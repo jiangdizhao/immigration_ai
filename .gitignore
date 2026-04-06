@@ -20,4 +20,4 @@ legal-service/.env
 .DS_Store
 Thumbs.db
 .vscode/
-.idea/
+.idea/chatbot/my_test/
