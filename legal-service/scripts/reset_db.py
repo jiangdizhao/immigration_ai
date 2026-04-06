@@ -1,0 +1,16 @@
+from sqlalchemy import text
+
+from app.db import models  # noqa: F401
+from app.db.base import Base
+from app.db.session import engine
+
+def main() -> None:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    print("Database reset complete.")
+
+if __name__ == "__main__":
+    main()

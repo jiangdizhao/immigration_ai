@@ -1,0 +1,33 @@
+import { cookies } from "next/headers";
+import Script from "next/script";
+import { Suspense } from "react";
+import { ChatRouteShell } from "@/components/chat-route-shell";
+import { DataStreamProvider } from "@/components/data-stream-provider";
+import { auth } from "../(auth)/auth";
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Script
+        src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"
+        strategy="beforeInteractive"
+      />
+      <DataStreamProvider>
+        <Suspense fallback={<div className="flex h-dvh" />}>
+          <SidebarWrapper>{children}</SidebarWrapper>
+        </Suspense>
+      </DataStreamProvider>
+    </>
+  );
+}
+
+async function SidebarWrapper({ children }: { children: React.ReactNode }) {
+  const [session, cookieStore] = await Promise.all([auth(), cookies()]);
+  const isCollapsed = cookieStore.get("sidebar_state")?.value !== "true";
+
+  return (
+    <ChatRouteShell defaultOpen={!isCollapsed} user={session?.user}>
+      {children}
+    </ChatRouteShell>
+  );
+}

@@ -1,0 +1,25 @@
+{
+  "title": "Migration Act 1958 - selected cancellation and review provisions",
+  "source_type": "legislation",
+  "authority": "Commonwealth of Australia",
+  "jurisdiction": "Cth",
+  "url": "https://www.legislation.gov.au/C1958A00062/latest/text",
+  "published_date": "2026-03-14",
+  "sections": [
+    {
+      "heading": "General cancellation framework",
+      "section_ref": "Migration Act 1958 ss 116-127",
+      "text": "The Migration Act 1958 contains the general cancellation framework in the provisions around sections 116 to 127. These provisions include the power to cancel, notice of proposed cancellation, information to be given to the visa holder, an invitation to comment, prescribed periods, the making of the cancellation decision, and notification of the decision. For legal triage, the client should be asked exactly which notice under this framework they received."
+    },
+    {
+      "heading": "Revocation for certain cancellations outside Australia",
+      "section_ref": "Migration Act 1958 ss 128-133",
+      "text": "The Act also contains provisions dealing with cancellation outside Australia, including notice of cancellation, prescribed periods, revocation of cancellation, and notification of the revocation decision. This is relevant where the client's location at the time of decision may affect process and available next steps."
+    },
+    {
+      "heading": "ART review framework",
+      "section_ref": "Migration Act 1958 ss 338, 347-349",
+      "text": "The review framework in the Act includes the meaning of a reviewable migration decision and the provisions dealing with applications for Administrative Review Tribunal review, Tribunal review of reviewable migration decisions, and remittal. Intake should therefore capture the decision maker, date of notification, and whether any ART review rights are identified in the notice."
+    }
+  ]
+}

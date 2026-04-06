@@ -1,0 +1,6 @@
+git status
+git add folder/
+git commit -m "homework"
+git push
+
+bfg --delete-files datacamp_1.ipynb
