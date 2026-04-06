@@ -1,0 +1,68 @@
+git status
+git add folder/
+git commit -m "homework"
+git push
+
+bfg --delete-files datacamp_1.ipynb
+
+
+Collaborating on GitHub with different accounts is standard practice. Depending on your project's needs, there are two primary ways to set this up: the **Collaborator Model** (best for small teams/friends) and the **Fork and Pull Request Model** (best for open-source or larger projects).
+
+
+
+---
+
+## Method 1: Adding a Collaborator (Recommended)
+This is the simplest way. The owner of the repository grants the other person "Push" access directly to the project.
+
+1.  **The Owner:** Go to the repository on GitHub.
+2.  **Navigate:** Click on **Settings** > **Collaborators** (under the "Access" section in the sidebar).
+3.  **Invite:** Click **Add people**, type your friend's GitHub username or email, and send the invitation.
+4.  **The Friend:** Your friend must check their email or GitHub notifications and **accept the invitation**.
+5.  **Syncing:** Once accepted, both of you can `git push` and `git pull` directly to the same repository.
+
+---
+
+## Method 2: The Fork & Pull Request Workflow
+This is more controlled. Instead of writing to the same repo, you work on your own "copy" and suggest changes.
+
+1.  **The Friend:** Go to the owner's repository and click the **Fork** button (top right). This creates a copy of the project under the friend's account.
+2.  **Cloning:** Your friend clones *their fork* to their computer.
+3.  **Making Changes:** Your friend commits and pushes changes to their own fork.
+4.  **Pull Request (PR):** When ready, your friend goes to their fork on GitHub and clicks **New Pull Request**. This asks the owner to "pull" the changes into the original project.
+5.  **Review:** The owner reviews the code and clicks **Merge** to sync it into the main project.
+
+---
+
+## Essential Commands for Synchronization
+Regardless of the method, you will use these Git commands in your terminal to keep your local code updated:
+
+### 1. Download the code
+```bash
+git clone <repository-url>
+```
+
+### 2. Save your work
+Before sending code to GitHub, you must "stage" and "commit" it locally.
+```bash
+git add .
+git commit -m "Describe what you changed"
+```
+
+### 3. Upload your changes
+```bash
+git push origin main
+```
+*(Note: Replace `main` with your branch name if you are using a different one.)*
+
+### 4. Download your friend's changes
+Always run this **before** you start working to ensure you have the latest version of the code.
+```bash
+git pull origin main
+```
+
+---
+
+> **Tip:** If both of you edit the exact same line of the same file at the same time, Git will trigger a **Merge Conflict**. You will need to manually choose which version of the code to keep before you can finish syncing.
+
+Would you like me to explain how to resolve a merge conflict if one occurs?
