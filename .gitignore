@@ -1,0 +1,23 @@
+# Node / Next.js
+chatbot/node_modules/
+chatbot/.next/
+chatbot/out/
+chatbot/.vercel/
+
+# Python
+legal-service/__pycache__/
+legal-service/.pytest_cache/
+legal-service/.mypy_cache/
+legal-service/.venv/
+legal-service/venv/
+
+# Env files
+chatbot/.env.local
+chatbot/.env
+legal-service/.env
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
