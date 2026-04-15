@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,7 @@ class QueryService:
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
+        self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
         return self.handle_query(db, payload)
@@ -25,17 +28,62 @@ class QueryService:
     def handle_query(self, db: Session, payload: QueryRequest) -> QueryResponse:
         matter = self._get_or_create_matter(db, payload)
 
-        chunks, retrieval_debug = self.retrieval_service.retrieve(db, payload)
+        conversation_history = self._conversation_history(matter)
+        carried_intake_facts = self._carried_intake_facts(matter)
+        merged_intake_facts = self._merge_intake_facts(carried_intake_facts, payload.intake_facts or {})
+
+        contextualized = self.reasoning_service.contextualize_question(
+            question=payload.question,
+            conversation_history=conversation_history,
+            issue_summary=matter.issue_summary,
+            issue_type=matter.issue_type,
+            visa_type=matter.visa_type,
+            intake_facts=merged_intake_facts,
+        )
+        effective_question = contextualized.get("standalone_question") or payload.question
+        contextualized_facts = contextualized.get("carried_facts") or {}
+        merged_intake_facts = self._merge_intake_facts(merged_intake_facts, contextualized_facts)
+
+        effective_payload = QueryRequest(
+            **{
+                **payload.model_dump(),
+                "matter_id": matter.id,
+                "question": effective_question,
+                "intake_facts": merged_intake_facts,
+            }
+        )
+
+        chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
+        retrieval_debug = {
+            **retrieval_debug,
+            "contextualization": contextualized,
+            "original_question": payload.question,
+            "effective_question": effective_question,
+        }
 
         response = self.reasoning_service.answer_from_chunks(
             payload=payload,
             chunks=chunks,
             retrieval_debug=retrieval_debug,
+            conversation_context={
+                "history": conversation_history,
+                "issue_summary": matter.issue_summary,
+                "issue_type": matter.issue_type,
+                "visa_type": matter.visa_type,
+                "intake_facts": merged_intake_facts,
+                "effective_question": effective_question,
+            },
         )
 
         response.matter_id = matter.id
 
-        self._update_matter_from_query(db, matter, payload, response)
+        self._update_matter_from_query(
+            matter=matter,
+            payload=payload,
+            response=response,
+            effective_question=effective_question,
+            merged_intake_facts=merged_intake_facts,
+        )
         self._persist_citations(db, matter, response)
 
         db.commit()
@@ -46,6 +94,16 @@ class QueryService:
     def _get_or_create_matter(self, db: Session, payload: QueryRequest) -> Matter:
         if payload.matter_id:
             matter = db.get(Matter, payload.matter_id)
+            if matter is not None:
+                return matter
+
+        if payload.session_id:
+            matter = (
+                db.query(Matter)
+                .filter(Matter.session_id == payload.session_id)
+                .order_by(Matter.last_user_message_at.desc().nullslast(), Matter.created_at.desc())
+                .first()
+            )
             if matter is not None:
                 return matter
 
@@ -61,7 +119,9 @@ class QueryService:
                 "preferred_jurisdiction": payload.preferred_jurisdiction,
                 "preferred_source_types": payload.preferred_source_types or [],
                 "intake_facts": payload.intake_facts or {},
+                "carried_intake_facts": payload.intake_facts or {},
                 "initial_question": payload.question,
+                "conversation_history": [],
             },
         )
         db.add(matter)
@@ -70,43 +130,66 @@ class QueryService:
 
     def _update_matter_from_query(
         self,
-        db: Session,
         matter: Matter,
         payload: QueryRequest,
         response: QueryResponse,
+        effective_question: str,
+        merged_intake_facts: dict[str, Any],
     ) -> None:
         matter.session_id = payload.session_id or matter.session_id
-        matter.issue_summary = self._build_issue_summary(payload.question)
+        issue_summary_basis = effective_question if len(payload.question.strip()) < 24 else payload.question
+        matter.issue_summary = self._build_issue_summary(issue_summary_basis)
         matter.last_user_message_at = self._now_utc()
 
         if response.issue_type:
             matter.issue_type = response.issue_type
         else:
-            inferred = self._infer_issue_type(payload.question)
+            inferred = self._infer_issue_type(effective_question)
             if inferred:
                 matter.issue_type = inferred
 
-        inferred_visa_type = self._infer_visa_type(payload.question)
+        inferred_visa_type = self._infer_visa_type(effective_question)
         if inferred_visa_type:
             matter.visa_type = inferred_visa_type
 
         matter.risk_level = self._map_risk_level(response)
 
-        existing_meta = matter.metadata_json or {}
+        existing_meta = deepcopy(matter.metadata_json or {})
+        history = list(existing_meta.get("conversation_history") or [])
+        history.extend(
+            [
+                {
+                    "role": "user",
+                    "content": payload.question,
+                    "effective_question": effective_question,
+                    "timestamp": self._now_utc().isoformat(),
+                },
+                {
+                    "role": "assistant",
+                    "content": response.answer,
+                    "next_action": response.next_action,
+                    "confidence": response.confidence,
+                    "timestamp": self._now_utc().isoformat(),
+                },
+            ]
+        )
+        history = history[-self.max_history_turns :]
+
         existing_meta.update(
             {
                 "preferred_jurisdiction": payload.preferred_jurisdiction,
                 "preferred_source_types": payload.preferred_source_types or [],
                 "intake_facts": payload.intake_facts or {},
+                "carried_intake_facts": merged_intake_facts,
                 "latest_question": payload.question,
+                "last_contextualized_question": effective_question,
                 "next_action": response.next_action,
                 "escalate": response.escalate,
                 "confidence": response.confidence,
+                "conversation_history": history,
             }
         )
         matter.metadata_json = existing_meta
-
-        db.add(matter)
 
     def _persist_citations(
         self,
@@ -128,6 +211,24 @@ class QueryService:
                 used_for="query_response",
             )
             db.add(citation)
+
+    def _conversation_history(self, matter: Matter) -> list[dict[str, Any]]:
+        metadata = matter.metadata_json or {}
+        history = metadata.get("conversation_history") or []
+        return [item for item in history if isinstance(item, dict)][-self.max_history_turns :]
+
+    def _carried_intake_facts(self, matter: Matter) -> dict[str, Any]:
+        metadata = matter.metadata_json or {}
+        carried = metadata.get("carried_intake_facts") or metadata.get("intake_facts") or {}
+        return carried if isinstance(carried, dict) else {}
+
+    def _merge_intake_facts(self, base: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base or {})
+        for key, value in (new or {}).items():
+            if value is None:
+                continue
+            merged[key] = value
+        return merged
 
     def _build_issue_summary(self, question: str) -> str:
         text = (question or "").strip()
@@ -151,12 +252,16 @@ class QueryService:
 
     def _infer_visa_type(self, question: str) -> str | None:
         lowered = question.lower()
-        if "student visa" in lowered:
+        if "student visa" in lowered or "subclass 500" in lowered:
             return "student"
+        if "485" in lowered or "temporary graduate" in lowered:
+            return "temporary_graduate"
         if "partner visa" in lowered:
             return "partner"
         if "visitor visa" in lowered:
             return "visitor"
+        if "bridging visa" in lowered or "bva" in lowered or "bvb" in lowered or "bvc" in lowered or "bve" in lowered:
+            return "bridging"
         if "skilled visa" in lowered or "skilled migration" in lowered:
             return "skilled"
         return None

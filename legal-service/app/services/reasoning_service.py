@@ -21,6 +21,7 @@ class ReasoningService:
         self.max_context_chunks = int(os.getenv("REASONING_MAX_CONTEXT_CHUNKS", "6"))
         self.max_quote_chars = int(os.getenv("REASONING_MAX_QUOTE_CHARS", "400"))
         self.max_supported_facts = int(os.getenv("REASONING_MAX_SUPPORTED_FACTS", "8"))
+        self.max_history_turns = int(os.getenv("REASONING_MAX_HISTORY_TURNS", "8"))
         self._client: OpenAI | None = None
 
     @property
@@ -30,6 +31,81 @@ class ReasoningService:
                 raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
             self._client = OpenAI(api_key=self.settings.openai_api_key)
         return self._client
+
+    def contextualize_question(
+        self,
+        question: str,
+        conversation_history: list[dict[str, Any]] | None = None,
+        issue_summary: str | None = None,
+        issue_type: str | None = None,
+        visa_type: str | None = None,
+        intake_facts: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        history = [item for item in (conversation_history or []) if isinstance(item, dict)][-self.max_history_turns :]
+        carried_facts = intake_facts or {}
+
+        if not history or self._should_contextualize(question) is False:
+            return {
+                "standalone_question": question.strip(),
+                "used_history": False,
+                "carried_facts": carried_facts,
+                "reason": "no_contextualization_needed",
+            }
+
+        system_prompt = (
+            "You rewrite the user's latest message into a standalone immigration-law query.\n"
+            "Use prior conversation only to resolve references like dates, pronouns, subclass numbers, refusals, travel questions, or prior asked issues.\n"
+            "Do NOT change the user's intent.\n"
+            "Do NOT answer the question.\n"
+            "Return ONLY valid JSON with this exact shape:\n"
+            "{\n"
+            '  "standalone_question": string,\n'
+            '  "used_history": boolean,\n'
+            '  "reason": string,\n'
+            '  "carried_facts": object\n'
+            "}\n"
+            "Keep the standalone_question concise but explicit.\n"
+        )
+
+        history_text = self._conversation_context_text({"history": history})
+        user_prompt = (
+            f"Issue summary: {issue_summary or 'unknown'}\n"
+            f"Issue type: {issue_type or 'unknown'}\n"
+            f"Visa type: {visa_type or 'unknown'}\n"
+            f"Known intake facts JSON: {json.dumps(carried_facts, ensure_ascii=False)}\n\n"
+            f"Recent conversation turns:\n{history_text}\n\n"
+            f"Latest user message:\n{question}\n"
+        )
+
+        try:
+            response = self.client.responses.create(
+                model=self.general_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            parsed = self._extract_json_object((response.output_text or "").strip())
+            if not parsed:
+                raise ValueError("contextualization returned no JSON")
+
+            standalone_question = str(parsed.get("standalone_question") or "").strip()
+            if not standalone_question:
+                standalone_question = question.strip()
+
+            return {
+                "standalone_question": standalone_question,
+                "used_history": bool(parsed.get("used_history", True)),
+                "reason": str(parsed.get("reason") or "contextualized"),
+                "carried_facts": self._normalize_fact_dict(parsed.get("carried_facts")) or carried_facts,
+            }
+        except Exception:
+            return {
+                "standalone_question": question.strip(),
+                "used_history": False,
+                "carried_facts": carried_facts,
+                "reason": "contextualization_failed",
+            }
     
     def _build_grounded_general_answer(
     self,
@@ -76,8 +152,11 @@ class ReasoningService:
         payload: QueryRequest,
         chunks: list[SourceChunk],
         retrieval_debug: dict[str, object],
+        conversation_context: dict[str, Any] | None = None,
     ) -> QueryResponse:
-        issue_type = self._classify_issue(payload.question)
+        conversation_context = conversation_context or {}
+        effective_question = str(conversation_context.get("effective_question") or payload.question).strip()
+        issue_type = self._classify_issue(effective_question)
         citations = [self._to_citation(chunk) for chunk in chunks]
 
         if not chunks:
@@ -89,8 +168,8 @@ class ReasoningService:
                 ),
                 confidence="low",
                 issue_type=issue_type,
-                missing_facts=self._infer_missing_facts(payload.question),
-                follow_up_questions=self._follow_up_questions(payload.question, issue_type),
+                missing_facts=self._infer_missing_facts(effective_question),
+                follow_up_questions=self._follow_up_questions(effective_question, issue_type),
                 citations=[],
                 escalate=self._should_escalate(payload.question, []),
                 next_action="suggest_consultation",
@@ -106,6 +185,8 @@ class ReasoningService:
             chunks=chunks[: self.max_context_chunks],
             citations=citations[: self.max_context_chunks],
             issue_type=issue_type,
+            effective_question=effective_question,
+            conversation_context=conversation_context,
         )
 
         if evidence is None:
@@ -179,9 +260,9 @@ class ReasoningService:
                 answer=answer,
                 confidence="low",
                 issue_type=evidence.get("issue_type") or issue_type,
-                missing_facts=missing_facts or self._infer_missing_facts(payload.question),
+                missing_facts=missing_facts or self._infer_missing_facts(effective_question),
                 follow_up_questions=follow_up_questions
-                or self._follow_up_questions(payload.question, issue_type),
+                or self._follow_up_questions(effective_question, issue_type),
                 citations=citations[: self.max_context_chunks],
                 escalate=True,
                 next_action="suggest_consultation",
@@ -199,6 +280,8 @@ class ReasoningService:
             payload=payload,
             evidence=evidence,
             issue_type=evidence.get("issue_type") or issue_type,
+            effective_question=effective_question,
+            conversation_context=conversation_context,
         )
 
         if final_answer is None:
@@ -213,7 +296,7 @@ class ReasoningService:
                 issue_type=evidence.get("issue_type") or issue_type,
                 missing_facts=missing_facts,
                 follow_up_questions=follow_up_questions
-                or self._follow_up_questions(payload.question, issue_type),
+                or self._follow_up_questions(effective_question, issue_type),
                 citations=citations[: self.max_context_chunks],
                 escalate=bool(missing_facts),
                 next_action="ask_followup" if missing_facts else "answer",
@@ -253,9 +336,12 @@ class ReasoningService:
         chunks: list[SourceChunk],
         citations: list[CitationOut],
         issue_type: str | None,
+        effective_question: str | None = None,
+        conversation_context: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         context_text = self._build_context_text(chunks, citations)
-        intake_facts = json.dumps(payload.intake_facts or {}, ensure_ascii=False)
+        intake_facts = json.dumps((conversation_context or {}).get("intake_facts") or payload.intake_facts or {}, ensure_ascii=False)
+        conversation_text = self._conversation_context_text(conversation_context)
 
         system_prompt = (
             "You are a strict legal-retrieval evidence extractor.\n"
@@ -347,6 +433,8 @@ class ReasoningService:
         payload: QueryRequest,
         evidence: dict[str, Any],
         issue_type: str | None,
+        effective_question: str | None = None,
+        conversation_context: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         supported_facts = self._normalize_supported_facts(evidence.get("supported_facts"))
         unsupported_items = self._normalize_string_list(evidence.get("unsupported_requests"))
@@ -588,6 +676,59 @@ class ReasoningService:
             cleaned.append(text)
             seen.add(text)
         return cleaned
+
+    def _conversation_context_text(self, conversation_context: dict[str, Any] | None) -> str:
+        if not conversation_context:
+            return ""
+
+        lines: list[str] = []
+        issue_summary = conversation_context.get("issue_summary")
+        issue_type = conversation_context.get("issue_type")
+        visa_type = conversation_context.get("visa_type")
+        intake_facts = conversation_context.get("intake_facts")
+        history = conversation_context.get("history") or []
+
+        if issue_summary:
+            lines.append(f"Issue summary: {issue_summary}")
+        if issue_type:
+            lines.append(f"Issue type: {issue_type}")
+        if visa_type:
+            lines.append(f"Visa type: {visa_type}")
+        if intake_facts:
+            lines.append(f"Known intake facts: {json.dumps(intake_facts, ensure_ascii=False)}")
+
+        recent = [item for item in history if isinstance(item, dict)][-self.max_history_turns :]
+        for item in recent:
+            role = str(item.get("role") or "unknown").capitalize()
+            content = str(item.get("content") or "").strip()
+            if content:
+                lines.append(f"{role}: {content}")
+
+        return "\n".join(lines).strip()
+
+    def _normalize_fact_dict(self, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                continue
+            if item in (None, "", [], {}):
+                continue
+            cleaned[key] = item
+        return cleaned
+
+    def _should_contextualize(self, question: str) -> bool:
+        q = (question or "").strip().lower()
+        if len(q) < 40:
+            return True
+
+        cue_terms = [
+            "it", "that", "this", "they", "them", "he", "she",
+            "what about", "and if", "then can", "in that case",
+            "the date is", "it was", "yes", "no",
+        ]
+        return any(term in q for term in cue_terms)
 
     def _classify_issue(self, question: str) -> str | None:
         lowered = question.lower()
