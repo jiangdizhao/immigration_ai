@@ -35,6 +35,18 @@ type WidgetCitation = {
   quoteText?: string | null;
 };
 
+type WidgetDebug = {
+  sessionId?: string | null;
+  matterId?: string | null;
+  originalQuestion?: string | null;
+  effectiveQuestion?: string | null;
+  contextualized?: {
+    standalone_question?: string;
+    used_history?: boolean;
+    reason?: string;
+  } | null;
+};
+
 type WidgetMessage = {
   id: string;
   role: "user" | "assistant";
@@ -45,6 +57,7 @@ type WidgetMessage = {
   escalate?: boolean;
   nextAction?: string;
   confidence?: string | null;
+  debug?: WidgetDebug | null;
 };
 
 const quickQuestions = [
@@ -57,6 +70,7 @@ const quickQuestions = [
 export function ImmigrationAssistantWidget() {
   const [open, setOpen] = useState(false);
   const [chatId] = useState(() => generateUUID());
+  const [matterId, setMatterId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
   const [status, setStatus] = useState<"ready" | "submitted">("ready");
@@ -125,6 +139,7 @@ export function ImmigrationAssistantWidget() {
         },
         body: JSON.stringify({
           id: chatId,
+          matterId,
           selectedChatModel: DEFAULT_CHAT_MODEL,
           messages: nextMessages.map((message) => ({
             id: message.id,
@@ -142,9 +157,15 @@ export function ImmigrationAssistantWidget() {
         escalate?: boolean;
         nextAction?: string;
         confidence?: string | null;
+        matterId?: string | null;
+        debug?: WidgetDebug | null;
       };
 
       const assistantText = data.text?.trim();
+
+      if (data.matterId) {
+        setMatterId(data.matterId);
+      }
 
       setMessages((current) => [
         ...current,
@@ -161,6 +182,7 @@ export function ImmigrationAssistantWidget() {
           escalate: Boolean(data.escalate),
           nextAction: data.nextAction ?? "ask_followup",
           confidence: data.confidence ?? null,
+          debug: data.debug ?? null,
         },
       ]);
     } catch (requestError) {
@@ -295,13 +317,21 @@ export function ImmigrationAssistantWidget() {
                         <div>{message.text}</div>
 
                         {!isUser && message.confidence && (
-                          <div className="mt-3">
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className="border-slate-200 bg-slate-50 text-slate-700"
                               variant="outline"
                             >
                               Confidence: {message.confidence}
                             </Badge>
+                            {message.debug?.contextualized?.used_history ? (
+                              <Badge
+                                className="border-sky-200 bg-sky-50 text-sky-700"
+                                variant="outline"
+                              >
+                                Used prior context
+                              </Badge>
+                            ) : null}
                           </div>
                         )}
 
@@ -335,6 +365,13 @@ export function ImmigrationAssistantWidget() {
                                 <li key={fact}>{fact}</li>
                               ))}
                             </ul>
+                          </div>
+                        ) : null}
+
+                        {!isUser && message.debug?.effectiveQuestion && message.debug.effectiveQuestion !== message.debug.originalQuestion ? (
+                          <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
+                            <p className="mb-1 font-medium">Resolved question used by backend</p>
+                            <p>{message.debug.effectiveQuestion}</p>
                           </div>
                         ) : null}
 
