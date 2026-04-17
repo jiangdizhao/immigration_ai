@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
 from app.schemas.state import LiveRetrievalResult, LiveSourceChunk
+from app.services.operation_profiles import canonical_operation_type, infer_source_classes_from_parts
 
 
 @dataclass(slots=True)
@@ -123,6 +124,7 @@ class LiveRetrievalService:
         max_urls = max_urls or self.DEFAULT_MAX_URLS
         max_chunks = max_chunks or self.DEFAULT_MAX_CHUNKS
         known_facts = known_facts or {}
+        operation_type = canonical_operation_type(operation_type)
 
         domains = self._normalize_domains(preferred_domains)
         candidates = self._candidate_urls(
@@ -179,6 +181,8 @@ class LiveRetrievalService:
         urls: list[str] = []
 
         tags: list[str] = []
+        operation_type = canonical_operation_type(operation_type)
+
         if operation_type in {"review_rights", "review_deadline"}:
             tags.extend(["review", "procedure", "migration"])
         if operation_type == "student_refusal_next_steps" or issue_type in {"student_visa", "visa_refusal"} or known_facts.get("visa_type") == "student":
@@ -364,6 +368,17 @@ class LiveRetrievalService:
                     metadata_json={
                         "live": True,
                         "content_type": doc.content_type,
+                        "source_classes": infer_source_classes_from_parts(
+                            title=doc.title,
+                            authority=doc.authority,
+                            source_type=doc.source_type,
+                            bucket=doc.bucket,
+                            sub_type=doc.sub_type,
+                            section_ref=f"live_{idx}",
+                            heading=heading,
+                            text=text,
+                            metadata_json={"live": True, "content_type": doc.content_type},
+                        ),
                     },
                 )
             )

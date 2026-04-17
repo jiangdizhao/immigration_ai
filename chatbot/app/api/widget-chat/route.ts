@@ -53,6 +53,18 @@ type RetrievalDebug = {
     need_live_fetch?: boolean;
     preferred_domains?: string[];
     preferred_source_types?: string[];
+    answerability?: {
+      profile_name?: string | null;
+      answer_mode?: string;
+      required_facts_missing?: string[];
+      required_source_classes_missing?: string[];
+      source_classes_present?: string[];
+    };
+  };
+  initial_sufficiency_gate?: {
+    local_sufficient?: boolean;
+    reason?: string | null;
+    need_live_fetch?: boolean;
   };
   live_fetch_used?: boolean;
   live_domains_used?: string[];
@@ -61,6 +73,7 @@ type RetrievalDebug = {
   source_type_counts?: Record<string, number>;
   authority_counts?: Record<string, number>;
   bucket_counts?: Record<string, number>;
+  source_class_counts?: Record<string, number>;
   policy?: {
     answer_allowed?: boolean;
     escalate?: boolean;
@@ -120,6 +133,8 @@ function logWidgetDebug(params: {
   console.log("localSufficient:", dbg.sufficiency_gate?.local_sufficient ?? null);
   console.log("sufficiencyReason:", dbg.sufficiency_gate?.reason ?? null);
   console.log("needLiveFetch:", dbg.sufficiency_gate?.need_live_fetch ?? null);
+  console.log("initialLocalSufficient:", dbg.initial_sufficiency_gate?.local_sufficient ?? null);
+  console.log("initialSufficiencyReason:", dbg.initial_sufficiency_gate?.reason ?? null);
   console.log("liveFetchUsed:", dbg.live_fetch_used ?? false);
   console.log("liveDomainsUsed:", dbg.live_domains_used ?? []);
   console.log("liveResultCount:", dbg.live_result_count ?? 0);
@@ -127,6 +142,11 @@ function logWidgetDebug(params: {
   console.log("sourceTypeCounts:", dbg.source_type_counts ?? {});
   console.log("authorityCounts:", dbg.authority_counts ?? {});
   console.log("bucketCounts:", dbg.bucket_counts ?? {});
+  console.log("sourceClassCounts:", dbg.source_class_counts ?? {});
+  console.log("answerabilityProfile:", dbg.sufficiency_gate?.answerability?.profile_name ?? null);
+  console.log("answerMode:", dbg.sufficiency_gate?.answerability?.answer_mode ?? null);
+  console.log("missingRequiredFacts:", dbg.sufficiency_gate?.answerability?.required_facts_missing ?? []);
+  console.log("missingRequiredSourceClasses:", dbg.sufficiency_gate?.answerability?.required_source_classes_missing ?? []);
   console.log("policy:", dbg.policy ?? {});
   console.log("confidence:", params.response.confidence ?? null);
   console.log("nextAction:", params.response.next_action ?? null);

@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.db.models import LegalSource, SourceChunk
 from app.schemas.query import QueryRequest
 from app.services.embedding_service import EmbeddingService
+from app.services.operation_profiles import infer_source_classes_from_parts
 
 settings = get_settings()
 
@@ -209,6 +210,35 @@ class RetrievalService:
         final_chunks = [row["item"].chunk for row in selected_rows]
         summaries = self._summarize_selected(final_chunks)
 
+        debug_results = []
+        for row in selected_rows:
+            chunk = row["item"].chunk
+            source = chunk.source
+            meta = (source.metadata_json or {}) if source else {}
+            source_classes = self._source_classes_for_chunk(chunk)
+            debug_results.append(
+                {
+                    "chunk_id": chunk.id,
+                    "source_id": chunk.source_id,
+                    "title": source.title if source else None,
+                    "source_type": source.source_type if source else None,
+                    "authority": source.authority if source else None,
+                    "bucket": meta.get("bucket") if source else None,
+                    "sub_type": meta.get("sub_type") if source else None,
+                    "section_ref": chunk.section_ref,
+                    "heading": chunk.heading,
+                    "text_preview": (chunk.text or "")[:240],
+                    "source_classes": source_classes,
+                    "vector_rank": row["item"].vector_rank,
+                    "keyword_rank": row["item"].keyword_rank,
+                    "vector_distance": row["item"].vector_distance,
+                    "rrf_score": row["base_score"],
+                    "source_prior": row["source_prior"],
+                    "topic_boost": row["topic_boost"],
+                    "final_score": row["final_score"],
+                }
+            )
+
         debug = {
             "strategy": self._strategy_name(has_embeddings, bool(keyword_chunks)),
             "intent": intent,
@@ -222,30 +252,26 @@ class RetrievalService:
             "source_type_counts": summaries["source_type_counts"],
             "authority_counts": summaries["authority_counts"],
             "bucket_counts": summaries["bucket_counts"],
+            "source_class_counts": summaries["source_class_counts"],
             "top_titles": summaries["top_titles"],
-            "results": [
-                {
-                    "chunk_id": row["item"].chunk.id,
-                    "source_id": row["item"].chunk.source_id,
-                    "title": row["item"].chunk.source.title if row["item"].chunk.source else None,
-                    "source_type": row["item"].chunk.source.source_type if row["item"].chunk.source else None,
-                    "authority": row["item"].chunk.source.authority if row["item"].chunk.source else None,
-                    "bucket": (row["item"].chunk.source.metadata_json or {}).get("bucket") if row["item"].chunk.source else None,
-                    "sub_type": (row["item"].chunk.source.metadata_json or {}).get("sub_type") if row["item"].chunk.source else None,
-                    "section_ref": row["item"].chunk.section_ref,
-                    "heading": row["item"].chunk.heading,
-                    "vector_rank": row["item"].vector_rank,
-                    "keyword_rank": row["item"].keyword_rank,
-                    "vector_distance": row["item"].vector_distance,
-                    "rrf_score": row["base_score"],
-                    "source_prior": row["source_prior"],
-                    "topic_boost": row["topic_boost"],
-                    "final_score": row["final_score"],
-                }
-                for row in selected_rows
-            ],
+            "results": debug_results,
         }
         return final_chunks, debug
+
+    def _source_classes_for_chunk(self, chunk: SourceChunk) -> list[str]:
+        source = chunk.source
+        source_meta = getattr(source, "metadata_json", None) or {}
+        return infer_source_classes_from_parts(
+            title=getattr(source, "title", None),
+            authority=getattr(source, "authority", None),
+            source_type=getattr(source, "source_type", None),
+            bucket=source_meta.get("bucket"),
+            sub_type=source_meta.get("sub_type"),
+            section_ref=getattr(chunk, "section_ref", None),
+            heading=getattr(chunk, "heading", None),
+            text=getattr(chunk, "text", None),
+            metadata_json={**source_meta, **(getattr(chunk, "metadata_json", None) or {})},
+        )
 
     def _rrf_score(self, item: _Candidate) -> float:
         score = 0.0
@@ -394,6 +420,7 @@ class RetrievalService:
         source_type_counter = Counter()
         authority_counter = Counter()
         bucket_counter = Counter()
+        source_class_counter = Counter()
         top_titles: list[str] = []
         seen_titles: set[str] = set()
         for chunk in chunks:
@@ -404,6 +431,8 @@ class RetrievalService:
             authority_counter[str(getattr(source, "authority", None) or "unknown")] += 1
             bucket = str((getattr(source, "metadata_json", None) or {}).get("bucket") or "unknown")
             bucket_counter[bucket] += 1
+            for source_class in self._source_classes_for_chunk(chunk):
+                source_class_counter[str(source_class)] += 1
             title = str(getattr(source, "title", None) or "")
             if title and title not in seen_titles:
                 seen_titles.add(title)
@@ -412,5 +441,6 @@ class RetrievalService:
             "source_type_counts": dict(source_type_counter),
             "authority_counts": dict(authority_counter),
             "bucket_counts": dict(bucket_counter),
+            "source_class_counts": dict(source_class_counter),
             "top_titles": top_titles[:10],
         }

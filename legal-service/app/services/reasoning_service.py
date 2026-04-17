@@ -11,6 +11,14 @@ from app.db.models import SourceChunk
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.schemas.state import EvidencePackage, SufficiencyGateResult
+from app.services.operation_profiles import (
+    ANSWER_MODE_ESCALATE,
+    ANSWER_MODE_FOLLOWUP,
+    ANSWER_MODE_QUALIFIED,
+    ANSWER_MODE_WARNING,
+    canonical_operation_type,
+    infer_source_classes_from_parts,
+)
 
 
 class ReasoningService:
@@ -119,7 +127,15 @@ class ReasoningService:
         conversation_context = conversation_context or {}
         effective_question = str(conversation_context.get("effective_question") or payload.question).strip()
         issue_type = str(conversation_context.get("issue_type") or self._classify_issue(effective_question) or "") or None
-        operation_type = str(conversation_context.get("operation_type") or self._infer_operation_type(effective_question) or "") or None
+        operation_type = canonical_operation_type(str(conversation_context.get("operation_type") or self._infer_operation_type(effective_question) or "") or None)
+        answerability_raw = conversation_context.get("answerability") or retrieval_debug.get("sufficiency_gate") or {}
+        if isinstance(answerability_raw, dict) and isinstance(answerability_raw.get("answerability"), dict):
+            answerability = answerability_raw.get("answerability") or {}
+        elif isinstance(answerability_raw, dict):
+            answerability = answerability_raw
+        else:
+            answerability = {}
+        contract_answer_mode = str(answerability.get("answer_mode") or "direct_answer")
         citations = [self._to_citation(chunk) for chunk in chunks]
 
         if not chunks:
@@ -151,6 +167,7 @@ class ReasoningService:
             operation_type=operation_type,
             effective_question=effective_question,
             conversation_context=conversation_context,
+            answerability=answerability,
         )
 
         if evidence is None:
@@ -196,15 +213,20 @@ class ReasoningService:
             ) or self._chunks_support_marker(chunks, specific_user_marker)
 
         question_is_specific = self._is_specific_question(effective_question)
+        partial_answer_allowed = contract_answer_mode in {
+            ANSWER_MODE_QUALIFIED,
+            ANSWER_MODE_WARNING,
+            ANSWER_MODE_FOLLOWUP,
+        }
 
         insufficient = False
         reason = "insufficient_evidence"
         if not supported_facts:
             insufficient = True
-        elif specific_user_marker and not marker_supported:
+        elif specific_user_marker and not marker_supported and not partial_answer_allowed:
             insufficient = True
             reason = f"specific_marker_not_supported:{specific_user_marker}"
-        elif question_is_specific and not is_context_sufficient:
+        elif question_is_specific and not is_context_sufficient and not partial_answer_allowed:
             insufficient = True
             reason = "specific_question_context_insufficient"
 
@@ -215,7 +237,10 @@ class ReasoningService:
                 unsupported_items=unsupported_items,
                 specific_marker=specific_user_marker,
                 reason=reason,
+                answerability=answerability,
+                operation_type=operation_type,
             )
+            next_action = self._fallback_next_action(answerability)
             return QueryResponse(
                 matter_id=payload.matter_id,
                 answer=answer,
@@ -224,8 +249,8 @@ class ReasoningService:
                 missing_facts=missing_facts or self._infer_missing_facts(effective_question),
                 follow_up_questions=follow_up_questions or self._follow_up_questions(effective_question, issue_type),
                 citations=citations[: self.max_context_chunks],
-                escalate=True,
-                next_action="suggest_consultation",
+                escalate=next_action == "suggest_consultation",
+                next_action=next_action,
                 retrieval_debug={
                     **retrieval_debug,
                     "reasoning_model": self.model,
@@ -243,12 +268,13 @@ class ReasoningService:
             operation_type=evidence.get("operation_type") or operation_type,
             effective_question=effective_question,
             conversation_context=conversation_context,
+            answerability=answerability,
         )
 
         if final_answer is None:
             return QueryResponse(
                 matter_id=payload.matter_id,
-                answer=self._build_grounded_general_answer(payload, supported_facts, unsupported_items),
+                answer=self._build_grounded_general_answer(payload, supported_facts, unsupported_items, answerability=answerability, operation_type=operation_type),
                 confidence="medium" if supported_facts else "low",
                 issue_type=evidence.get("issue_type") or issue_type,
                 missing_facts=missing_facts,
@@ -267,7 +293,7 @@ class ReasoningService:
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=final_answer.get("answer", "").strip() or self._build_insufficient_answer(
-                payload, supported_facts, unsupported_items, specific_user_marker
+                payload, supported_facts, unsupported_items, specific_user_marker, answerability=answerability, operation_type=operation_type
             ),
             confidence=self._normalize_confidence(final_answer.get("confidence")),
             issue_type=final_answer.get("issue_type") or evidence.get("issue_type") or issue_type,
@@ -355,10 +381,12 @@ class ReasoningService:
         operation_type: str | None = None,
         effective_question: str | None = None,
         conversation_context: dict[str, Any] | None = None,
+        answerability: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         context_text = self._build_context_text(chunks, citations)
         intake_facts = json.dumps((conversation_context or {}).get("intake_facts") or payload.intake_facts or {}, ensure_ascii=False)
         conversation_text = self._conversation_context_text(conversation_context)
+        answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
 
         system_prompt = (
             "You are a strict legal-retrieval evidence extractor.\n"
@@ -367,6 +395,7 @@ class ReasoningService:
             "Do NOT infer visa-specific rules unless the retrieved sources explicitly support them.\n"
             "If the question is outside immigration/visa/legal-service scope, mark is_in_domain=false.\n"
             "If the retrieved material is too generic or does not support the user's specific request, mark is_context_sufficient=false.\n"
+            "Use the operation answerability JSON as a contract: if decisive fact slots or source classes are missing, reflect that in missing_information and follow_up_questions.\n"
             "Return ONLY valid JSON with this exact shape:\n"
             "{\n"
             '  "is_in_domain": boolean,\n'
@@ -387,6 +416,7 @@ class ReasoningService:
             f"Issue type:\n{issue_type or 'unknown'}\n\n"
             f"Operation type:\n{operation_type or 'unknown'}\n\n"
             f"Conversation context:\n{conversation_text or 'N/A'}\n\n"
+            f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Intake facts JSON:\n{intake_facts}\n\n"
             f"Retrieved sources:\n{context_text}\n"
         )
@@ -410,6 +440,7 @@ class ReasoningService:
         operation_type: str | None = None,
         effective_question: str | None = None,
         conversation_context: dict[str, Any] | None = None,
+        answerability: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         supported_facts = self._normalize_supported_facts(evidence.get("supported_facts"))
         unsupported_items = self._normalize_string_list(evidence.get("unsupported_requests"))
@@ -427,11 +458,13 @@ class ReasoningService:
             },
             ensure_ascii=False,
         )
+        answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
 
         system_prompt = (
             "You are a strict legal answer drafter.\n"
             "You MUST write the answer using ONLY the supported_facts provided to you.\n"
             "Do NOT introduce any new legal rule, deadline, visa requirement, or assumption.\n"
+            "Honor the operation answerability contract. If the contract says ask_followup or qualified_general, do not draft a final rights/deadline answer.\n"
             "If supported_facts are general, the answer must stay general.\n"
             "If unsupported_requests are present, explicitly say those points are not supported by the retrieved material.\n"
             "Return ONLY valid JSON with this exact shape:\n"
@@ -447,6 +480,7 @@ class ReasoningService:
         user_prompt = (
             f"Original question:\n{payload.question}\n\n"
             f"Effective question:\n{effective_question or payload.question}\n\n"
+            f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Evidence package JSON:\n{evidence_json}\n"
         )
         try:
@@ -492,6 +526,9 @@ class ReasoningService:
         payload: QueryRequest,
         supported_facts: list[dict[str, Any]],
         unsupported_items: list[str],
+        *,
+        answerability: dict[str, Any] | None = None,
+        operation_type: str | None = None,
     ) -> str:
         if not supported_facts:
             return (
@@ -514,6 +551,9 @@ class ReasoningService:
             parts.append(
                 "This is general guidance based on the retrieved material only, and the exact next step will depend on the refusal notice, dates, and stated reasons."
             )
+        coverage_gap_text = self._coverage_gap_text(answerability, operation_type=operation_type)
+        if coverage_gap_text:
+            parts.append(coverage_gap_text)
         parts.append(
             "Please review the refusal notice carefully and gather the decision record, relevant correspondence, and key dates before taking further action or arranging a consultation."
         )
@@ -526,6 +566,9 @@ class ReasoningService:
         unsupported_items: list[str],
         specific_marker: str | None,
         reason: str | None = None,
+        *,
+        answerability: dict[str, Any] | None = None,
+        operation_type: str | None = None,
     ) -> str:
         parts: list[str] = []
         if supported_facts:
@@ -538,8 +581,35 @@ class ReasoningService:
             parts.append("Some parts of your question are not specifically supported by the retrieved material.")
         else:
             parts.append("I have some relevant retrieved material, but not enough to give a fully specific answer with confidence.")
+        coverage_gap_text = self._coverage_gap_text(answerability, operation_type=operation_type)
+        if coverage_gap_text:
+            parts.append(coverage_gap_text)
         parts.append("Please provide the refusal notice, relevant dates, and stated refusal reason, or arrange a consultation with the lawyer.")
         return "\n\n".join(parts)
+
+    def _coverage_gap_text(self, answerability: dict[str, Any] | None, *, operation_type: str | None = None) -> str:
+        if not isinstance(answerability, dict):
+            return ""
+        required_facts_missing = answerability.get("required_facts_missing") or []
+        required_source_classes_missing = answerability.get("required_source_classes_missing") or []
+        parts: list[str] = []
+        if required_source_classes_missing:
+            joined = ", ".join(str(item) for item in required_source_classes_missing[:6])
+            parts.append(
+                f"For this operation{f' ({operation_type})' if operation_type else ''}, the retrieved material does not yet cover the key source classes needed for a final answer: {joined}."
+            )
+        if required_facts_missing:
+            joined = ", ".join(str(item) for item in required_facts_missing[:6])
+            parts.append(f"I still need these decisive facts before I can answer more specifically: {joined}.")
+        return " ".join(parts).strip()
+
+    def _fallback_next_action(self, answerability: dict[str, Any] | None) -> str:
+        if not isinstance(answerability, dict):
+            return "ask_followup"
+        answer_mode = str(answerability.get("answer_mode") or "")
+        if answer_mode == ANSWER_MODE_ESCALATE:
+            return "suggest_consultation"
+        return "ask_followup"
 
     def _fallback_insufficient_response(
         self,
@@ -575,10 +645,22 @@ class ReasoningService:
         for idx, (chunk, citation) in enumerate(zip(chunks, citations), start=1):
             bucket = None
             sub_type = None
+            source_classes: list[str] = []
             if getattr(chunk, "source", None) is not None:
                 meta = getattr(chunk.source, "metadata_json", None) or {}
                 bucket = meta.get("bucket")
                 sub_type = meta.get("sub_type")
+                source_classes = infer_source_classes_from_parts(
+                    title=getattr(chunk.source, "title", None),
+                    authority=getattr(chunk.source, "authority", None),
+                    source_type=getattr(chunk.source, "source_type", None),
+                    bucket=bucket,
+                    sub_type=sub_type,
+                    section_ref=getattr(chunk, "section_ref", None),
+                    heading=getattr(chunk, "heading", None),
+                    text=getattr(chunk, "text", None),
+                    metadata_json={**meta, **(getattr(chunk, "metadata_json", None) or {})},
+                )
             blocks.append(
                 "\n".join(
                     [
@@ -588,6 +670,7 @@ class ReasoningService:
                         f"Source type: {getattr(chunk.source, 'source_type', 'unknown')}",
                         f"Bucket: {bucket or 'N/A'}",
                         f"Sub type: {sub_type or 'N/A'}",
+                        f"Source classes: {', '.join(source_classes) if source_classes else 'N/A'}",
                         f"Section ref: {citation.section_ref or 'N/A'}",
                         f"URL: {citation.url}",
                         f"Heading: {getattr(chunk, 'heading', None) or 'N/A'}",
@@ -751,17 +834,17 @@ class ReasoningService:
     def _infer_operation_type(self, question: str) -> str | None:
         q = question.lower()
         if "how many days" in q or ("review" in q and ("deadline" in q or "still" in q)):
-            return "review_deadline"
+            return canonical_operation_type("review_deadline")
         if "review" in q or "appeal" in q:
-            return "review_rights"
+            return canonical_operation_type("review_rights")
         if "travel" in q or ("leave" in q and "come back" in q) or "bridging visa" in q:
-            return "bridging_travel"
+            return canonical_operation_type("bridging_travel")
         if "genuine student" in q or ("student visa" in q and "refused" in q):
-            return "student_refusal_next_steps"
+            return canonical_operation_type("student_refusal_next_steps")
         if "485" in q or "temporary graduate" in q:
-            return "485_eligibility_overview"
+            return canonical_operation_type("485_eligibility_overview")
         if "4020" in q or "misleading" in q or "incorrect information" in q:
-            return "pic4020_risk"
+            return canonical_operation_type("pic4020_risk")
         return None
 
     def _infer_missing_facts(self, question: str) -> list[str]:

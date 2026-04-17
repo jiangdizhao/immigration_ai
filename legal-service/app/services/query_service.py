@@ -109,27 +109,36 @@ class QueryService:
         local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
         artifacts.retrieval_debug = retrieval_debug
 
-        sufficiency_gate = self.policy_rules.judge_local_sufficiency(
+        initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
             question=effective_question,
             issue_type=state.issue_type,
             operation_type=state.operation_type,
             known_facts=merged_intake_facts,
             retrieval_debug=retrieval_debug,
         )
-        artifacts.sufficiency_gate = sufficiency_gate
 
         live_result = LiveRetrievalResult()
         live_chunks: list[_LiveChunkShim] = []
-        if sufficiency_gate.need_live_fetch:
+        if initial_sufficiency_gate.need_live_fetch:
             live_result = self.live_retrieval_service.retrieve(
                 question=effective_question,
-                preferred_domains=sufficiency_gate.preferred_domains,
+                preferred_domains=initial_sufficiency_gate.preferred_domains,
                 issue_type=state.issue_type,
                 operation_type=state.operation_type,
                 known_facts=merged_intake_facts,
             )
             live_chunks = self._live_chunks_to_shims(live_result)
         artifacts.live_retrieval = live_result
+
+        sufficiency_gate = self.policy_rules.judge_local_sufficiency(
+            question=effective_question,
+            issue_type=state.issue_type,
+            operation_type=state.operation_type,
+            known_facts=merged_intake_facts,
+            retrieval_debug=retrieval_debug,
+            live_retrieval=live_result,
+        )
+        artifacts.sufficiency_gate = sufficiency_gate
 
         merged_chunks = self._merge_chunks(local_chunks, live_chunks)
 
@@ -139,6 +148,7 @@ class QueryService:
             original_question=payload.question,
             effective_question=effective_question,
             live_result=live_result,
+            initial_sufficiency_gate=initial_sufficiency_gate,
             sufficiency_gate=sufficiency_gate,
         )
 
@@ -150,9 +160,11 @@ class QueryService:
                 "history": [turn.model_dump() for turn in state.conversation_history],
                 "issue_summary": matter.issue_summary,
                 "issue_type": state.issue_type,
+                "operation_type": state.operation_type,
                 "visa_type": state.visa_type,
                 "intake_facts": merged_intake_facts,
                 "effective_question": effective_question,
+                "answerability": sufficiency_gate.model_dump(),
             },
         )
         response.matter_id = matter.id
@@ -461,6 +473,7 @@ class QueryService:
         original_question: str,
         effective_question: str,
         live_result: LiveRetrievalResult,
+        initial_sufficiency_gate: SufficiencyGateResult | None,
         sufficiency_gate: SufficiencyGateResult,
     ) -> dict[str, Any]:
         live_rows = [
@@ -473,6 +486,7 @@ class QueryService:
                 "sub_type": chunk.sub_type,
                 "section_ref": chunk.section_ref,
                 "heading": chunk.heading,
+                "source_classes": (chunk.metadata_json or {}).get("source_classes", []),
             }
             for chunk in live_result.chunks[:8]
         ]
@@ -482,6 +496,7 @@ class QueryService:
             "contextualization": contextualization.model_dump() if contextualization else None,
             "original_question": original_question,
             "effective_question": effective_question,
+            "initial_sufficiency_gate": initial_sufficiency_gate.model_dump() if initial_sufficiency_gate else None,
             "sufficiency_gate": sufficiency_gate.model_dump(),
             "live_fetch_used": live_result.used_live_fetch,
             "live_domains_used": live_result.domains_used,
