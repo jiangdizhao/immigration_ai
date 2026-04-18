@@ -59,7 +59,7 @@ class ReasoningService:
             return {
                 "standalone_question": question.strip(),
                 "used_history": False,
-                "carried_facts": carried_facts,
+                "carried_facts": {},
                 "reason": "no_contextualization_needed",
             }
 
@@ -110,7 +110,7 @@ class ReasoningService:
             return {
                 "standalone_question": question.strip(),
                 "used_history": False,
-                "carried_facts": carried_facts,
+                "carried_facts": {},
                 "reason": "contextualization_failed",
             }
 

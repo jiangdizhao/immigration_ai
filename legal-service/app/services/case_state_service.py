@@ -140,9 +140,9 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
     ),
     "bridging_travel": OperationProfile(
         key="bridging_travel",
-        required_facts=("current_visa", "travel_need"),
-        optional_facts=("onshore_offshore",),
-        blocking_facts=("current_visa",),
+        required_facts=(),
+        optional_facts=("current_visa", "travel_need", "onshore_offshore"),
+        blocking_facts=(),
         followup_intro="Travel on a bridging visa depends on the visa and what you are trying to do, so I need a little more detail first.",
     ),
     "485_eligibility_overview": OperationProfile(
@@ -193,7 +193,12 @@ class CaseStateService:
         known_facts: dict[str, Any] | None = None,
     ) -> CaseHypothesis:
         known_facts = known_facts or {}
-        primary_operation = state.operation_type or self._infer_primary_operation(
+        inferred_operation = self._infer_primary_operation(
+            question=question,
+            issue_type=state.issue_type,
+            visa_type=state.visa_type,
+        )
+        primary_operation = inferred_operation or state.operation_type or self._infer_primary_operation(
             question=question,
             issue_type=state.issue_type,
             visa_type=state.visa_type,
@@ -280,7 +285,6 @@ class CaseStateService:
         missing_facts: Iterable[str] | None = None,
     ) -> list[FactSlotState]:
         known_facts = known_facts or {}
-        missing_fact_keys = [item for item in (missing_facts or []) if isinstance(item, str) and item.strip()]
         profile = self._resolve_profile(state.operation_type, state.issue_type, state.visa_type)
         ordered_keys: list[str] = []
 
@@ -288,15 +292,18 @@ class CaseStateService:
             ordered_keys.extend(profile.required_facts)
             ordered_keys.extend(profile.optional_facts)
 
-        for key in missing_fact_keys:
-            if key not in ordered_keys:
-                ordered_keys.append(key)
+        for item in (missing_facts or []):
+            canonical_key = self._canonical_fact_key_from_text(item)
+            if canonical_key and canonical_key not in ordered_keys:
+                ordered_keys.append(canonical_key)
 
         if not ordered_keys:
             ordered_keys.extend(
-                k
-                for k in known_facts.keys()
-                if isinstance(k, str) and k not in {"issue_type", "operation_type", "visa_type", "has_refusal", "has_cancellation", "seeking_review"}
+                key
+                for key in known_facts.keys()
+                if isinstance(key, str)
+                and key in FACT_SPECS
+                and key not in {"issue_type", "operation_type", "visa_type", "has_refusal", "has_cancellation", "seeking_review"}
             )
 
         slots: list[FactSlotState] = []
@@ -335,20 +342,6 @@ class CaseStateService:
             for slot in fact_slot_states
             if slot.status in KNOWN_STATUSES
         }
-        requested_slots = self._select_requested_slots(fact_slot_states)
-        requested_facts = [
-            InteractionFactRequest(
-                fact_key=slot.fact_key,
-                label=slot.label,
-                prompt=self._fact_prompt(slot.fact_key),
-                input_type=self._fact_spec(slot.fact_key).input_type,
-                options=list(self._fact_spec(slot.fact_key).options),
-                required=slot.required,
-                blocking=slot.blocking,
-                why_needed=slot.why_needed,
-            )
-            for slot in requested_slots
-        ]
 
         warnings: list[str] = []
         if state.risk_flags.deadline_sensitive and "notification_date" in required_missing:
@@ -359,7 +352,9 @@ class CaseStateService:
                 if pretty and pretty not in warnings:
                     warnings.append(pretty)
         if evidence.unsupported_requests:
-            warnings.append("Some of the exact next-step questions are not yet fully supported by the current evidence.")
+            warning = "Some of the exact next-step questions are not yet fully supported by the current evidence."
+            if warning not in warnings:
+                warnings.append(warning)
 
         if policy.escalate or policy.next_action == "suggest_consultation":
             mode = "escalation"
@@ -382,9 +377,34 @@ class CaseStateService:
             answer_mode = "ask_followup"
             primary_prompt = "Please provide a little more information so I can guide you properly."
 
+        requested_facts: list[InteractionFactRequest] = []
+        if mode == "guided_intake":
+            requested_slots = self._select_requested_slots(fact_slot_states)
+            if not requested_slots and required_missing:
+                fallback_slots = [slot for slot in fact_slot_states if slot.fact_key in required_missing]
+                fallback_slots.sort(key=lambda slot: (not slot.blocking, slot.question_priority or 999))
+                requested_slots = fallback_slots[:1]
+            requested_facts = [
+                InteractionFactRequest(
+                    fact_key=slot.fact_key,
+                    label=slot.label,
+                    prompt=self._fact_prompt(slot.fact_key),
+                    input_type=self._fact_spec(slot.fact_key).input_type,
+                    options=list(self._fact_spec(slot.fact_key).options),
+                    required=slot.required,
+                    blocking=slot.blocking,
+                    why_needed=slot.why_needed,
+                )
+                for slot in requested_slots
+            ]
+
+        if mode in {"answer", "analysis_ready"}:
+            required_missing = []
+            blocking_missing = []
+
         progress = InteractionProgress(
             collected_required=sum(1 for slot in required_slots if slot.status in KNOWN_STATUSES),
-            total_required=len(required_slots),
+            total_required=len(required_slots) if mode == "guided_intake" else 0,
         )
 
         return InteractionPlan(
@@ -402,9 +422,6 @@ class CaseStateService:
             can_answer_with_partial_information=not policy.escalate,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
     def _resolve_profile(
         self,
         operation_type: str | None,
@@ -445,9 +462,9 @@ class CaseStateService:
         if "4020" in q or "misleading" in q or "false information" in q:
             candidates.append("pic4020_risk")
 
-        if issue_type == "student_visa" and "student_refusal_next_steps" not in candidates:
+        if not candidates and issue_type == "student_visa":
             candidates.append("student_refusal_next_steps")
-        if visa_type == "bridging" and "bridging_travel" not in candidates:
+        if not candidates and visa_type == "bridging":
             candidates.append("bridging_travel")
 
         return self._unique(candidates)[:3] or ["document_checklist"]
@@ -557,7 +574,7 @@ class CaseStateService:
         status = self._derive_status(spec, value, explicit_status)
         confidence = self._parse_confidence(explicit_status)
         value_display = self._display_value(spec, value)
-        source = "carried_context" if value is not None else None
+        source = self._infer_fact_source(fact_key=fact_key, value=value, explicit_status=explicit_status)
 
         return FactSlotState(
             fact_key=fact_key,
@@ -587,6 +604,59 @@ class CaseStateService:
 
     def _fact_prompt(self, fact_key: str) -> str:
         return self._fact_spec(fact_key).prompt
+
+    def _canonical_fact_key_from_text(self, value: str | None) -> str | None:
+        text = str(value or "").strip().lower()
+        if not text:
+            return None
+        if text in FACT_SPECS:
+            return text
+
+        keyword_map = {
+            "notification_date": (
+                "notification date",
+                "notified of the refusal",
+                "notified of the decision",
+                "date you were notified",
+            ),
+            "refusal_notice_available": (
+                "refusal notice",
+                "refusal reasons",
+                "quote the refusal notice",
+                "upload or quote the refusal notice",
+            ),
+            "onshore_offshore": (
+                "onshore",
+                "offshore",
+                "in australia",
+                "outside australia",
+            ),
+            "refusal_reason_if_known": (
+                "refusal reason",
+                "decision-maker say caused the refusal",
+                "main reason given",
+            ),
+            "current_visa": (
+                "current visa",
+                "visa or immigration status",
+                "bridging visa subclass",
+                "bva",
+                "bvb",
+                "vevo",
+            ),
+            "travel_need": (
+                "travel plan",
+                "leave australia and return",
+                "asking generally",
+            ),
+            "visa_subclass": ("visa subclass", "subclass"),
+            "completion_date": ("complete your studies", "completion date"),
+            "incorrect_information_issue": ("incorrect information", "misleading", "4020"),
+        }
+        for canonical_key, patterns in keyword_map.items():
+            if any(pattern in text for pattern in patterns):
+                return canonical_key
+        return None
 
     def _read_fact_value(self, fact_key: str, known_facts: dict[str, Any]) -> Any | None:
         spec = self._fact_spec(fact_key)
@@ -626,6 +696,16 @@ class CaseStateService:
             return "known"
         return "known"
 
+
+    def _infer_fact_source(self, *, fact_key: str, value: Any | None, explicit_status: str) -> str | None:
+        if value is None or value == "":
+            return None
+        if fact_key in {"current_visa", "travel_need"}:
+            return "system_inferred"
+        if explicit_status in {"user_unsure", "document_unavailable", "conflicting", "not_applicable"}:
+            return "user_input"
+        return "carried_context"
+
     def _display_value(self, spec: FactSpec, value: Any | None) -> str | None:
         if value is None:
             return None
@@ -657,7 +737,11 @@ class CaseStateService:
     def _select_requested_slots(self, slots: list[FactSlotState]) -> list[FactSlotState]:
         missing_required = [slot for slot in slots if slot.required and slot.status not in KNOWN_STATUSES]
         missing_required.sort(key=lambda slot: (not slot.blocking, slot.question_priority or 999))
-        return missing_required[:1]
+        if missing_required:
+            return missing_required[:1]
+        missing_optional = [slot for slot in slots if slot.status not in KNOWN_STATUSES]
+        missing_optional.sort(key=lambda slot: (not slot.blocking, slot.question_priority or 999))
+        return missing_optional[:1]
 
     def _humanize_fact_key(self, key: str) -> str:
         return key.replace("_", " ").strip().title()

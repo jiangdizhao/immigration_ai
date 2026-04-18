@@ -200,6 +200,9 @@ class QueryService:
             state=state,
             known_facts=state.carried_intake_facts,
         )
+        if case_hypothesis.primary_operation_type:
+            state.operation_type = case_hypothesis.primary_operation_type
+
         fact_slot_states = self.case_state_service.build_fact_slot_states(
             state=state,
             known_facts=state.carried_intake_facts,
@@ -215,6 +218,30 @@ class QueryService:
         state.case_hypothesis = case_hypothesis
         state.fact_slot_states = fact_slot_states
         state.interaction_plan = interaction_plan
+
+        response = self._normalize_response_for_user(
+            response=response,
+            policy=policy,
+            evidence=evidence,
+            fact_slot_states=fact_slot_states,
+            case_hypothesis=case_hypothesis,
+        )
+
+        response = self._normalize_response_for_user(
+            response=response,
+            policy=policy,
+            evidence=evidence,
+            fact_slot_states=fact_slot_states,
+            case_hypothesis=case_hypothesis,
+        )
+
+        response = self._normalize_response_for_user(
+            response=response,
+            policy=policy,
+            evidence=evidence,
+            fact_slot_states=fact_slot_states,
+            case_hypothesis=case_hypothesis,
+        )
 
         response.conversation_state = state.conversation_state
         response.case_hypothesis = case_hypothesis
@@ -394,21 +421,34 @@ class QueryService:
         if getattr(response, "retrieval_debug", None):
             raw = (response.retrieval_debug or {}).get("evidence") or {}
         if isinstance(raw, EvidencePackage):
-            return raw
-        if isinstance(raw, dict) and raw:
+            evidence = raw
+        elif isinstance(raw, dict) and raw:
             try:
-                return EvidencePackage(**raw)
+                evidence = EvidencePackage(**raw)
             except Exception:
-                pass
+                evidence = None
+        else:
+            evidence = None
 
-        return EvidencePackage(
-            is_in_domain=True,
-            is_context_sufficient=False,
-            issue_type=response.issue_type or state.issue_type,
-            operation_type=state.operation_type,
-            missing_information=list(response.missing_facts or []),
-            follow_up_questions=list(response.follow_up_questions or []),
-        )
+        if evidence is None:
+            evidence = EvidencePackage(
+                is_in_domain=True,
+                is_context_sufficient=False,
+                issue_type=response.issue_type or state.issue_type,
+                operation_type=state.operation_type,
+                missing_information=list(response.missing_facts or []),
+                follow_up_questions=list(response.follow_up_questions or []),
+            )
+
+        if state.issue_type:
+            evidence.issue_type = state.issue_type
+        elif response.issue_type and not evidence.issue_type:
+            evidence.issue_type = response.issue_type
+
+        if state.operation_type:
+            evidence.operation_type = state.operation_type
+
+        return evidence
 
     def _apply_policy_to_response(
         self,
@@ -428,6 +468,171 @@ class QueryService:
             debug["policy"] = policy.model_dump()
             response.retrieval_debug = debug
         return response
+
+    def _normalize_response_for_user(
+        self,
+        *,
+        response: QueryResponse,
+        policy: PolicyDecision,
+        evidence: EvidencePackage,
+        fact_slot_states: list[Any],
+        case_hypothesis: Any,
+    ) -> QueryResponse:
+        known_statuses = {"known", "not_applicable"}
+        canonical_missing = [
+            slot.fact_key
+            for slot in fact_slot_states
+            if getattr(slot, "required", False) and getattr(slot, "status", "missing") not in known_statuses
+        ]
+        debug = dict(response.retrieval_debug or {})
+        evidence_gaps = [
+            item for item in (evidence.missing_information or [])
+            if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
+        ]
+        if evidence_gaps:
+            debug["evidence_gaps"] = evidence_gaps
+
+        if policy.next_action == "answer":
+            response.missing_facts = []
+            response.follow_up_questions = []
+        else:
+            response.missing_facts = canonical_missing
+
+        resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
+        if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
+            response.answer = self._soften_bridging_travel_answer(response.answer)
+            if response.confidence == "high":
+                response.confidence = "medium"
+
+        response.retrieval_debug = debug
+        return response
+
+    def _soften_bridging_travel_answer(self, answer: str) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return answer
+        lowered = text.lower()
+        if lowered.startswith("no."):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        if lowered.startswith("no,"):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        return text
+
+    def _normalize_response_for_user(
+        self,
+        *,
+        response: QueryResponse,
+        policy: PolicyDecision,
+        evidence: EvidencePackage,
+        fact_slot_states: list[Any],
+        case_hypothesis: Any,
+    ) -> QueryResponse:
+        known_statuses = {"known", "not_applicable"}
+        canonical_missing = [
+            slot.fact_key
+            for slot in fact_slot_states
+            if getattr(slot, "required", False) and getattr(slot, "status", "missing") not in known_statuses
+        ]
+        debug = dict(response.retrieval_debug or {})
+        evidence_gaps = [
+            item for item in (evidence.missing_information or [])
+            if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
+        ]
+        if evidence_gaps:
+            debug["evidence_gaps"] = evidence_gaps
+
+        if policy.next_action == "answer":
+            response.missing_facts = []
+            response.follow_up_questions = []
+        else:
+            response.missing_facts = canonical_missing
+
+        resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
+        if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
+            response.answer = self._soften_bridging_travel_answer(response.answer)
+            if response.confidence == "high":
+                response.confidence = "medium"
+
+        response.retrieval_debug = debug
+        return response
+
+    def _soften_bridging_travel_answer(self, answer: str) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return answer
+        lowered = text.lower()
+        if lowered.startswith("no."):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        if lowered.startswith("no,"):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        return text
+
+    def _normalize_response_for_user(
+        self,
+        *,
+        response: QueryResponse,
+        policy: PolicyDecision,
+        evidence: EvidencePackage,
+        fact_slot_states: list[Any],
+        case_hypothesis: Any,
+    ) -> QueryResponse:
+        known_statuses = {"known", "not_applicable"}
+        canonical_missing = [
+            slot.fact_key
+            for slot in fact_slot_states
+            if getattr(slot, "required", False) and getattr(slot, "status", "missing") not in known_statuses
+        ]
+        debug = dict(response.retrieval_debug or {})
+        evidence_gaps = [
+            item for item in (evidence.missing_information or [])
+            if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
+        ]
+        if evidence_gaps:
+            debug["evidence_gaps"] = evidence_gaps
+
+        if policy.next_action == "answer":
+            response.missing_facts = []
+            response.follow_up_questions = []
+        else:
+            response.missing_facts = canonical_missing
+
+        resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
+        if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
+            response.answer = self._soften_bridging_travel_answer(response.answer)
+            if response.confidence == "high":
+                response.confidence = "medium"
+
+        response.retrieval_debug = debug
+        return response
+
+    def _soften_bridging_travel_answer(self, answer: str) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return answer
+        lowered = text.lower()
+        if lowered.startswith("no."):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        if lowered.startswith("no,"):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        return text
 
     def _cap_confidence(self, current: str, cap: str) -> str:
         order = {"low": 0, "medium": 1, "high": 2}

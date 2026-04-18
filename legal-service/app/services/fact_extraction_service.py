@@ -57,6 +57,19 @@ class FactExtractionService:
             preferred_jurisdiction=preferred_jurisdiction,
         )
 
+        explicit_issue_type, explicit_operation_type, explicit_visa_type = self._explicit_current_turn_cues(
+            question=question,
+            current_visa_type=current_visa_type,
+        )
+        explicit_cues_json = json.dumps(
+            {
+                "issue_type": explicit_issue_type,
+                "operation_type": explicit_operation_type,
+                "visa_type": explicit_visa_type,
+            },
+            ensure_ascii=False,
+        )
+
         system_prompt = (
             "You classify an immigration-law user query into a narrow JSON structure.\n"
             "Return ONLY valid JSON with this exact shape:\n"
@@ -70,13 +83,15 @@ class FactExtractionService:
             "- Keep labels short and implementation-friendly.\n"
             "- Prefer conservative labels over speculative ones.\n"
             "- operation_type should describe the legal/user operation, e.g. review_rights, review_deadline, student_refusal_next_steps, bridging_travel, document_checklist, 485_eligibility_overview, pic4020_risk.\n"
-            "- If uncertain, keep existing labels if they still fit.\n"
+            "- Respect strong current-turn cues over stale carried labels.\n"
+            "- If uncertain, keep the heuristic labels.\n"
         )
 
         user_prompt = (
             f"Question:\n{question}\n\n"
             f"Known intake facts JSON:\n{json.dumps(intake_facts or {}, ensure_ascii=False)}\n\n"
-            f"Current labels JSON:\n{json.dumps(heuristic.model_dump(), ensure_ascii=False)}\n"
+            f"Heuristic labels JSON:\n{json.dumps(heuristic.model_dump(), ensure_ascii=False)}\n\n"
+            f"Explicit current-turn cues JSON:\n{explicit_cues_json}\n"
         )
 
         try:
@@ -90,10 +105,23 @@ class FactExtractionService:
             parsed = self._extract_json_object((response.output_text or "").strip())
             if not parsed:
                 return heuristic
+
             return IssueAndOperation(
-                issue_type=self._clean_label(parsed.get("issue_type")) or heuristic.issue_type,
-                operation_type=self._clean_label(parsed.get("operation_type")) or heuristic.operation_type,
-                visa_type=self._clean_label(parsed.get("visa_type")) or heuristic.visa_type,
+                issue_type=(
+                    self._clean_label(parsed.get("issue_type"))
+                    or explicit_issue_type
+                    or heuristic.issue_type
+                ),
+                operation_type=(
+                    self._clean_label(parsed.get("operation_type"))
+                    or explicit_operation_type
+                    or heuristic.operation_type
+                ),
+                visa_type=(
+                    self._clean_label(parsed.get("visa_type"))
+                    or explicit_visa_type
+                    or heuristic.visa_type
+                ),
                 jurisdiction=self._clean_label(parsed.get("jurisdiction")) or heuristic.jurisdiction,
             )
         except Exception:
@@ -129,7 +157,7 @@ class FactExtractionService:
             "- Do not infer missing legal conclusions.\n"
             "- Use short snake_case keys where possible.\n"
             "- Confidence values must be low, medium, or high.\n"
-            "- Good keys include refusal_date, notification_date, in_australia, outside_australia, detention_status, refusal_reason, visa_subclass, visa_type, issue_type.\n"
+            "- Good keys include refusal_date, notification_date, refusal_notice_available, onshore_offshore, detention_status, refusal_reason, visa_subclass, visa_type, issue_type, current_visa, travel_need.\n"
         )
 
         user_prompt = (
@@ -157,7 +185,6 @@ class FactExtractionService:
             new_facts = self._normalize_fact_dict(parsed.get("new_facts"))
             fact_confidence = self._normalize_confidence_dict(parsed.get("fact_confidence"))
 
-            # merge heuristic defaults if LLM omitted them
             merged_facts = dict(heuristic.new_facts)
             merged_facts.update(new_facts)
             merged_conf = dict(heuristic.fact_confidence)
@@ -179,51 +206,16 @@ class FactExtractionService:
         current_visa_type: str | None,
         preferred_jurisdiction: str | None,
     ) -> IssueAndOperation:
-        q = question.lower()
-        issue_type = current_issue_type
-        operation_type = current_operation_type
-        visa_type = current_visa_type
         jurisdiction = preferred_jurisdiction or "Cth"
 
-        # visa / issue
-        if "student visa" in q or "subclass 500" in q:
-            issue_type = issue_type or "student_visa"
-            visa_type = visa_type or "student"
-        elif "485" in q or "temporary graduate" in q:
-            issue_type = issue_type or "temporary_graduate_visa"
-            visa_type = visa_type or "temporary_graduate"
-        elif "bridging visa" in q or any(x in q for x in ["bva", "bvb", "bvc", "bve"]):
-            issue_type = issue_type or "bridging_visa"
-            visa_type = visa_type or "bridging"
-        elif "partner visa" in q:
-            issue_type = issue_type or "partner_visa"
-            visa_type = visa_type or "partner"
-        elif "skilled" in q:
-            issue_type = issue_type or "skilled_migration"
-            visa_type = visa_type or "skilled"
+        explicit_issue_type, explicit_operation_type, explicit_visa_type = self._explicit_current_turn_cues(
+            question=question,
+            current_visa_type=current_visa_type,
+        )
 
-        if "refus" in q:
-            issue_type = issue_type or "visa_refusal"
-        if "cancel" in q:
-            issue_type = issue_type or "visa_cancellation"
-        if "4020" in q or "incorrect information" in q or "misleading" in q:
-            issue_type = issue_type or "pic4020_issue"
-
-        # operation
-        if ("review" in q or "appeal" in q) and any(x in q for x in ["still", "time", "deadline", "late"]):
-            operation_type = operation_type or "review_deadline"
-        elif "review" in q or "appeal" in q:
-            operation_type = operation_type or "review_rights"
-        elif ("refus" in q or "refused" in q) and visa_type == "student":
-            operation_type = operation_type or "student_refusal_next_steps"
-        elif ("travel" in q or "leave" in q or "come back" in q) and ("bridging" in q or visa_type == "bridging"):
-            operation_type = operation_type or "bridging_travel"
-        elif ("document" in q or "prepare" in q or "upload" in q or "checklist" in q):
-            operation_type = operation_type or "document_checklist"
-        elif visa_type == "temporary_graduate" and ("eligible" in q or "what is" in q or "can i apply" in q):
-            operation_type = operation_type or "485_eligibility_overview"
-        elif issue_type == "pic4020_issue":
-            operation_type = operation_type or "pic4020_risk"
+        issue_type = explicit_issue_type or current_issue_type
+        visa_type = explicit_visa_type or current_visa_type
+        operation_type = explicit_operation_type or current_operation_type
 
         return IssueAndOperation(
             issue_type=issue_type,
@@ -231,6 +223,72 @@ class FactExtractionService:
             visa_type=visa_type,
             jurisdiction=jurisdiction,
         )
+
+    def _explicit_current_turn_cues(
+        self,
+        *,
+        question: str,
+        current_visa_type: str | None,
+    ) -> tuple[str | None, str | None, str | None]:
+        q = question.lower()
+
+        explicit_issue_type: str | None = None
+        explicit_operation_type: str | None = None
+        explicit_visa_type: str | None = None
+
+        # visa / issue: strong current-turn cues should override stale labels
+        if "student visa" in q or "subclass 500" in q:
+            explicit_issue_type = "student_visa"
+            explicit_visa_type = "student"
+        elif "485" in q or "temporary graduate" in q:
+            explicit_issue_type = "temporary_graduate_visa"
+            explicit_visa_type = "temporary_graduate"
+        elif "bridging visa" in q or any(x in q for x in ["bva", "bvb", "bvc", "bve"]):
+            explicit_issue_type = "bridging_visa"
+            explicit_visa_type = "bridging"
+        elif "partner visa" in q:
+            explicit_issue_type = "partner_visa"
+            explicit_visa_type = "partner"
+        elif "skilled" in q:
+            explicit_issue_type = "skilled_migration"
+            explicit_visa_type = "skilled"
+
+        if "4020" in q or "incorrect information" in q or "misleading" in q:
+            explicit_issue_type = "pic4020_issue"
+        elif "cancel" in q:
+            explicit_issue_type = "visa_cancellation"
+        elif "refus" in q and explicit_issue_type is None:
+            explicit_issue_type = "visa_refusal"
+
+        # operation: prioritize review/travel cues from the current turn
+        if ("travel" in q or "leave" in q or "come back" in q) and (
+            "bridging" in q or explicit_visa_type == "bridging" or current_visa_type == "bridging"
+        ):
+            explicit_operation_type = "bridging_travel"
+            if explicit_issue_type is None:
+                explicit_issue_type = "bridging_visa"
+            if explicit_visa_type is None:
+                explicit_visa_type = "bridging"
+        elif ("review" in q or "appeal" in q or "tribunal" in q) and any(
+            x in q for x in ["still", "time", "deadline", "late"]
+        ):
+            explicit_operation_type = "review_deadline"
+        elif "review" in q or "appeal" in q or "tribunal" in q:
+            explicit_operation_type = "review_rights"
+        elif ("refus" in q or "refused" in q) and (
+            explicit_visa_type == "student" or current_visa_type == "student"
+        ):
+            explicit_operation_type = "student_refusal_next_steps"
+        elif ("document" in q or "prepare" in q or "upload" in q or "checklist" in q):
+            explicit_operation_type = "document_checklist"
+        elif (explicit_visa_type == "temporary_graduate" or current_visa_type == "temporary_graduate") and (
+            "eligible" in q or "what is" in q or "can i apply" in q
+        ):
+            explicit_operation_type = "485_eligibility_overview"
+        elif explicit_issue_type == "pic4020_issue":
+            explicit_operation_type = "pic4020_risk"
+
+        return explicit_issue_type, explicit_operation_type, explicit_visa_type
 
     def _heuristic_fact_updates(
         self,
@@ -246,7 +304,6 @@ class FactExtractionService:
         new_facts: dict[str, Any] = {}
         conf: dict[str, str] = {}
 
-        # carry labels when explicit
         if issue_type:
             new_facts["issue_type"] = issue_type
             conf["issue_type"] = "high"
@@ -255,22 +312,20 @@ class FactExtractionService:
             conf["visa_type"] = "high"
         if operation_type:
             new_facts["operation_type"] = operation_type
-            conf["operation_type"] = "medium"
+            conf["operation_type"] = "high"
 
-        # dates
         date_match = self._extract_date(question) or self._extract_date(effective_question)
         if date_match:
-            if "refus" in q or "refus" in eq:
-                new_facts["refusal_date"] = date_match
-                conf["refusal_date"] = "high"
-            elif "notif" in q or "notif" in eq:
+            if "notif" in q or "notif" in eq:
                 new_facts["notification_date"] = date_match
                 conf["notification_date"] = "high"
+            elif "refus" in q or "refus" in eq:
+                new_facts["refusal_date"] = date_match
+                conf["refusal_date"] = "high"
             elif "decision" in q or "decision" in eq:
                 new_facts["decision_date"] = date_match
                 conf["decision_date"] = "medium"
 
-        # location / detention flags
         if "in australia" in q or "onshore" in q:
             new_facts["in_australia"] = True
             new_facts["onshore_offshore"] = "in_australia"
@@ -281,31 +336,60 @@ class FactExtractionService:
             new_facts["onshore_offshore"] = "outside_australia"
             conf["in_australia"] = "high"
             conf["onshore_offshore"] = "high"
-        if "immigration detention" in q or "detention" in q:
+
+        if "immigration detention" in q or ("detention" in q and "not in detention" not in q):
             new_facts["detention_status"] = True
             conf["detention_status"] = "medium"
         if "not in detention" in q:
             new_facts["detention_status"] = False
             conf["detention_status"] = "medium"
 
-        # refusal / cancellation / review mentions
         if "refus" in q:
             new_facts["has_refusal"] = True
             conf["has_refusal"] = "high"
         if "cancel" in q:
             new_facts["has_cancellation"] = True
             conf["has_cancellation"] = "high"
-        if "review" in q or "appeal" in q:
+        if "review" in q or "appeal" in q or "tribunal" in q:
             new_facts["seeking_review"] = True
             conf["seeking_review"] = "high"
 
-        # subclass hints
-        subclass_match = re.search(r"\b(500|485|010|020|030|050|051|820|801|189|190|491|600)\b", q)
-        if subclass_match:
-            new_facts["visa_subclass"] = subclass_match.group(1)
+        subclass_token_match = re.search(
+            r"\b(500|485|010|020|030|050|051|820|801|189|190|491|600)\b", q
+        )
+        if subclass_token_match:
+            new_facts["visa_subclass"] = subclass_token_match.group(1)
             conf["visa_subclass"] = "high"
 
-        # rough refusal reason cues
+        bridging_name_map = {
+            "bva": ("010", "BVA"),
+            "bvb": ("020", "BVB"),
+            "bvc": ("030", "BVC"),
+            "bve": ("050", "BVE"),
+        }
+        for needle, (subclass, display) in bridging_name_map.items():
+            if needle in q:
+                new_facts["visa_subclass"] = subclass
+                new_facts["current_visa"] = display
+                conf["visa_subclass"] = "high"
+                conf["current_visa"] = "high"
+                break
+
+        if "bridging visa" in q:
+            new_facts.setdefault("current_visa", "bridging_visa")
+            conf.setdefault("current_visa", "medium")
+
+        if "have the refusal notice" in q or "got the refusal notice" in q:
+            new_facts["refusal_notice_available"] = True
+            conf["refusal_notice_available"] = "high"
+        elif "do not have the refusal notice" in q or "don't have the refusal notice" in q or "no refusal notice" in q:
+            new_facts["refusal_notice_available"] = False
+            conf["refusal_notice_available"] = "high"
+
+        if "travel" in q or "leave" in q or "come back" in q or "return" in q:
+            new_facts["travel_need"] = "international_travel"
+            conf["travel_need"] = "medium"
+
         reason_map = {
             "genuine student": "genuine_student",
             "gs": "genuine_student",
@@ -369,8 +453,9 @@ class FactExtractionService:
         for key, item in value.items():
             if not isinstance(key, str):
                 continue
-            if isinstance(item, str) and item in allowed:
-                normalized[key.strip()] = item
+            key = key.strip()
+            if isinstance(item, str) and item in allowed and key:
+                normalized[key] = item
         return normalized
 
     def _clean_label(self, value: Any) -> str | None:

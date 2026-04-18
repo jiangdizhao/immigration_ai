@@ -201,8 +201,13 @@ class StateMachine:
         state.latest_question = turn_input.question
         state.last_contextualized_question = effective_question
 
+        base_carried_facts = (
+            dict(state.carried_intake_facts)
+            if artifacts.contextualization.used_history
+            else self._carry_forward_facts_for_standalone_turn(state.carried_intake_facts)
+        )
         merged_facts = self.merge_facts(
-            state.carried_intake_facts,
+            base_carried_facts,
             turn_input.intake_facts,
             artifacts.contextualization.carried_facts,
         )
@@ -474,6 +479,22 @@ class StateMachine:
                     continue
                 merged[key] = value
         return merged
+
+    def _carry_forward_facts_for_standalone_turn(
+        self,
+        facts: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """
+        When the contextualizer says history was not needed, do not blindly reuse the
+        full prior fact set. This prevents earlier refusal/review assumptions from
+        contaminating a later standalone turn such as a bridging-travel question.
+        """
+        facts = dict(facts or {})
+        stable_keys = {
+            "client_name",
+            "preferred_language",
+        }
+        return {key: value for key, value in facts.items() if key in stable_keys}
 
     def update_fact_status(
         self,
