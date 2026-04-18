@@ -9,7 +9,6 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.schemas.state import FactExtractionResult, IssueAndOperation
-from app.services.operation_profiles import canonical_operation_type, normalize_known_facts
 
 
 class FactExtractionService:
@@ -50,7 +49,6 @@ class FactExtractionService:
         current_visa_type: str | None = None,
         preferred_jurisdiction: str | None = None,
     ) -> IssueAndOperation:
-        intake_facts = normalize_known_facts(intake_facts)
         heuristic = self._heuristic_issue_and_operation(
             question=question,
             current_issue_type=current_issue_type,
@@ -92,10 +90,9 @@ class FactExtractionService:
             parsed = self._extract_json_object((response.output_text or "").strip())
             if not parsed:
                 return heuristic
-            parsed_operation_type = canonical_operation_type(self._clean_label(parsed.get("operation_type")))
             return IssueAndOperation(
                 issue_type=self._clean_label(parsed.get("issue_type")) or heuristic.issue_type,
-                operation_type=parsed_operation_type or heuristic.operation_type,
+                operation_type=self._clean_label(parsed.get("operation_type")) or heuristic.operation_type,
                 visa_type=self._clean_label(parsed.get("visa_type")) or heuristic.visa_type,
                 jurisdiction=self._clean_label(parsed.get("jurisdiction")) or heuristic.jurisdiction,
             )
@@ -112,12 +109,11 @@ class FactExtractionService:
         visa_type: str | None,
         prior_facts: dict[str, Any] | None = None,
     ) -> FactExtractionResult:
-        prior_facts = normalize_known_facts(prior_facts)
         heuristic = self._heuristic_fact_updates(
             question=question,
             effective_question=effective_question,
             issue_type=issue_type,
-            operation_type=canonical_operation_type(operation_type),
+            operation_type=operation_type,
             visa_type=visa_type,
         )
 
@@ -185,7 +181,7 @@ class FactExtractionService:
     ) -> IssueAndOperation:
         q = question.lower()
         issue_type = current_issue_type
-        operation_type = canonical_operation_type(current_operation_type)
+        operation_type = current_operation_type
         visa_type = current_visa_type
         jurisdiction = preferred_jurisdiction or "Cth"
 
@@ -224,14 +220,14 @@ class FactExtractionService:
             operation_type = operation_type or "bridging_travel"
         elif ("document" in q or "prepare" in q or "upload" in q or "checklist" in q):
             operation_type = operation_type or "document_checklist"
-        elif visa_type == "temporary_graduate" and ("eligible" in q or "what is" in q or "can i apply" in q or "requirements" in q):
+        elif visa_type == "temporary_graduate" and ("eligible" in q or "what is" in q or "can i apply" in q):
             operation_type = operation_type or "485_eligibility_overview"
         elif issue_type == "pic4020_issue":
             operation_type = operation_type or "pic4020_risk"
 
         return IssueAndOperation(
             issue_type=issue_type,
-            operation_type=canonical_operation_type(operation_type),
+            operation_type=operation_type,
             visa_type=visa_type,
             jurisdiction=jurisdiction,
         )
@@ -247,7 +243,6 @@ class FactExtractionService:
     ) -> FactExtractionResult:
         q = question.lower()
         eq = effective_question.lower()
-        operation_type = canonical_operation_type(operation_type)
         new_facts: dict[str, Any] = {}
         conf: dict[str, str] = {}
 
@@ -278,12 +273,12 @@ class FactExtractionService:
         # location / detention flags
         if "in australia" in q or "onshore" in q:
             new_facts["in_australia"] = True
-            new_facts["onshore_offshore"] = "onshore"
+            new_facts["onshore_offshore"] = "in_australia"
             conf["in_australia"] = "high"
             conf["onshore_offshore"] = "high"
         if "outside australia" in q or "offshore" in q:
             new_facts["in_australia"] = False
-            new_facts["onshore_offshore"] = "offshore"
+            new_facts["onshore_offshore"] = "outside_australia"
             conf["in_australia"] = "high"
             conf["onshore_offshore"] = "high"
         if "immigration detention" in q or "detention" in q:
@@ -304,20 +299,11 @@ class FactExtractionService:
             new_facts["seeking_review"] = True
             conf["seeking_review"] = "high"
 
-        if any(term in q for term in ["refusal notice", "decision letter", "notice of decision"]):
-            new_facts["refusal_notice_available"] = True
-            conf["refusal_notice_available"] = "medium"
-
         # subclass hints
         subclass_match = re.search(r"\b(500|485|010|020|030|050|051|820|801|189|190|491|600)\b", q)
         if subclass_match:
             new_facts["visa_subclass"] = subclass_match.group(1)
             conf["visa_subclass"] = "high"
-
-        if operation_type in {"review_deadline", "review_rights", "student_refusal_next_steps"} and date_match and "notification_date" not in new_facts:
-            if any(term in q for term in ["notified", "notification", "received the decision", "received the refusal"]):
-                new_facts["notification_date"] = date_match
-                conf["notification_date"] = "medium"
 
         # rough refusal reason cues
         reason_map = {
@@ -372,11 +358,8 @@ class FactExtractionService:
             key = key.strip()
             if not key:
                 continue
-            if key == "operation_type" and isinstance(item, str):
-                normalized[key] = canonical_operation_type(item) or item
-                continue
             normalized[key] = item
-        return normalize_known_facts(normalized)
+        return normalized
 
     def _normalize_confidence_dict(self, value: Any) -> dict[str, str]:
         if not isinstance(value, dict):

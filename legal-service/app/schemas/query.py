@@ -5,6 +5,7 @@ from pydantic import Field
 from app.core.config import get_settings
 from app.schemas.common import BaseSchema
 from app.schemas.source import CitationOut
+from app.schemas.state import CaseHypothesis, FactSlotState, InteractionPlan, ConversationState
 
 settings = get_settings()
 
@@ -29,4 +30,8 @@ class QueryResponse(BaseSchema):
     citations: list[CitationOut] = Field(default_factory=list)
     escalate: bool = False
     next_action: Literal["answer", "ask_followup", "suggest_consultation"]
+    conversation_state: ConversationState | None = None
+    case_hypothesis: CaseHypothesis | None = None
+    fact_slot_states: list[FactSlotState] = Field(default_factory=list)
+    interaction_plan: InteractionPlan | None = None
     retrieval_debug: dict[str, Any] = Field(default_factory=dict)

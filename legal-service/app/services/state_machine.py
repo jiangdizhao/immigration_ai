@@ -6,10 +6,13 @@ from typing import Any, Callable
 
 from app.schemas.state import (
     AnswerPackage,
+    CaseHypothesis,
     ContextualizationResult,
     ConversationTurn,
     EvidencePackage,
     FactExtractionResult,
+    FactSlotState,
+    InteractionPlan,
     IssueAndOperation,
     LiveRetrievalResult,
     MatterState,
@@ -91,6 +94,29 @@ class StateMachine:
         if not isinstance(carried_facts, dict):
             carried_facts = {}
 
+        case_hypothesis_raw = metadata.get("case_hypothesis") or {}
+        if isinstance(case_hypothesis_raw, CaseHypothesis):
+            case_hypothesis = case_hypothesis_raw
+        elif isinstance(case_hypothesis_raw, dict):
+            case_hypothesis = CaseHypothesis(**case_hypothesis_raw)
+        else:
+            case_hypothesis = CaseHypothesis()
+
+        fact_slot_states_raw = metadata.get("fact_slot_states") or []
+        fact_slot_states = [
+            item if isinstance(item, FactSlotState) else FactSlotState(**item)
+            for item in fact_slot_states_raw
+            if isinstance(item, (dict, FactSlotState))
+        ]
+
+        interaction_plan_raw = metadata.get("interaction_plan") or {}
+        if isinstance(interaction_plan_raw, InteractionPlan):
+            interaction_plan = interaction_plan_raw
+        elif isinstance(interaction_plan_raw, dict):
+            interaction_plan = InteractionPlan(**interaction_plan_raw)
+        else:
+            interaction_plan = InteractionPlan()
+
         conversation_state = metadata.get("conversation_state") or self._infer_legacy_state(metadata, history)
 
         return MatterState(
@@ -106,6 +132,9 @@ class StateMachine:
             last_answer_type=metadata.get("last_answer_type"),
             next_action=metadata.get("next_action"),
             conversation_history=history[-self.max_history_turns :],
+            case_hypothesis=case_hypothesis,
+            fact_slot_states=fact_slot_states,
+            interaction_plan=interaction_plan,
         )
 
     def to_metadata_json(
@@ -128,6 +157,9 @@ class StateMachine:
                 "last_answer_type": state.last_answer_type,
                 "next_action": state.next_action,
                 "conversation_history": [turn.model_dump() for turn in state.conversation_history[-self.max_history_turns :]],
+                "case_hypothesis": state.case_hypothesis.model_dump(),
+                "fact_slot_states": [slot.model_dump() for slot in state.fact_slot_states],
+                "interaction_plan": state.interaction_plan.model_dump(),
             }
         )
         return metadata
@@ -451,9 +483,10 @@ class StateMachine:
     ) -> dict[str, str]:
         status = dict(existing_status or {})
         for key, value in known_facts.items():
-            status[key] = "known" if value not in (None, "") else status.get(key, "missing")
+            normalized = self._normalize_fact_status(key, value, status.get(key))
+            status[key] = normalized
         for key, conf in (fact_confidence or {}).items():
-            if key in known_facts and known_facts.get(key) not in (None, ""):
+            if key in known_facts and known_facts.get(key) not in (None, "") and status.get(key) == "known":
                 status[key] = f"known:{conf}"
         return status
 
@@ -618,6 +651,32 @@ class StateMachine:
         if history:
             return "FACT_GATHERING"
         return "NEW"
+
+    def _normalize_fact_status(
+        self,
+        key: str,
+        value: Any,
+        previous: str | None,
+    ) -> str:
+        lowered_previous = str(previous or "").strip().lower()
+        if lowered_previous in {"user_unsure", "document_unavailable", "not_applicable", "conflicting"}:
+            return lowered_previous
+        if value in (None, ""):
+            return lowered_previous or "missing"
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"not_sure", "unknown", "unsure", "don't know", "dont know"}:
+                return "user_unsure"
+            if lowered in {"n/a", "na", "not_applicable"}:
+                return "not_applicable"
+            if key.endswith("_available") and lowered in {"no", "false"}:
+                return "document_unavailable"
+            return "known"
+        if isinstance(value, bool):
+            if key.endswith("_available") and value is False:
+                return "document_unavailable"
+            return "known"
+        return "known"
 
     def _iso_now(self) -> str:
         from datetime import datetime, timezone

@@ -22,6 +22,7 @@ from app.schemas.state import (
     PolicyDecision,
     SufficiencyGateResult,
 )
+from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.policy_rules import PolicyRules
@@ -60,6 +61,7 @@ class QueryService:
         policy_rules: PolicyRules | None = None,
         live_retrieval_service: LiveRetrievalService | None = None,
         state_machine: StateMachine | None = None,
+        case_state_service: CaseStateService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -67,6 +69,7 @@ class QueryService:
         self.policy_rules = policy_rules or PolicyRules()
         self.live_retrieval_service = live_retrieval_service or LiveRetrievalService()
         self.state_machine = state_machine or StateMachine(max_history_turns=12)
+        self.case_state_service = case_state_service or CaseStateService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -109,36 +112,27 @@ class QueryService:
         local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
         artifacts.retrieval_debug = retrieval_debug
 
-        initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
-            question=effective_question,
-            issue_type=state.issue_type,
-            operation_type=state.operation_type,
-            known_facts=merged_intake_facts,
-            retrieval_debug=retrieval_debug,
-        )
-
-        live_result = LiveRetrievalResult()
-        live_chunks: list[_LiveChunkShim] = []
-        if initial_sufficiency_gate.need_live_fetch:
-            live_result = self.live_retrieval_service.retrieve(
-                question=effective_question,
-                preferred_domains=initial_sufficiency_gate.preferred_domains,
-                issue_type=state.issue_type,
-                operation_type=state.operation_type,
-                known_facts=merged_intake_facts,
-            )
-            live_chunks = self._live_chunks_to_shims(live_result)
-        artifacts.live_retrieval = live_result
-
         sufficiency_gate = self.policy_rules.judge_local_sufficiency(
             question=effective_question,
             issue_type=state.issue_type,
             operation_type=state.operation_type,
             known_facts=merged_intake_facts,
             retrieval_debug=retrieval_debug,
-            live_retrieval=live_result,
         )
         artifacts.sufficiency_gate = sufficiency_gate
+
+        live_result = LiveRetrievalResult()
+        live_chunks: list[_LiveChunkShim] = []
+        if sufficiency_gate.need_live_fetch:
+            live_result = self.live_retrieval_service.retrieve(
+                question=effective_question,
+                preferred_domains=sufficiency_gate.preferred_domains,
+                issue_type=state.issue_type,
+                operation_type=state.operation_type,
+                known_facts=merged_intake_facts,
+            )
+            live_chunks = self._live_chunks_to_shims(live_result)
+        artifacts.live_retrieval = live_result
 
         merged_chunks = self._merge_chunks(local_chunks, live_chunks)
 
@@ -148,7 +142,6 @@ class QueryService:
             original_question=payload.question,
             effective_question=effective_question,
             live_result=live_result,
-            initial_sufficiency_gate=initial_sufficiency_gate,
             sufficiency_gate=sufficiency_gate,
         )
 
@@ -160,11 +153,9 @@ class QueryService:
                 "history": [turn.model_dump() for turn in state.conversation_history],
                 "issue_summary": matter.issue_summary,
                 "issue_type": state.issue_type,
-                "operation_type": state.operation_type,
                 "visa_type": state.visa_type,
                 "intake_facts": merged_intake_facts,
                 "effective_question": effective_question,
-                "answerability": sufficiency_gate.model_dump(),
             },
         )
         response.matter_id = matter.id
@@ -203,6 +194,37 @@ class QueryService:
             issue_type=response.issue_type or state.issue_type,
             visa_type=state.visa_type,
         )
+
+        case_hypothesis = self.case_state_service.build_case_hypothesis(
+            question=effective_question,
+            state=state,
+            known_facts=state.carried_intake_facts,
+        )
+        fact_slot_states = self.case_state_service.build_fact_slot_states(
+            state=state,
+            known_facts=state.carried_intake_facts,
+            missing_facts=response.missing_facts or evidence.missing_information,
+        )
+        interaction_plan = self.case_state_service.build_interaction_plan(
+            state=state,
+            case_hypothesis=case_hypothesis,
+            fact_slot_states=fact_slot_states,
+            policy=policy,
+            evidence=evidence,
+        )
+        state.case_hypothesis = case_hypothesis
+        state.fact_slot_states = fact_slot_states
+        state.interaction_plan = interaction_plan
+
+        response.conversation_state = state.conversation_state
+        response.case_hypothesis = case_hypothesis
+        response.fact_slot_states = fact_slot_states
+        response.interaction_plan = interaction_plan
+        debug = dict(response.retrieval_debug or {})
+        debug["case_hypothesis"] = case_hypothesis.model_dump()
+        debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
+        debug["interaction_plan"] = interaction_plan.model_dump()
+        response.retrieval_debug = debug
 
         self._update_matter_from_state(
             matter=matter,
@@ -473,7 +495,6 @@ class QueryService:
         original_question: str,
         effective_question: str,
         live_result: LiveRetrievalResult,
-        initial_sufficiency_gate: SufficiencyGateResult | None,
         sufficiency_gate: SufficiencyGateResult,
     ) -> dict[str, Any]:
         live_rows = [
@@ -486,7 +507,6 @@ class QueryService:
                 "sub_type": chunk.sub_type,
                 "section_ref": chunk.section_ref,
                 "heading": chunk.heading,
-                "source_classes": (chunk.metadata_json or {}).get("source_classes", []),
             }
             for chunk in live_result.chunks[:8]
         ]
@@ -496,7 +516,6 @@ class QueryService:
             "contextualization": contextualization.model_dump() if contextualization else None,
             "original_question": original_question,
             "effective_question": effective_question,
-            "initial_sufficiency_gate": initial_sufficiency_gate.model_dump() if initial_sufficiency_gate else None,
             "sufficiency_gate": sufficiency_gate.model_dump(),
             "live_fetch_used": live_result.used_live_fetch,
             "live_domains_used": live_result.domains_used,
