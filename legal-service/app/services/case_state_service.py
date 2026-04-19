@@ -184,7 +184,7 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
 }
 
 
-KNOWN_STATUSES = {"known", "not_applicable"}
+KNOWN_STATUSES = {"known", "not_applicable", "document_unavailable"}
 
 
 class CaseStateService:

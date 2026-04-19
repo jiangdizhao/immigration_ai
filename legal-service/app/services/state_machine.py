@@ -686,8 +686,6 @@ class StateMachine:
         previous: str | None,
     ) -> str:
         lowered_previous = str(previous or "").strip().lower()
-        if lowered_previous in {"user_unsure", "document_unavailable", "not_applicable", "conflicting"}:
-            return lowered_previous
         if value in (None, ""):
             return lowered_previous or "missing"
         if isinstance(value, str):
@@ -696,6 +694,8 @@ class StateMachine:
                 return "user_unsure"
             if lowered in {"n/a", "na", "not_applicable"}:
                 return "not_applicable"
+            if lowered == "conflicting":
+                return "conflicting"
             if key.endswith("_available") and lowered in {"no", "false"}:
                 return "document_unavailable"
             return "known"

@@ -160,11 +160,17 @@ function normalizeFactSlotStates(factSlotStates: LegalServiceResponse["fact_slot
       label: slot.label ?? slot.fact_key ?? "",
       status: slot.status ?? null,
       value:
+        typeof slot.value === "string" ||
+        typeof slot.value === "number" ||
+        typeof slot.value === "boolean"
+          ? slot.value
+          : null,
+      valueDisplay:
         slot.value_display ??
         (typeof slot.value === "string" ||
         typeof slot.value === "number" ||
         typeof slot.value === "boolean"
-          ? slot.value
+          ? String(slot.value)
           : null),
       source: slot.source ?? null,
       required: Boolean(slot.required),
