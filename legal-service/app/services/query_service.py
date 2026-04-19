@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from types import SimpleNamespace
 from typing import Any
 
@@ -112,21 +113,21 @@ class QueryService:
         local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
         artifacts.retrieval_debug = retrieval_debug
 
-        sufficiency_gate = self.policy_rules.judge_local_sufficiency(
+        initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
             question=effective_question,
             issue_type=state.issue_type,
             operation_type=state.operation_type,
             known_facts=merged_intake_facts,
             retrieval_debug=retrieval_debug,
         )
-        artifacts.sufficiency_gate = sufficiency_gate
+        artifacts.sufficiency_gate = initial_sufficiency_gate
 
         live_result = LiveRetrievalResult()
         live_chunks: list[_LiveChunkShim] = []
-        if sufficiency_gate.need_live_fetch:
+        if initial_sufficiency_gate.need_live_fetch:
             live_result = self.live_retrieval_service.retrieve(
                 question=effective_question,
-                preferred_domains=sufficiency_gate.preferred_domains,
+                preferred_domains=initial_sufficiency_gate.preferred_domains,
                 issue_type=state.issue_type,
                 operation_type=state.operation_type,
                 known_facts=merged_intake_facts,
@@ -134,7 +135,24 @@ class QueryService:
             live_chunks = self._live_chunks_to_shims(live_result)
         artifacts.live_retrieval = live_result
 
-        merged_chunks = self._merge_chunks(local_chunks, live_chunks)
+        final_sufficiency_gate = initial_sufficiency_gate
+        if live_result.used_live_fetch:
+            final_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
+                question=effective_question,
+                issue_type=state.issue_type,
+                operation_type=state.operation_type,
+                known_facts=merged_intake_facts,
+                retrieval_debug=retrieval_debug,
+                live_retrieval=live_result,
+            )
+        artifacts.sufficiency_gate = final_sufficiency_gate
+
+        merged_chunks = self._merge_chunks(
+            local_chunks,
+            live_chunks,
+            question=effective_question,
+            operation_type=state.operation_type,
+        )
 
         enriched_debug = self._enrich_retrieval_debug(
             retrieval_debug=retrieval_debug,
@@ -142,7 +160,9 @@ class QueryService:
             original_question=payload.question,
             effective_question=effective_question,
             live_result=live_result,
-            sufficiency_gate=sufficiency_gate,
+            initial_sufficiency_gate=initial_sufficiency_gate,
+            final_sufficiency_gate=final_sufficiency_gate,
+            risk_flags=state.risk_flags.model_dump(),
         )
 
         response = self.reasoning_service.answer_from_chunks(
@@ -164,7 +184,7 @@ class QueryService:
         policy = self.policy_rules.apply_policy_rules(
             question=effective_question,
             state=state,
-            sufficiency_gate=sufficiency_gate,
+            sufficiency_gate=final_sufficiency_gate,
             evidence_package=evidence,
             live_retrieval=live_result.model_dump(),
         )
@@ -218,22 +238,6 @@ class QueryService:
         state.case_hypothesis = case_hypothesis
         state.fact_slot_states = fact_slot_states
         state.interaction_plan = interaction_plan
-
-        response = self._normalize_response_for_user(
-            response=response,
-            policy=policy,
-            evidence=evidence,
-            fact_slot_states=fact_slot_states,
-            case_hypothesis=case_hypothesis,
-        )
-
-        response = self._normalize_response_for_user(
-            response=response,
-            policy=policy,
-            evidence=evidence,
-            fact_slot_states=fact_slot_states,
-            case_hypothesis=case_hypothesis,
-        )
 
         response = self._normalize_response_for_user(
             response=response,
@@ -672,7 +676,14 @@ class QueryService:
             )
         return shims
 
-    def _merge_chunks(self, local_chunks: list[Any], live_chunks: list[Any]) -> list[Any]:
+    def _merge_chunks(
+        self,
+        local_chunks: list[Any],
+        live_chunks: list[Any],
+        *,
+        question: str,
+        operation_type: str | None,
+    ) -> list[Any]:
         merged: list[Any] = []
         seen: set[str] = set()
 
@@ -690,6 +701,15 @@ class QueryService:
                 continue
             seen.add(key)
             merged.append(chunk)
+
+        merged.sort(
+            key=lambda chunk: self._chunk_merge_priority(
+                chunk,
+                question=question,
+                operation_type=operation_type,
+            ),
+            reverse=True,
+        )
         return merged
 
     def _enrich_retrieval_debug(
@@ -700,7 +720,9 @@ class QueryService:
         original_question: str,
         effective_question: str,
         live_result: LiveRetrievalResult,
-        sufficiency_gate: SufficiencyGateResult,
+        initial_sufficiency_gate: SufficiencyGateResult,
+        final_sufficiency_gate: SufficiencyGateResult,
+        risk_flags: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         live_rows = [
             {
@@ -721,13 +743,65 @@ class QueryService:
             "contextualization": contextualization.model_dump() if contextualization else None,
             "original_question": original_question,
             "effective_question": effective_question,
-            "sufficiency_gate": sufficiency_gate.model_dump(),
+            "sufficiency_gate": final_sufficiency_gate.model_dump(),
+            "initial_sufficiency_gate": initial_sufficiency_gate.model_dump(),
             "live_fetch_used": live_result.used_live_fetch,
             "live_domains_used": live_result.domains_used,
             "live_result_count": len(live_result.chunks),
             "live_results": live_rows,
             "live_debug": live_result.debug,
+            "risk_flags": risk_flags or {},
         }
+
+
+    def _chunk_merge_priority(self, chunk: Any, *, question: str, operation_type: str | None) -> float:
+        source = getattr(chunk, "source", None)
+        title = str(getattr(source, "title", "") or "").lower()
+        authority = str(getattr(source, "authority", "") or "").lower()
+        source_type = str(getattr(source, "source_type", "") or "").lower()
+        metadata_json = dict(getattr(source, "metadata_json", None) or {})
+        text_preview = str(getattr(chunk, "text", "") or "")[:500].lower()
+        heading = str(getattr(chunk, "heading", "") or "").lower()
+        condition_no = self._extract_condition_number(question)
+
+        score = 0.0
+        if getattr(source, "id", "").startswith("live-source-"):
+            score += 0.18
+        if "department of home affairs" in authority:
+            score += 0.12
+        if "administrative review tribunal" in authority:
+            score += 0.12
+        if source_type == "guidance":
+            score += 0.10
+        elif source_type == "procedure":
+            score += 0.08
+        elif source_type == "legislation":
+            score += 0.04
+
+        if condition_no:
+            if condition_no in title:
+                score += 0.80
+            elif condition_no in text_preview or condition_no in heading:
+                score += 0.40
+            if "visa conditions" in title or "see your visa conditions" in title:
+                score += 0.30
+            if "schedule 8" in title and condition_no not in text_preview:
+                score -= 0.12
+
+        if operation_type in {"review_rights", "review_deadline"} and ("art" in title or "review" in title):
+            score += 0.20
+        if operation_type == "visa_condition_explainer" and ("visa conditions" in title or "condition" in heading):
+            score += 0.18
+        if operation_type == "student_refusal_next_steps" and ("refus" in title or "next steps" in title):
+            score += 0.18
+
+        if metadata_json.get("bucket") == "live_official":
+            score += 0.05
+        return score
+
+    def _extract_condition_number(self, text: str) -> str | None:
+        match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
+        return match.group(1) if match else None
 
     # ------------------------------------------------------------------
     # Persistence helpers

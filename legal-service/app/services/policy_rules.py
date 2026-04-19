@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 from app.schemas.state import (
     AnswerabilityAssessment,
     EvidencePackage,
+    LiveTriggerDecision,
     MatterState,
     PolicyDecision,
     RiskFlags,
@@ -23,6 +25,7 @@ from app.services.operation_profiles import (
     infer_source_classes_from_parts,
     normalize_known_facts,
 )
+from app.services.live_trigger_policy import LiveTriggerPolicy
 
 
 class PolicyRules:
@@ -37,6 +40,9 @@ class PolicyRules:
     """
 
     FRESHNESS_TERMS = ("current", "latest", "recent", "today", "now")
+
+    def __init__(self) -> None:
+        self.live_trigger_policy = LiveTriggerPolicy()
 
     def judge_local_sufficiency(
         self,
@@ -58,6 +64,13 @@ class PolicyRules:
         visa_type = str(known_facts.get("visa_type") or "") or None
         profile = get_operation_profile(operation_type, issue_type=issue_type, visa_type=visa_type)
         source_classes_present = self._collect_source_classes(rows=rows, live_retrieval=live_retrieval)
+        live_trigger = self.live_trigger_policy.decide(
+            question=question,
+            issue_type=issue_type,
+            operation_type=operation_type,
+            known_facts=known_facts,
+            source_classes_present=source_classes_present,
+        )
 
         fact_coverage = {key: fact_is_present(known_facts, key) for key in profile.required_facts}
         required_facts_missing = [key for key, present in fact_coverage.items() if not present]
@@ -82,7 +95,9 @@ class PolicyRules:
         has_any_signal = bool(source_classes_present)
         deadline_sensitive = self._is_deadline_sensitive(profile.name, question)
 
-        if not has_any_local_results and not live_used:
+        if live_trigger.reasons and not live_used:
+            reason = live_trigger.reasons[0]
+        elif not has_any_local_results and not live_used:
             reason = "no_local_results"
         elif freshness_required and not live_used:
             reason = "freshness_requested"
@@ -98,7 +113,8 @@ class PolicyRules:
         need_live_fetch = bool(
             not live_used
             and (
-                freshness_required
+                live_trigger.should_live_fetch
+                or freshness_required
                 or not has_any_local_results
                 or bool(required_source_classes_missing)
             )
@@ -141,17 +157,20 @@ class PolicyRules:
             freshness_required=freshness_required,
         )
 
-        local_sufficient = operation_contract_satisfied and not freshness_required
-        if profile.name == "general_guidance" and has_any_local_results and not need_live_fetch:
-            local_sufficient = True
+        local_sufficient = (
+            operation_contract_satisfied
+            and not freshness_required
+            and not live_trigger.should_live_fetch
+        )
 
         return SufficiencyGateResult(
             local_sufficient=local_sufficient,
             reason=reason,
             need_live_fetch=need_live_fetch,
-            preferred_domains=list(profile.live_fetch_domains),
-            preferred_source_types=list(profile.preferred_source_types),
+            preferred_domains=live_trigger.preferred_domains or list(profile.live_fetch_domains),
+            preferred_source_types=live_trigger.preferred_source_types or list(profile.preferred_source_types),
             answerability=assessment,
+            live_trigger=live_trigger,
         )
 
     def apply_policy_rules(
@@ -360,9 +379,9 @@ class PolicyRules:
                 flags.detention_related,
                 flags.character_issue,
                 flags.pic4020_issue,
-                "detention" in q,
-                "section 501" in q,
-                "character" in q,
-                "criminal" in q,
+                bool(re.search(r"\bdetention\b", q)),
+                bool(re.search(r"\bsection\s*501\b", q)),
+                bool(re.search(r"\bcharacter\b", q)),
+                bool(re.search(r"\bcriminal\b", q)),
             ]
         )

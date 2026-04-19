@@ -88,6 +88,13 @@ FACT_SPECS: dict[str, FactSpec] = {
         why_needed="Current status can affect travel, lawful stay, and available next steps.",
         input_type="short_text",
     ),
+    "visa_condition_number": FactSpec(
+        key="visa_condition_number",
+        label="Visa condition number",
+        prompt="Which visa condition number are you asking about?",
+        why_needed="The condition number determines the exact meaning and practical effect.",
+        input_type="short_text",
+    ),
     "travel_need": FactSpec(
         key="travel_need",
         label="Travel plan",
@@ -158,6 +165,13 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
         optional_facts=("refusal_notice_available", "refusal_reason_if_known"),
         blocking_facts=(),
         followup_intro="I can suggest a more relevant document checklist if I know the visa context.",
+    ),
+    "visa_condition_explainer": OperationProfile(
+        key="visa_condition_explainer",
+        required_facts=(),
+        optional_facts=("visa_condition_number", "visa_subclass"),
+        blocking_facts=(),
+        followup_intro="I can explain the condition more accurately if I know the exact condition number.",
     ),
     "pic4020_risk": OperationProfile(
         key="pic4020_risk",
@@ -432,6 +446,8 @@ class CaseStateService:
             return OPERATION_PROFILES[operation_type]
         if issue_type == "student_visa":
             return OPERATION_PROFILES["student_refusal_next_steps"]
+        if issue_type == "visa_conditions":
+            return OPERATION_PROFILES["visa_condition_explainer"]
         if visa_type == "bridging":
             return OPERATION_PROFILES["bridging_travel"]
         return None
@@ -455,6 +471,8 @@ class CaseStateService:
             candidates.extend(["review_rights", "review_deadline"])
         if "bridging" in q and ("travel" in q or "leave" in q or "come back" in q):
             candidates.append("bridging_travel")
+        if self._extract_condition_number(question) or "visa condition" in q:
+            candidates.append("visa_condition_explainer")
         if "485" in q or "temporary graduate" in q:
             candidates.append("485_eligibility_overview")
         if "document" in q or "prepare" in q or "checklist" in q:
@@ -464,6 +482,8 @@ class CaseStateService:
 
         if not candidates and issue_type == "student_visa":
             candidates.append("student_refusal_next_steps")
+        if not candidates and issue_type == "visa_conditions":
+            candidates.append("visa_condition_explainer")
         if not candidates and visa_type == "bridging":
             candidates.append("bridging_travel")
 
@@ -479,6 +499,8 @@ class CaseStateService:
         q = (question or "").lower()
         if "bridging" in q and ("travel" in q or "leave" in q or "come back" in q):
             return "bridging_travel"
+        if self._extract_condition_number(question) or "visa condition" in q:
+            return "visa_condition_explainer"
         if "review" in q and ("deadline" in q or "time" in q):
             return "review_deadline"
         if "review" in q or "appeal" in q or "tribunal" in q:
@@ -493,6 +515,8 @@ class CaseStateService:
             return "pic4020_risk"
         if issue_type == "student_visa":
             return "student_refusal_next_steps"
+        if issue_type == "visa_conditions":
+            return "visa_condition_explainer"
         if visa_type == "bridging":
             return "bridging_travel"
         return None
@@ -517,6 +541,8 @@ class CaseStateService:
             score += 0.08
         if operation == "bridging_travel" and "bridging" in q and ("travel" in q or "leave" in q):
             score += 0.08
+        if operation == "visa_condition_explainer" and (self._extract_condition_number(question) or "visa condition" in q):
+            score += 0.08
         return min(score, 0.95)
 
     def _candidate_reason(self, operation: str, question: str, rank: int) -> str:
@@ -529,6 +555,8 @@ class CaseStateService:
             return "The question appears to involve timing or deadline concerns."
         if operation == "bridging_travel" and "bridging" in q:
             return "The question appears to be about bridging visa travel."
+        if operation == "visa_condition_explainer" and (self._extract_condition_number(question) or "visa condition" in q):
+            return "The question appears to ask for an explanation of a visa condition."
         if rank == 0:
             return "This is the best current fit based on the known facts."
         return "This remains a plausible alternative classification while facts are still incomplete."
@@ -644,6 +672,13 @@ class CaseStateService:
                 "bvb",
                 "vevo",
             ),
+            "visa_condition_number": (
+                "visa condition",
+                "condition number",
+                "8501",
+                "8503",
+                "8201",
+            ),
             "travel_need": (
                 "travel plan",
                 "leave australia and return",
@@ -742,6 +777,12 @@ class CaseStateService:
         missing_optional = [slot for slot in slots if slot.status not in KNOWN_STATUSES]
         missing_optional.sort(key=lambda slot: (not slot.blocking, slot.question_priority or 999))
         return missing_optional[:1]
+
+    def _extract_condition_number(self, text: str) -> str | None:
+        import re
+
+        match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
+        return match.group(1) if match else None
 
     def _humanize_fact_key(self, key: str) -> str:
         return key.replace("_", " ").strip().title()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Iterable
 
 
@@ -107,6 +108,15 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
         preferred_source_types=("guidance",),
         allowed_answer_modes=(ANSWER_MODE_DIRECT, ANSWER_MODE_QUALIFIED, ANSWER_MODE_WARNING),
     ),
+    "visa_condition_explainer": OperationProfile(
+        name="visa_condition_explainer",
+        required_facts=(),
+        required_source_classes_any=(("conditions_guidance", "visa_condition_definition"),),
+        optional_source_classes=("visa_conditions_schedule", "legislation_primary"),
+        live_fetch_domains=("immi.homeaffairs.gov.au", "legislation.gov.au"),
+        preferred_source_types=("guidance", "legislation"),
+        allowed_answer_modes=(ANSWER_MODE_DIRECT, ANSWER_MODE_WARNING, ANSWER_MODE_QUALIFIED),
+    ),
     "pic4020_risk": OperationProfile(
         name="pic4020_risk",
         required_facts=(),
@@ -149,6 +159,8 @@ def get_operation_profile(
     visa = (visa_type or "").strip().lower()
     if issue == "pic4020_issue":
         return OPERATION_PROFILES["pic4020_risk"]
+    if issue == "visa_conditions":
+        return OPERATION_PROFILES["visa_condition_explainer"]
     if visa == "temporary_graduate":
         return OPERATION_PROFILES["485_eligibility_overview"]
     return DEFAULT_OPERATION_PROFILE
@@ -223,6 +235,16 @@ def infer_source_classes_from_parts(
 
     if source_type_l == "legislation" or "legislation" in authority_l or "federal register of legislation" in authority_l:
         classes.add("legislation_primary")
+
+    condition_match = re.search(r"\bcondition\s*(\d{4})\b", blob)
+    if any(term in blob for term in ["see your visa conditions", "visas subject condition", "visas subject to condition"]):
+        classes.add("conditions_guidance")
+    elif source_type_l != "legislation" and ("visa condition" in blob or "visa conditions" in blob):
+        classes.add("conditions_guidance")
+    if condition_match:
+        classes.add("visa_condition_definition")
+    if "schedule 8" in blob or ("visa conditions" in title_l and source_type_l == "legislation"):
+        classes.add("visa_conditions_schedule")
 
     if any(term in blob for term in ["administrative review tribunal", "art.gov.au", "reviewable migration", "tribunal review", "merits review"]):
         classes.update({"review_rights", "art_procedure"})

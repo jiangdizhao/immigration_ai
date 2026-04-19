@@ -78,6 +78,10 @@ class LiveRetrievalService:
             ],
             "conditions": [
                 "https://immi.homeaffairs.gov.au/visas/already-have-a-visa/check-visa-details-and-conditions/see-your-visa-conditions",
+                "https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/health/adequate-health-insurance/visas-subject-condition-8501",
+            ],
+            "conditions_8501": [
+                "https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/health/adequate-health-insurance/visas-subject-condition-8501",
             ],
         },
         "art.gov.au": {
@@ -193,8 +197,11 @@ class LiveRetrievalService:
             tags.append("485")
         if operation_type == "pic4020_risk" or "4020" in q or "misleading" in q or "incorrect information" in q:
             tags.append("pic4020")
-        if "condition" in q:
+        condition_no = self._extract_condition_number(question)
+        if operation_type == "visa_condition_explainer" or "condition" in q or condition_no:
             tags.append("conditions")
+            if condition_no == "8501":
+                tags.append("conditions_8501")
         if "judicial" in q or "fedcourt" in q:
             tags.append("judicial_review")
 
@@ -215,6 +222,10 @@ class LiveRetrievalService:
             seen.add(url)
             deduped.append(url)
         return deduped
+
+    def _extract_condition_number(self, text: str) -> str | None:
+        match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
+        return match.group(1) if match else None
 
     def _normalize_domains(self, domains: list[str] | None) -> list[str]:
         if not domains:

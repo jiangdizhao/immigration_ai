@@ -60,6 +60,21 @@ type RetrievalDebug = {
       required_source_classes_missing?: string[];
       source_classes_present?: string[];
     };
+    live_trigger?: {
+      should_live_fetch?: boolean;
+      reasons?: string[];
+      matched_condition_number?: string | null;
+      source_classes_present?: string[];
+      required_source_classes_missing?: string[];
+    };
+  };
+  risk_flags?: {
+    deadline_sensitive?: boolean;
+    cancellation_related?: boolean;
+    detention_related?: boolean;
+    character_issue?: boolean;
+    pic4020_issue?: boolean;
+    review_related?: boolean;
   };
   initial_sufficiency_gate?: {
     local_sufficient?: boolean;
@@ -148,6 +163,8 @@ function logWidgetDebug(params: {
   console.log("missingRequiredFacts:", dbg.sufficiency_gate?.answerability?.required_facts_missing ?? []);
   console.log("missingRequiredSourceClasses:", dbg.sufficiency_gate?.answerability?.required_source_classes_missing ?? []);
   console.log("policy:", dbg.policy ?? {});
+  console.log("liveTrigger:", dbg.sufficiency_gate?.live_trigger ?? null);
+  console.log("riskFlags:", dbg.risk_flags ?? {});
   console.log("confidence:", params.response.confidence ?? null);
   console.log("nextAction:", params.response.next_action ?? null);
   console.log("escalate:", params.response.escalate ?? false);

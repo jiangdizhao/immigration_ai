@@ -82,7 +82,7 @@ class FactExtractionService:
             "Rules:\n"
             "- Keep labels short and implementation-friendly.\n"
             "- Prefer conservative labels over speculative ones.\n"
-            "- operation_type should describe the legal/user operation, e.g. review_rights, review_deadline, student_refusal_next_steps, bridging_travel, document_checklist, 485_eligibility_overview, pic4020_risk.\n"
+            "- operation_type should describe the legal/user operation, e.g. review_rights, review_deadline, student_refusal_next_steps, bridging_travel, visa_condition_explainer, document_checklist, 485_eligibility_overview, pic4020_risk.\n"
             "- Respect strong current-turn cues over stale carried labels.\n"
             "- If uncertain, keep the heuristic labels.\n"
         )
@@ -236,20 +236,25 @@ class FactExtractionService:
         explicit_operation_type: str | None = None
         explicit_visa_type: str | None = None
 
+        condition_number = self._extract_condition_number(question)
+        if condition_number:
+            explicit_issue_type = "visa_conditions"
+            explicit_operation_type = "visa_condition_explainer"
+
         # visa / issue: strong current-turn cues should override stale labels
-        if "student visa" in q or "subclass 500" in q:
+        if explicit_issue_type is None and ("student visa" in q or "subclass 500" in q):
             explicit_issue_type = "student_visa"
             explicit_visa_type = "student"
-        elif "485" in q or "temporary graduate" in q:
+        elif explicit_issue_type is None and ("485" in q or "temporary graduate" in q):
             explicit_issue_type = "temporary_graduate_visa"
             explicit_visa_type = "temporary_graduate"
-        elif "bridging visa" in q or any(x in q for x in ["bva", "bvb", "bvc", "bve"]):
+        elif explicit_issue_type is None and ("bridging visa" in q or any(x in q for x in ["bva", "bvb", "bvc", "bve"])):
             explicit_issue_type = "bridging_visa"
             explicit_visa_type = "bridging"
-        elif "partner visa" in q:
+        elif explicit_issue_type is None and "partner visa" in q:
             explicit_issue_type = "partner_visa"
             explicit_visa_type = "partner"
-        elif "skilled" in q:
+        elif explicit_issue_type is None and "skilled" in q:
             explicit_issue_type = "skilled_migration"
             explicit_visa_type = "skilled"
 
@@ -353,6 +358,11 @@ class FactExtractionService:
         if "review" in q or "appeal" in q or "tribunal" in q:
             new_facts["seeking_review"] = True
             conf["seeking_review"] = "high"
+
+        condition_number = self._extract_condition_number(question) or self._extract_condition_number(effective_question)
+        if condition_number:
+            new_facts["visa_condition_number"] = condition_number
+            conf["visa_condition_number"] = "high"
 
         subclass_token_match = re.search(
             r"\b(500|485|010|020|030|050|051|820|801|189|190|491|600)\b", q
@@ -463,6 +473,10 @@ class FactExtractionService:
             return None
         value = value.strip()
         return value or None
+
+    def _extract_condition_number(self, text: str) -> str | None:
+        match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
+        return match.group(1) if match else None
 
     def _extract_date(self, text: str) -> str | None:
         if not text:

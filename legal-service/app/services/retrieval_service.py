@@ -38,6 +38,9 @@ class RetrievalService:
         candidate_k = max(top_k * self.vector_candidate_multiplier, top_k)
         query_text = payload.question.strip()
         terms = self._extract_terms(query_text)
+        condition_no = self._extract_condition_number(query_text)
+        if condition_no:
+            terms = [f"condition {condition_no}", condition_no, *terms]
 
         base_stmt = self._build_base_stmt(payload)
 
@@ -313,6 +316,10 @@ class RetrievalService:
 
     def _classify_query_intent(self, question: str) -> str:
         q = question.lower().strip()
+        if re.search(r"(?:visa\s+)?condition\s*\d{4}\b", q):
+            return "condition_explainer"
+        if "visa condition" in q:
+            return "condition_explainer"
         if any(x in q for x in ["my ", "i was", "i am", "my visa", "my student visa", "my spouse", "my child"]):
             return "fact_specific"
         if any(x in q for x in ["how many days", "deadline", "time limit", "review", "appeal", "criteria", "condition", "lawful"]):
@@ -361,6 +368,13 @@ class RetrievalService:
                 score += 0.14
             if bucket == "procedure":
                 score += 0.10
+        elif intent == "condition_explainer":
+            if source_type == "guidance":
+                score += 0.28
+            if source_type == "legislation":
+                score += 0.12
+            if "department of home affairs" in authority:
+                score += 0.10
         else:
             if source_type == "guidance":
                 score += 0.12
@@ -378,9 +392,21 @@ class RetrievalService:
         title = (source.title or "").lower()
         preview = ((chunk.heading or "") + " " + (chunk.text or "")[:400]).lower()
         score = 0.0
+        condition_match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", q)
+        condition_no = condition_match.group(1) if condition_match else None
 
         def has(term: str) -> bool:
             return term in title or term in preview
+
+        if condition_no:
+            if condition_no in title:
+                score += 0.85
+            elif condition_no in preview:
+                score += 0.45
+            if "see your visa conditions" in title or "visa conditions" in title:
+                score += 0.35
+            if "schedule 8" in title and condition_no not in preview:
+                score -= 0.18
 
         if "genuine student" in q:
             if "genuine student" in title:
@@ -415,6 +441,10 @@ class RetrievalService:
             if "practice direction" in title or "reviewable" in preview:
                 score += 0.28
         return score
+
+    def _extract_condition_number(self, text: str) -> str | None:
+        match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
+        return match.group(1) if match else None
 
     def _summarize_selected(self, chunks: list[SourceChunk]) -> dict[str, object]:
         source_type_counter = Counter()

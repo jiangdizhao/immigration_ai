@@ -202,6 +202,16 @@ class AnswerabilityAssessment(BaseSchema):
 # -------------------------------------------------------------------------
 
 
+class LiveTriggerDecision(BaseSchema):
+    should_live_fetch: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    matched_condition_number: str | None = None
+    source_classes_present: list[str] = Field(default_factory=list)
+    required_source_classes_missing: list[str] = Field(default_factory=list)
+    preferred_domains: list[str] = Field(default_factory=list)
+    preferred_source_types: list[str] = Field(default_factory=list)
+
+
 class SufficiencyGateResult(BaseSchema):
     local_sufficient: bool = False
     reason: str | None = None
@@ -210,6 +220,7 @@ class SufficiencyGateResult(BaseSchema):
     preferred_source_types: list[str] = Field(default_factory=list)
     # compatibility field used by earlier policy/query code
     answerability: AnswerabilityAssessment = Field(default_factory=AnswerabilityAssessment)
+    live_trigger: LiveTriggerDecision = Field(default_factory=LiveTriggerDecision)
 
 
 class SupportedFact(BaseSchema):

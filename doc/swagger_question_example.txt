@@ -1,0 +1,8 @@
+{
+  "question": "Can I still apply for review?",
+  "session_id": "multi-turn-test-1",
+  "preferred_jurisdiction": "Cth",
+  "preferred_source_types": ["guidance", "legislation"],
+  "intake_facts": {},
+  "top_k": 8
+}

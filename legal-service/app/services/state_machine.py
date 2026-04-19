@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Callable
 
 from app.schemas.state import (
@@ -521,10 +522,15 @@ class StateMachine:
     ) -> RiskFlags:
         q = question.lower()
         return RiskFlags(
-            deadline_sensitive=any(term in q for term in ["review", "deadline", "time limit", "refusal", "cancellation"]) or bool(known_facts.get("refusal_date")),
-            cancellation_related="cancel" in q or (issue_type == "visa_cancellation"),
-            detention_related="detention" in q or bool(known_facts.get("in_detention")),
-            character_issue=("character" in q or "criminal" in q or "501" in q),
+            deadline_sensitive=(
+                operation_type in {"review_rights", "review_deadline", "student_refusal_next_steps"}
+                or bool(re.search(r"\bdeadline\b|\btime limit\b|\bappeal\b|\breview\b|\btribunal\b", q))
+                or ("refus" in q and any(x in q for x in ["what should i do", "next", "review"]))
+                or bool(known_facts.get("notification_date"))
+            ),
+            cancellation_related=bool(re.search(r"\bcancel(?:lation|led|ling)?\b", q)) or (issue_type == "visa_cancellation"),
+            detention_related=bool(re.search(r"\bdetention\b", q)) or bool(known_facts.get("in_detention")),
+            character_issue=bool(re.search(r"\bcharacter\b|\bcriminal\b|\b501\b", q)),
             pic4020_issue=("4020" in q or "misleading" in q or "false information" in q),
             review_related=("review" in q or "tribunal" in q or operation_type in {"review_rights", "review_deadline"}),
         )
