@@ -41,6 +41,20 @@ export function GuidedIntakeCard({
       ? (interactionPlan.progress?.completed ?? 0) / interactionPlan.progress.total
       : 0);
 
+  const slotMap = new Map(
+    (factSlotStates ?? []).map((slot) => [slot.key ?? slot.fact_key, slot] as const)
+  );
+
+  const effectiveValue = (factKey: string) => {
+    if (Object.prototype.hasOwnProperty.call(draftFacts, factKey)) {
+      return draftFacts[factKey];
+    }
+    const slot = slotMap.get(factKey);
+    if (!slot) return undefined;
+    if (slot.value !== undefined) return slot.value;
+    return undefined;
+  };
+
   if (mode === "escalation") {
     return (
       <ConsultationEscalationCard
@@ -88,9 +102,9 @@ export function GuidedIntakeCard({
         <div className="space-y-3">
           {requestedFacts.map((fact) => (
             <FactInputField
-              key={fact.key}
+              key={fact.key ?? fact.fact_key}
               fact={fact}
-              value={draftFacts[fact.key]}
+              value={effectiveValue(fact.key ?? fact.fact_key)}
               onChange={onDraftChange}
             />
           ))}
@@ -120,14 +134,14 @@ export function GuidedIntakeCard({
           <div className="mt-3 space-y-2 text-sm">
             {factSlotStates.map((slot) => (
               <div
-                key={slot.key}
+                key={slot.key ?? slot.fact_key}
                 className="rounded-lg border border-border/40 px-3 py-2"
               >
-                <div className="font-medium">{slot.label ?? slot.key}</div>
+                <div className="font-medium">{slot.label ?? slot.key ?? slot.fact_key}</div>
                 <div className="text-muted-foreground">
                   status: {slot.status ?? "unknown"}
                   {slot.value !== undefined && slot.value !== null
-                    ? ` • value: ${String(slot.value)}`
+                    ? ` • value: ${String(slot.value_display ?? slot.value)}`
                     : ""}
                 </div>
               </div>

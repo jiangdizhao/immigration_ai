@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import type { InteractionFactRequest } from "./guided-intake-types";
 
 type Props = {
@@ -19,8 +20,23 @@ type Props = {
   onChange: (key: string, value: string | number | boolean | null) => void;
 };
 
+function normalizeBooleanValue(
+  value: string | number | boolean | null | undefined
+): "yes" | "no" | "not_sure" | null {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  if (typeof value === "string") {
+    const lowered = value.trim().toLowerCase();
+    if (["yes", "true", "available", "in_australia"].includes(lowered)) return "yes";
+    if (["no", "false", "document_unavailable"].includes(lowered)) return "no";
+    if (["not_sure", "unknown", "unsure", "don't know", "dont know"].includes(lowered)) return "not_sure";
+  }
+  return null;
+}
+
 export function FactInputField({ fact, value, onChange }: Props) {
   const inputType = fact.input_type ?? "short_text";
+  const booleanValue = normalizeBooleanValue(value);
 
   return (
     <div className="rounded-xl border border-border/60 bg-background/80 p-3">
@@ -38,17 +54,30 @@ export function FactInputField({ fact, value, onChange }: Props) {
       </div>
 
       {inputType === "boolean" ? (
-        <label className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-          <span className="text-sm">
-            {Boolean(value) ? "Yes" : "No"}
-          </span>
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border border-input"
-            checked={Boolean(value)}
-            onChange={(e) => onChange(fact.key, e.target.checked)}
-          />
-        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Yes", raw: true, keyValue: "yes" },
+            { label: "No", raw: false, keyValue: "no" },
+            { label: "Not sure", raw: "not_sure", keyValue: "not_sure" },
+          ].map((option) => {
+            const selected = booleanValue === option.keyValue;
+            return (
+              <button
+                key={option.keyValue}
+                type="button"
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm transition-colors",
+                  selected
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-border bg-background hover:bg-muted"
+                )}
+                onClick={() => onChange(fact.key, option.raw)}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       ) : null}
 
       {inputType === "single_select" ? (
@@ -62,7 +91,7 @@ export function FactInputField({ fact, value, onChange }: Props) {
           <SelectContent>
             {(fact.options ?? []).map((option) => (
               <SelectItem key={option} value={option}>
-                {option}
+                {option.replaceAll("_", " ")}
               </SelectItem>
             ))}
           </SelectContent>
