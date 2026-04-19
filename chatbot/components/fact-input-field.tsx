@@ -10,7 +10,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import type { InteractionFactRequest } from "./guided-intake-types";
 
@@ -39,13 +38,17 @@ export function FactInputField({ fact, value, onChange }: Props) {
       </div>
 
       {inputType === "boolean" ? (
-        <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-          <span className="text-sm">{String(value ?? false) === "true" ? "Yes" : "No"}</span>
-          <Switch
+        <label className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+          <span className="text-sm">
+            {Boolean(value) ? "Yes" : "No"}
+          </span>
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border border-input"
             checked={Boolean(value)}
-            onCheckedChange={(checked) => onChange(fact.key, checked)}
+            onChange={(e) => onChange(fact.key, e.target.checked)}
           />
-        </div>
+        </label>
       ) : null}
 
       {inputType === "single_select" ? (
@@ -77,7 +80,11 @@ export function FactInputField({ fact, value, onChange }: Props) {
       {(inputType === "short_text" || inputType === "document") ? (
         <Input
           type="text"
-          placeholder={inputType === "document" ? "Describe or paste document details" : "Enter a short answer"}
+          placeholder={
+            inputType === "document"
+              ? "Describe or paste document details"
+              : "Enter a short answer"
+          }
           value={typeof value === "string" || typeof value === "number" ? String(value) : ""}
           onChange={(e) => onChange(fact.key, e.target.value || null)}
         />

@@ -16,6 +16,12 @@ import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { GuidedIntakeCard } from "./guided-intake-card";
+import type {
+  IntakeFacts,
+  WidgetMessage,
+  WidgetRouteResponse,
+} from "./guided-intake-types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -27,45 +33,31 @@ import {
 } from "./ui/sheet";
 import { Textarea } from "./ui/textarea";
 
-type WidgetCitation = {
-  title: string;
-  authority?: string | null;
-  sectionRef?: string | null;
-  url?: string | null;
-  quoteText?: string | null;
-};
-
-type WidgetDebug = {
-  sessionId?: string | null;
-  matterId?: string | null;
-  originalQuestion?: string | null;
-  effectiveQuestion?: string | null;
-  contextualized?: {
-    standalone_question?: string;
-    used_history?: boolean;
-    reason?: string;
-  } | null;
-};
-
-type WidgetMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  citations?: WidgetCitation[];
-  followUpQuestions?: string[];
-  missingFacts?: string[];
-  escalate?: boolean;
-  nextAction?: string;
-  confidence?: string | null;
-  debug?: WidgetDebug | null;
-};
-
 const quickQuestions = [
   "My student visa was refused. What should I do next?",
+  "Can I still apply for review?",
+  "Can I leave Australia and come back if I only hold a bridging visa?",
   "What documents should I prepare for a student visa refusal consultation?",
-  "How should I prepare for my first consultation with an immigration lawyer?",
-  "What details do I need to gather after receiving a visa refusal?",
 ];
+
+function isAssistantMessage(
+  message: WidgetMessage
+): message is Extract<WidgetMessage, { role: "assistant" }> {
+  return message.role === "assistant";
+}
+
+function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
+  const populatedEntries = Object.entries(draftFacts).filter(
+    ([, value]) => value !== null && value !== undefined && value !== ""
+  );
+
+  if (!populatedEntries.length) {
+    return "Guided intake update.";
+  }
+
+  const lines = populatedEntries.map(([key, value]) => `${key}: ${String(value)}`);
+  return `Guided intake update:\n${lines.join("\n")}`;
+}
 
 export function ImmigrationAssistantWidget() {
   const [open, setOpen] = useState(false);
@@ -76,6 +68,8 @@ export function ImmigrationAssistantWidget() {
   const [status, setStatus] = useState<"ready" | "submitted">("ready");
   const [error, setError] = useState<string | null>(null);
   const [showQuickQuestions, setShowQuickQuestions] = useState(true);
+  const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
+  const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
   const listRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -108,6 +102,61 @@ export function ImmigrationAssistantWidget() {
     };
   }, [open]);
 
+  const appendAssistantMessage = (data: WidgetRouteResponse) => {
+    if (data.matterId) {
+      setMatterId(data.matterId);
+    }
+
+    const assistantMessage: Extract<WidgetMessage, { role: "assistant" }> = {
+      id: generateUUID(),
+      role: "assistant",
+      text:
+        data.text?.trim() && data.text.trim().length > 0
+          ? data.text.trim()
+          : "Sorry, I could not generate a response right now.",
+      citations: data.citations ?? [],
+      followUpQuestions: data.followUpQuestions ?? [],
+      missingFacts: data.missingFacts ?? [],
+      evidenceGaps: data.evidenceGaps ?? [],
+      confidence: data.confidence ?? null,
+      escalate: Boolean(data.escalate),
+      nextAction: data.nextAction ?? null,
+      matterId: data.matterId ?? null,
+      conversationState: data.conversationState ?? null,
+      caseHypothesis: data.caseHypothesis ?? null,
+      factSlotStates: data.factSlotStates ?? [],
+      interactionPlan: data.interactionPlan ?? null,
+      retrievalDebug: data.retrievalDebug ?? null,
+    };
+
+    setMessages((current) => [...current, assistantMessage]);
+  };
+
+  const sendToWidgetRoute = async (
+    nextMessages: WidgetMessage[],
+    facts: IntakeFacts
+  ) => {
+    const response = await fetchWithErrorHandlers("/api/widget-chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: chatId,
+        matterId,
+        intakeFacts: facts,
+        selectedChatModel: DEFAULT_CHAT_MODEL,
+        messages: nextMessages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          parts: [{ type: "text", text: message.text }],
+        })),
+      }),
+    });
+
+    return (await response.json()) as WidgetRouteResponse;
+  };
+
   const submitMessage = async (messageText: string) => {
     const trimmed = messageText.trim();
 
@@ -115,7 +164,7 @@ export function ImmigrationAssistantWidget() {
       return;
     }
 
-    const nextUserMessage: WidgetMessage = {
+    const nextUserMessage: Extract<WidgetMessage, { role: "user" }> = {
       id: generateUUID(),
       role: "user",
       text: trimmed,
@@ -132,59 +181,8 @@ export function ImmigrationAssistantWidget() {
     }
 
     try {
-      const response = await fetchWithErrorHandlers("/api/widget-chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: chatId,
-          matterId,
-          selectedChatModel: DEFAULT_CHAT_MODEL,
-          messages: nextMessages.map((message) => ({
-            id: message.id,
-            role: message.role,
-            parts: [{ type: "text", text: message.text }],
-          })),
-        }),
-      });
-
-      const data = (await response.json()) as {
-        text?: string;
-        citations?: WidgetCitation[];
-        followUpQuestions?: string[];
-        missingFacts?: string[];
-        escalate?: boolean;
-        nextAction?: string;
-        confidence?: string | null;
-        matterId?: string | null;
-        debug?: WidgetDebug | null;
-      };
-
-      const assistantText = data.text?.trim();
-
-      if (data.matterId) {
-        setMatterId(data.matterId);
-      }
-
-      setMessages((current) => [
-        ...current,
-        {
-          id: generateUUID(),
-          role: "assistant",
-          text:
-            assistantText && assistantText.length > 0
-              ? assistantText
-              : "Sorry, I could not generate a response right now.",
-          citations: data.citations ?? [],
-          followUpQuestions: data.followUpQuestions ?? [],
-          missingFacts: data.missingFacts ?? [],
-          escalate: Boolean(data.escalate),
-          nextAction: data.nextAction ?? "ask_followup",
-          confidence: data.confidence ?? null,
-          debug: data.debug ?? null,
-        },
-      ]);
+      const data = await sendToWidgetRoute(nextMessages, intakeFacts);
+      appendAssistantMessage(data);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -198,6 +196,55 @@ export function ImmigrationAssistantWidget() {
     } finally {
       setStatus("ready");
     }
+  };
+
+  const handleDraftChange = (
+    key: string,
+    value: string | number | boolean | null
+  ) => {
+    setDraftFacts((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleSubmitDraftFacts = async () => {
+    if (status !== "ready") return;
+
+    const mergedFacts = { ...intakeFacts, ...draftFacts };
+    const syntheticText = buildGuidedIntakeSummary(draftFacts);
+
+    const nextUserMessage: Extract<WidgetMessage, { role: "user" }> = {
+      id: generateUUID(),
+      role: "user",
+      text: syntheticText,
+    };
+
+    const nextMessages = [...messages, nextUserMessage];
+    setMessages(nextMessages);
+    setIntakeFacts(mergedFacts);
+    setDraftFacts({});
+    setStatus("submitted");
+    setError(null);
+    setShowQuickQuestions(false);
+
+    try {
+      const data = await sendToWidgetRoute(nextMessages, mergedFacts);
+      appendAssistantMessage(data);
+    } catch (requestError) {
+      const message =
+        requestError instanceof ChatbotError
+          ? requestError.message
+          : requestError instanceof Error
+            ? requestError.message
+            : "Unable to submit the intake details right now.";
+
+      setError(message);
+      toast.error(message);
+    } finally {
+      setStatus("ready");
+    }
+  };
+
+  const handleBookConsultation = () => {
+    toast.info("Consultation booking flow placeholder. Connect this to your real booking page next.");
   };
 
   return (
@@ -300,6 +347,18 @@ export function ImmigrationAssistantWidget() {
                 <AnimatePresence initial={false}>
                   {messages.map((message) => {
                     const isUser = message.role === "user";
+                    const isAssistant = isAssistantMessage(message);
+                    const showGuidedCard =
+                      isAssistant &&
+                      !!message.interactionPlan &&
+                      ((message.interactionPlan.requested_facts?.length ?? 0) > 0 ||
+                        message.interactionPlan.mode === "guided_intake" ||
+                        message.interactionPlan.mode === "analysis_ready" ||
+                        message.interactionPlan.mode === "escalation" ||
+                        (message.interactionPlan.warnings?.length ?? 0) > 0);
+                    const hasRequestedFacts =
+                      isAssistant &&
+                      (message.interactionPlan?.requested_facts?.length ?? 0) > 0;
 
                     return (
                       <motion.div
@@ -316,7 +375,7 @@ export function ImmigrationAssistantWidget() {
                       >
                         <div>{message.text}</div>
 
-                        {!isUser && message.confidence && (
+                        {isAssistant && message.confidence ? (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className="border-slate-200 bg-slate-50 text-slate-700"
@@ -324,40 +383,64 @@ export function ImmigrationAssistantWidget() {
                             >
                               Confidence: {message.confidence}
                             </Badge>
-                            {message.debug?.contextualized?.used_history ? (
+                            {message.retrievalDebug?.live_fetch_used ? (
                               <Badge
                                 className="border-sky-200 bg-sky-50 text-sky-700"
                                 variant="outline"
                               >
-                                Used prior context
+                                Live official source used
+                              </Badge>
+                            ) : null}
+                            {message.conversationState ? (
+                              <Badge
+                                className="border-slate-200 bg-slate-50 text-slate-700"
+                                variant="outline"
+                              >
+                                State: {message.conversationState}
                               </Badge>
                             ) : null}
                           </div>
-                        )}
+                        ) : null}
 
-                        {!isUser && message.followUpQuestions?.length ? (
+                        {showGuidedCard ? (
+                          <div className="mt-4">
+                            <GuidedIntakeCard
+                              interactionPlan={message.interactionPlan}
+                              factSlotStates={message.factSlotStates}
+                              draftFacts={draftFacts}
+                              onDraftChange={handleDraftChange}
+                              onSubmitDraftFacts={() => {
+                                void handleSubmitDraftFacts();
+                              }}
+                              onBookConsultation={handleBookConsultation}
+                              isSubmitting={status === "submitted"}
+                            />
+                          </div>
+                        ) : null}
+
+                        {isAssistant && !hasRequestedFacts && message.followUpQuestions?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               Follow-up questions
                             </p>
                             <div className="flex flex-col gap-2">
-                              {message.followUpQuestions.slice(0, 3).map((q) => (
+                              {message.followUpQuestions.slice(0, 3).map((question) => (
                                 <button
                                   className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm leading-6 text-slate-700 transition hover:bg-slate-100"
-                                  key={q}
+                                  key={question}
                                   onClick={() => {
-                                    void submitMessage(q);
+                                    void submitMessage(question);
                                   }}
                                   type="button"
                                 >
-                                  {q}
+                                  {question}
                                 </button>
                               ))}
                             </div>
                           </div>
                         ) : null}
 
-                        {!isUser && message.missingFacts?.length ? (
+                        {isAssistant && message.missingFacts?.length ? (
                           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                             <p className="mb-1 font-medium">Important details still needed</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -368,14 +451,25 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {!isUser && message.debug?.effectiveQuestion && message.debug.effectiveQuestion !== message.debug.originalQuestion ? (
+                        {isAssistant && message.evidenceGaps?.length ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
-                            <p className="mb-1 font-medium">Resolved question used by backend</p>
-                            <p>{message.debug.effectiveQuestion}</p>
+                            <p className="mb-1 font-medium">Evidence gaps</p>
+                            <ul className="list-disc space-y-1 pl-5">
+                              {message.evidenceGaps.slice(0, 4).map((gap) => (
+                                <li key={gap}>{gap}</li>
+                              ))}
+                            </ul>
                           </div>
                         ) : null}
 
-                        {!isUser && message.citations?.length ? (
+                        {isAssistant && message.retrievalDebug?.effective_question ? (
+                          <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
+                            <p className="mb-1 font-medium">Resolved question used by backend</p>
+                            <p>{message.retrievalDebug.effective_question}</p>
+                          </div>
+                        ) : null}
+
+                        {isAssistant && message.citations?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               Sources considered
@@ -390,10 +484,13 @@ export function ImmigrationAssistantWidget() {
                                     {citation.title}
                                   </div>
                                   <div className="mt-1 text-xs text-slate-500">
-                                    {[citation.authority, citation.sectionRef]
-                                      .filter(Boolean)
-                                      .join(" — ")}
+                                    {[citation.authority].filter(Boolean).join(" — ")}
                                   </div>
+                                  {citation.quote ? (
+                                    <div className="mt-2 text-xs leading-5 text-slate-600">
+                                      {citation.quote}
+                                    </div>
+                                  ) : null}
                                   {citation.url ? (
                                     <a
                                       className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
@@ -411,7 +508,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {!isUser && message.escalate ? (
+                        {isAssistant && message.escalate && !showGuidedCard ? (
                           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm leading-6 text-red-800">
                             <div className="flex items-start gap-2">
                               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -490,6 +587,7 @@ export function ImmigrationAssistantWidget() {
 
           <button
             className="mt-3 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-100"
+            onClick={handleBookConsultation}
             type="button"
           >
             <div>
