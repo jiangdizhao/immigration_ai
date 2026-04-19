@@ -754,14 +754,40 @@ class QueryService:
         }
 
 
+    def _normalize_condition_text(self, text: str) -> str:
+        normalized = text or ""
+        return re.sub(
+            r"((?:visa\s+)?condition\s*)(\d{4})1(?=\s+in\s+schedule\s+8\b)",
+            r"\1\2",
+            normalized,
+            flags=re.I,
+        )
+
+    def _is_condition_definition_like(self, text: str, condition_no: str | None) -> bool:
+        normalized = self._normalize_condition_text(text)
+        patterns = [
+            r"states? that the visa holder must",
+            r"requires? the visa holder to",
+            r"condition\s*\d{4}\s+means",
+            r"must maintain[^\n]{0,120}health insurance",
+            r"adequate arrangements for health insurance",
+            r"while the holder is in australia",
+            r"must not",
+        ]
+        if not any(re.search(pattern, normalized, flags=re.I) for pattern in patterns):
+            return False
+        if condition_no:
+            return bool(re.search(rf"(?:visa\s+)?condition\s*{re.escape(condition_no)}\b", normalized, flags=re.I))
+        return True
+
     def _chunk_merge_priority(self, chunk: Any, *, question: str, operation_type: str | None) -> float:
         source = getattr(chunk, "source", None)
-        title = str(getattr(source, "title", "") or "").lower()
+        title = self._normalize_condition_text(str(getattr(source, "title", "") or "").lower())
         authority = str(getattr(source, "authority", "") or "").lower()
         source_type = str(getattr(source, "source_type", "") or "").lower()
         metadata_json = dict(getattr(source, "metadata_json", None) or {})
-        text_preview = str(getattr(chunk, "text", "") or "")[:500].lower()
-        heading = str(getattr(chunk, "heading", "") or "").lower()
+        text_preview = self._normalize_condition_text(str(getattr(chunk, "text", "") or "")[:700].lower())
+        heading = self._normalize_condition_text(str(getattr(chunk, "heading", "") or "").lower())
         condition_no = self._extract_condition_number(question)
 
         score = 0.0
@@ -779,12 +805,23 @@ class QueryService:
             score += 0.04
 
         if condition_no:
+            explicit_definition = self._is_condition_definition_like(f"{heading}\n{text_preview}", condition_no)
+            applicability_only = any(
+                phrase in text_preview
+                for phrase in ["can only be imposed", "is applicable to", "visas subject to condition", "certain bridging visas"]
+            )
             if condition_no in title:
                 score += 0.80
             elif condition_no in text_preview or condition_no in heading:
                 score += 0.40
             if "visa conditions" in title or "see your visa conditions" in title:
                 score += 0.30
+            if explicit_definition:
+                score += 0.90
+                if "health insurance" in text_preview:
+                    score += 0.25
+            if applicability_only and not explicit_definition:
+                score -= 0.35
             if "schedule 8" in title and condition_no not in text_preview:
                 score -= 0.12
 

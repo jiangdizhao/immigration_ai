@@ -70,6 +70,7 @@ class PolicyRules:
             operation_type=operation_type,
             known_facts=known_facts,
             source_classes_present=source_classes_present,
+            retrieval_rows=rows,
         )
 
         fact_coverage = {key: fact_is_present(known_facts, key) for key in profile.required_facts}

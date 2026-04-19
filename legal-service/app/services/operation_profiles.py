@@ -196,6 +196,36 @@ def _present(value: Any) -> bool:
 
 
 
+def _normalize_condition_text_for_matching(text: str) -> str:
+    normalized = text or ""
+    # Common PDF extraction artifact: "Condition 85011 in Schedule 8" instead of "Condition 8501 in Schedule 8"
+    normalized = re.sub(
+        r"((?:visa\s+)?condition\s*)(\d{4})1(?=\s+in\s+schedule\s+8\b)",
+        r"\1\2",
+        normalized,
+        flags=re.I,
+    )
+    return normalized
+
+
+def _is_condition_definition_like(blob: str, condition_no: str | None = None) -> bool:
+    normalized = _normalize_condition_text_for_matching(blob)
+    definition_patterns = [
+        r"states? that the visa holder must",
+        r"requires? the visa holder to",
+        r"condition\s*\d{4}\s+means",
+        r"must maintain[^\n]{0,120}health insurance",
+        r"adequate arrangements for health insurance",
+        r"while the holder is in australia",
+        r"must not",
+    ]
+    if not any(re.search(pattern, normalized, flags=re.I) for pattern in definition_patterns):
+        return False
+    if condition_no:
+        return bool(re.search(rf"(?:visa\s+)?condition\s*{re.escape(condition_no)}\b", normalized, flags=re.I))
+    return True
+
+
 def infer_source_classes_from_parts(
     *,
     title: str | None = None,
@@ -219,14 +249,14 @@ def infer_source_classes_from_parts(
             if isinstance(item, str) and item.strip():
                 classes.add(item.strip().lower())
 
-    title_l = (title or "").lower()
+    title_l = _normalize_condition_text_for_matching((title or "").lower())
     authority_l = (authority or "").lower()
     source_type_l = (source_type or "").lower()
     bucket_l = (bucket or "").lower()
     sub_type_l = (sub_type or "").lower()
     section_ref_l = (section_ref or "").lower()
-    heading_l = (heading or "").lower()
-    text_l = (text or "").lower()
+    heading_l = _normalize_condition_text_for_matching((heading or "").lower())
+    text_l = _normalize_condition_text_for_matching((text or "").lower())
     blob = "\n".join(
         item
         for item in [title_l, authority_l, source_type_l, bucket_l, sub_type_l, section_ref_l, heading_l, text_l]
@@ -237,11 +267,12 @@ def infer_source_classes_from_parts(
         classes.add("legislation_primary")
 
     condition_match = re.search(r"\bcondition\s*(\d{4})\b", blob)
+    condition_no = condition_match.group(1) if condition_match else None
     if any(term in blob for term in ["see your visa conditions", "visas subject condition", "visas subject to condition"]):
         classes.add("conditions_guidance")
     elif source_type_l != "legislation" and ("visa condition" in blob or "visa conditions" in blob):
         classes.add("conditions_guidance")
-    if condition_match:
+    if _is_condition_definition_like(blob, condition_no):
         classes.add("visa_condition_definition")
     if "schedule 8" in blob or ("visa conditions" in title_l and source_type_l == "legislation"):
         classes.add("visa_conditions_schedule")
@@ -256,7 +287,17 @@ def infer_source_classes_from_parts(
     if any(term in blob for term in ["next steps", "what to do next", "what you can do", "after your visa is refused", "after refusal"]):
         classes.add("official_next_steps")
 
-    if any(term in blob for term in ["lawful", "unlawful", "remain in australia", "bridging visa after refusal", "status after refusal"]):
+    if any(
+        re.search(pattern, blob, flags=re.I)
+        for pattern in [
+            r"\bunlawful\b",
+            r"\bremain in australia\b",
+            r"\bbridging visa after refusal\b",
+            r"\bstatus after refusal\b",
+            r"\bafter your visa is refused\b",
+            r"\bafter refusal\b",
+        ]
+    ):
         classes.add("lawful_status_after_refusal")
 
     if "genuine student" in blob or "gte" in blob or "genuine temporary entrant" in blob:
@@ -273,12 +314,23 @@ def infer_source_classes_from_parts(
     if "temporary graduate" in blob or "subclass 485" in blob or " 485" in f" {blob} ":
         classes.update({"485_requirements_overview", "requirements_overview"})
 
-    if "bridging visa" in blob or "bridging" in title_l:
-        classes.add("bridging_travel")
-    if "travel on a bridging visa" in blob or ("bridging visa" in blob and "travel" in blob):
+    travel_context = any(
+        term in blob
+        for term in [
+            "travel on a bridging visa",
+            "leave australia",
+            "come back",
+            "return to australia",
+            "re-enter australia",
+            "travel and return",
+        ]
+    )
+    if travel_context or (("bridging visa" in title_l or "bridging visa" in blob) and "travel" in blob):
         classes.add("bridging_travel")
     if "bridging visa b" in blob or "(bvb)" in blob or " bvb" in f" {blob} ":
         classes.add("bridging_visa_b")
+        if travel_context:
+            classes.add("bridging_travel")
 
     if any(term in blob for term in ["4020", "accurate information", "false or misleading", "misleading information", "incorrect information"]):
         classes.add("pic4020_guidance")

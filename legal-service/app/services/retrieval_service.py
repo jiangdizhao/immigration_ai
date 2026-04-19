@@ -384,16 +384,59 @@ class RetrievalService:
                 score += 0.05
         return score
 
+    def _normalize_condition_text(self, text: str) -> str:
+        normalized = text or ""
+        return re.sub(
+            r"((?:visa\s+)?condition\s*)(\d{4})1(?=\s+in\s+schedule\s+8\b)",
+            r"\1\2",
+            normalized,
+            flags=re.I,
+        )
+
+    def _is_condition_definition_like(self, text: str, condition_no: str | None) -> bool:
+        normalized = self._normalize_condition_text(text)
+        patterns = [
+            r"states? that the visa holder must",
+            r"requires? the visa holder to",
+            r"condition\s*\d{4}\s+means",
+            r"must maintain[^\n]{0,120}health insurance",
+            r"adequate arrangements for health insurance",
+            r"while the holder is in australia",
+            r"must not",
+        ]
+        if not any(re.search(pattern, normalized, flags=re.I) for pattern in patterns):
+            return False
+        if condition_no:
+            return bool(re.search(rf"(?:visa\s+)?condition\s*{re.escape(condition_no)}\b", normalized, flags=re.I))
+        return True
+
+    def _is_condition_applicability_like(self, text: str, condition_no: str | None) -> bool:
+        normalized = self._normalize_condition_text(text)
+        patterns = [
+            r"can only be imposed",
+            r"is applicable to",
+            r"visas subject to condition",
+            r"certain bridging visas",
+            r"visitor visa granted",
+        ]
+        if not any(re.search(pattern, normalized, flags=re.I) for pattern in patterns):
+            return False
+        if condition_no:
+            return bool(re.search(rf"(?:visa\s+)?condition\s*{re.escape(condition_no)}\b", normalized, flags=re.I))
+        return True
+
     def _compute_topic_boost(self, chunk: SourceChunk, question: str) -> float:
         source = chunk.source
         if source is None:
             return 0.0
-        q = question.lower()
-        title = (source.title or "").lower()
-        preview = ((chunk.heading or "") + " " + (chunk.text or "")[:400]).lower()
+        q = self._normalize_condition_text(question.lower())
+        title = self._normalize_condition_text((source.title or "").lower())
+        preview = self._normalize_condition_text(((chunk.heading or "") + " " + (chunk.text or "")[:700]).lower())
         score = 0.0
         condition_match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", q)
         condition_no = condition_match.group(1) if condition_match else None
+        explicit_definition = self._is_condition_definition_like(preview, condition_no)
+        applicability_only = self._is_condition_applicability_like(preview, condition_no)
 
         def has(term: str) -> bool:
             return term in title or term in preview
@@ -405,6 +448,14 @@ class RetrievalService:
                 score += 0.45
             if "see your visa conditions" in title or "visa conditions" in title:
                 score += 0.35
+            if explicit_definition:
+                score += 0.95
+                if "health insurance" in preview:
+                    score += 0.25
+            if applicability_only and not explicit_definition:
+                score -= 0.45
+            if "can only be imposed" in preview or "is applicable to" in preview:
+                score -= 0.15
             if "schedule 8" in title and condition_no not in preview:
                 score -= 0.18
 
