@@ -41,7 +41,7 @@ const quickQuestions = [
 ];
 
 
-const TYPEWRITER_TICK_MS = 18;
+const TYPEWRITER_TICK_MS = 45;
 const TYPEWRITER_WORDS_PER_TICK = 2;
 
 const sleep = (ms: number) =>
