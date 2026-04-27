@@ -40,6 +40,19 @@ const quickQuestions = [
   "What documents should I prepare for a student visa refusal consultation?",
 ];
 
+
+const TYPEWRITER_TICK_MS = 18;
+const TYPEWRITER_WORDS_PER_TICK = 2;
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+function splitIntoDisplayTokens(text: string) {
+  return text.match(/\S+\s*/g) ?? [text];
+}
+
 function isAssistantMessage(
   message: WidgetMessage
 ): message is Extract<WidgetMessage, { role: "assistant" }> {
@@ -65,20 +78,33 @@ export function ImmigrationAssistantWidget() {
   const [matterId, setMatterId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
-  const [status, setStatus] = useState<"ready" | "submitted">("ready");
+  const [status, setStatus] = useState<"ready" | "submitted" | "typing">("ready");
   const [error, setError] = useState<string | null>(null);
   const [showQuickQuestions, setShowQuickQuestions] = useState(true);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
   const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
-  const scrollToBottom = () => {
+  const isNearBottom = () => {
+    const container = listRef.current;
+    if (!container) return true;
+
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+  };
+
+  const scrollToBottom = (force = false) => {
     const container = listRef.current;
     if (!container) return;
+    if (!force && !shouldAutoScrollRef.current) return;
 
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
+  };
+
+  const handleMessageListScroll = () => {
+    shouldAutoScrollRef.current = isNearBottom();
   };
 
   useEffect(() => {
@@ -102,18 +128,23 @@ export function ImmigrationAssistantWidget() {
     };
   }, [open]);
 
-  const appendAssistantMessage = (data: WidgetRouteResponse) => {
+  const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
       setMatterId(data.matterId);
     }
 
+    const fullText =
+      data.text?.trim() && data.text.trim().length > 0
+        ? data.text.trim()
+        : "Sorry, I could not generate a response right now.";
+
+    const assistantMessageId = generateUUID();
+
     const assistantMessage: Extract<WidgetMessage, { role: "assistant" }> = {
-      id: generateUUID(),
+      id: assistantMessageId,
       role: "assistant",
-      text:
-        data.text?.trim() && data.text.trim().length > 0
-          ? data.text.trim()
-          : "Sorry, I could not generate a response right now.",
+      text: "",
+      isStreaming: true,
       citations: data.citations ?? [],
       followUpQuestions: data.followUpQuestions ?? [],
       missingFacts: data.missingFacts ?? [],
@@ -129,7 +160,40 @@ export function ImmigrationAssistantWidget() {
       retrievalDebug: data.retrievalDebug ?? null,
     };
 
+    shouldAutoScrollRef.current = true;
+    setStatus("typing");
     setMessages((current) => [...current, assistantMessage]);
+    scrollToBottom(true);
+
+    const tokens = splitIntoDisplayTokens(fullText);
+    let visibleTokenCount = 0;
+
+    while (visibleTokenCount < tokens.length) {
+      visibleTokenCount = Math.min(
+        visibleTokenCount + TYPEWRITER_WORDS_PER_TICK,
+        tokens.length
+      );
+
+      const visibleText = tokens.slice(0, visibleTokenCount).join("");
+
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === assistantMessageId && message.role === "assistant"
+            ? { ...message, text: visibleText }
+            : message
+        )
+      );
+
+      await sleep(TYPEWRITER_TICK_MS);
+    }
+
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === assistantMessageId && message.role === "assistant"
+          ? { ...message, text: fullText, isStreaming: false }
+          : message
+      )
+    );
   };
 
   const sendToWidgetRoute = async (
@@ -171,7 +235,9 @@ export function ImmigrationAssistantWidget() {
     };
 
     const nextMessages = [...messages, nextUserMessage];
+    shouldAutoScrollRef.current = true;
     setMessages(nextMessages);
+    scrollToBottom(true);
     setInput("");
     setStatus("submitted");
     setError(null);
@@ -182,7 +248,7 @@ export function ImmigrationAssistantWidget() {
 
     try {
       const data = await sendToWidgetRoute(nextMessages, intakeFacts);
-      appendAssistantMessage(data);
+      await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -218,7 +284,9 @@ export function ImmigrationAssistantWidget() {
     };
 
     const nextMessages = [...messages, nextUserMessage];
+    shouldAutoScrollRef.current = true;
     setMessages(nextMessages);
+    scrollToBottom(true);
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
     setStatus("submitted");
@@ -227,7 +295,7 @@ export function ImmigrationAssistantWidget() {
 
     try {
       const data = await sendToWidgetRoute(nextMessages, mergedFacts);
-      appendAssistantMessage(data);
+      await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -259,7 +327,7 @@ export function ImmigrationAssistantWidget() {
         </Button>
       </SheetTrigger>
 
-      <SheetContent className="[&>button]:hidden flex h-[100dvh] w-[min(100vw,28rem)] max-w-none flex-col gap-0 border-l border-slate-200 bg-white p-0 sm:w-[min(92vw,28rem)]">
+      <SheetContent className="[&>button]:hidden flex h-[100dvh] w-[100vw] max-w-none flex-col gap-0 border-l border-slate-200 bg-white p-0 sm:w-[min(92vw,42rem)] lg:w-[42rem] xl:w-[46rem]">
         <div className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950 px-4 py-3 text-white">
           <div className="flex items-start justify-between gap-3 pr-8">
             <div className="min-w-0">
@@ -331,6 +399,7 @@ export function ImmigrationAssistantWidget() {
           <div className="min-h-[340px] flex-1 px-4 py-3 sm:min-h-[420px]">
             <div
               className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1"
+              onScroll={handleMessageListScroll}
               ref={listRef}
             >
               {messages.length === 0 ? (
@@ -348,8 +417,9 @@ export function ImmigrationAssistantWidget() {
                   {messages.map((message) => {
                     const isUser = message.role === "user";
                     const isAssistant = isAssistantMessage(message);
+                    const assistantReady = isAssistant && !message.isStreaming;
                     const showGuidedCard =
-                      isAssistant &&
+                      assistantReady &&
                       !!message.interactionPlan &&
                       ((message.interactionPlan.requested_facts?.length ?? 0) > 0 ||
                         message.interactionPlan.mode === "guided_intake" ||
@@ -357,7 +427,7 @@ export function ImmigrationAssistantWidget() {
                         message.interactionPlan.mode === "escalation" ||
                         (message.interactionPlan.warnings?.length ?? 0) > 0);
                     const hasRequestedFacts =
-                      isAssistant &&
+                      assistantReady &&
                       (message.interactionPlan?.requested_facts?.length ?? 0) > 0;
 
                     return (
@@ -373,9 +443,16 @@ export function ImmigrationAssistantWidget() {
                         key={message.id}
                         transition={{ duration: 0.2 }}
                       >
-                        <div>{message.text}</div>
+                        <div>
+                          {message.text}
+                          {isAssistant && message.isStreaming ? (
+                            <span className="ml-0.5 inline-block animate-pulse text-slate-400">
+                              ▍
+                            </span>
+                          ) : null}
+                        </div>
 
-                        {isAssistant && message.confidence ? (
+                        {assistantReady && message.confidence ? (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className="border-slate-200 bg-slate-50 text-slate-700"
@@ -413,12 +490,12 @@ export function ImmigrationAssistantWidget() {
                                 void handleSubmitDraftFacts();
                               }}
                               onBookConsultation={handleBookConsultation}
-                              isSubmitting={status === "submitted"}
+                              isSubmitting={status !== "ready"}
                             />
                           </div>
                         ) : null}
 
-                        {isAssistant && !hasRequestedFacts && message.followUpQuestions?.length ? (
+                        {assistantReady && !hasRequestedFacts && message.followUpQuestions?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               Follow-up questions
@@ -440,7 +517,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {isAssistant && message.missingFacts?.length ? (
+                        {assistantReady && message.missingFacts?.length ? (
                           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                             <p className="mb-1 font-medium">Important details still needed</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -451,7 +528,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {isAssistant && message.evidenceGaps?.length ? (
+                        {assistantReady && message.evidenceGaps?.length ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
                             <p className="mb-1 font-medium">Evidence gaps</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -462,14 +539,14 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {isAssistant && message.retrievalDebug?.effective_question ? (
+                        {assistantReady && message.retrievalDebug?.effective_question ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
                             <p className="mb-1 font-medium">Resolved question used by backend</p>
                             <p>{message.retrievalDebug.effective_question}</p>
                           </div>
                         ) : null}
 
-                        {isAssistant && message.citations?.length ? (
+                        {assistantReady && message.citations?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               Sources considered
@@ -508,7 +585,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {isAssistant && message.escalate && !showGuidedCard ? (
+                        {assistantReady && message.escalate && !showGuidedCard ? (
                           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm leading-6 text-red-800">
                             <div className="flex items-start gap-2">
                               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -573,7 +650,7 @@ export function ImmigrationAssistantWidget() {
                 disabled={status !== "ready" || input.trim().length === 0}
                 type="submit"
               >
-                {status === "submitted" ? (
+                {status !== "ready" ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <>

@@ -95,6 +95,7 @@ export interface WidgetAssistantMessage {
   id: string;
   role: "assistant";
   text: string;
+  isStreaming?: boolean;
   citations?: CitationItem[];
   followUpQuestions?: string[];
   missingFacts?: string[];
