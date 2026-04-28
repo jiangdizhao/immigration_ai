@@ -41,7 +41,7 @@ const quickQuestions = [
 ];
 
 
-const TYPEWRITER_TICK_MS = 45;
+const TYPEWRITER_TICK_MS = 60;
 const TYPEWRITER_WORDS_PER_TICK = 2;
 
 const sleep = (ms: number) =>
@@ -327,7 +327,7 @@ export function ImmigrationAssistantWidget() {
         </Button>
       </SheetTrigger>
 
-      <SheetContent className="[&>button]:hidden flex h-[100dvh] w-[100vw] max-w-none flex-col gap-0 border-l border-slate-200 bg-white p-0 sm:w-[min(92vw,42rem)] lg:w-[42rem] xl:w-[46rem]">
+      <SheetContent className="[&>button]:hidden flex h-[100dvh] w-[100vw] max-w-none flex-col gap-0 border-l border-slate-200 bg-white p-0 sm:w-[min(95vw,56rem)] lg:w-[56rem] xl:w-[60rem]">
         <div className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950 px-4 py-3 text-white">
           <div className="flex items-start justify-between gap-3 pr-8">
             <div className="min-w-0">
