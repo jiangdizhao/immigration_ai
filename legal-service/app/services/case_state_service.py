@@ -184,7 +184,7 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
 }
 
 
-KNOWN_STATUSES = {"known", "not_applicable", "document_unavailable"}
+KNOWN_STATUSES = {"known", "not_applicable", "document_unavailable", "user_unsure"}
 
 
 class CaseStateService:
@@ -365,6 +365,9 @@ class CaseStateService:
                 pretty = self._humanize_reason(reason)
                 if pretty and pretty not in warnings:
                     warnings.append(pretty)
+        # The public widget should not feel like a technical audit log. Keep only
+        # the most important warning; detailed reasons remain in retrieval_debug.
+        warnings = warnings[:1]
         if evidence.unsupported_requests:
             warning = "Some of the exact next-step questions are not yet fully supported by the current evidence."
             if warning not in warnings:
@@ -376,8 +379,8 @@ class CaseStateService:
             primary_prompt = profile.escalation_intro if profile is not None else "This matter may be time-sensitive or high-risk, so legal review is sensible."
         elif policy.next_action == "ask_followup":
             mode = "guided_intake"
-            answer_mode = "qualified_general" if evidence.supported_facts else "ask_followup"
-            primary_prompt = profile.followup_intro if profile is not None else "I can help further, but I first need a few key details."
+            answer_mode = "answer_then_ask"
+            primary_prompt = profile.followup_intro if profile is not None else "I can still give general guidance, but one detail would help me be more specific."
         elif policy.next_action == "answer":
             if warnings or policy.confidence_cap == "low":
                 mode = "analysis_ready"

@@ -26,7 +26,9 @@ from app.schemas.state import (
 from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.live_retrieval_service import LiveRetrievalService
+from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
+from app.services.pre_llm_router_service import PreLLMRouterService, PreLLMTurnAnalysis
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
 from app.services.state_machine import StateMachine, TurnInput
@@ -63,6 +65,8 @@ class QueryService:
         live_retrieval_service: LiveRetrievalService | None = None,
         state_machine: StateMachine | None = None,
         case_state_service: CaseStateService | None = None,
+        pre_llm_router_service: PreLLMRouterService | None = None,
+        lightweight_response_service: LightweightResponseService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -71,6 +75,8 @@ class QueryService:
         self.live_retrieval_service = live_retrieval_service or LiveRetrievalService()
         self.state_machine = state_machine or StateMachine(max_history_turns=12)
         self.case_state_service = case_state_service or CaseStateService()
+        self.pre_llm_router_service = pre_llm_router_service or PreLLMRouterService()
+        self.lightweight_response_service = lightweight_response_service or LightweightResponseService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -80,6 +86,12 @@ class QueryService:
         matter = self._get_or_create_matter(db, payload)
 
         current_state = self.state_machine.hydrate_state(matter.metadata_json)
+        turn_analysis = self.pre_llm_router_service.analyze(
+            question=payload.question,
+            current_state=current_state,
+            intake_facts=payload.intake_facts or {},
+            conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
+        )
         turn_input = TurnInput(
             question=payload.question,
             preferred_jurisdiction=payload.preferred_jurisdiction,
@@ -91,9 +103,9 @@ class QueryService:
         prepared = self.state_machine.prepare_turn(
             current_state=current_state,
             turn_input=turn_input,
-            contextualize_fn=self._contextualize_turn,
-            classify_fn=self._classify_issue_and_operation,
-            fact_extract_fn=self._extract_fact_updates,
+            contextualize_fn=lambda **kwargs: self._contextualize_turn(**kwargs, turn_analysis=turn_analysis),
+            classify_fn=lambda **kwargs: self._classify_issue_and_operation(**kwargs, turn_analysis=turn_analysis),
+            fact_extract_fn=lambda **kwargs: self._extract_fact_updates(**kwargs, turn_analysis=turn_analysis),
         )
 
         state = prepared.state
@@ -110,7 +122,15 @@ class QueryService:
             }
         )
 
-        local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
+        if turn_analysis.retrieval_needed:
+            local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
+        else:
+            local_chunks, retrieval_debug = [], {
+                "query": effective_question,
+                "results": [],
+                "top_titles": [],
+                "skipped_retrieval": True,
+            }
         artifacts.retrieval_debug = retrieval_debug
 
         initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
@@ -124,7 +144,7 @@ class QueryService:
 
         live_result = LiveRetrievalResult()
         live_chunks: list[_LiveChunkShim] = []
-        if initial_sufficiency_gate.need_live_fetch:
+        if initial_sufficiency_gate.need_live_fetch and turn_analysis.live_fetch_allowed:
             live_result = self.live_retrieval_service.retrieve(
                 question=effective_question,
                 preferred_domains=initial_sufficiency_gate.preferred_domains,
@@ -165,29 +185,60 @@ class QueryService:
             risk_flags=state.risk_flags.model_dump(),
         )
 
-        response = self.reasoning_service.answer_from_chunks(
-            payload=payload,
+        if self.lightweight_response_service.can_answer_without_llm(
+            analysis=turn_analysis,
             chunks=merged_chunks,
-            retrieval_debug=enriched_debug,
-            conversation_context={
-                "history": [turn.model_dump() for turn in state.conversation_history],
-                "issue_summary": matter.issue_summary,
-                "issue_type": state.issue_type,
-                "visa_type": state.visa_type,
-                "intake_facts": merged_intake_facts,
-                "effective_question": effective_question,
-            },
-        )
-        response.matter_id = matter.id
-
-        evidence = self._evidence_from_response(response, state)
-        policy = self.policy_rules.apply_policy_rules(
-            question=effective_question,
-            state=state,
             sufficiency_gate=final_sufficiency_gate,
-            evidence_package=evidence,
-            live_retrieval=live_result.model_dump(),
-        )
+        ):
+            response = self.lightweight_response_service.build_response(
+                analysis=turn_analysis,
+                state=state,
+                effective_question=effective_question,
+                chunks=merged_chunks,
+                retrieval_debug=enriched_debug,
+                matter_id=matter.id,
+            )
+            evidence = self.lightweight_response_service.evidence_for_lightweight_response(
+                analysis=turn_analysis,
+                response=response,
+                state=state,
+            )
+            policy = self.lightweight_response_service.build_policy_for_lightweight_response(
+                analysis=turn_analysis,
+                response=response,
+            )
+        else:
+            enriched_debug["pre_llm_router"] = {
+                "turn_type": turn_analysis.turn_type,
+                "display_mode": turn_analysis.display_mode,
+                "no_llm_needed": turn_analysis.no_llm_needed,
+                "reasons": turn_analysis.reasons,
+                "extracted_facts": turn_analysis.extraction.facts,
+                "fact_confidence": turn_analysis.extraction.fact_confidence,
+            }
+            response = self.reasoning_service.answer_from_chunks(
+                payload=payload,
+                chunks=merged_chunks,
+                retrieval_debug=enriched_debug,
+                conversation_context={
+                    "history": [turn.model_dump() for turn in state.conversation_history],
+                    "issue_summary": matter.issue_summary,
+                    "issue_type": state.issue_type,
+                    "visa_type": state.visa_type,
+                    "intake_facts": merged_intake_facts,
+                    "effective_question": effective_question,
+                    "pre_llm_router": enriched_debug["pre_llm_router"],
+                },
+            )
+            response.matter_id = matter.id
+            evidence = self._evidence_from_response(response, state)
+            policy = self.policy_rules.apply_policy_rules(
+                question=effective_question,
+                state=state,
+                sufficiency_gate=final_sufficiency_gate,
+                evidence_package=evidence,
+                live_retrieval=live_result.model_dump(),
+            )
         artifacts.evidence_package = evidence
         artifacts.policy_decision = policy
 
@@ -255,7 +306,16 @@ class QueryService:
         debug["case_hypothesis"] = case_hypothesis.model_dump()
         debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
         debug["interaction_plan"] = interaction_plan.model_dump()
+        debug.setdefault("pre_llm_router", {
+            "turn_type": turn_analysis.turn_type,
+            "display_mode": turn_analysis.display_mode,
+            "no_llm_needed": turn_analysis.no_llm_needed,
+            "reasons": turn_analysis.reasons,
+            "extracted_facts": turn_analysis.extraction.facts,
+            "fact_confidence": turn_analysis.extraction.fact_confidence,
+        })
         response.retrieval_debug = debug
+        response.compact_sources = self._compact_source_titles(response)
 
         self._update_matter_from_state(
             matter=matter,
@@ -366,7 +426,15 @@ class QueryService:
         issue_type: str | None,
         visa_type: str | None,
         intake_facts: dict[str, Any],
+        turn_analysis: PreLLMTurnAnalysis | None = None,
     ) -> ContextualizationResult:
+        if turn_analysis is not None and turn_analysis.can_skip_contextualization_llm:
+            return ContextualizationResult(
+                standalone_question=question.strip(),
+                used_history=False,
+                carried_facts=dict(turn_analysis.extraction.facts),
+                reason="pre_llm_router_no_contextualization_needed",
+            )
         raw = self.reasoning_service.contextualize_question(
             question=question,
             conversation_history=conversation_history,
@@ -388,14 +456,30 @@ class QueryService:
         current_operation_type: str | None,
         current_visa_type: str | None,
         preferred_jurisdiction: str | None,
+        turn_analysis: PreLLMTurnAnalysis | None = None,
     ) -> IssueAndOperation:
-        return self.fact_extraction_service.classify_issue_and_operation(
+        fallback = IssueAndOperation(
+            issue_type=current_issue_type,
+            operation_type=current_operation_type,
+            visa_type=current_visa_type,
+            jurisdiction=preferred_jurisdiction,
+        )
+        if turn_analysis is not None and turn_analysis.can_skip_classification_llm:
+            return turn_analysis.extraction.to_issue_operation(fallback=fallback)
+        heuristic = turn_analysis.extraction.to_issue_operation(fallback=fallback) if turn_analysis is not None else fallback
+        refined = self.fact_extraction_service.classify_issue_and_operation(
             question=question,
-            intake_facts=intake_facts,
-            current_issue_type=current_issue_type,
-            current_operation_type=current_operation_type,
-            current_visa_type=current_visa_type,
+            intake_facts={**(intake_facts or {}), **(turn_analysis.extraction.facts if turn_analysis is not None else {})},
+            current_issue_type=heuristic.issue_type,
+            current_operation_type=heuristic.operation_type,
+            current_visa_type=heuristic.visa_type,
             preferred_jurisdiction=preferred_jurisdiction,
+        )
+        return IssueAndOperation(
+            issue_type=refined.issue_type or heuristic.issue_type,
+            operation_type=refined.operation_type or heuristic.operation_type,
+            visa_type=refined.visa_type or heuristic.visa_type,
+            jurisdiction=refined.jurisdiction or heuristic.jurisdiction,
         )
 
     def _extract_fact_updates(
@@ -407,15 +491,24 @@ class QueryService:
         operation_type: str | None,
         visa_type: str | None,
         prior_facts: dict[str, Any],
+        turn_analysis: PreLLMTurnAnalysis | None = None,
     ) -> FactExtractionResult:
-        return self.fact_extraction_service.extract_fact_updates(
+        if turn_analysis is not None and turn_analysis.can_skip_fact_extraction_llm:
+            return turn_analysis.extraction.to_fact_result()
+        heuristic_result = turn_analysis.extraction.to_fact_result() if turn_analysis is not None else FactExtractionResult()
+        refined = self.fact_extraction_service.extract_fact_updates(
             question=question,
             effective_question=effective_question,
             issue_type=issue_type,
             operation_type=operation_type,
             visa_type=visa_type,
-            prior_facts=prior_facts,
+            prior_facts={**(prior_facts or {}), **heuristic_result.new_facts},
         )
+        merged_facts = dict(heuristic_result.new_facts)
+        merged_facts.update(refined.new_facts)
+        merged_conf = dict(heuristic_result.fact_confidence)
+        merged_conf.update(refined.fact_confidence)
+        return FactExtractionResult(new_facts=merged_facts, fact_confidence=merged_conf)
 
     # ------------------------------------------------------------------
     # Response / evidence / policy helpers
@@ -482,7 +575,7 @@ class QueryService:
         fact_slot_states: list[Any],
         case_hypothesis: Any,
     ) -> QueryResponse:
-        known_statuses = {"known", "not_applicable"}
+        known_statuses = {"known", "not_applicable", "document_unavailable", "user_unsure"}
         canonical_missing = [
             slot.fact_key
             for slot in fact_slot_states
@@ -494,13 +587,13 @@ class QueryService:
             if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
         ]
         if evidence_gaps:
-            debug["evidence_gaps"] = evidence_gaps
+            debug["internal_evidence_gaps"] = evidence_gaps
 
         if policy.next_action == "answer":
             response.missing_facts = []
             response.follow_up_questions = []
         else:
-            response.missing_facts = canonical_missing
+            response.missing_facts = canonical_missing[:1]
 
         resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
         if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
@@ -537,7 +630,7 @@ class QueryService:
         fact_slot_states: list[Any],
         case_hypothesis: Any,
     ) -> QueryResponse:
-        known_statuses = {"known", "not_applicable"}
+        known_statuses = {"known", "not_applicable", "document_unavailable", "user_unsure"}
         canonical_missing = [
             slot.fact_key
             for slot in fact_slot_states
@@ -549,13 +642,13 @@ class QueryService:
             if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
         ]
         if evidence_gaps:
-            debug["evidence_gaps"] = evidence_gaps
+            debug["internal_evidence_gaps"] = evidence_gaps
 
         if policy.next_action == "answer":
             response.missing_facts = []
             response.follow_up_questions = []
         else:
-            response.missing_facts = canonical_missing
+            response.missing_facts = canonical_missing[:1]
 
         resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
         if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
@@ -592,7 +685,7 @@ class QueryService:
         fact_slot_states: list[Any],
         case_hypothesis: Any,
     ) -> QueryResponse:
-        known_statuses = {"known", "not_applicable"}
+        known_statuses = {"known", "not_applicable", "document_unavailable", "user_unsure"}
         canonical_missing = [
             slot.fact_key
             for slot in fact_slot_states
@@ -604,13 +697,13 @@ class QueryService:
             if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
         ]
         if evidence_gaps:
-            debug["evidence_gaps"] = evidence_gaps
+            debug["internal_evidence_gaps"] = evidence_gaps
 
         if policy.next_action == "answer":
             response.missing_facts = []
             response.follow_up_questions = []
         else:
-            response.missing_facts = canonical_missing
+            response.missing_facts = canonical_missing[:1]
 
         resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
         if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
@@ -839,6 +932,18 @@ class QueryService:
     def _extract_condition_number(self, text: str) -> str | None:
         match = re.search(r"(?:visa\s+)?condition\s*(\d{4})\b", text or "", flags=re.I)
         return match.group(1) if match else None
+
+    def _compact_source_titles(self, response: QueryResponse) -> list[str]:
+        titles: list[str] = []
+        for citation in response.citations or []:
+            title = getattr(citation, "title", None)
+            authority = getattr(citation, "authority", None)
+            if not title:
+                continue
+            label = f"{authority} — {title}" if authority else title
+            if label not in titles:
+                titles.append(label)
+        return titles[:3]
 
     # ------------------------------------------------------------------
     # Persistence helpers
