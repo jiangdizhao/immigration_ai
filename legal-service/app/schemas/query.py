@@ -24,10 +24,19 @@ class QueryResponse(BaseSchema):
     matter_id: str | None = None
     answer: str
     confidence: Literal["low", "medium", "high"]
+    user_display_mode: Literal[
+        "direct_short",
+        "general_with_warning",
+        "answer_then_ask",
+        "ask_one_question",
+        "escalate_with_brief_reason",
+        "booking_handoff",
+    ] | None = None
     issue_type: str | None = None
     missing_facts: list[str] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
     citations: list[CitationOut] = Field(default_factory=list)
+    compact_sources: list[str] = Field(default_factory=list)
     escalate: bool = False
     next_action: Literal["answer", "ask_followup", "suggest_consultation"]
     conversation_state: ConversationState | None = None

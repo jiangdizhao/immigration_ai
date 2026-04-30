@@ -59,6 +59,7 @@ InteractionMode = Literal[
 AnswerMode = Literal[
     "direct_answer",
     "qualified_general",
+    "answer_then_ask",
     "ask_followup",
     "live_fetch_then_retry",
     "answer_with_warning",
