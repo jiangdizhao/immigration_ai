@@ -459,9 +459,6 @@ class ReasoningService:
             ensure_ascii=False,
         )
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
-        response_language = str((conversation_context or {}).get("response_language") or getattr(payload, "response_language", None) or "en").lower()
-        original_user_question = str((conversation_context or {}).get("original_user_question") or payload.question)
-        language_instruction = self._response_language_instruction(response_language)
 
         system_prompt = (
             "You are a strict legal answer drafter.\n"
@@ -480,10 +477,8 @@ class ReasoningService:
             "}\n"
             "Keep the answer concise and grounded.\n"
         )
-        system_prompt += language_instruction
-
         user_prompt = (
-            f"Original question:\n{original_user_question}\n\n"
+            f"Original question:\n{payload.question}\n\n"
             f"Effective question:\n{effective_question or payload.question}\n\n"
             f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Evidence package JSON:\n{evidence_json}\n"
@@ -503,19 +498,6 @@ class ReasoningService:
     # ------------------------------------------------------------------
     # Fallbacks / serialization helpers
     # ------------------------------------------------------------------
-
-    def _response_language_instruction(self, response_language: str | None) -> str:
-        language = (response_language or "en").strip().lower()
-        if language.startswith("zh"):
-            return (
-                "\nResponse language requirement:\n"
-                "- Write the final user-facing answer in Simplified Chinese.\n"
-                "- Preserve legal uncertainty and cautions. Do not make deadlines, rights, or eligibility sound more certain than the supported facts allow.\n"
-                "- Keep official terms such as Home Affairs, ART, Subclass 500, Subclass 485, Bridging visa B, BVA/BVB, and visa condition numbers in English when useful, with Chinese explanation.\n"
-                "- Do not translate or alter citations/source titles unless needed for readability.\n"
-            )
-        return "\nResponse language requirement: write the final user-facing answer in English.\n"
-
     def _answer_general_question_directly(self, question: str) -> str:
         system_prompt = (
             "You are a helpful general assistant.\n"

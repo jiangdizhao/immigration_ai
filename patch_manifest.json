@@ -1,0 +1,17 @@
+{
+  "created_files": [
+    "legal-service/app/services/language_service.py",
+    "legal-service/scripts/smoke_test_chinese_language.py",
+    "apply_chinese_language_patch.py",
+    "README_CHINESE_LANGUAGE_PATCH.md"
+  ],
+  "patched_files": [
+    "legal-service/app/schemas/query.py",
+    "legal-service/app/services/query_service.py",
+    "legal-service/app/services/reasoning_service.py",
+    "chatbot/app/api/widget-chat/route.ts",
+    "chatbot/components/guided-intake-types.ts",
+    "chatbot/components/immigration-assistant-widget.tsx"
+  ],
+  "purpose": "Chinese input -> Chinese response; internal English canonical question for retrieval/classification."
+}

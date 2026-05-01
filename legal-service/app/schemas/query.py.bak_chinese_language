@@ -11,7 +11,6 @@ settings = get_settings()
 
 class QueryRequest(BaseSchema):
     question: str = Field(min_length=3, max_length=4000)
-    response_language: Literal["en", "zh"] | None = None
     matter_id: str | None = None
     session_id: str | None = None
     #preferred_jurisdiction: str | None = Field(default="Cth")
@@ -24,7 +23,6 @@ class QueryRequest(BaseSchema):
 class QueryResponse(BaseSchema):
     matter_id: str | None = None
     answer: str
-    response_language: Literal["en", "zh"] = "en"
     confidence: Literal["low", "medium", "high"]
     user_display_mode: Literal[
         "direct_short",

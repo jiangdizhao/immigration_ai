@@ -25,7 +25,6 @@ from app.schemas.state import (
 )
 from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
-from app.services.language_service import LanguageService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
@@ -68,7 +67,6 @@ class QueryService:
         case_state_service: CaseStateService | None = None,
         pre_llm_router_service: PreLLMRouterService | None = None,
         lightweight_response_service: LightweightResponseService | None = None,
-        language_service: LanguageService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -79,27 +77,12 @@ class QueryService:
         self.case_state_service = case_state_service or CaseStateService()
         self.pre_llm_router_service = pre_llm_router_service or PreLLMRouterService()
         self.lightweight_response_service = lightweight_response_service or LightweightResponseService()
-        self.language_service = language_service or LanguageService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
         return self.handle_query(db, payload)
 
     def handle_query(self, db: Session, payload: QueryRequest) -> QueryResponse:
-        original_question = payload.question
-        language_context = self.language_service.prepare_turn(
-            question=payload.question,
-            requested_language=payload.response_language,
-        )
-        if language_context.internal_question_en.strip() != payload.question.strip() or payload.response_language != language_context.response_language:
-            payload = QueryRequest(
-                **{
-                    **payload.model_dump(),
-                    "question": language_context.internal_question_en,
-                    "response_language": language_context.response_language,
-                }
-            )
-
         matter = self._get_or_create_matter(db, payload)
 
         current_state = self.state_machine.hydrate_state(matter.metadata_json)
@@ -244,9 +227,6 @@ class QueryService:
                     "visa_type": state.visa_type,
                     "intake_facts": merged_intake_facts,
                     "effective_question": effective_question,
-                    "original_user_question": original_question,
-                    "response_language": language_context.response_language,
-                    "language": language_context.to_debug_dict(),
                     "pre_llm_router": enriched_debug["pre_llm_router"],
                 },
             )
@@ -318,19 +298,11 @@ class QueryService:
             case_hypothesis=case_hypothesis,
         )
 
-        response, fact_slot_states, interaction_plan = self.language_service.localize_response_bundle(
-            response=response,
-            fact_slot_states=fact_slot_states,
-            interaction_plan=interaction_plan,
-            response_language=language_context.response_language,
-        )
-
         response.conversation_state = state.conversation_state
         response.case_hypothesis = case_hypothesis
         response.fact_slot_states = fact_slot_states
         response.interaction_plan = interaction_plan
         debug = dict(response.retrieval_debug or {})
-        debug["language"] = language_context.to_debug_dict()
         debug["case_hypothesis"] = case_hypothesis.model_dump()
         debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
         debug["interaction_plan"] = interaction_plan.model_dump()
@@ -344,7 +316,6 @@ class QueryService:
         })
         response.retrieval_debug = debug
         response.compact_sources = self._compact_source_titles(response)
-        response.response_language = language_context.response_language
 
         self._update_matter_from_state(
             matter=matter,

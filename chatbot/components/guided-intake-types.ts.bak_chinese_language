@@ -1,4 +1,3 @@
-export type ResponseLanguage = "en" | "zh" | string;
 export type ConfidenceLevel = "low" | "medium" | "high";
 
 export type InputType =
@@ -101,7 +100,6 @@ export interface WidgetAssistantMessage {
   role: "assistant";
   text: string;
   isStreaming?: boolean;
-  responseLanguage?: ResponseLanguage | null;
   citations?: CitationItem[];
   compactSources?: string[];
   userDisplayMode?: string | null;
@@ -129,7 +127,6 @@ export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 
 export interface WidgetRouteResponse {
   text: string;
-  responseLanguage?: ResponseLanguage | null;
   citations?: CitationItem[];
   compactSources?: string[];
   userDisplayMode?: string | null;

@@ -151,7 +151,7 @@ export function ImmigrationAssistantWidget() {
     const fullText =
       data.text?.trim() && data.text.trim().length > 0
         ? data.text.trim()
-        : data.responseLanguage === "zh" ? "抱歉，我现在无法生成回复。" : "Sorry, I could not generate a response right now.";
+        : "Sorry, I could not generate a response right now.";
 
     const assistantMessageId = generateUUID();
 
@@ -160,7 +160,6 @@ export function ImmigrationAssistantWidget() {
       role: "assistant",
       text: "",
       isStreaming: true,
-      responseLanguage: data.responseLanguage ?? null,
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
