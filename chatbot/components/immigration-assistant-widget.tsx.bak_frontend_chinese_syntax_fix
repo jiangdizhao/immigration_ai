@@ -72,8 +72,8 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
   return `Guided intake update:\n${lines.join("\n")}`;
 }
 
-function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
-  if (message.compactSources?.length) return message.compactSources.slice(0, 4);
+function compact{messageZh ? "参考来源" : "Sources"}ForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
+  if (message.compact{messageZh ? "参考来源" : "Sources"}?.length) return message.compact{messageZh ? "参考来源" : "Sources"}.slice(0, 4);
 
   const fallback = (message.citations ?? [])
     .map((citation) => {
@@ -167,7 +167,7 @@ function isZhLanguage(responseLanguage?: string | null) {
       isStreaming: true,
       responseLanguage: data.responseLanguage ?? null,
       citations: data.citations ?? [],
-      compactSources: data.compactSources ?? [],
+      compact{messageZh ? "参考来源" : "Sources"}: data.compact{messageZh ? "参考来源" : "Sources"} ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
       followUpQuestions: data.followUpQuestions ?? [],
       missingFacts: data.missingFacts ?? [],
@@ -454,7 +454,7 @@ function isZhLanguage(responseLanguage?: string | null) {
                     const hasRequestedFacts =
                       assistantReady &&
                       (message.interactionPlan?.requested_facts?.length ?? 0) > 0;
-                    const visibleSources = isAssistant ? compactSourcesForMessage(message) : [];
+                    const visible{messageZh ? "参考来源" : "Sources"} = isAssistant ? compact{messageZh ? "参考来源" : "Sources"}ForMessage(message) : [];
 
                     return (
                       <motion.div
@@ -581,13 +581,13 @@ function isZhLanguage(responseLanguage?: string | null) {
                           </div>
                         ) : null}
 
-                        {assistantReady && visibleSources.length ? (
+                        {assistantReady && visible{messageZh ? "参考来源" : "Sources"}.length ? (
                           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               {messageZh ? "参考来源" : "Sources"}
                             </p>
                             <ul className="space-y-1">
-                              {visibleSources.map((source) => (
+                              {visible{messageZh ? "参考来源" : "Sources"}.map((source) => (
                                 <li key={source}>{source}</li>
                               ))}
                             </ul>

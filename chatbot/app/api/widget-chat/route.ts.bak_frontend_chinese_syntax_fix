@@ -122,10 +122,6 @@ function extractLatestUserText(messages: Array<z.infer<typeof messageSchema>>): 
   return text.length > 0 ? text : null;
 }
 
-function detectResponseLanguage(text: string): "zh" | "en" {
-  return /[\u3400-\u9fff]/.test(text) ? "zh" : "en";
-}
-
 function fallbackText(data: LegalServiceResponse): string {
   if (data.answer?.trim()) return data.answer.trim();
   return "Sorry, I could not generate a response right now.";
@@ -383,8 +379,6 @@ export async function POST(request: Request) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const responseLanguage = detectResponseLanguage(question);
-
     const legalResponse = await fetch(`${legalServiceUrl}/api/v1/query`, {
       method: "POST",
       headers: {
@@ -398,7 +392,6 @@ export async function POST(request: Request) {
         session_id: id,
         preferred_jurisdiction: jurisdiction,
         preferred_source_types: sourceTypes,
-        response_language: responseLanguage,
         intake_facts: intakeFacts ?? {},
         top_k: 8,
       }),
