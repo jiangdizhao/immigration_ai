@@ -35,6 +35,8 @@ const widgetRequestBodySchema = z.object({
   responseLanguage: z.enum(["en", "zh"]).optional(),
 });
 
+type ResponseLanguage = "en" | "zh";
+
 type LegalCitation = {
   title?: string;
   authority?: string | null;
@@ -122,17 +124,19 @@ function extractLatestUserText(messages: Array<z.infer<typeof messageSchema>>): 
   return text.length > 0 ? text : null;
 }
 
-function detectResponseLanguage(text: string): "zh" | "en" {
-  return /[\u3400-\u9fff]/.test(text) ? "zh" : "en";
+function detectResponseLanguage(text: string): ResponseLanguage {
+  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text) ? "zh" : "en";
 }
 
-function fallbackText(data: LegalServiceResponse): string {
+function normalizeResponseLanguage(value: string | null | undefined, fallback: ResponseLanguage): ResponseLanguage {
+  return value?.toLowerCase().startsWith("zh") ? "zh" : fallback;
+}
+
+function fallbackText(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
   if (data.answer?.trim()) return data.answer.trim();
-  return "Sorry, I could not generate a response right now.";
-}
-
-function containsChinese(text: string): boolean {
-  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text);
+  return responseLanguage === "zh"
+    ? "抱歉，我现在无法生成回复。"
+    : "Sorry, I could not generate a response right now.";
 }
 
 function normalizeNextAction(nextAction: string | null | undefined) {
@@ -289,12 +293,14 @@ function logWidgetDebug(params: {
   question: string;
   matterId?: string | null;
   response: LegalServiceResponse;
+  responseLanguage: ResponseLanguage;
 }) {
   const dbg = params.response.retrieval_debug ?? {};
   console.log("\n=== widget-chat debug ===");
   console.log("sessionId:", params.sessionId);
   console.log("matterId(in):", params.matterId ?? null);
   console.log("matterId(out):", params.response.matter_id ?? null);
+  console.log("responseLanguage:", params.responseLanguage);
   console.log("originalQuestion:", dbg.original_question ?? params.question);
   console.log("effectiveQuestion:", dbg.effective_question ?? dbg.contextualization?.standalone_question ?? params.question);
   console.log("usedHistory:", dbg.contextualization?.used_history ?? false);
@@ -336,9 +342,14 @@ function logWidgetDebug(params: {
   console.log("=== end widget-chat debug ===\n");
 }
 
-function emptyWidgetResponse(text: string, matterId?: string | null) {
+function emptyWidgetResponse(
+  text: string,
+  matterId?: string | null,
+  responseLanguage: ResponseLanguage = detectResponseLanguage(text)
+) {
   return Response.json({
     text,
+    responseLanguage,
     citations: [],
     compactSources: [],
     userDisplayMode: null,
@@ -359,8 +370,14 @@ function emptyWidgetResponse(text: string, matterId?: string | null) {
 export async function POST(request: Request) {
   try {
     const json = await request.json();
-    const { id, matterId, messages, selectedChatModel, intakeFacts, responseLanguage } =
-      widgetRequestBodySchema.parse(json);
+    const {
+      id,
+      matterId,
+      messages,
+      selectedChatModel,
+      intakeFacts,
+      responseLanguage: requestedResponseLanguage,
+    } = widgetRequestBodySchema.parse(json);
 
     if (!allowedModelIds.has(selectedChatModel)) {
       return new ChatbotError("bad_request:api").toResponse();
@@ -370,10 +387,11 @@ export async function POST(request: Request) {
 
     const question = extractLatestUserText(messages);
     if (!question) {
-      return emptyWidgetResponse("Please enter a question so I can help.", matterId ?? null);
+      return emptyWidgetResponse("Please enter a question so I can help.", matterId ?? null, "en");
     }
 
-    const detectedResponseLanguage = responseLanguage ?? (containsChinese(question) ? "zh" : "en");
+    const responseLanguage: ResponseLanguage =
+      requestedResponseLanguage ?? detectResponseLanguage(question);
 
     const legalServiceUrl = process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
     const apiKey = process.env.LEGAL_SERVICE_API_KEY;
@@ -383,8 +401,6 @@ export async function POST(request: Request) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const responseLanguage = detectResponseLanguage(question);
-
     const legalResponse = await fetch(`${legalServiceUrl}/api/v1/query`, {
       method: "POST",
       headers: {
@@ -393,12 +409,11 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         question,
-        response_language: detectedResponseLanguage,
+        response_language: responseLanguage,
         matter_id: matterId ?? null,
         session_id: id,
         preferred_jurisdiction: jurisdiction,
         preferred_source_types: sourceTypes,
-        response_language: responseLanguage,
         intake_facts: intakeFacts ?? {},
         top_k: 8,
       }),
@@ -408,15 +423,27 @@ export async function POST(request: Request) {
     if (!legalResponse.ok) {
       const errorText = await legalResponse.text();
       console.error("legal-service error:", legalResponse.status, errorText);
-      return emptyWidgetResponse("Sorry, the legal service is unavailable right now.", matterId ?? null);
+      const fallback =
+        responseLanguage === "zh"
+          ? "抱歉，法律服务暂时不可用。"
+          : "Sorry, the legal service is unavailable right now.";
+      return emptyWidgetResponse(fallback, matterId ?? null, responseLanguage);
     }
 
     const data = (await legalResponse.json()) as LegalServiceResponse;
-    logWidgetDebug({ sessionId: id, question, matterId, response: data });
+    const finalResponseLanguage = normalizeResponseLanguage(data.response_language, responseLanguage);
+
+    logWidgetDebug({
+      sessionId: id,
+      question,
+      matterId,
+      response: data,
+      responseLanguage: finalResponseLanguage,
+    });
 
     return Response.json({
-      text: fallbackText(data),
-      responseLanguage: data.response_language ?? detectedResponseLanguage,
+      text: fallbackText(data, finalResponseLanguage),
+      responseLanguage: finalResponseLanguage,
       citations: (data.citations ?? []).map((c) => ({
         source_id: c.source_id ?? null,
         title: c.title ?? "",
@@ -450,6 +477,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         text: "Sorry, I could not generate a response right now.",
+        responseLanguage: "en",
         citations: [],
         compactSources: [],
         userDisplayMode: null,
