@@ -14,10 +14,6 @@ import type {
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 
-function isZhLanguage(responseLanguage?: string | null) {
-  return (responseLanguage ?? "").toLowerCase().startsWith("zh");
-}
-
 type Props = {
   interactionPlan?: InteractionPlan | null;
   factSlotStates?: FactSlotState[] | null;
@@ -26,7 +22,6 @@ type Props = {
   onSubmitDraftFacts: () => void;
   onBookConsultation?: () => void;
   isSubmitting?: boolean;
-  responseLanguage?: string | null;
 };
 
 function slotKey(slot: FactSlotState) {
@@ -45,11 +40,9 @@ export function GuidedIntakeCard({
   onSubmitDraftFacts,
   onBookConsultation,
   isSubmitting,
-  responseLanguage,
 }: Props) {
   if (!interactionPlan) return null;
 
-  const zh = isZhLanguage(responseLanguage);
   const mode = interactionPlan.mode ?? "guided_intake";
   const allRequestedFacts = interactionPlan.requested_facts ?? [];
   const requestedFacts = SHOW_WIDGET_DEBUG ? allRequestedFacts : allRequestedFacts.slice(0, 1);
@@ -90,18 +83,12 @@ export function GuidedIntakeCard({
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-slate-900">
-          {requestedFacts.length
-            ? zh ? "一个简单问题" : "One quick question"
-            : zh ? "可以继续下一步" : "Ready for the next step"}
+          {requestedFacts.length ? "One quick question" : "Ready for the next step"}
         </h3>
         <p className="text-sm leading-6 text-slate-600">
           {requestedFacts.length
-            ? (zh
-                ? "这可以帮助我根据你的情况给出更具体的说明。你也可以选择“不确定”后继续。"
-                : "This helps make the guidance more specific to your situation. You can also choose “Not sure” and continue.")
-            : (zh
-                ? "我已经有足够的基础信息，可以继续进行一般性分析。"
-                : "I have enough basic information to continue the general analysis.")}
+            ? "This helps make the guidance more specific to your situation. You can also choose “Not sure” and continue."
+            : "I have enough basic information to continue the general analysis."}
         </p>
       </div>
 
@@ -129,7 +116,7 @@ export function GuidedIntakeCard({
 
       {SHOW_WIDGET_DEBUG && interactionPlan.warnings?.length ? (
         <Alert>
-          <AlertTitle>{zh ? "重要提示" : "Important"}</AlertTitle>
+          <AlertTitle>Important</AlertTitle>
           <AlertDescription className="mt-2">
             <ul className="list-disc space-y-1 pl-5 text-sm">
               {interactionPlan.warnings.map((warning) => (
@@ -151,14 +138,13 @@ export function GuidedIntakeCard({
                 value={effectiveValue(key)}
                 onChange={onDraftChange}
                 showMeta={SHOW_WIDGET_DEBUG}
-                responseLanguage={responseLanguage}
               />
             );
           })}
 
           <div className="flex items-center justify-end gap-2">
             <Button onClick={onSubmitDraftFacts} disabled={isSubmitting}>
-              {isSubmitting ? (zh ? "正在提交..." : "Submitting...") : (zh ? "继续" : "Continue")}
+              {isSubmitting ? "Submitting..." : "Continue"}
             </Button>
           </div>
         </div>
@@ -166,9 +152,9 @@ export function GuidedIntakeCard({
 
       {SHOW_WIDGET_DEBUG && !requestedFacts.length && mode === "analysis_ready" ? (
         <Alert>
-          <AlertTitle>{zh ? "可以继续分析" : "Ready for analysis"}</AlertTitle>
+          <AlertTitle>Ready for analysis</AlertTitle>
           <AlertDescription className="text-sm">
-            {zh ? "后端已经有足够信息，可以继续进行法律分析。" : "The backend has enough information to continue the legal analysis."}
+            The backend has enough information to continue the legal analysis.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -176,7 +162,7 @@ export function GuidedIntakeCard({
       {SHOW_WIDGET_DEBUG && factSlotStates?.length ? (
         <details className="rounded-xl border border-border/50 p-3">
           <summary className="cursor-pointer text-sm font-medium">
-            {zh ? "事实字段详情" : "Fact slot details"}
+            Fact slot details
           </summary>
           <div className="mt-3 space-y-2 text-sm">
             {factSlotStates.map((slot) => {

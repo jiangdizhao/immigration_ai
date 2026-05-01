@@ -19,27 +19,8 @@ type Props = {
   value: string | number | boolean | null | undefined;
   onChange: (key: string, value: string | number | boolean | null) => void;
   showMeta?: boolean;
-  responseLanguage?: string | null;
 };
 
-
-function isZhLanguage(responseLanguage?: string | null) {
-  return (responseLanguage ?? "").toLowerCase().startsWith("zh");
-}
-
-function optionDisplayLabel(option: string, zh: boolean) {
-  if (!zh) return option.replaceAll("_", " ");
-  const map: Record<string, string> = {
-    yes: "是",
-    no: "否",
-    not_sure: "不确定",
-    in_australia: "在澳大利亚境内",
-    outside_australia: "在澳大利亚境外",
-    leave_and_return: "离开后再返回澳大利亚",
-    general_question: "一般性询问",
-  };
-  return map[option] ?? option.replaceAll("_", " ");
-}
 function normalizeBooleanValue(
   value: string | number | boolean | null | undefined
 ): "yes" | "no" | "not_sure" | null {
@@ -62,8 +43,7 @@ function isNotSureValue(value: string | number | boolean | null | undefined) {
   return typeof value === "string" && ["not_sure", "unknown", "unsure"].includes(value.trim().toLowerCase());
 }
 
-export function FactInputField({ fact, value, onChange, showMeta = false, responseLanguage = null }: Props) {
-  const zh = isZhLanguage(responseLanguage);
+export function FactInputField({ fact, value, onChange, showMeta = false }: Props) {
   const inputType = fact.input_type ?? "short_text";
   const booleanValue = normalizeBooleanValue(value);
   const key = factKey(fact);
@@ -80,8 +60,8 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
         </div>
         {showMeta ? (
           <div className="flex shrink-0 gap-2">
-            {fact.required ? <Badge variant="secondary">{zh ? "必填" : "Required"}</Badge> : null}
-            {fact.blocking ? <Badge variant="destructive">{zh ? "关键" : "Blocking"}</Badge> : null}
+            {fact.required ? <Badge variant="secondary">Required</Badge> : null}
+            {fact.blocking ? <Badge variant="destructive">Blocking</Badge> : null}
           </div>
         ) : null}
       </div>
@@ -89,9 +69,9 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
       {inputType === "boolean" ? (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: zh ? "是" : "Yes", raw: true, keyValue: "yes" },
-            { label: zh ? "否" : "No", raw: false, keyValue: "no" },
-            { label: zh ? "不确定" : "Not sure", raw: "not_sure", keyValue: "not_sure" },
+            { label: "Yes", raw: true, keyValue: "yes" },
+            { label: "No", raw: false, keyValue: "no" },
+            { label: "Not sure", raw: "not_sure", keyValue: "not_sure" },
           ].map((option) => {
             const selected = booleanValue === option.keyValue;
             return (
@@ -119,12 +99,12 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
           onValueChange={(next) => onChange(key, next)}
         >
           <SelectTrigger>
-            <SelectValue placeholder={zh ? "请选择一个选项" : "Select an option"} />
+            <SelectValue placeholder="Select an option" />
           </SelectTrigger>
           <SelectContent>
             {(fact.options ?? []).map((option) => (
               <SelectItem key={option} value={option}>
-                {optionDisplayLabel(option, zh)}
+                {option.replaceAll("_", " ")}
               </SelectItem>
             ))}
           </SelectContent>
@@ -144,8 +124,8 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
           type="text"
           placeholder={
             inputType === "document"
-              ? zh ? "描述或粘贴文件内容" : "Describe or paste document details"
-              : zh ? "请输入简短回答" : "Enter a short answer"
+              ? "Describe or paste document details"
+              : "Enter a short answer"
           }
           value={
             !isNotSure && (typeof value === "string" || typeof value === "number")
@@ -159,7 +139,7 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
       {inputType === "long_text" ? (
         <Textarea
           rows={4}
-          placeholder={zh ? "请输入详细信息" : "Enter details"}
+          placeholder="Enter details"
           value={!isNotSure && typeof value === "string" ? value : ""}
           onChange={(e) => onChange(key, e.target.value || null)}
         />
@@ -177,21 +157,21 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
             )}
             onClick={() => onChange(key, "not_sure")}
           >
-            {zh ? "不确定" : "Not sure"}
+            Not sure
           </button>
           <button
             type="button"
             className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
             onClick={() => onChange(key, "not_sure")}
           >
-            {zh ? "暂时跳过" : "Skip for now"}
+            Skip for now
           </button>
         </div>
       ) : null}
 
       {showMeta && fact.why_needed ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          {zh ? "为什么需要这个信息：" : "Why this matters: "}{fact.why_needed}
+          Why this matters: {fact.why_needed}
         </p>
       ) : null}
     </div>
