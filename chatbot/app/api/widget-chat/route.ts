@@ -6,6 +6,8 @@ import { checkIpRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 60;
 
+const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
+
 const textPartSchema = z.object({
   type: z.literal("text"),
   text: z.string().min(1).max(4000),
@@ -46,6 +48,8 @@ type LegalCitation = {
 type LegalServiceResponse = {
   answer?: string;
   citations?: LegalCitation[];
+  compact_sources?: string[];
+  user_display_mode?: string | null;
   follow_up_questions?: string[];
   missing_facts?: string[];
   confidence?: string | null;
@@ -135,6 +139,29 @@ function normalizeNextAction(nextAction: string | null | undefined) {
   return "ask_followup";
 }
 
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeCompactSources(data: LegalServiceResponse) {
+  const fromBackend = uniqueStrings(
+    (data.compact_sources ?? []).filter((item): item is string => typeof item === "string")
+  );
+  if (fromBackend.length > 0) return fromBackend.slice(0, 4);
+
+  const fromCitations = uniqueStrings(
+    (data.citations ?? [])
+      .map((citation) => {
+        const title = citation.title?.trim();
+        const authority = citation.authority?.trim();
+        if (authority && title) return `${authority} — ${title}`;
+        return title || authority || "";
+      })
+      .filter(Boolean)
+  );
+  return fromCitations.slice(0, 4);
+}
+
 function normalizeCaseHypothesis(caseHypothesis: LegalServiceResponse["case_hypothesis"]) {
   if (!caseHypothesis) return null;
   return {
@@ -157,6 +184,7 @@ function normalizeFactSlotStates(factSlotStates: LegalServiceResponse["fact_slot
     .filter((slot) => slot?.fact_key)
     .map((slot) => ({
       key: slot.fact_key ?? "",
+      fact_key: slot.fact_key ?? "",
       label: slot.label ?? slot.fact_key ?? "",
       status: slot.status ?? null,
       value:
@@ -196,6 +224,7 @@ function normalizeInteractionPlan(interactionPlan: LegalServiceResponse["interac
       .filter((fact) => fact?.fact_key)
       .map((fact) => ({
         key: fact.fact_key ?? "",
+        fact_key: fact.fact_key ?? "",
         label: fact.label ?? fact.fact_key ?? "",
         prompt: fact.prompt ?? null,
         why_needed: fact.why_needed ?? null,
@@ -234,9 +263,13 @@ function normalizeRetrievalDebug(retrievalDebug: LegalServiceResponse["retrieval
 }
 
 function extractEvidenceGaps(retrievalDebug: LegalServiceResponse["retrieval_debug"]) {
+  if (!SHOW_WIDGET_DEBUG) return [];
   const dbg = retrievalDebug ?? {};
   if (Array.isArray(dbg.evidence_gaps)) {
     return dbg.evidence_gaps.filter((item: unknown): item is string => typeof item === "string");
+  }
+  if (Array.isArray(dbg.internal_evidence_gaps)) {
+    return dbg.internal_evidence_gaps.filter((item: unknown): item is string => typeof item === "string");
   }
   return [];
 }
@@ -284,11 +317,33 @@ function logWidgetDebug(params: {
     "requestedFacts:",
     (params.response.interaction_plan?.requested_facts ?? []).map((fact) => fact?.fact_key ?? null)
   );
+  console.log("compactSources:", params.response.compact_sources ?? []);
+  console.log("userDisplayMode:", params.response.user_display_mode ?? null);
   console.log("confidence:", params.response.confidence ?? null);
   console.log("nextAction:", params.response.next_action ?? null);
   console.log("escalate:", params.response.escalate ?? false);
   console.log("answerPreview:", (params.response.answer ?? "").slice(0, 300));
   console.log("=== end widget-chat debug ===\n");
+}
+
+function emptyWidgetResponse(text: string, matterId?: string | null) {
+  return Response.json({
+    text,
+    citations: [],
+    compactSources: [],
+    userDisplayMode: null,
+    followUpQuestions: [],
+    missingFacts: [],
+    evidenceGaps: [],
+    escalate: false,
+    nextAction: "ask_followup",
+    matterId: matterId ?? null,
+    conversationState: null,
+    caseHypothesis: null,
+    factSlotStates: [],
+    interactionPlan: null,
+    retrievalDebug: null,
+  });
 }
 
 export async function POST(request: Request) {
@@ -305,21 +360,7 @@ export async function POST(request: Request) {
 
     const question = extractLatestUserText(messages);
     if (!question) {
-      return Response.json({
-        text: "Please enter a question so I can help.",
-        citations: [],
-        followUpQuestions: [],
-        missingFacts: [],
-        evidenceGaps: [],
-        escalate: false,
-        nextAction: "ask_followup",
-        matterId: matterId ?? null,
-        conversationState: null,
-        caseHypothesis: null,
-        factSlotStates: [],
-        interactionPlan: null,
-        retrievalDebug: null,
-      });
+      return emptyWidgetResponse("Please enter a question so I can help.", matterId ?? null);
     }
 
     const legalServiceUrl = process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
@@ -351,21 +392,7 @@ export async function POST(request: Request) {
     if (!legalResponse.ok) {
       const errorText = await legalResponse.text();
       console.error("legal-service error:", legalResponse.status, errorText);
-      return Response.json({
-        text: "Sorry, the legal service is unavailable right now.",
-        citations: [],
-        followUpQuestions: [],
-        missingFacts: [],
-        evidenceGaps: [],
-        escalate: false,
-        nextAction: "ask_followup",
-        matterId: matterId ?? null,
-        conversationState: null,
-        caseHypothesis: null,
-        factSlotStates: [],
-        interactionPlan: null,
-        retrievalDebug: null,
-      });
+      return emptyWidgetResponse("Sorry, the legal service is unavailable right now.", matterId ?? null);
     }
 
     const data = (await legalResponse.json()) as LegalServiceResponse;
@@ -382,8 +409,10 @@ export async function POST(request: Request) {
         source_type: c.source_type ?? null,
         used_for: c.used_for ?? null,
       })),
+      compactSources: normalizeCompactSources(data),
+      userDisplayMode: data.user_display_mode ?? data.interaction_plan?.answer_mode ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
-      missingFacts: data.missing_facts ?? [],
+      missingFacts: SHOW_WIDGET_DEBUG ? data.missing_facts ?? [] : [],
       evidenceGaps: extractEvidenceGaps(data.retrieval_debug),
       escalate: Boolean(data.escalate),
       nextAction: normalizeNextAction(data.next_action),
@@ -393,7 +422,7 @@ export async function POST(request: Request) {
       caseHypothesis: normalizeCaseHypothesis(data.case_hypothesis),
       factSlotStates: normalizeFactSlotStates(data.fact_slot_states),
       interactionPlan: normalizeInteractionPlan(data.interaction_plan),
-      retrievalDebug: normalizeRetrievalDebug(data.retrieval_debug),
+      retrievalDebug: SHOW_WIDGET_DEBUG ? normalizeRetrievalDebug(data.retrieval_debug) : null,
     });
   } catch (error) {
     console.error("widget-chat error:", error);
@@ -405,6 +434,8 @@ export async function POST(request: Request) {
       {
         text: "Sorry, I could not generate a response right now.",
         citations: [],
+        compactSources: [],
+        userDisplayMode: null,
         followUpQuestions: [],
         missingFacts: [],
         evidenceGaps: [],

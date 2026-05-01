@@ -33,9 +33,12 @@ export interface CitationItem {
 
 export interface FactSlotState {
   key: string;
+  fact_key?: string | null;
   label?: string | null;
   status?: string | null;
   value?: string | number | boolean | null;
+  valueDisplay?: string | null;
+  value_display?: string | null;
   source?: string | null;
   required?: boolean;
   blocking?: boolean;
@@ -58,6 +61,7 @@ export interface CaseHypothesis {
 
 export interface InteractionFactRequest {
   key: string;
+  fact_key?: string | null;
   label: string;
   prompt?: string | null;
   why_needed?: string | null;
@@ -97,6 +101,8 @@ export interface WidgetAssistantMessage {
   text: string;
   isStreaming?: boolean;
   citations?: CitationItem[];
+  compactSources?: string[];
+  userDisplayMode?: string | null;
   followUpQuestions?: string[];
   missingFacts?: string[];
   evidenceGaps?: string[];
@@ -122,6 +128,8 @@ export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 export interface WidgetRouteResponse {
   text: string;
   citations?: CitationItem[];
+  compactSources?: string[];
+  userDisplayMode?: string | null;
   followUpQuestions?: string[];
   missingFacts?: string[];
   evidenceGaps?: string[];

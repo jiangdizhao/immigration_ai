@@ -40,7 +40,7 @@ const quickQuestions = [
   "What documents should I prepare for a student visa refusal consultation?",
 ];
 
-
+const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 const TYPEWRITER_TICK_MS = 60;
 const TYPEWRITER_WORDS_PER_TICK = 2;
 
@@ -70,6 +70,21 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
 
   const lines = populatedEntries.map(([key, value]) => `${key}: ${String(value)}`);
   return `Guided intake update:\n${lines.join("\n")}`;
+}
+
+function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
+  if (message.compactSources?.length) return message.compactSources.slice(0, 4);
+
+  const fallback = (message.citations ?? [])
+    .map((citation) => {
+      const title = citation.title?.trim();
+      const authority = citation.authority?.trim();
+      if (authority && title) return `${authority} — ${title}`;
+      return title || authority || "";
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(fallback)).slice(0, 4);
 }
 
 export function ImmigrationAssistantWidget() {
@@ -146,6 +161,8 @@ export function ImmigrationAssistantWidget() {
       text: "",
       isStreaming: true,
       citations: data.citations ?? [],
+      compactSources: data.compactSources ?? [],
+      userDisplayMode: data.userDisplayMode ?? null,
       followUpQuestions: data.followUpQuestions ?? [],
       missingFacts: data.missingFacts ?? [],
       evidenceGaps: data.evidenceGaps ?? [],
@@ -422,13 +439,15 @@ export function ImmigrationAssistantWidget() {
                       assistantReady &&
                       !!message.interactionPlan &&
                       ((message.interactionPlan.requested_facts?.length ?? 0) > 0 ||
-                        message.interactionPlan.mode === "guided_intake" ||
-                        message.interactionPlan.mode === "analysis_ready" ||
                         message.interactionPlan.mode === "escalation" ||
-                        (message.interactionPlan.warnings?.length ?? 0) > 0);
+                        (SHOW_WIDGET_DEBUG &&
+                          (message.interactionPlan.mode === "guided_intake" ||
+                            message.interactionPlan.mode === "analysis_ready" ||
+                            (message.interactionPlan.warnings?.length ?? 0) > 0)));
                     const hasRequestedFacts =
                       assistantReady &&
                       (message.interactionPlan?.requested_facts?.length ?? 0) > 0;
+                    const visibleSources = isAssistant ? compactSourcesForMessage(message) : [];
 
                     return (
                       <motion.div
@@ -452,7 +471,7 @@ export function ImmigrationAssistantWidget() {
                           ) : null}
                         </div>
 
-                        {assistantReady && message.confidence ? (
+                        {SHOW_WIDGET_DEBUG && assistantReady && message.confidence ? (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className="border-slate-200 bg-slate-50 text-slate-700"
@@ -460,6 +479,14 @@ export function ImmigrationAssistantWidget() {
                             >
                               Confidence: {message.confidence}
                             </Badge>
+                            {message.userDisplayMode ? (
+                              <Badge
+                                className="border-slate-200 bg-slate-50 text-slate-700"
+                                variant="outline"
+                              >
+                                Display: {message.userDisplayMode}
+                              </Badge>
+                            ) : null}
                             {message.retrievalDebug?.live_fetch_used ? (
                               <Badge
                                 className="border-sky-200 bg-sky-50 text-sky-700"
@@ -517,7 +544,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {assistantReady && message.missingFacts?.length ? (
+                        {SHOW_WIDGET_DEBUG && assistantReady && message.missingFacts?.length ? (
                           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                             <p className="mb-1 font-medium">Important details still needed</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -528,7 +555,7 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {assistantReady && message.evidenceGaps?.length ? (
+                        {SHOW_WIDGET_DEBUG && assistantReady && message.evidenceGaps?.length ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
                             <p className="mb-1 font-medium">Evidence gaps</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -539,17 +566,30 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {assistantReady && message.retrievalDebug?.effective_question ? (
+                        {SHOW_WIDGET_DEBUG && assistantReady && message.retrievalDebug?.effective_question ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
                             <p className="mb-1 font-medium">Resolved question used by backend</p>
                             <p>{message.retrievalDebug.effective_question}</p>
                           </div>
                         ) : null}
 
-                        {assistantReady && message.citations?.length ? (
+                        {assistantReady && visibleSources.length ? (
+                          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              Sources
+                            </p>
+                            <ul className="space-y-1">
+                              {visibleSources.map((source) => (
+                                <li key={source}>{source}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {SHOW_WIDGET_DEBUG && assistantReady && message.citations?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              Sources considered
+                              Source details
                             </p>
                             <div className="space-y-2">
                               {message.citations.slice(0, 3).map((citation, index) => (
