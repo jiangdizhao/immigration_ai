@@ -32,7 +32,6 @@ from app.services.policy_rules import PolicyRules
 from app.services.pre_llm_router_service import PreLLMRouterService, PreLLMTurnAnalysis
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
-from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
 from app.services.state_machine import StateMachine, TurnInput
 
 
@@ -70,7 +69,6 @@ class QueryService:
         pre_llm_router_service: PreLLMRouterService | None = None,
         lightweight_response_service: LightweightResponseService | None = None,
         language_service: LanguageService | None = None,
-        schedule_aware_reasoning_service: ScheduleAwareReasoningService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -82,7 +80,6 @@ class QueryService:
         self.pre_llm_router_service = pre_llm_router_service or PreLLMRouterService()
         self.lightweight_response_service = lightweight_response_service or LightweightResponseService()
         self.language_service = language_service or LanguageService()
-        self.schedule_aware_reasoning_service = schedule_aware_reasoning_service or ScheduleAwareReasoningService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -152,29 +149,6 @@ class QueryService:
                 "skipped_retrieval": True,
             }
         artifacts.retrieval_debug = retrieval_debug
-
-        schedule_aware_assessment = None
-        schedule_aware_chunks: list[Any] = []
-        schedule_aware_debug: dict[str, Any] = {"is_active": False}
-        if turn_analysis.retrieval_needed:
-            schedule_aware_assessment, schedule_aware_chunks, schedule_aware_debug = (
-                self.schedule_aware_reasoning_service.assess(
-                    db=db,
-                    payload=effective_payload,
-                    question=effective_question,
-                    known_facts=merged_intake_facts,
-                    current_state=state,
-                    retrieval_service=self.retrieval_service,
-                )
-            )
-            if schedule_aware_assessment and schedule_aware_assessment.get("is_active"):
-                local_chunks = self.schedule_aware_reasoning_service.merge_targeted_chunks(
-                    local_chunks,
-                    schedule_aware_chunks,
-                )
-                retrieval_debug["schedule_aware_criterion_reasoning"] = schedule_aware_assessment
-                retrieval_debug["schedule_aware_targeted_retrieval"] = schedule_aware_debug.get("targeted_retrieval", {})
-                artifacts.retrieval_debug = retrieval_debug
 
         initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
             question=effective_question,
@@ -273,7 +247,6 @@ class QueryService:
                     "original_user_question": original_question,
                     "response_language": language_context.response_language,
                     "language": language_context.to_debug_dict(),
-                    "schedule_aware_assessment": self.schedule_aware_reasoning_service.answerability_context(schedule_aware_assessment),
                     "pre_llm_router": enriched_debug["pre_llm_router"],
                 },
             )

@@ -387,7 +387,6 @@ class ReasoningService:
         intake_facts = json.dumps((conversation_context or {}).get("intake_facts") or payload.intake_facts or {}, ensure_ascii=False)
         conversation_text = self._conversation_context_text(conversation_context)
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
-        schedule_assessment_json = json.dumps((conversation_context or {}).get("schedule_aware_assessment") or {}, ensure_ascii=False)
 
         system_prompt = (
             "You are a strict legal-retrieval evidence extractor.\n"
@@ -418,7 +417,6 @@ class ReasoningService:
             f"Operation type:\n{operation_type or 'unknown'}\n\n"
             f"Conversation context:\n{conversation_text or 'N/A'}\n\n"
             f"Operation answerability JSON:\n{answerability_json}\n\n"
-            f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
             f"Intake facts JSON:\n{intake_facts}\n\n"
             f"Retrieved sources:\n{context_text}\n"
         )
@@ -461,7 +459,6 @@ class ReasoningService:
             ensure_ascii=False,
         )
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
-        schedule_assessment_json = json.dumps((conversation_context or {}).get("schedule_aware_assessment") or {}, ensure_ascii=False)
         response_language = str((conversation_context or {}).get("response_language") or getattr(payload, "response_language", None) or "en").lower()
         original_user_question = str((conversation_context or {}).get("original_user_question") or payload.question)
         language_instruction = self._response_language_instruction(response_language)
@@ -471,7 +468,6 @@ class ReasoningService:
             "You MUST write the answer using ONLY the supported_facts provided to you.\n"
             "Do NOT introduce any new legal rule, deadline, visa requirement, or assumption.\n"
             "Honor the operation answerability contract. If the contract says ask_followup or qualified_general, do not draft a final rights/deadline answer.\n"
-            "If schedule-aware criterion reasoning JSON is provided, use it as the organising structure: Schedule 1 validity before Schedule 2 grant criteria. Do not mix unrelated subclass criteria.\n"
             "If supported_facts are general, the answer must stay general.\n"
             "If unsupported_requests are present, explicitly say those points are not supported by the retrieved material.\n"
             "Return ONLY valid JSON with this exact shape:\n"
@@ -490,7 +486,6 @@ class ReasoningService:
             f"Original question:\n{original_user_question}\n\n"
             f"Effective question:\n{effective_question or payload.question}\n\n"
             f"Operation answerability JSON:\n{answerability_json}\n\n"
-            f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
             f"Evidence package JSON:\n{evidence_json}\n"
         )
         try:

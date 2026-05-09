@@ -102,7 +102,6 @@ class RuleBasedExtractionService:
         result = RuleExtractionResult(jurisdiction="Cth")
 
         self._extract_visa_and_issue(lowered, result)
-        self._extract_485_facts(lowered, result)
         self._extract_operation(lowered, result, current_state=current_state)
         self._extract_location(lowered, result)
         self._extract_documents(lowered, result)
@@ -194,74 +193,14 @@ class RuleBasedExtractionService:
         if result.operation_type is None and re.search(r"\b(document|documents|checklist|prepare|evidence|upload)\b", lowered):
             result.operation_type = "document_checklist"
 
-        if result.operation_type is None and ("485" in lowered or "temporary graduate" in lowered):
-            if "replacement" in lowered:
-                result.operation_type = "485_replacement_stream"
-            elif "regional" in lowered or "second 485" in lowered or "second temporary graduate" in lowered:
-                result.operation_type = "485_regional_extension"
-            elif any(term in lowered for term in ["diploma", "trade", "associate degree", "vocational", "skills assessment"]):
-                result.operation_type = "485_vocational_stream"
-            elif any(term in lowered for term in ["bachelor", "master", "masters", "phd", "degree", "higher education"]):
-                result.operation_type = "485_higher_education_stream"
-            elif re.search(r"\b(eligible|eligibility|requirement|requirements|can\s+i\s+apply|apply|stream)\b", lowered):
-                result.operation_type = "485_stream_selection"
+        if result.operation_type is None and ("485" in lowered or "temporary graduate" in lowered) and re.search(r"\b(eligible|eligibility|requirement|requirements|can\s+i\s+apply|apply)\b", lowered):
+            result.operation_type = "485_eligibility_overview"
 
         if result.operation_type is None and "4020" in lowered:
             result.operation_type = "pic4020_risk"
 
         if result.operation_type is None and "refus" in lowered and ("student" in lowered or result.visa_type == "student" or current_state.visa_type == "student"):
             result.operation_type = "student_refusal_next_steps"
-
-
-    def _extract_485_facts(self, lowered: str, result: RuleExtractionResult) -> None:
-        if not ("485" in lowered or "temporary graduate" in lowered or "graduate visa" in lowered):
-            return
-
-        result.issue_type = result.issue_type or "temporary_graduate_visa"
-        result.visa_type = result.visa_type or "temporary_graduate"
-        result.facts.setdefault("visa_subclass", "485")
-        result.fact_confidence.setdefault("visa_subclass", "high")
-
-        if "diploma" in lowered:
-            result.facts["qualification_level"] = "diploma"
-        elif "associate degree" in lowered:
-            result.facts["qualification_level"] = "associate_degree"
-        elif "trade" in lowered:
-            result.facts["qualification_level"] = "trade"
-        elif "bachelor" in lowered:
-            result.facts["qualification_level"] = "bachelor"
-        elif "master" in lowered or "masters" in lowered:
-            result.facts["qualification_level"] = "masters"
-        elif "phd" in lowered or "doctorate" in lowered:
-            result.facts["qualification_level"] = "phd"
-        if "qualification_level" in result.facts:
-            result.fact_confidence["qualification_level"] = "high"
-
-        if "first 485" in lowered or "first temporary graduate" in lowered:
-            result.facts["first_485_or_subsequent"] = "first_485"
-            result.fact_confidence["first_485_or_subsequent"] = "high"
-        if "second 485" in lowered or "second temporary graduate" in lowered or "regional extension" in lowered:
-            result.facts["first_485_or_subsequent"] = "second_485"
-            result.facts["previous_485_held"] = True
-            result.fact_confidence["first_485_or_subsequent"] = "high"
-            result.fact_confidence["previous_485_held"] = "high"
-
-        if "regional" in lowered:
-            result.facts["regional_history"] = True
-            result.fact_confidence["regional_history"] = "medium"
-
-        if "replacement" in lowered:
-            result.facts["replacement_reason"] = "user_mentioned_replacement"
-            result.fact_confidence["replacement_reason"] = "medium"
-
-        if "skills assessment" in lowered:
-            if any(term in lowered for term in ["not applied", "haven't applied", "have not applied", "no skills assessment"]):
-                result.facts["skills_assessment_status"] = "not_applied"
-            elif any(term in lowered for term in ["applied", "lodged"]):
-                result.facts["skills_assessment_status"] = "applied"
-            elif any(term in lowered for term in ["obtained", "positive", "passed"]):
-                result.facts["skills_assessment_status"] = "obtained"
-            result.fact_confidence["skills_assessment_status"] = "medium"
 
     def _extract_location(self, lowered: str, result: RuleExtractionResult) -> None:
         if re.search(r"\b(in\s+australia|inside\s+australia|onshore|currently\s+in\s+(?:sydney|melbourne|brisbane|perth|adelaide|canberra|darwin|hobart))\b", lowered):

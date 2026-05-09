@@ -49,12 +49,6 @@ class LanguageService:
         "travel_need": "旅行计划",
         "completion_date": "课程完成日期",
         "incorrect_information_issue": "被质疑的信息或文件",
-        "qualification_level": "学历层级",
-        "first_485_or_subsequent": "第一次或后续 485 申请",
-        "skills_assessment_status": "职业评估状态",
-        "nominated_occupation": "提名职业",
-        "regional_residence_duration": "偏远地区居住时长",
-        "replacement_reason": "Replacement stream 原因",
     }
 
     ZH_FACT_PROMPTS: dict[str, str] = {
@@ -68,12 +62,6 @@ class LanguageService:
         "travel_need": "你是想离开澳大利亚后再回来，还是只是一般性询问？",
         "completion_date": "你是什么时候完成课程，或预计什么时候完成？",
         "incorrect_information_issue": "移民局具体质疑的是哪项信息或哪份文件？",
-        "qualification_level": "你完成的是什么学历？例如 diploma、trade qualification、Bachelor、Masters 或 PhD。",
-        "first_485_or_subsequent": "这是你的第一次 485 申请，还是第二次、后续或 replacement 申请？",
-        "skills_assessment_status": "你是否已经申请或获得职业评估？",
-        "nominated_occupation": "你打算使用哪个提名职业？",
-        "regional_residence_duration": "你在偏远地区居住、工作或学习了多久？",
-        "replacement_reason": "你认为 replacement stream 适用的原因是什么？",
     }
 
     ZH_FACT_WHY: dict[str, str] = {
@@ -87,12 +75,6 @@ class LanguageService:
         "travel_need": "旅行目的会影响过桥签证和回澳风险的判断。",
         "completion_date": "课程完成时间可能影响 485 等签证的时限和资格。",
         "incorrect_information_issue": "PIC 4020 或错误信息风险高度依赖具体被质疑的内容。",
-        "qualification_level": "学历层级会帮助判断 485 的具体 stream。",
-        "first_485_or_subsequent": "第一次、第二次、后续或 replacement 485 对应的法律路径不同。",
-        "skills_assessment_status": "职业评估是 vocational stream 的关键风险点。",
-        "nominated_occupation": "提名职业会影响 vocational stream 和学历相关性判断。",
-        "regional_residence_duration": "偏远地区居住/工作/学习时长会影响 regional extension。",
-        "replacement_reason": "Replacement stream 取决于之前 485 和受影响原因。",
     }
 
     ZH_VALUE_DISPLAY: dict[str, str] = {

@@ -45,4 +45,5 @@ class QueryResponse(BaseSchema):
     case_hypothesis: CaseHypothesis | None = None
     fact_slot_states: list[FactSlotState] = Field(default_factory=list)
     interaction_plan: InteractionPlan | None = None
+    legal_reasoning_trace: dict[str, Any] = Field(default_factory=dict)
     retrieval_debug: dict[str, Any] = Field(default_factory=dict)
