@@ -30,6 +30,7 @@ from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
 from app.services.pre_llm_router_service import PreLLMRouterService, PreLLMTurnAnalysis
+from app.services.public_answer_guard import PublicAnswerGuard
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
 from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
@@ -71,6 +72,7 @@ class QueryService:
         lightweight_response_service: LightweightResponseService | None = None,
         language_service: LanguageService | None = None,
         schedule_aware_reasoning_service: ScheduleAwareReasoningService | None = None,
+        public_answer_guard: PublicAnswerGuard | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -83,6 +85,7 @@ class QueryService:
         self.lightweight_response_service = lightweight_response_service or LightweightResponseService()
         self.language_service = language_service or LanguageService()
         self.schedule_aware_reasoning_service = schedule_aware_reasoning_service or ScheduleAwareReasoningService()
+        self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -352,6 +355,17 @@ class QueryService:
             response_language=language_context.response_language,
         )
 
+        response, public_answer_guard_debug = self.public_answer_guard.sanitize_response(
+            response=response,
+            response_language=language_context.response_language,
+            original_question=original_question,
+            effective_question=effective_question,
+            policy=policy,
+            case_hypothesis=case_hypothesis,
+            interaction_plan=interaction_plan,
+            fact_slot_states=fact_slot_states,
+        )
+
         response.conversation_state = state.conversation_state
         response.case_hypothesis = case_hypothesis
         response.fact_slot_states = fact_slot_states
@@ -361,6 +375,7 @@ class QueryService:
         debug["case_hypothesis"] = case_hypothesis.model_dump()
         debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
         debug["interaction_plan"] = interaction_plan.model_dump()
+        debug["public_answer_guard"] = public_answer_guard_debug
         debug.setdefault("pre_llm_router", {
             "turn_type": turn_analysis.turn_type,
             "display_mode": turn_analysis.display_mode,

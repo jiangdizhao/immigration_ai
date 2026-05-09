@@ -139,6 +139,64 @@ function fallbackText(data: LegalServiceResponse, responseLanguage: ResponseLang
     : "Sorry, I could not generate a response right now.";
 }
 
+const FORBIDDEN_PUBLIC_ANSWER_PATTERNS = [
+  /retrieved material/i,
+  /retrieved source/i,
+  /source material/i,
+  /provided sources?/i,
+  /does not provide/i,
+  /does not support/i,
+  /not supported by/i,
+  /not specifically supported/i,
+  /fully grounded answer/i,
+  /operation answerability/i,
+  /source classes?/i,
+  /evidence package/i,
+  /context insufficient/i,
+  /unsupported specificity/i,
+  /local corpus/i,
+  /legal corpus/i,
+  /retrieval/i,
+];
+
+function hasForbiddenPublicAnswerText(text: string): boolean {
+  return FORBIDDEN_PUBLIC_ANSWER_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function firstRequestedFactPrompt(data: LegalServiceResponse): string | null {
+  const prompt = data.interaction_plan?.requested_facts?.[0]?.prompt;
+  return typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
+}
+
+function publicFallbackAnswer(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
+  const nextPrompt = firstRequestedFactPrompt(data);
+  const operation = data.case_hypothesis?.primary_operation_type ?? "";
+  const is485 = operation.startsWith("485") || operation.includes("temporary_graduate");
+
+  if (responseLanguage === "zh") {
+    let answer = is485
+      ? "根据你提供的信息，这看起来是一个 Subclass 485 Temporary Graduate visa 问题。我可以先给你一般性方向，但还需要一个关键信息才能更准确判断。"
+      : "我可以先给你一般性方向，但还需要一个关键信息，才能把说明更准确地对应到你的情况。";
+    if (nextPrompt) answer += `
+
+一个简单问题：${nextPrompt}`;
+    return answer;
+  }
+
+  let answer = is485
+    ? "Based on what you told me, this appears to be a Subclass 485 Temporary Graduate visa question. I can give a cautious first view, but I need one key detail before making it more specific."
+    : "I can give general guidance, but I need one key detail before making it more specific to your situation.";
+  if (nextPrompt) answer += `
+
+One quick question: ${nextPrompt}`;
+  return answer;
+}
+
+function publicSafeText(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
+  const text = fallbackText(data, responseLanguage);
+  return hasForbiddenPublicAnswerText(text) ? publicFallbackAnswer(data, responseLanguage) : text;
+}
+
 function normalizeNextAction(nextAction: string | null | undefined) {
   if (nextAction === "answer") return "provide_answer";
   if (
@@ -442,7 +500,7 @@ export async function POST(request: Request) {
     });
 
     return Response.json({
-      text: fallbackText(data, finalResponseLanguage),
+      text: publicSafeText(data, finalResponseLanguage),
       responseLanguage: finalResponseLanguage,
       citations: (data.citations ?? []).map((c) => ({
         source_id: c.source_id ?? null,

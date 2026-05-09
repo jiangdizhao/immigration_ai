@@ -142,7 +142,7 @@ class ReasoningService:
             return QueryResponse(
                 matter_id=payload.matter_id,
                 answer=(
-                    "I do not have enough retrieved immigration-law material to answer this reliably. "
+                    "I need a little more information before I can answer this reliably. "
                     "Please provide more details or arrange a consultation with the lawyer."
                 ),
                 confidence="low",
@@ -473,7 +473,7 @@ class ReasoningService:
             "Honor the operation answerability contract. If the contract says ask_followup or qualified_general, do not draft a final rights/deadline answer.\n"
             "If schedule-aware criterion reasoning JSON is provided, use it as the organising structure: Schedule 1 validity before Schedule 2 grant criteria. Do not mix unrelated subclass criteria.\n"
             "If supported_facts are general, the answer must stay general.\n"
-            "If unsupported_requests are present, explicitly say those points are not supported by the retrieved material.\n"
+            "If unsupported_requests are present, explain the limitation in customer-friendly language. Do not mention retrieved material, source classes, evidence package, corpus, or internal retrieval.\n"
             "Return ONLY valid JSON with this exact shape:\n"
             "{\n"
             '  "answer": string,\n'
@@ -555,7 +555,7 @@ class ReasoningService:
     ) -> str:
         if not supported_facts:
             return (
-                "I could not reliably generate a fully grounded answer from the retrieved material. "
+                "I need a little more information before I can give a reliable answer. "
                 "Please provide more details or arrange a consultation with the lawyer."
             )
         fact_text = " ".join(
@@ -568,11 +568,11 @@ class ReasoningService:
             parts.append(fact_text)
         if unsupported_items:
             parts.append(
-                "Some parts of your question are not specifically supported by the retrieved material, so this answer should be treated as general guidance only."
+                "Some parts of your question still need to be checked carefully, so this should be treated as general guidance only."
             )
         else:
             parts.append(
-                "This is general guidance based on the retrieved material only, and the exact next step will depend on the refusal notice, dates, and stated reasons."
+                "This is general guidance only, and the exact next step will depend on the relevant documents, dates, and stated reasons."
             )
         coverage_gap_text = self._coverage_gap_text(answerability, operation_type=operation_type)
         if coverage_gap_text:
@@ -597,13 +597,13 @@ class ReasoningService:
         if supported_facts:
             fact_lines = [f"- {item['fact']}" for item in supported_facts[:3] if item.get("fact")]
             if fact_lines:
-                parts.append("I found some retrieved material that may be relevant:\n" + "\n".join(fact_lines))
+                parts.append("Here is the general information I can use at this stage:\n" + "\n".join(fact_lines))
         if reason and reason.startswith("specific_marker_not_supported:"):
-            parts.append(f"I do not have enough retrieved source material specifically supporting the part of your question about '{specific_marker}'.")
+            parts.append(f"I cannot safely confirm the part of your question about '{specific_marker}' without checking one more detail.")
         elif unsupported_items:
-            parts.append("Some parts of your question are not specifically supported by the retrieved material.")
+            parts.append("Some parts of your question still need to be checked before I can be more specific.")
         else:
-            parts.append("I have some relevant retrieved material, but not enough to give a fully specific answer with confidence.")
+            parts.append("I can give general guidance, but I need one more detail before making this specific to your situation.")
         coverage_gap_text = self._coverage_gap_text(answerability, operation_type=operation_type)
         if coverage_gap_text:
             parts.append(coverage_gap_text)
@@ -619,7 +619,7 @@ class ReasoningService:
         if required_source_classes_missing:
             joined = ", ".join(str(item) for item in required_source_classes_missing[:6])
             parts.append(
-                f"For this operation{f' ({operation_type})' if operation_type else ''}, the retrieved material does not yet cover the key source classes needed for a final answer: {joined}."
+                "I still need to check the right official rule before giving a final answer on this point."
             )
         if required_facts_missing:
             joined = ", ".join(str(item) for item in required_facts_missing[:6])
@@ -645,7 +645,7 @@ class ReasoningService:
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=(
-                "I could not reliably generate a fully grounded answer from the retrieved material. "
+                "I need a little more information before I can give a reliable answer. "
                 "Please provide more details or arrange a consultation with the lawyer."
             ),
             confidence="low",
