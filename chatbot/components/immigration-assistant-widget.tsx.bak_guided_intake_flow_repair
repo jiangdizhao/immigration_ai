@@ -59,21 +59,6 @@ function isAssistantMessage(
   return message.role === "assistant";
 }
 
-const FACT_DISPLAY_LABELS: Record<string, string> = {
-  completion_date: "course completion date",
-  qualification_level: "qualification level",
-  course_cricos_registered: "CRICOS course status",
-  australian_study_requirement_met: "Australian Study Requirement status",
-  first_485_or_subsequent: "first/subsequent 485 status",
-  current_visa: "current visa/status",
-  current_location: "current location",
-  application_timing: "application timing",
-  refusal_notice_available: "refusal notice availability",
-  notification_date: "notification date",
-  onshore_offshore: "location at decision",
-  refusal_reason_if_known: "refusal reason",
-};
-
 function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
   const populatedEntries = Object.entries(draftFacts).filter(
     ([, value]) => value !== null && value !== undefined && value !== ""
@@ -85,22 +70,6 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
 
   const lines = populatedEntries.map(([key, value]) => `${key}: ${String(value)}`);
   return `Guided intake update:\n${lines.join("\n")}`;
-}
-
-function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
-  const populatedEntries = Object.entries(draftFacts).filter(
-    ([, value]) => value !== null && value !== undefined && value !== ""
-  );
-
-  if (!populatedEntries.length) {
-    return "I updated the intake details.";
-  }
-
-  const labels = populatedEntries.map(([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " "));
-  if (labels.length === 1) {
-    return `I updated my ${labels[0]}.`;
-  }
-  return `I updated these intake details: ${labels.join(", ")}.`;
 }
 
 function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
@@ -330,25 +299,16 @@ function isZhLanguage(responseLanguage?: string | null) {
 
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
-    const visibleText = buildGuidedIntakeDisplaySummary(draftFacts);
 
-    const visibleUserMessage: Extract<WidgetMessage, { role: "user" }> = {
-      id: generateUUID(),
-      role: "user",
-      text: visibleText,
-    };
-
-    const backendUserMessage: Extract<WidgetMessage, { role: "user" }> = {
+    const nextUserMessage: Extract<WidgetMessage, { role: "user" }> = {
       id: generateUUID(),
       role: "user",
       text: syntheticText,
     };
 
-    const visibleMessages = [...messages, visibleUserMessage];
-    const backendMessages = [...messages, backendUserMessage];
-
+    const nextMessages = [...messages, nextUserMessage];
     shouldAutoScrollRef.current = true;
-    setMessages(visibleMessages);
+    setMessages(nextMessages);
     scrollToBottom(true);
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
@@ -357,7 +317,7 @@ function isZhLanguage(responseLanguage?: string | null) {
     setShowQuickQuestions(false);
 
     try {
-      const data = await sendToWidgetRoute(backendMessages, mergedFacts);
+      const data = await sendToWidgetRoute(nextMessages, mergedFacts);
       await appendAssistantMessage(data);
     } catch (requestError) {
       const message =

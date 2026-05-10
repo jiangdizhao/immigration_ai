@@ -283,7 +283,7 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
     "485_higher_education_stream": OperationProfile(
         key="485_higher_education_stream",
         required_facts=("qualification_level", "completion_date", "course_cricos_registered"),
-        optional_facts=("australian_study_requirement_met", "current_visa", "first_485_or_subsequent"),
+        optional_facts=("australian_study_requirement_met", "minister_specified_qualification_status", "current_visa"),
         blocking_facts=("qualification_level", "completion_date"),
         followup_intro="For the 485 higher education pathway, the qualification type and study/completion timing are central.",
     ),
@@ -499,14 +499,6 @@ class CaseStateService:
             if slot.status in KNOWN_STATUSES
         }
 
-        primary_operation = case_hypothesis.primary_operation_type or state.operation_type
-        force_485_analysis_ready = (
-            bool(primary_operation)
-            and str(primary_operation).startswith("485_")
-            and not required_missing
-            and not blocking_missing
-        )
-
         warnings: list[str] = []
         if state.risk_flags.deadline_sensitive and "notification_date" in required_missing:
             warnings.append("The timing may matter here, so it is safer to clarify the notification date as early as possible.")
@@ -527,10 +519,6 @@ class CaseStateService:
             mode = "escalation"
             answer_mode = "escalate"
             primary_prompt = profile.escalation_intro if profile is not None else "This matter may be time-sensitive or high-risk, so legal review is sensible."
-        elif force_485_analysis_ready:
-            mode = "analysis_ready"
-            answer_mode = "answer_with_warning"
-            primary_prompt = "I have the key 485 pathway facts needed to give a more useful assessment now."
         elif policy.next_action == "ask_followup":
             mode = "guided_intake"
             answer_mode = "answer_then_ask"
@@ -572,7 +560,6 @@ class CaseStateService:
         if mode in {"answer", "analysis_ready"}:
             required_missing = []
             blocking_missing = []
-            requested_facts = []
 
         progress = InteractionProgress(
             collected_required=sum(1 for slot in required_slots if slot.status in KNOWN_STATUSES),

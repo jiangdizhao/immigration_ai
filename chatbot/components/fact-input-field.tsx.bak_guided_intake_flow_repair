@@ -132,16 +132,11 @@ export function FactInputField({ fact, value, onChange, showMeta = false, respon
       ) : null}
 
       {inputType === "date" ? (
-        <div className="space-y-1">
-          <Input
-            type="date"
-            value={typeof value === "string" && !isNotSure ? value : ""}
-            onChange={(e) => onChange(key, e.target.value || null)}
-          />
-          <p className="text-xs text-slate-500">
-            {zh ? "请使用 YYYY-MM-DD 格式；移民日期很重要。" : "Use YYYY-MM-DD format; immigration dates can be important."}
-          </p>
-        </div>
+        <Input
+          type="date"
+          value={typeof value === "string" && !isNotSure ? value : ""}
+          onChange={(e) => onChange(key, e.target.value || null)}
+        />
       ) : null}
 
       {inputType === "short_text" || inputType === "document" ? (

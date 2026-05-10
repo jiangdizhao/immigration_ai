@@ -30,7 +30,6 @@ from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
 from app.services.pre_llm_router_service import PreLLMRouterService, PreLLMTurnAnalysis
-from app.services.public_answer_guard import PublicAnswerGuard
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
 from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
@@ -72,7 +71,6 @@ class QueryService:
         lightweight_response_service: LightweightResponseService | None = None,
         language_service: LanguageService | None = None,
         schedule_aware_reasoning_service: ScheduleAwareReasoningService | None = None,
-        public_answer_guard: PublicAnswerGuard | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -85,7 +83,6 @@ class QueryService:
         self.lightweight_response_service = lightweight_response_service or LightweightResponseService()
         self.language_service = language_service or LanguageService()
         self.schedule_aware_reasoning_service = schedule_aware_reasoning_service or ScheduleAwareReasoningService()
-        self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -355,17 +352,6 @@ class QueryService:
             response_language=language_context.response_language,
         )
 
-        response, public_answer_guard_debug = self.public_answer_guard.sanitize_response(
-            response=response,
-            response_language=language_context.response_language,
-            original_question=original_question,
-            effective_question=effective_question,
-            policy=policy,
-            case_hypothesis=case_hypothesis,
-            interaction_plan=interaction_plan,
-            fact_slot_states=fact_slot_states,
-        )
-
         response.conversation_state = state.conversation_state
         response.case_hypothesis = case_hypothesis
         response.fact_slot_states = fact_slot_states
@@ -375,7 +361,6 @@ class QueryService:
         debug["case_hypothesis"] = case_hypothesis.model_dump()
         debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
         debug["interaction_plan"] = interaction_plan.model_dump()
-        debug["public_answer_guard"] = public_answer_guard_debug
         debug.setdefault("pre_llm_router", {
             "turn_type": turn_analysis.turn_type,
             "display_mode": turn_analysis.display_mode,
@@ -384,17 +369,8 @@ class QueryService:
             "extracted_facts": turn_analysis.extraction.facts,
             "fact_confidence": turn_analysis.extraction.fact_confidence,
         })
-        if schedule_aware_assessment:
-            response.legal_reasoning_trace = schedule_aware_assessment
         response.retrieval_debug = debug
         response.compact_sources = self._compact_source_titles(response)
-        if state.operation_type and str(state.operation_type).startswith("485"):
-            filtered_sources = [
-                item for item in response.compact_sources
-                if not re.search(r"\bbridging\b|\bBVB\b|travel on a bridging", item, flags=re.I)
-            ]
-            if filtered_sources:
-                response.compact_sources = filtered_sources
         response.response_language = language_context.response_language
 
         self._update_matter_from_state(
@@ -508,24 +484,6 @@ class QueryService:
         intake_facts: dict[str, Any],
         turn_analysis: PreLLMTurnAnalysis | None = None,
     ) -> ContextualizationResult:
-        if turn_analysis is not None and turn_analysis.turn_type == "guided_intake_update":
-            standalone_question = (issue_summary or "").strip()
-            for item in reversed(conversation_history or []):
-                if not isinstance(item, dict):
-                    continue
-                content = str(item.get("effective_question") or item.get("content") or "").strip()
-                if content and not content.lower().startswith("guided intake update"):
-                    standalone_question = content
-                    break
-            if not standalone_question:
-                standalone_question = question.strip()
-            return ContextualizationResult(
-                standalone_question=standalone_question,
-                used_history=True,
-                carried_facts=dict(turn_analysis.extraction.facts),
-                reason="guided_intake_update_preserves_matter_context",
-            )
-
         if turn_analysis is not None and turn_analysis.can_skip_contextualization_llm:
             return ContextualizationResult(
                 standalone_question=question.strip(),
