@@ -1144,37 +1144,64 @@ class QueryService:
     # ------------------------------------------------------------------
     # Persistence helpers
     # ------------------------------------------------------------------
-    def _persist_citations(
-        self,
-        db: Session,
-        matter: Matter,
-        response: QueryResponse,
-    ) -> None:
-        db.query(Citation).filter(Citation.matter_id == matter.id).delete(synchronize_session=False)
+    def _persist_citations(self, db: Session, matter: Matter, response: QueryResponse) -> None:
+        """Persist only DB-backed citations.
 
-        for item in response.citations:
-            source_id = item.source_id or ""
-            chunk_id = item.chunk_id or ""
+        Response citations can include live/focused-policy snippets created only
+        for the frontend. Those snippets do not have matching rows in
+        legal_sources/source_chunks, so inserting them into citations would
+        violate fk_citations_source_id_legal_sources. They are still returned in
+        the response, but are intentionally not persisted.
+        """
+        if not response.citations:
+            return
 
-            # Skip ephemeral live-retrieval citations; they are not in legal_sources/source_chunks
-            if source_id.startswith("live-source-") or chunk_id.startswith("live-chunk-"):
+        from app.db.models import Case, LegalSource, SourceChunk
+
+        synthetic_prefixes = (
+            "focused-policy",
+            "live-policy",
+            "live-",
+            "live:",
+            "response-only",
+            "synthetic",
+        )
+
+        for citation in response.citations or []:
+            source_id = str(getattr(citation, "source_id", "") or "")
+            chunk_id = getattr(citation, "chunk_id", None)
+            case_id = getattr(citation, "case_id", None)
+
+            # non_db_backed_response_citation
+            if (
+                not source_id
+                or source_id.startswith(synthetic_prefixes)
+                or (isinstance(chunk_id, str) and chunk_id.startswith(synthetic_prefixes))
+            ):
                 continue
 
-            citation = Citation(
-                matter_id=matter.id,
-                source_id=item.source_id,
-                chunk_id=item.chunk_id,
-                case_id=item.case_id,
-                quote_text=item.quote_text,
-                rationale=item.rationale,
-                confidence_score=item.confidence_score,
-                used_for="query_response",
-            )
-            db.add(citation)
+            if db.get(LegalSource, source_id) is None:
+                continue
 
-    # ------------------------------------------------------------------
-    # Legacy helper logic
-    # ------------------------------------------------------------------
+            if chunk_id and db.get(SourceChunk, chunk_id) is None:
+                chunk_id = None
+
+            if case_id and db.get(Case, case_id) is None:
+                case_id = None
+
+            db.add(
+                Citation(
+                    matter_id=matter.id,
+                    source_id=source_id,
+                    chunk_id=chunk_id,
+                    case_id=case_id,
+                    quote_text=getattr(citation, "quote_text", None),
+                    rationale=getattr(citation, "rationale", None),
+                    confidence_score=getattr(citation, "confidence_score", None),
+                    used_for="query_response",
+                )
+            )
+
     def _build_issue_summary(self, question: str) -> str:
         text = (question or "").strip()
         if len(text) <= 240:
