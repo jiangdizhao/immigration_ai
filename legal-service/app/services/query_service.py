@@ -25,6 +25,8 @@ from app.schemas.state import (
 )
 from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
+from app.services.fact_status_reasoning_service import FactStatusReasoningService
+from app.services.citation_quality_service import CitationQualityService
 from app.services.interaction_control_service import InteractionControlService
 from app.services.language_service import LanguageService
 from app.services.focused_policy_issue_service import FocusedPolicyIssueService
@@ -77,6 +79,8 @@ class QueryService:
         public_answer_guard: PublicAnswerGuard | None = None,
         interaction_control_service: InteractionControlService | None = None,
         focused_policy_issue_service: FocusedPolicyIssueService | None = None,
+        fact_status_reasoning_service: FactStatusReasoningService | None = None,
+        citation_quality_service: CitationQualityService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -92,6 +96,8 @@ class QueryService:
         self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
         self.interaction_control_service = interaction_control_service or InteractionControlService()
         self.focused_policy_issue_service = focused_policy_issue_service or FocusedPolicyIssueService()
+        self.fact_status_reasoning_service = fact_status_reasoning_service or FactStatusReasoningService()
+        self.citation_quality_service = citation_quality_service or CitationQualityService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -157,6 +163,7 @@ class QueryService:
             known_facts=merged_intake_facts,
         )
         focused_policy_finding: dict[str, Any] | None = None
+        fact_status_report: dict[str, Any] | None = None
 
         if turn_analysis.retrieval_needed:
             local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
@@ -240,6 +247,15 @@ class QueryService:
                     known_facts=merged_intake_facts,
                 )
 
+        fact_status_report = self.fact_status_reasoning_service.evaluate(
+            known_facts=merged_intake_facts,
+            focused_policy_finding=focused_policy_finding,
+            focused_policy_issue=focused_policy_issue,
+            legal_reasoning_trace=schedule_aware_assessment,
+            question=effective_question,
+        )
+        retrieval_debug["fact_status_reasoning"] = fact_status_report
+
         final_sufficiency_gate = initial_sufficiency_gate
         if live_result.used_live_fetch:
             final_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
@@ -321,6 +337,7 @@ class QueryService:
                     "schedule_aware_assessment": self.schedule_aware_reasoning_service.answerability_context(schedule_aware_assessment),
                     "focused_policy_issue": focused_policy_issue,
                     "focused_policy_finding": focused_policy_finding,
+                    "fact_status_reasoning": fact_status_report,
                     "pre_llm_router": enriched_debug["pre_llm_router"],
                 },
             )
@@ -345,6 +362,12 @@ class QueryService:
                 known_facts=merged_intake_facts,
                 question=effective_question,
             )
+
+        response, fact_status_response_debug = self.fact_status_reasoning_service.apply_to_response(
+            response=response,
+            fact_status_report=fact_status_report,
+            known_facts=merged_intake_facts,
+        )
 
         state = self.state_machine.finalize_after_reasoning(
             state=state,
@@ -462,6 +485,14 @@ class QueryService:
             ]
             if filtered_sources:
                 response.compact_sources = filtered_sources
+        response, citation_quality_debug = self.citation_quality_service.filter_response_citations(
+            response=response,
+            focused_policy_issue=focused_policy_issue,
+            focused_policy_finding=focused_policy_finding,
+        )
+        debug = dict(response.retrieval_debug or {})
+        debug["citation_quality"] = citation_quality_debug
+        response.retrieval_debug = debug
         response.response_language = language_context.response_language
 
         self._update_matter_from_state(

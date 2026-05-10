@@ -389,6 +389,7 @@ class ReasoningService:
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
         schedule_assessment_json = json.dumps((conversation_context or {}).get("schedule_aware_assessment") or {}, ensure_ascii=False)
         focused_policy_finding_json = json.dumps((conversation_context or {}).get("focused_policy_finding") or {}, ensure_ascii=False)
+        fact_status_reasoning_json = json.dumps((conversation_context or {}).get("fact_status_reasoning") or {}, ensure_ascii=False)
 
         system_prompt = (
             "You are a strict legal-retrieval evidence extractor.\n"
@@ -422,6 +423,7 @@ class ReasoningService:
             f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
             f"Focused current-policy finding JSON:\n{focused_policy_finding_json}\n\n"
+            f"Fact-status reasoning JSON:\n{fact_status_reasoning_json}\n\n"
             f"Intake facts JSON:\n{intake_facts}\n\n"
             f"Retrieved sources:\n{context_text}\n"
         )
