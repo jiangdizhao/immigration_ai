@@ -101,25 +101,6 @@ class RuleBasedExtractionService:
         lowered = q.lower()
         result = RuleExtractionResult(jurisdiction="Cth")
 
-        if self._is_active_485_continuation(current_state=current_state, lowered=lowered):
-            self._extract_485_continuation_facts(lowered, result)
-            for key, value in intake_facts.items():
-                if value is None or value == "":
-                    continue
-                result.facts[key] = value
-                result.fact_confidence[key] = "high"
-            result.issue_type = current_state.issue_type or "temporary_graduate_visa"
-            result.operation_type = current_state.operation_type or result.facts.get("operation_type") or "485_higher_education_stream"
-            result.visa_type = current_state.visa_type or "temporary_graduate"
-            result.facts.setdefault("issue_type", result.issue_type)
-            result.facts.setdefault("operation_type", result.operation_type)
-            result.facts.setdefault("visa_type", result.visa_type)
-            result.fact_confidence.setdefault("issue_type", "high")
-            result.fact_confidence.setdefault("operation_type", "high")
-            result.fact_confidence.setdefault("visa_type", "high")
-            result.evidence["active_485_continuation_preserve_operation"] = True
-            return result
-
         if lowered.startswith("guided intake update"):
             self._extract_structured_key_value_lines(q, result)
             # Explicit structured frontend facts are trusted more than free-text extraction.
@@ -177,92 +158,6 @@ class RuleBasedExtractionService:
             result.fact_confidence.setdefault("visa_type", "high")
 
         return result
-
-    def _is_active_485_continuation(self, *, current_state: MatterState, lowered: str) -> bool:
-        op = str(current_state.operation_type or "")
-        facts = current_state.carried_intake_facts or {}
-        is_485 = (
-            op.startswith("485_")
-            or str(facts.get("operation_type") or "").startswith("485_")
-            or str(facts.get("visa_subclass") or "") == "485"
-            or str(facts.get("visa_type") or "") == "temporary_graduate"
-        )
-        if not is_485:
-            return False
-        # Explicit user topic shifts are allowed. Merely saying "I hold a 500 visa"
-        # is not a topic shift; it is a current-visa fact inside the 485 flow.
-        if re.search(r"\b(bridging travel|condition\s*\d{4}|pic\s*4020|character|detention)\b", lowered):
-            return False
-        if re.search(r"\b(review|appeal|tribunal|refusal notice|review deadline)\b", lowered):
-            return False
-        return True
-
-    def _extract_485_continuation_facts(self, lowered: str, result: RuleExtractionResult) -> None:
-        result.facts.setdefault("visa_subclass", "485")
-        result.fact_confidence.setdefault("visa_subclass", "high")
-
-        age_match = re.search(r"\b(?:i\s+am\s+|age\s*)?(\d{2})\s*(?:years?\s*old)?\b", lowered)
-        if age_match:
-            age = int(age_match.group(1))
-            if 10 <= age <= 80:
-                result.facts["age"] = age
-                result.fact_confidence["age"] = "high"
-
-        if re.search(r"\b(in australia|inside australia|onshore|currently in australia|i am in australia)\b", lowered):
-            result.facts["current_location"] = "in_australia"
-            result.facts["onshore_offshore"] = "in_australia"
-            result.facts["in_australia"] = True
-            result.fact_confidence["current_location"] = "high"
-            result.fact_confidence["onshore_offshore"] = "high"
-            result.fact_confidence["in_australia"] = "high"
-        if re.search(r"\b(outside australia|offshore|overseas)\b", lowered):
-            result.facts["current_location"] = "outside_australia"
-            result.facts["onshore_offshore"] = "outside_australia"
-            result.facts["in_australia"] = False
-            result.fact_confidence["current_location"] = "high"
-            result.fact_confidence["onshore_offshore"] = "high"
-            result.fact_confidence["in_australia"] = "high"
-
-        if re.search(r"\b(500 visa|subclass 500|student visa)\b", lowered):
-            result.facts["current_visa"] = "500 visa"
-            result.fact_confidence["current_visa"] = "high"
-
-        if re.search(r"\bmaster|masters\b", lowered):
-            result.facts["qualification_level"] = "masters"
-            result.fact_confidence["qualification_level"] = "high"
-        elif "bachelor" in lowered:
-            result.facts["qualification_level"] = "bachelor"
-            result.fact_confidence["qualification_level"] = "high"
-        elif "phd" in lowered or "doctorate" in lowered:
-            result.facts["qualification_level"] = "phd"
-            result.fact_confidence["qualification_level"] = "high"
-        elif "diploma" in lowered:
-            result.facts["qualification_level"] = "diploma"
-            result.fact_confidence["qualification_level"] = "high"
-
-        if re.search(r"\b(first\s+(?:subclass\s*)?485|first\s+temporary\s+graduate)\b", lowered):
-            result.facts["first_485_or_subsequent"] = "first_485"
-            result.fact_confidence["first_485_or_subsequent"] = "high"
-
-        if re.search(r"\b(australian study requirement|stud(?:ied|y)\s+in australia|2\s*(?:and\s+a\s+half|\.5)?\s+years|two\s+and\s+a\s+half\s+years)\b", lowered):
-            result.facts["australian_study_requirement_met"] = "yes"
-            result.fact_confidence["australian_study_requirement_met"] = "medium"
-
-        if re.search(r"\b(adequate health insurance|health insurance|oshc)\b", lowered):
-            result.facts["health_insurance_status"] = "yes"
-            result.fact_confidence["health_insurance_status"] = "medium"
-
-        if re.search(r"\bcricos\b", lowered):
-            if re.search(r"\b(no|not|not registered)\b.{0,40}\bcricos\b", lowered):
-                result.facts["course_cricos_registered"] = "no"
-            else:
-                result.facts["course_cricos_registered"] = "yes"
-            result.fact_confidence["course_cricos_registered"] = "medium"
-
-        date_value = self._extract_date(lowered)
-        if date_value and ("complete" in lowered or "finish" in lowered or "course" in lowered):
-            result.facts["completion_date"] = date_value
-            result.fact_confidence["completion_date"] = "medium"
 
     def _extract_visa_and_issue(self, lowered: str, result: RuleExtractionResult) -> None:
         for subclass, pattern in self.VISA_PATTERNS.items():
@@ -369,7 +264,7 @@ class RuleBasedExtractionService:
         if "qualification_level" in result.facts:
             result.fact_confidence["qualification_level"] = "high"
 
-        if "first 485" in lowered or "first subclass 485" in lowered or "first temporary graduate" in lowered:
+        if "first 485" in lowered or "first temporary graduate" in lowered:
             result.facts["first_485_or_subsequent"] = "first_485"
             result.fact_confidence["first_485_or_subsequent"] = "high"
         if "second 485" in lowered or "second temporary graduate" in lowered or "regional extension" in lowered:

@@ -495,36 +495,6 @@ class StateMachine:
             "client_name",
             "preferred_language",
         }
-
-        if (
-            str(facts.get("operation_type") or "").startswith("485_")
-            or str(facts.get("visa_subclass") or "") == "485"
-            or str(facts.get("visa_type") or "") == "temporary_graduate"
-        ):
-            stable_keys.update(
-                {
-                    "visa_subclass",
-                    "visa_type",
-                    "issue_type",
-                    "operation_type",
-                    "age",
-                    "qualification",
-                    "qualification_level",
-                    "completion_date",
-                    "course_completion_date",
-                    "course_cricos_registered",
-                    "australian_study_requirement_met",
-                    "first_485_or_subsequent",
-                    "previous_485_held",
-                    "current_visa",
-                    "current_location",
-                    "application_timing",
-                    "health_insurance_status",
-                    "regional_study_location",
-                    "regional_residence_duration",
-                    "replacement_reason",
-                }
-            )
         return {key: value for key, value in facts.items() if key in stable_keys}
 
     def update_fact_status(
@@ -556,10 +526,7 @@ class StateMachine:
                 operation_type in {"review_rights", "review_deadline", "student_refusal_next_steps"}
                 or bool(re.search(r"\bdeadline\b|\btime limit\b|\bappeal\b|\breview\b|\btribunal\b", q))
                 or ("refus" in q and any(x in q for x in ["what should i do", "next", "review"]))
-                or (
-                    bool(known_facts.get("notification_date"))
-                    and operation_type in {"review_rights", "review_deadline", "student_refusal_next_steps"}
-                )
+                or bool(known_facts.get("notification_date"))
             ),
             cancellation_related=bool(re.search(r"\bcancel(?:lation|led|ling)?\b", q)) or (issue_type == "visa_cancellation"),
             detention_related=bool(re.search(r"\bdetention\b", q)) or bool(known_facts.get("in_detention")),

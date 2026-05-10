@@ -25,7 +25,6 @@ from app.schemas.state import (
 )
 from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
-from app.services.interaction_control_service import InteractionControlService
 from app.services.language_service import LanguageService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
@@ -74,7 +73,6 @@ class QueryService:
         language_service: LanguageService | None = None,
         schedule_aware_reasoning_service: ScheduleAwareReasoningService | None = None,
         public_answer_guard: PublicAnswerGuard | None = None,
-        interaction_control_service: InteractionControlService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -88,7 +86,6 @@ class QueryService:
         self.language_service = language_service or LanguageService()
         self.schedule_aware_reasoning_service = schedule_aware_reasoning_service or ScheduleAwareReasoningService()
         self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
-        self.interaction_control_service = interaction_control_service or InteractionControlService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -358,20 +355,6 @@ class QueryService:
             response_language=language_context.response_language,
         )
 
-        response, fact_slot_states, interaction_plan, interaction_control_debug = (
-            self.interaction_control_service.apply_customer_flow_guards(
-                response=response,
-                fact_slot_states=fact_slot_states,
-                interaction_plan=interaction_plan,
-                state=state,
-                known_facts=state.carried_intake_facts,
-                case_hypothesis=case_hypothesis,
-                question=effective_question,
-            )
-        )
-        state.fact_slot_states = fact_slot_states
-        state.interaction_plan = interaction_plan
-
         response, public_answer_guard_debug = self.public_answer_guard.sanitize_response(
             response=response,
             response_language=language_context.response_language,
@@ -393,7 +376,6 @@ class QueryService:
         debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
         debug["interaction_plan"] = interaction_plan.model_dump()
         debug["public_answer_guard"] = public_answer_guard_debug
-        debug["interaction_control"] = interaction_control_debug
         debug.setdefault("pre_llm_router", {
             "turn_type": turn_analysis.turn_type,
             "display_mode": turn_analysis.display_mode,
