@@ -384,8 +384,17 @@ class QueryService:
             "extracted_facts": turn_analysis.extraction.facts,
             "fact_confidence": turn_analysis.extraction.fact_confidence,
         })
+        if schedule_aware_assessment:
+            response.legal_reasoning_trace = schedule_aware_assessment
         response.retrieval_debug = debug
         response.compact_sources = self._compact_source_titles(response)
+        if state.operation_type and str(state.operation_type).startswith("485"):
+            filtered_sources = [
+                item for item in response.compact_sources
+                if not re.search(r"\bbridging\b|\bBVB\b|travel on a bridging", item, flags=re.I)
+            ]
+            if filtered_sources:
+                response.compact_sources = filtered_sources
         response.response_language = language_context.response_language
 
         self._update_matter_from_state(

@@ -367,6 +367,26 @@ def infer_source_classes_from_parts(
 
     if "temporary graduate" in blob or "subclass 485" in blob or " 485" in f" {blob} ":
         classes.update({"485_requirements_overview", "requirements_overview"})
+        if any(term in blob for term in ["35 years", "35 years old", "years old or younger", "age requirement", "maximum age"]):
+            classes.add("485_age_requirement")
+        if any(term in blob for term in ["485.221", "485.222", "485.223", "485.224", "post-vocational", "post vocational", "vocational education work"]):
+            classes.add("485_vocational_485221_485224")
+        if "skills assessment" in blob:
+            classes.add("485_skills_assessment")
+        if "closely related" in blob or "nominated occupation" in blob:
+            classes.add("485_occupation_relevance")
+        if "485.231" in blob or "post-higher education" in blob or "post higher education" in blob:
+            classes.add("485_higher_education_485231")
+        if any(term in blob for term in ["485.232", "485.233", "485.234", "485.235", "second post-higher", "second post higher", "regional extension"]):
+            classes.add("485_second_regional_485232_485235")
+        if "two years" in blob or "2 years" in blob or "regional residence" in blob:
+            classes.add("485_regional_residence_requirement")
+        if "replacement stream" in blob or "replacement" in blob:
+            classes.add("485_replacement_stream")
+        if "australian study requirement" in blob or "16 months" in blob or "2 academic years" in blob:
+            classes.add("485_australian_study_requirement")
+        if "specified by the minister" in blob or "minister-specified" in blob or "minister specified" in blob:
+            classes.add("485_minister_specified_qualification")
 
     travel_context = any(
         term in blob
