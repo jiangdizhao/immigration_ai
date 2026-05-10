@@ -184,6 +184,14 @@ function isZhLanguage(responseLanguage?: string | null) {
       setMatterId(data.matterId);
     }
 
+    const knownFactsFromBackend = data.interactionPlan?.known_facts_summary ?? {};
+    if (Object.keys(knownFactsFromBackend).length > 0) {
+      setIntakeFacts((current) => ({
+        ...knownFactsFromBackend,
+        ...current,
+      }));
+    }
+
     const fullText =
       data.text?.trim() && data.text.trim().length > 0
         ? data.text.trim()
