@@ -27,6 +27,7 @@ from app.services.case_state_service import CaseStateService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.interaction_control_service import InteractionControlService
 from app.services.language_service import LanguageService
+from app.services.focused_policy_issue_service import FocusedPolicyIssueService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
@@ -75,6 +76,7 @@ class QueryService:
         schedule_aware_reasoning_service: ScheduleAwareReasoningService | None = None,
         public_answer_guard: PublicAnswerGuard | None = None,
         interaction_control_service: InteractionControlService | None = None,
+        focused_policy_issue_service: FocusedPolicyIssueService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -89,6 +91,7 @@ class QueryService:
         self.schedule_aware_reasoning_service = schedule_aware_reasoning_service or ScheduleAwareReasoningService()
         self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
         self.interaction_control_service = interaction_control_service or InteractionControlService()
+        self.focused_policy_issue_service = focused_policy_issue_service or FocusedPolicyIssueService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -148,6 +151,13 @@ class QueryService:
             }
         )
 
+        focused_policy_issue = self.focused_policy_issue_service.detect_issue(
+            question=effective_question,
+            operation_type=state.operation_type,
+            known_facts=merged_intake_facts,
+        )
+        focused_policy_finding: dict[str, Any] | None = None
+
         if turn_analysis.retrieval_needed:
             local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
         else:
@@ -204,6 +214,32 @@ class QueryService:
             live_chunks = self._live_chunks_to_shims(live_result)
         artifacts.live_retrieval = live_result
 
+        if focused_policy_issue and turn_analysis.live_fetch_allowed:
+            focused_policy_finding = self.focused_policy_issue_service.resolve_from_chunks(
+                issue=focused_policy_issue,
+                chunks=[*live_chunks, *local_chunks],
+                known_facts=merged_intake_facts,
+            )
+            if not (focused_policy_finding or {}).get("resolved"):
+                focused_live_result = self.live_retrieval_service.retrieve(
+                    question=focused_policy_issue.get("search_query") or effective_question,
+                    preferred_domains=initial_sufficiency_gate.preferred_domains or ["immi.homeaffairs.gov.au", "legislation.gov.au"],
+                    issue_type=state.issue_type,
+                    operation_type=state.operation_type,
+                    known_facts={**merged_intake_facts, "focused_policy_issue": focused_policy_issue},
+                    max_urls=8,
+                    max_chunks=12,
+                )
+                live_result = self.focused_policy_issue_service.merge_live_results(live_result, focused_live_result)
+                live_chunks = self._live_chunks_to_shims(live_result)
+                artifacts.live_retrieval = live_result
+                retrieval_debug["focused_policy_second_pass"] = focused_live_result.model_dump()
+                focused_policy_finding = self.focused_policy_issue_service.resolve_from_chunks(
+                    issue=focused_policy_issue,
+                    chunks=[*live_chunks, *local_chunks],
+                    known_facts=merged_intake_facts,
+                )
+
         final_sufficiency_gate = initial_sufficiency_gate
         if live_result.used_live_fetch:
             final_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
@@ -233,6 +269,9 @@ class QueryService:
             final_sufficiency_gate=final_sufficiency_gate,
             risk_flags=state.risk_flags.model_dump(),
         )
+
+        enriched_debug["focused_policy_issue"] = focused_policy_issue
+        enriched_debug["focused_policy_finding"] = focused_policy_finding
 
         if self.lightweight_response_service.can_answer_without_llm(
             analysis=turn_analysis,
@@ -280,6 +319,8 @@ class QueryService:
                     "response_language": language_context.response_language,
                     "language": language_context.to_debug_dict(),
                     "schedule_aware_assessment": self.schedule_aware_reasoning_service.answerability_context(schedule_aware_assessment),
+                    "focused_policy_issue": focused_policy_issue,
+                    "focused_policy_finding": focused_policy_finding,
                     "pre_llm_router": enriched_debug["pre_llm_router"],
                 },
             )
@@ -296,6 +337,14 @@ class QueryService:
         artifacts.policy_decision = policy
 
         response = self._apply_policy_to_response(response, policy, state)
+        if focused_policy_finding and focused_policy_finding.get("resolved"):
+            response = self.focused_policy_issue_service.apply_finding_to_response(
+                response=response,
+                finding=focused_policy_finding,
+                issue=focused_policy_issue,
+                known_facts=merged_intake_facts,
+                question=effective_question,
+            )
 
         state = self.state_machine.finalize_after_reasoning(
             state=state,

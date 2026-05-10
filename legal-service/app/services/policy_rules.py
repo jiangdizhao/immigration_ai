@@ -204,6 +204,20 @@ class PolicyRules:
                 coverage_summary=assessment.model_dump(),
             )
 
+        focused_policy_finding = {}
+        if isinstance(live_retrieval, dict):
+            focused_policy_finding = live_retrieval.get("focused_policy_finding") or {}
+        if isinstance(focused_policy_finding, dict) and focused_policy_finding.get("resolved"):
+            return PolicyDecision(
+                answer_allowed=True,
+                escalate=False,
+                next_action="answer",
+                confidence_cap=focused_policy_finding.get("confidence") or "medium",
+                reasons=["focused_policy_finding_resolved"],
+                answer_mode=ANSWER_MODE_WARNING,
+                coverage_summary={**assessment.model_dump(), "focused_policy_finding": focused_policy_finding},
+            )
+
         if suff_obj.need_live_fetch and not self._live_fetch_used(live_retrieval):
             return PolicyDecision(
                 answer_allowed=True,

@@ -388,6 +388,7 @@ class ReasoningService:
         conversation_text = self._conversation_context_text(conversation_context)
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
         schedule_assessment_json = json.dumps((conversation_context or {}).get("schedule_aware_assessment") or {}, ensure_ascii=False)
+        focused_policy_finding_json = json.dumps((conversation_context or {}).get("focused_policy_finding") or {}, ensure_ascii=False)
 
         system_prompt = (
             "You are a strict legal-retrieval evidence extractor.\n"
@@ -397,6 +398,7 @@ class ReasoningService:
             "If the question is outside immigration/visa/legal-service scope, mark is_in_domain=false.\n"
             "If the retrieved material is too generic or does not support the user's specific request, mark is_context_sufficient=false.\n"
             "Use the operation answerability JSON as a contract: if decisive fact slots or source classes are missing, reflect that in missing_information and follow_up_questions.\n"
+            "If a focused current-policy finding is provided and resolved=true, treat it as controlling evidence for the user's latest focused issue. Do not require unrelated full-eligibility facts to answer that focused issue.\n"
             "Return ONLY valid JSON with this exact shape:\n"
             "{\n"
             '  "is_in_domain": boolean,\n'
@@ -419,6 +421,7 @@ class ReasoningService:
             f"Conversation context:\n{conversation_text or 'N/A'}\n\n"
             f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
+            f"Focused current-policy finding JSON:\n{focused_policy_finding_json}\n\n"
             f"Intake facts JSON:\n{intake_facts}\n\n"
             f"Retrieved sources:\n{context_text}\n"
         )
@@ -462,6 +465,7 @@ class ReasoningService:
         )
         answerability_json = json.dumps(answerability or {}, ensure_ascii=False)
         schedule_assessment_json = json.dumps((conversation_context or {}).get("schedule_aware_assessment") or {}, ensure_ascii=False)
+        focused_policy_finding_json = json.dumps((conversation_context or {}).get("focused_policy_finding") or {}, ensure_ascii=False)
         response_language = str((conversation_context or {}).get("response_language") or getattr(payload, "response_language", None) or "en").lower()
         original_user_question = str((conversation_context or {}).get("original_user_question") or payload.question)
         language_instruction = self._response_language_instruction(response_language)
@@ -473,6 +477,7 @@ class ReasoningService:
             "Honor the operation answerability contract. If the contract says ask_followup or qualified_general, do not draft a final rights/deadline answer.\n"
             "If schedule-aware criterion reasoning JSON is provided, use it as the organising structure: Schedule 1 validity before Schedule 2 grant criteria. Do not mix unrelated subclass criteria.\n"
             "If supported_facts are general, the answer must stay general.\n"
+            "If the user's latest question asks a focused current-policy issue and focused current-policy finding JSON has resolved=true, answer that focused issue first, then separately say what other facts are needed for a full eligibility assessment.\n"
             "If unsupported_requests are present, explain the limitation in customer-friendly language. Do not mention retrieved material, source classes, evidence package, corpus, or internal retrieval.\n"
             "Return ONLY valid JSON with this exact shape:\n"
             "{\n"
@@ -491,6 +496,7 @@ class ReasoningService:
             f"Effective question:\n{effective_question or payload.question}\n\n"
             f"Operation answerability JSON:\n{answerability_json}\n\n"
             f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
+            f"Focused current-policy finding JSON:\n{focused_policy_finding_json}\n\n"
             f"Evidence package JSON:\n{evidence_json}\n"
         )
         try:
