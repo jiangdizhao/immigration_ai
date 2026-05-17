@@ -1,10 +1,12 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  BarChart3,
   CalendarRange,
   CheckCircle2,
   FileCheck2,
   Globe2,
+  Languages,
   MessageSquareMore,
   Scale,
   ShieldCheck,
@@ -14,211 +16,195 @@ import {
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ImmigrationAssistantWidget } from "./immigration-assistant-widget";
+import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
 
 const services = [
   {
     icon: Globe2,
     title: "Visa pathway guidance",
     description:
-      "Present visitor, student, skilled, partner, and employer-sponsored pathways in a clear, client-friendly format.",
+      "Explain student, temporary graduate, skilled, partner, visitor, and bridging visa pathways in a client-friendly way.",
   },
   {
     icon: FileCheck2,
-    title: "Document preparation support",
+    title: "Document preparation",
     description:
-      "Help clients understand what to collect before the first meeting so the lawyer can assess the case faster.",
+      "Collect decisive facts and help clients understand what documents may matter before the first lawyer meeting.",
   },
   {
     icon: Scale,
     title: "Refusal and review triage",
     description:
-      "Guide potential clients toward the right consultation when they are dealing with refusals, cancellations, or urgent deadlines.",
+      "Detect refusals, cancellations, review questions, deadlines, and situations that should be escalated quickly.",
   },
   {
     icon: CalendarRange,
-    title: "Consultation intake",
+    title: "Consultation handoff",
     description:
-      "Use the AI assistant as the first point of contact, then direct the client to book a paid consultation with the firm.",
+      "Move high-intent or high-risk visitors from general AI guidance into a real paid consultation workflow.",
   },
-];
-
-const strengths = [
-  "Professional service-center layout designed for an immigration practice",
-  "Floating AI assistant button modeled after e-commerce support experiences",
-  "Guest-friendly chat flow so prospects can engage before creating an account",
-  "Suitable for demonstrating intake, triage, and consultation preparation",
 ];
 
 const process = [
   {
     step: "01",
-    title: "Client asks a question",
+    title: "Ask a migration question",
     description:
-      "The visitor opens the floating assistant and asks about visas, refusals, timelines, or next steps.",
+      "The visitor can type freely or start from a realistic scenario such as a student refusal, 485 eligibility question, or bridging-visa travel issue.",
   },
   {
     step: "02",
-    title: "AI provides general guidance",
+    title: "AI gathers decisive facts",
     description:
-      "The assistant explains common pathways, eligibility themes, and preparation steps in plain language.",
+      "The backend decides which fact matters next. The frontend presents only one customer-friendly follow-up at a time.",
   },
   {
     step: "03",
-    title: "Lawyer takes over when needed",
+    title: "Sources and risk are controlled",
     description:
-      "The page encourages the client to move from general information to a proper consultation for case-specific advice.",
+      "The assistant uses local legal material, official-source live retrieval when needed, compact sources, and safe confidence limits.",
   },
+  {
+    step: "04",
+    title: "Lawyer consultation follows",
+    description:
+      "The UI keeps a visible consultation pathway so qualified users can move from general information to professional advice.",
+  },
+];
+
+const proofPoints = [
+  "Backend-owned legal reasoning: the frontend renders InteractionPlan rather than inventing legal logic.",
+  "Customer mode by default: answer, one quick question, compact sources, and lawyer handoff.",
+  "Large workspace layout: enough room for conversation, intake state, sources, and consultation CTA.",
+  "Designed to match a premium legal-tech brand instead of a toy chatbot demo.",
 ];
 
 export function ImmigrationServiceHome() {
   return (
-    <div className="relative min-h-dvh bg-white text-slate-900">
-      <div className="absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(15,23,42,0.14),_transparent_30%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(255,255,255,0.96))]" />
+    <div className="relative min-h-dvh overflow-hidden bg-[#f8f9fa] text-slate-900">
+      <div className="absolute inset-x-0 top-0 -z-10 h-[760px] bg-[radial-gradient(circle_at_16%_10%,rgba(125,211,252,0.28),transparent_30%),radial-gradient(circle_at_90%_0%,rgba(168,85,247,0.22),transparent_28%),linear-gradient(135deg,#001736_0%,#002b5b_52%,#0f172a_100%)]" />
+      <div className="absolute inset-x-0 top-[620px] -z-10 h-[360px] bg-[linear-gradient(180deg,rgba(248,249,250,0),#f8f9fa_38%)]" />
 
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-slate-900 p-2 text-white shadow-sm">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#001736]/80 text-white backdrop-blur-2xl">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
+          <Link className="flex items-center gap-3" href="#top">
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-2 shadow-sm">
               <Scale className="size-5" />
             </div>
             <div>
-              <p className="font-semibold text-base tracking-tight">
-                Immigration Consult Service Center
-              </p>
-              <p className="text-xs text-slate-500">
-                AI-assisted intake for a modern migration practice
-              </p>
+              <p className="font-semibold tracking-tight">Sovereign Nexus Legal</p>
+              <p className="text-xs text-slate-300">AI-assisted migration intake</p>
             </div>
-          </div>
+          </Link>
 
-          <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
-            <a className="transition hover:text-slate-900" href="#services">
+          <nav className="hidden items-center gap-8 text-sm text-slate-200 md:flex">
+            <a className="transition hover:text-white" href="#ai-workspace">
+              AI Workspace
+            </a>
+            <a className="transition hover:text-white" href="#services">
               Services
             </a>
-            <a className="transition hover:text-slate-900" href="#process">
+            <a className="transition hover:text-white" href="#process">
               Process
             </a>
-            <a className="transition hover:text-slate-900" href="#contact">
+            <a className="transition hover:text-white" href="#contact">
               Contact
             </a>
           </nav>
 
           <div className="hidden md:block">
-            <Button
-              asChild
-              className="rounded-full bg-slate-900 px-5 text-white hover:bg-slate-800"
-            >
-              <a href="#contact">Book consultation</a>
+            <Button asChild className="rounded-full bg-white px-5 text-[#001736] hover:bg-slate-100">
+              <a href="#ai-workspace">Talk to AI</a>
             </Button>
           </div>
         </div>
       </header>
 
-      <main>
-        <section className="mx-auto grid w-full max-w-7xl gap-12 px-6 py-16 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-24">
-          <div className="max-w-3xl">
-            <Badge
-              className="mb-5 rounded-full bg-sky-100 px-4 py-1.5 text-sky-900 hover:bg-sky-100"
-              variant="secondary"
-            >
-              Trusted first-contact experience for immigration inquiries
+      <main id="top">
+        <section className="mx-auto grid w-full max-w-7xl gap-12 px-5 pb-8 pt-14 text-white lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:pb-12 lg:pt-20">
+          <div className="max-w-4xl">
+            <Badge className="mb-5 rounded-full border-white/15 bg-white/10 px-4 py-1.5 text-white hover:bg-white/10" variant="outline">
+              <Sparkles className="mr-2 size-3.5 text-cyan-200" />
+              The Digital Jurist · Migration law first contact
             </Badge>
 
-            <h1 className="max-w-4xl text-balance font-semibold text-4xl tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-              A business-style immigration service page with an AI consultation
-              desk built in.
+            <h1 className="max-w-5xl text-balance text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+              The Future of Legal Intelligence
             </h1>
-
-            <p className="mt-6 max-w-2xl text-balance text-lg leading-8 text-slate-600">
-              This demo homepage is designed to feel like a professional
-              immigration practice website. Visitors can review services,
-              understand the process, and open the AI assistant from a floating
-              button just like they would on a modern e-commerce support site.
+            <p className="mt-4 text-2xl font-medium text-cyan-100 sm:text-3xl">
+              法律智能的未来
+            </p>
+            <p className="mt-6 max-w-2xl text-base leading-8 text-slate-200 sm:text-lg">
+              A premium immigration-service homepage with a central AI legal workspace. Visitors can ask questions, clarify facts, view compact source context, and move naturally into a real lawyer consultation.
             </p>
 
             <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-              <Button
-                asChild
-                className="h-12 rounded-full bg-slate-900 px-6 text-white hover:bg-slate-800"
-              >
-                <a href="#contact">
-                  Arrange consultation
+              <Button asChild className="h-12 rounded-full bg-white px-6 text-[#001736] hover:bg-slate-100">
+                <a href="#ai-workspace">
+                  Open AI legal workspace
                   <ArrowRight className="ml-2 size-4" />
                 </a>
               </Button>
-              <Button
-                asChild
-                className="h-12 rounded-full border-slate-300 px-6 text-slate-900 hover:bg-slate-100"
-                variant="outline"
-              >
-                <Link href="#services">Explore service sections</Link>
+              <Button asChild className="h-12 rounded-full border-white/20 bg-white/5 px-6 text-white hover:bg-white/10" variant="outline">
+                <a href="#services">Explore services</a>
               </Button>
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
+              <Card className="rounded-[28px] border-white/10 bg-white/10 text-white shadow-xl backdrop-blur-xl">
                 <CardContent className="p-5">
                   <p className="text-3xl font-semibold">24/7</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    AI assistant availability for initial client questions
-                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">AI first-contact intake</p>
                 </CardContent>
               </Card>
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
+              <Card className="rounded-[28px] border-white/10 bg-white/10 text-white shadow-xl backdrop-blur-xl">
                 <CardContent className="p-5">
-                  <p className="text-3xl font-semibold">1st touch</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    General intake and consultation triage before lawyer review
-                  </p>
+                  <p className="text-3xl font-semibold">1-by-1</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">Guided decisive questions</p>
                 </CardContent>
               </Card>
-              <Card className="rounded-3xl border-slate-200 shadow-sm">
+              <Card className="rounded-[28px] border-white/10 bg-white/10 text-white shadow-xl backdrop-blur-xl">
                 <CardContent className="p-5">
-                  <p className="text-3xl font-semibold">Human-led</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Clear handoff to a real lawyer for case-specific legal advice
-                  </p>
+                  <p className="text-3xl font-semibold">Human</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">Lawyer handoff by design</p>
                 </CardContent>
               </Card>
             </div>
           </div>
 
-          <div className="relative">
-            <Card className="overflow-hidden rounded-[32px] border-slate-200 bg-slate-950 text-white shadow-[0_30px_90px_-30px_rgba(15,23,42,0.7)]">
-              <CardHeader className="border-b border-white/10 pb-4">
-                <div className="mb-4 flex items-center gap-2 text-sm text-slate-300">
-                  <Sparkles className="size-4 text-sky-300" />
-                  Live website concept for an immigration practice
-                </div>
-                <CardTitle className="text-2xl text-white">
-                  AI consultation desk
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6 text-sm leading-7 text-slate-300">
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  “I’m on a skilled visa and want to know what to prepare before
-                  speaking with a lawyer.”
-                </div>
-                <div className="ml-auto max-w-[88%] rounded-3xl bg-sky-400/15 p-4 text-sky-50">
-                  The assistant can explain common intake questions, likely
-                  supporting documents, and when a legal consultation is
-                  appropriate.
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <p className="font-medium text-white">Client benefits</p>
-                    <p className="mt-2 text-slate-300">
-                      Fast first response, clearer expectations, less friction
-                      before booking.
-                    </p>
+          <div className="relative hidden lg:block">
+            <div className="absolute -left-8 top-12 h-64 w-64 rounded-full bg-cyan-300/20 blur-3xl" />
+            <div className="absolute -right-8 bottom-8 h-72 w-72 rounded-full bg-purple-400/20 blur-3xl" />
+            <Card className="relative overflow-hidden rounded-[40px] border-white/15 bg-white/10 text-white shadow-[0_40px_120px_-40px_rgba(0,0,0,0.75)] backdrop-blur-2xl">
+              <CardContent className="p-6">
+                <div className="rounded-[32px] border border-white/10 bg-[#001736]/70 p-5">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">AI workspace preview</p>
+                      <h2 className="mt-2 text-2xl font-semibold">Guided migration intake</h2>
+                    </div>
+                    <div className="rounded-2xl bg-cyan-300/15 p-3 text-cyan-100">
+                      <MessageSquareMore className="size-6" />
+                    </div>
                   </div>
-                  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <p className="font-medium text-white">Firm benefits</p>
-                    <p className="mt-2 text-slate-300">
-                      Better lead qualification and more focused lawyer
-                      consultations.
-                    </p>
+
+                  <div className="space-y-3">
+                    <div className="max-w-[88%] rounded-3xl bg-white/10 p-4 text-sm leading-7 text-slate-200">
+                      “I am 36 and finished a master by coursework. Can I still apply for a 485 visa?”
+                    </div>
+                    <div className="ml-auto max-w-[90%] rounded-3xl bg-cyan-300/15 p-4 text-sm leading-7 text-cyan-50">
+                      I can give a focused first view, but I will keep full eligibility separate from the current age-and-qualification issue.
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                        <p className="font-medium">Case snapshot</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">Operation, confidence, next action, and intake facts.</p>
+                      </div>
+                      <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                        <p className="font-medium">Compact sources</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">Source titles without exposing raw debug panels.</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -226,17 +212,18 @@ export function ImmigrationServiceHome() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-8 lg:px-8" id="services">
-          <div className="mb-8 max-w-2xl">
-            <p className="mb-3 text-sm font-medium uppercase tracking-[0.2em] text-sky-700">
-              Service categories
-            </p>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-              Structured like a professional migration practice website
-            </h2>
-            <p className="mt-3 text-slate-600">
-              The layout below gives your friend a realistic consultation-service
-              homepage instead of a raw chatbot interface.
+        <ImmigrationAIWorkspace />
+
+        <section className="mx-auto max-w-7xl px-5 py-14 lg:px-8" id="services">
+          <div className="mb-9 grid gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
+            <div>
+              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#002b5b]">Legal service categories</p>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                Built around migration-client workflows, not a generic chatbot.
+              </h2>
+            </div>
+            <p className="max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
+              The website now positions the AI as a premium consultation desk. The real legal reasoning remains in the FastAPI backend; the frontend focuses on clarity, trust, and conversion.
             </p>
           </div>
 
@@ -244,135 +231,111 @@ export function ImmigrationServiceHome() {
             {services.map((service) => {
               const Icon = service.icon;
               return (
-                <Card
-                  className="rounded-[28px] border-slate-200 shadow-sm"
-                  key={service.title}
-                >
+                <Card className="group rounded-[32px] border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl" key={service.title}>
                   <CardHeader className="pb-3">
-                    <div className="mb-4 inline-flex w-fit rounded-2xl bg-sky-100 p-3 text-sky-900">
+                    <div className="mb-4 inline-flex w-fit rounded-2xl bg-[#001736] p-3 text-white shadow-sm transition group-hover:bg-[#002b5b]">
                       <Icon className="size-5" />
                     </div>
-                    <CardTitle className="text-xl text-slate-950">
-                      {service.title}
-                    </CardTitle>
+                    <CardTitle className="text-xl text-slate-950">{service.title}</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm leading-7 text-slate-600">
-                    {service.description}
-                  </CardContent>
+                  <CardContent className="text-sm leading-7 text-slate-600">{service.description}</CardContent>
                 </Card>
               );
             })}
           </div>
         </section>
 
-        <section
-          className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[0.95fr_1.05fr] lg:px-8"
-          id="process"
-        >
-          <Card className="rounded-[32px] border-slate-200 bg-slate-900 text-white shadow-[0_24px_80px_-24px_rgba(15,23,42,0.75)]">
-            <CardHeader>
-              <p className="text-sm uppercase tracking-[0.2em] text-sky-300">
-                Why this works for a demo
-              </p>
-              <CardTitle className="text-3xl text-white">
-                Business website first, assistant second
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm leading-7 text-slate-300">
-              {strengths.map((item) => (
-                <div className="flex items-start gap-3" key={item}>
-                  <CheckCircle2 className="mt-1 size-5 shrink-0 text-sky-300" />
-                  <p>{item}</p>
+        <section className="mx-auto max-w-7xl px-5 py-10 lg:px-8" id="process">
+          <div className="overflow-hidden rounded-[44px] bg-white shadow-[0_24px_100px_-40px_rgba(15,23,42,0.35)]">
+            <div className="grid gap-0 lg:grid-cols-[0.88fr_1.12fr]">
+              <div className="bg-[#001736] p-8 text-white lg:p-10">
+                <Badge className="mb-5 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/10" variant="outline">
+                  <BarChart3 className="mr-2 size-3.5 text-cyan-200" />
+                  Guided intake architecture
+                </Badge>
+                <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                  The interface reflects the backend state machine.
+                </h2>
+                <p className="mt-4 text-sm leading-7 text-slate-300">
+                  Current backend work already exposes case hypothesis, fact slots, interaction plans, compact sources, and escalation flags. This redesign gives those objects enough space to be useful.
+                </p>
+                <div className="mt-7 space-y-4">
+                  {proofPoints.map((point) => (
+                    <div className="flex items-start gap-3 text-sm leading-7 text-slate-200" key={point}>
+                      <CheckCircle2 className="mt-1 size-5 shrink-0 text-cyan-200" />
+                      <p>{point}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+              </div>
 
-          <div className="space-y-4">
-            {process.map((item) => (
-              <Card className="rounded-[28px] border-slate-200 shadow-sm" key={item.step}>
-                <CardContent className="flex gap-5 p-6">
-                  <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 font-semibold text-white">
-                    {item.step}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-slate-950">
-                      {item.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-7 text-slate-600">
-                      {item.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+              <div className="grid gap-4 p-6 lg:p-8">
+                {process.map((item) => (
+                  <Card className="rounded-[28px] border-slate-200 bg-slate-50 shadow-none" key={item.step}>
+                    <CardContent className="flex gap-5 p-5">
+                      <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white font-semibold text-[#002b5b] shadow-sm">
+                        {item.step}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-950">{item.title}</h3>
+                        <p className="mt-2 text-sm leading-7 text-slate-600">{item.description}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 py-12 lg:px-8" id="contact">
-          <Card className="overflow-hidden rounded-[36px] border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950 text-white shadow-[0_30px_90px_-30px_rgba(15,23,42,0.75)]">
-            <CardContent className="grid gap-8 p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
+        <section className="mx-auto max-w-7xl px-5 py-14 lg:px-8" id="contact">
+          <Card className="overflow-hidden rounded-[44px] border-0 bg-gradient-to-br from-[#001736] via-[#002b5b] to-[#1d0052] text-white shadow-[0_30px_120px_-40px_rgba(0,0,0,0.65)]">
+            <CardContent className="grid gap-8 p-8 lg:grid-cols-[1.12fr_0.88fr] lg:p-10">
               <div>
-                <p className="mb-3 text-sm uppercase tracking-[0.2em] text-sky-300">
-                  Consultation handoff
-                </p>
+                <p className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">Consultation conversion</p>
                 <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Let the AI assistant handle first-contact questions, then move
-                  qualified clients into real consultations.
+                  AI answers the first question. The lawyer handles the legal advice.
                 </h2>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
-                  This section can later be connected to your friend’s booking
-                  form, payment workflow, or calendar system. For now, it
-                  demonstrates a credible service-center experience with a clear
-                  path from AI support to lawyer engagement.
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
+                  This design lets your friend present the service as a professional legal intake system: useful enough for visitors, cautious enough for legal risk, and structured enough for later booking, payment, or CRM integration.
                 </p>
-                <div className="mt-6 flex flex-col gap-4 sm:flex-row">
-                  <Button className="rounded-full bg-white px-6 text-slate-900 hover:bg-slate-100">
-                    Request consultation
+                <div className="mt-7 flex flex-col gap-4 sm:flex-row">
+                  <Button className="h-12 rounded-full bg-white px-6 text-[#001736] hover:bg-slate-100">
+                    Request lawyer consultation
+                    <ArrowRight className="ml-2 size-4" />
                   </Button>
-                  <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-6 py-2.5 text-sm text-slate-200">
-                    AI assistant button stays visible at the bottom-right
-                  </div>
+                  <Button asChild className="h-12 rounded-full border-white/20 bg-white/5 px-6 text-white hover:bg-white/10" variant="outline">
+                    <a href="#ai-workspace">Return to AI workspace</a>
+                  </Button>
                 </div>
               </div>
 
               <div className="grid gap-4">
-                <Card className="rounded-[28px] border-white/10 bg-white/5 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-5">
-                    <div className="mb-3 flex items-center gap-3">
-                      <ShieldCheck className="size-5 text-sky-300" />
-                      <p className="font-medium">General information only</p>
+                <Card className="rounded-[30px] border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
+                  <CardContent className="flex gap-4 p-5">
+                    <ShieldCheck className="mt-1 size-5 shrink-0 text-cyan-200" />
+                    <div>
+                      <p className="font-medium">Risk-controlled public UI</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-200">No raw fact-slot dashboard unless debug mode is enabled.</p>
                     </div>
-                    <p className="text-sm leading-7 text-slate-300">
-                      Position the assistant as intake and education support, not
-                      as a replacement for case-specific legal advice.
-                    </p>
                   </CardContent>
                 </Card>
-                <Card className="rounded-[28px] border-white/10 bg-white/5 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-5">
-                    <div className="mb-3 flex items-center gap-3">
-                      <Users className="size-5 text-sky-300" />
-                      <p className="font-medium">Ideal for demonstrations</p>
+                <Card className="rounded-[30px] border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
+                  <CardContent className="flex gap-4 p-5">
+                    <Languages className="mt-1 size-5 shrink-0 text-cyan-200" />
+                    <div>
+                      <p className="font-medium">Bilingual-ready style</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-200">The layout leaves room for English and Chinese customer flows.</p>
                     </div>
-                    <p className="text-sm leading-7 text-slate-300">
-                      Your friend can immediately see how prospects would
-                      experience the site before you connect real booking and CRM
-                      integrations.
-                    </p>
                   </CardContent>
                 </Card>
-                <Card className="rounded-[28px] border-white/10 bg-white/5 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-5">
-                    <div className="mb-3 flex items-center gap-3">
-                      <MessageSquareMore className="size-5 text-sky-300" />
-                      <p className="font-medium">Floating assistant entry</p>
+                <Card className="rounded-[30px] border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
+                  <CardContent className="flex gap-4 p-5">
+                    <Users className="mt-1 size-5 shrink-0 text-cyan-200" />
+                    <div>
+                      <p className="font-medium">Human lawyer handoff</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-200">The AI stays positioned as triage and preparation, not a lawyer replacement.</p>
                     </div>
-                    <p className="text-sm leading-7 text-slate-300">
-                      The AI button stays visible while visitors browse the page,
-                      mirroring the support pattern common on commercial
-                      websites.
-                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -380,8 +343,6 @@ export function ImmigrationServiceHome() {
           </Card>
         </section>
       </main>
-
-      <ImmigrationAssistantWidget />
     </div>
   );
 }

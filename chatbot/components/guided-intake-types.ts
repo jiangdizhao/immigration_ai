@@ -98,7 +98,6 @@ export interface RetrievalDebug {
 
 export interface WidgetAssistantMessage {
   id: string;
-  responseLanguage?: string | null;
   role: "assistant";
   text: string;
   isStreaming?: boolean;
@@ -130,7 +129,6 @@ export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 
 export interface WidgetRouteResponse {
   text: string;
-  responseLanguage?: string | null;
   responseLanguage?: ResponseLanguage | null;
   citations?: CitationItem[];
   compactSources?: string[];
