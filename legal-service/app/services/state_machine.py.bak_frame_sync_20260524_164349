@@ -481,21 +481,51 @@ class StateMachine:
                 merged[key] = value
         return merged
 
-
     def _carry_forward_facts_for_standalone_turn(
         self,
         facts: dict[str, Any] | None,
     ) -> dict[str, Any]:
         """
-        Carry historical facts and active-frame metadata into the next turn.
-
-        There is no truly standalone legal frame inside an ongoing matter. Earlier
-        pruning dropped active_case_frame_id and urgent facts such as
-        student_visa_expired_days, causing short fact updates like "I am in
-        Australia" to drift into a generic frame. CaseFrameService now validates
-        and removes forbidden facts after all history has been carried forward.
+        When the contextualizer says history was not needed, do not blindly reuse the
+        full prior fact set. This prevents earlier refusal/review assumptions from
+        contaminating a later standalone turn such as a bridging-travel question.
         """
-        return dict(facts or {})
+        facts = dict(facts or {})
+        stable_keys = {
+            "client_name",
+            "preferred_language",
+        }
+
+        if (
+            str(facts.get("operation_type") or "").startswith("485_")
+            or str(facts.get("visa_subclass") or "") == "485"
+            or str(facts.get("visa_type") or "") == "temporary_graduate"
+        ):
+            stable_keys.update(
+                {
+                    "visa_subclass",
+                    "visa_type",
+                    "issue_type",
+                    "operation_type",
+                    "age",
+                    "qualification",
+                    "qualification_level",
+                    "completion_date",
+                    "course_completion_date",
+                    "course_cricos_registered",
+                    "australian_study_requirement_met",
+                    "first_485_or_subsequent",
+                    "previous_485_held",
+                    "current_visa",
+                    "current_location",
+                    "application_timing",
+                    "health_insurance_status",
+                    "regional_study_location",
+                    "regional_residence_duration",
+                    "replacement_reason",
+                }
+            )
+        return {key: value for key, value in facts.items() if key in stable_keys}
 
     def update_fact_status(
         self,

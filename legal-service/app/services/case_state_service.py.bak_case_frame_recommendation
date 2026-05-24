@@ -301,45 +301,6 @@ OPERATION_PROFILES: dict[str, OperationProfile] = {
         blocking_facts=("previous_485_held", "replacement_reason"),
         followup_intro="For a replacement 485 pathway, I need to understand your previous 485 and the disruption reason.",
     ),
-    "visa_topic_triage": OperationProfile(
-        key="visa_topic_triage",
-        required_facts=(),
-        optional_facts=("visa_subclass",),
-        blocking_facts=(),
-        followup_intro="I can help once we choose the broad visa topic.",
-    ),
-    "student_500_compliance_risk": OperationProfile(
-        key="student_500_compliance_risk",
-        required_facts=(),
-        optional_facts=("home_affairs_notice_received", "current_enrolment_status", "attendance_rate"),
-        blocking_facts=(),
-        followup_intro="I can give a provisional compliance-risk view and refine it if you add more details.",
-        escalation_intro="Student visa compliance issues can become serious if Home Affairs sends a formal notice.",
-    ),
-    "500_expiry_or_extension": OperationProfile(
-        key="500_expiry_or_extension",
-        required_facts=(),
-        optional_facts=("student_visa_expiry_date", "current_location", "lodged_485_already"),
-        blocking_facts=(),
-        followup_intro="I can give a provisional current-status view and refine it if you add more details.",
-        escalation_intro="Expiry/status questions can be urgent if the visa has already expired.",
-    ),
-    "485_student_visa_expired_or_status_risk": OperationProfile(
-        key="485_student_visa_expired_or_status_risk",
-        required_facts=(),
-        optional_facts=("current_location", "lodged_485_already", "student_visa_expiry_date"),
-        blocking_facts=(),
-        followup_intro="I can give a provisional 485/status-risk view and refine it if you add more details.",
-        escalation_intro="This may involve current-status risk and should be checked quickly.",
-    ),
-    "485_english_test_or_pte_timing": OperationProfile(
-        key="485_english_test_or_pte_timing",
-        required_facts=(),
-        optional_facts=("completion_letter_available", "official_transcript_available", "current_location"),
-        blocking_facts=(),
-        followup_intro="I can give a provisional PTE/485 timing view and refine it if you add more details.",
-        escalation_intro="If your current visa is close to expiry, the lodgement strategy should be checked quickly.",
-    ),
     "document_checklist": OperationProfile(
         key="document_checklist",
         required_facts=("visa_subclass",),
@@ -641,8 +602,8 @@ class CaseStateService:
     ) -> OperationProfile | None:
         if operation_type and operation_type in OPERATION_PROFILES:
             return OPERATION_PROFILES[operation_type]
-        # Do not default every Student visa matter to refusal/review.
-        # The CaseFrameRouter chooses student_refusal_next_steps only when refusal/review is explicit.
+        if issue_type == "student_visa":
+            return OPERATION_PROFILES["student_refusal_next_steps"]
         if issue_type == "visa_conditions":
             return OPERATION_PROFILES["visa_condition_explainer"]
         if visa_type == "bridging":

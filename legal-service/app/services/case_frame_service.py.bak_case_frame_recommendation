@@ -295,7 +295,7 @@ class CaseFrameService:
             "485_student_visa_expired_or_status_risk": CaseFrameDefinition(
                 frame_id="485_student_visa_expired_or_status_risk",
                 case_family="temporary_graduate_485",
-                operation_type="485_student_visa_expired_or_status_risk",
+                operation_type="485_timing_and_lodgement",
                 user_goal="current_status_and_485_lodgement_risk",
                 issue_type="temporary_graduate_visa",
                 visa_type="temporary_graduate",
@@ -311,7 +311,7 @@ class CaseFrameService:
             "485_english_test_or_pte_timing": CaseFrameDefinition(
                 frame_id="485_english_test_or_pte_timing",
                 case_family="temporary_graduate_485",
-                operation_type="485_english_test_or_pte_timing",
+                operation_type="485_timing_and_lodgement",
                 user_goal="english_test_timing_and_lodgement_strategy",
                 issue_type="temporary_graduate_visa",
                 visa_type="temporary_graduate",
@@ -392,7 +392,7 @@ class CaseFrameService:
         route_action = "continue_active_frame" if previous_frame == selected else ("create_new_frame" if not previous_frame else "switch_frame")
         rejected = self._rejected_candidate_debug(candidate_frames, selected=selected, lowered=lowered)
         confidence = "high" if score >= 0.78 else "medium" if score >= 0.52 else "low"
-        next_question = self._dynamic_next_question(definition, known_facts, is_zh=is_zh) or (definition.default_next_question_zh if is_zh else definition.default_next_question_en)
+        next_question = definition.default_next_question_zh if is_zh else definition.default_next_question_en
         accepted_facts, rejected_facts = self._partition_facts(known_facts, definition)
         return CaseFrameDecision(
             frame_id=definition.frame_id,
@@ -573,7 +573,7 @@ class CaseFrameService:
 
         active_frame = self._current_frame_id(current_state, known_facts)
         if active_frame and active_frame in self.frames and not self._clear_topic_shift(lowered, active_frame):
-            out.append((active_frame, 0.97, "Continue existing active frame with full historical context; no clear topic shift was detected."))
+            out.append((active_frame, 0.58, "Continue existing active frame because no clear topic shift was detected."))
 
         if not out:
             out.append(("other_visa_general", 0.42, "Fallback general visa frame."))
@@ -622,18 +622,6 @@ class CaseFrameService:
                 blocking=False,
                 why_needed="This can make the recommendation more precise, but I can still give a provisional answer from current information.",
             )
-        return None
-
-
-    def _dynamic_next_question(self, definition: CaseFrameDefinition, known_facts: dict[str, Any], *, is_zh: bool) -> str | None:
-        """Choose the next askable fact, skipping facts already known."""
-        language = "zh" if is_zh else "en"
-        for key in definition.askable_fact_keys:
-            if self._fact_present(known_facts.get(key)):
-                continue
-            prompt = self.FACT_PROMPTS.get(key, {}).get(language)
-            if prompt:
-                return prompt
         return None
 
     def _partition_facts(self, facts: dict[str, Any], definition: CaseFrameDefinition) -> tuple[list[str], list[str]]:
@@ -703,25 +691,11 @@ class CaseFrameService:
     def _condition_query(self, text: str) -> bool:
         return bool(re.search(r"\bcondition\s*\d{4}\b|\b\d{4}\s*condition\b", text)) or any(term in text for term in ["签证条件", "condition 8501", "condition 8105", "8501", "8105", "8503"])
 
-
     def _clear_topic_shift(self, text: str, active_frame_id: str) -> bool:
-        """
-        Return True only for clear topic shifts. Short fact updates must preserve
-        the active frame.
-        """
-        q = (text or "").lower().strip()
-        if not q:
-            return False
-        if active_frame_id.startswith("485") and any(term in q for term in ["student visa refusal", "拒签", "review", "appeal", "art", "tribunal", "复审", "上诉"]):
+        if active_frame_id.startswith("485") and any(term in text for term in ["student visa refusal", "拒签", "review", "art", "bridging travel"]):
             return True
-        if active_frame_id.startswith(("485", "500")) and any(term in q for term in ["bridging travel", "bvb", "bridging visa b", "leave australia", "come back", "离境", "回来", "过桥签旅行"]):
+        if active_frame_id.startswith("500") and "485" in text:
             return True
-        if active_frame_id.startswith("500") and ("485" in q or "temporary graduate" in q or "毕业生签证" in q):
-            return True
-        if active_frame_id.startswith("485") and self._has_student_500(q, {}) and self._student_compliance_risk(q):
-            return True
-        if self._broad_visa_inquiry(q):
-            return False
         return False
 
     def _fact_present(self, value: Any) -> bool:

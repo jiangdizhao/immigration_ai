@@ -406,32 +406,6 @@ class QueryService:
             effective_question=effective_question,
         )
 
-        if provisional_recommendation_debug.get("applied") and response.next_action == "answer":
-            policy = PolicyDecision(
-                answer_allowed=True,
-                escalate=bool(response.escalate),
-                next_action="answer",
-                confidence_cap=response.confidence,  # type: ignore[arg-type]
-                reasons=[*(policy.reasons or []), "frame_policy_synchronized_after_provisional_recommendation"],
-                answer_mode="answer_with_warning",
-                coverage_summary={
-                    **(policy.coverage_summary or {}),
-                    "case_frame": case_frame_debug,
-                    "provisional_recommendation": provisional_recommendation_debug,
-                },
-            )
-            evidence = evidence.model_copy(
-                update={
-                    "is_context_sufficient": True,
-                    "missing_information": [],
-                    "follow_up_questions": [],
-                    "operation_type": state.operation_type,
-                    "issue_type": state.issue_type,
-                }
-            )
-            artifacts.evidence_package = evidence
-            artifacts.policy_decision = policy
-
         state = self.state_machine.finalize_after_reasoning(
             state=state,
             turn_input=turn_input,

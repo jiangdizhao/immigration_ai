@@ -406,32 +406,6 @@ class QueryService:
             effective_question=effective_question,
         )
 
-        if provisional_recommendation_debug.get("applied") and response.next_action == "answer":
-            policy = PolicyDecision(
-                answer_allowed=True,
-                escalate=bool(response.escalate),
-                next_action="answer",
-                confidence_cap=response.confidence,  # type: ignore[arg-type]
-                reasons=[*(policy.reasons or []), "frame_policy_synchronized_after_provisional_recommendation"],
-                answer_mode="answer_with_warning",
-                coverage_summary={
-                    **(policy.coverage_summary or {}),
-                    "case_frame": case_frame_debug,
-                    "provisional_recommendation": provisional_recommendation_debug,
-                },
-            )
-            evidence = evidence.model_copy(
-                update={
-                    "is_context_sufficient": True,
-                    "missing_information": [],
-                    "follow_up_questions": [],
-                    "operation_type": state.operation_type,
-                    "issue_type": state.issue_type,
-                }
-            )
-            artifacts.evidence_package = evidence
-            artifacts.policy_decision = policy
-
         state = self.state_machine.finalize_after_reasoning(
             state=state,
             turn_input=turn_input,
@@ -833,9 +807,115 @@ class QueryService:
             response.retrieval_debug = debug
         return response
 
+    def _normalize_response_for_user(
+        self,
+        *,
+        response: QueryResponse,
+        policy: PolicyDecision,
+        evidence: EvidencePackage,
+        fact_slot_states: list[Any],
+        case_hypothesis: Any,
+    ) -> QueryResponse:
+        known_statuses = {"known", "not_applicable", "document_unavailable", "user_unsure"}
+        canonical_missing = [
+            slot.fact_key
+            for slot in fact_slot_states
+            if getattr(slot, "required", False) and getattr(slot, "status", "missing") not in known_statuses
+        ]
+        debug = dict(response.retrieval_debug or {})
+        evidence_gaps = [
+            item for item in (evidence.missing_information or [])
+            if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
+        ]
+        if evidence_gaps:
+            debug["internal_evidence_gaps"] = evidence_gaps
 
+        if policy.next_action == "answer":
+            response.missing_facts = []
+            response.follow_up_questions = []
+        else:
+            response.missing_facts = canonical_missing[:1]
 
+        resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
+        if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
+            response.answer = self._soften_bridging_travel_answer(response.answer)
+            if response.confidence == "high":
+                response.confidence = "medium"
 
+        response.retrieval_debug = debug
+        return response
+
+    def _soften_bridging_travel_answer(self, answer: str) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return answer
+        lowered = text.lower()
+        if lowered.startswith("no."):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        if lowered.startswith("no,"):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        return text
+
+    def _normalize_response_for_user(
+        self,
+        *,
+        response: QueryResponse,
+        policy: PolicyDecision,
+        evidence: EvidencePackage,
+        fact_slot_states: list[Any],
+        case_hypothesis: Any,
+    ) -> QueryResponse:
+        known_statuses = {"known", "not_applicable", "document_unavailable", "user_unsure"}
+        canonical_missing = [
+            slot.fact_key
+            for slot in fact_slot_states
+            if getattr(slot, "required", False) and getattr(slot, "status", "missing") not in known_statuses
+        ]
+        debug = dict(response.retrieval_debug or {})
+        evidence_gaps = [
+            item for item in (evidence.missing_information or [])
+            if isinstance(item, str) and item.strip() and item not in set(canonical_missing)
+        ]
+        if evidence_gaps:
+            debug["internal_evidence_gaps"] = evidence_gaps
+
+        if policy.next_action == "answer":
+            response.missing_facts = []
+            response.follow_up_questions = []
+        else:
+            response.missing_facts = canonical_missing[:1]
+
+        resolved_operation = getattr(case_hypothesis, "primary_operation_type", None)
+        if resolved_operation == "bridging_travel" and policy.answer_mode == "direct_answer":
+            response.answer = self._soften_bridging_travel_answer(response.answer)
+            if response.confidence == "high":
+                response.confidence = "medium"
+
+        response.retrieval_debug = debug
+        return response
+
+    def _soften_bridging_travel_answer(self, answer: str) -> str:
+        text = (answer or "").strip()
+        if not text:
+            return answer
+        lowered = text.lower()
+        if lowered.startswith("no."):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        if lowered.startswith("no,"):
+            return (
+                "Not necessarily. Only a Bridging visa B (BVB) lets you leave Australia and return during the allowed travel period. "
+                + text[3:].lstrip()
+            )
+        return text
 
     def _normalize_response_for_user(
         self,
