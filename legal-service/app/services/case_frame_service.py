@@ -10,6 +10,7 @@ from typing import Any
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.services.llm_turn_analysis_service import RestrictedLLMTurnAnalysisService
 from app.schemas.state import CaseHypothesis, FactSlotState, InteractionFactRequest, InteractionPlan, MatterState, RiskFlags
 
 
