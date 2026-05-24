@@ -410,6 +410,7 @@ class QueryService:
             response=response,
             case_frame=case_frame_debug,
             known_facts=merged_intake_facts,
+            fact_status=state.fact_status,
             chunks=merged_chunks,
             retrieval_debug=enriched_debug,
             response_language=language_context.response_language,

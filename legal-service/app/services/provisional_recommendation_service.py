@@ -54,6 +54,7 @@ class ProvisionalRecommendationService:
         response: QueryResponse,
         case_frame: dict[str, Any] | None,
         known_facts: dict[str, Any],
+        fact_status: dict[str, str] | None = None,
         chunks: list[Any],
         retrieval_debug: dict[str, Any] | None,
         response_language: str,
@@ -91,9 +92,16 @@ class ProvisionalRecommendationService:
             return response, {"applied": True, "strategy": "triage_direct_answer", "frame_id": frame_id}
 
         evidence_snapshot = self._evidence_snapshot(chunks, retrieval_debug)
+        working_assumptions = self._build_working_assumptions(
+            known_facts=known_facts,
+            fact_status=fact_status or {},
+            case_frame=case_frame,
+        )
         generated = self._generate(
             case_frame=case_frame,
             known_facts=known_facts,
+            fact_status=fact_status or {},
+            working_assumptions=working_assumptions,
             evidence_snapshot=evidence_snapshot,
             is_zh=is_zh,
             original_question=original_question,
@@ -116,6 +124,7 @@ class ProvisionalRecommendationService:
             "frame_id": frame_id,
             "answer_preference": answer_preference,
             "weak_answer_replaced": weak_answer,
+            "working_assumptions": working_assumptions,
         }
 
     def _generate(
@@ -123,6 +132,8 @@ class ProvisionalRecommendationService:
         *,
         case_frame: dict[str, Any],
         known_facts: dict[str, Any],
+        fact_status: dict[str, str],
+        working_assumptions: list[dict[str, Any]],
         evidence_snapshot: dict[str, Any],
         is_zh: bool,
         original_question: str,
@@ -134,6 +145,9 @@ class ProvisionalRecommendationService:
             "Use the active case frame, known user facts, and evidence snapshot.\n"
             "Legal certainty must be bounded: do not give exact legal deadlines, final eligibility decisions, or document-specific legal advice unless clearly supported.\n"
             "Missing facts should reduce certainty and become caveats, not block the answer.\n"
+            "Known fact commitment rule: facts listed in working_assumptions are the current working assumptions from the user/history. Treat them as already provided unless the user contradicts them.\n"
+            "Do not ask whether a working-assumption fact exists again. Do not phrase a known fact as unknown. If caution is needed, write 'if the fact you gave is accurate' rather than 'whether this happened'.\n"
+            "When a new user turn adds one fact to an existing frame, continue from the stored facts and update the risk analysis; do not restart generic pathway classification.\n"
             "Do not mention retrieved data, source classes, corpus, evidence package, internal policy, or backend logic.\n"
             "Answer structure:\n"
             "1. Start with a direct provisional view.\n"
@@ -149,6 +163,8 @@ class ProvisionalRecommendationService:
                 "effective_question": effective_question,
                 "active_case_frame": case_frame,
                 "known_user_facts": known_facts,
+                "fact_status": fact_status,
+                "working_assumptions": working_assumptions,
                 "evidence_snapshot": evidence_snapshot,
                 "forbidden_overclaims": [
                     "do not say a visa will definitely be cancelled",
@@ -212,6 +228,90 @@ class ProvisionalRecommendationService:
                 "Based on the information you provided, I can give a provisional recommendation rather than a final legal conclusion. The safest practical step is to confirm your current visa status, preserve the key documents, and act early on any timing or compliance risk."
                 + (f"\n\nOne useful next question: {next_question}" if next_question else "")
             )
+
+    def _build_working_assumptions(
+        self,
+        *,
+        known_facts: dict[str, Any],
+        fact_status: dict[str, str],
+        case_frame: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        # Build a compact, frame-aware list of facts the answer should commit to.
+        # This is deliberately generic. It converts persisted user facts into
+        # explicit working assumptions so the generator does not re-ask or weaken
+        # already-known facts.
+        facts = dict(known_facts or {})
+        statuses = dict(fact_status or {})
+        frame = dict(case_frame or {})
+        valid_keys = set(frame.get("valid_fact_keys") or [])
+        metadata_keys = {
+            "issue_type",
+            "visa_type",
+            "operation_type",
+            "active_case_frame_id",
+            "case_family",
+            "answer_preference",
+            "answer_tier",
+            "preferred_language",
+        }
+
+        priority_keys = list(frame.get("accepted_facts") or [])
+        if valid_keys:
+            priority_keys.extend([key for key in facts.keys() if key in valid_keys])
+        else:
+            priority_keys.extend(facts.keys())
+
+        ordered: list[str] = []
+        for key in priority_keys:
+            key_s = str(key)
+            if key_s not in ordered:
+                ordered.append(key_s)
+
+        assumptions: list[dict[str, Any]] = []
+        for key in ordered:
+            if key in metadata_keys:
+                continue
+            value = facts.get(key)
+            if not self._present(value):
+                continue
+            status = str(statuses.get(key) or "")
+            if status.startswith("known:"):
+                confidence = status.split(":", 1)[1] or "medium"
+            elif status in {"known", "user_input", "carried_context"}:
+                confidence = "medium"
+            else:
+                confidence = "medium"
+
+            assumptions.append(
+                {
+                    "fact_key": key,
+                    "value": value,
+                    "confidence": confidence if confidence in {"low", "medium", "high"} else "medium",
+                    "commitment_instruction": (
+                        "Treat this as a current working assumption from the user/history. "
+                        "Do not ask whether it exists again unless the user contradicts it."
+                    ),
+                }
+            )
+            if len(assumptions) >= 12:
+                break
+        return assumptions
+
+    def _present(self, value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip()) and value.strip().lower() not in {
+                "not_sure",
+                "not sure",
+                "unknown",
+                "unsure",
+                "n/a",
+                "na",
+            }
+        if isinstance(value, (list, tuple, set, dict)):
+            return bool(value)
+        return True
 
     def _evidence_snapshot(self, chunks: list[Any], retrieval_debug: dict[str, Any] | None) -> dict[str, Any]:
         sources: list[dict[str, Any]] = []
