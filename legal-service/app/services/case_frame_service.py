@@ -10,7 +10,7 @@ from typing import Any
 from openai import OpenAI
 
 from app.core.config import get_settings
-from app.schemas.state import CaseHypothesis, FactSlotState, InteractionFactRequest, InteractionPlan, MatterState
+from app.schemas.state import CaseHypothesis, FactSlotState, InteractionFactRequest, InteractionPlan, MatterState, RiskFlags
 
 
 AnswerPreference = str
@@ -57,6 +57,15 @@ class CaseFrameDecision:
     default_next_question: str | None = None
     risk_level: str = "medium"
     live_current_sensitive: bool = False
+    semantic_turn_intent: str | None = None
+    semantic_frame_action: str | None = None
+    semantic_router_confidence: str | None = None
+    positive_evidence: list[str] = field(default_factory=list)
+    negative_evidence: list[str] = field(default_factory=list)
+    positive_issue_flags: dict[str, bool] = field(default_factory=dict)
+    extracted_facts: dict[str, Any] = field(default_factory=dict)
+    fact_confidence: dict[str, str] = field(default_factory=dict)
+    semantic_router_debug: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -161,6 +170,7 @@ class CaseFrameService:
         self.settings = get_settings()
         self.model = os.getenv("FRAME_ROUTER_MODEL", os.getenv("GENERAL_QA_MODEL", "gpt-5.4-mini"))
         self._client: OpenAI | None = None
+        self.llm_turn_analysis_service = RestrictedLLMTurnAnalysisService()
         refusal_forbidden = self.COMMON_REFUSAL_FACTS
         self.frames: dict[str, CaseFrameDefinition] = {
             "visa_topic_triage": CaseFrameDefinition(
@@ -397,54 +407,68 @@ class CaseFrameService:
         answer_preference: str | None = None,
     ) -> CaseFrameDecision:
         """
-        Transition-first frame router.
+        Restricted-LLM authoritative semantic routing.
 
-        The LLM and deterministic rules may propose a frame, but state transition
-        rules decide whether to continue the current frame, switch, create a new
-        frame, or stay in temporary triage.
+        Regex helpers may still exist as legacy fallback utilities, but they are
+        no longer the authoritative semantic classifier. The LLM proposes the
+        frame from a fixed registry; deterministic transition validation decides
+        whether to keep, switch, or create the frame.
         """
         known_facts = dict(known_facts or {})
         preference = self._normalize_answer_preference(answer_preference, question, original_question)
-        text = "\n".join([question or "", original_question or ""]).strip()
-        lowered = text.lower()
-        is_zh = self._looks_zh(text)
         previous_frame = self._current_frame_id(current_state, known_facts)
+        raw_message = original_question or question or ""
+        internal_question = question or ""
+        is_zh = self._looks_zh(raw_message)
 
-        deterministic = self._deterministic_frame_candidate(lowered=lowered, known_facts=known_facts)
-        llm_candidate = self._llm_frame_candidate(
-            text=text,
-            previous_frame=previous_frame,
+        semantic = self.llm_turn_analysis_service.analyze(
+            raw_user_message=raw_message,
+            internal_question_en=internal_question,
+            previous_frame_id=previous_frame,
             known_facts=known_facts,
+            frame_registry=self._frame_registry_for_llm(),
         )
-        selected, route_action, confidence, transition_reason = self._select_frame_by_transition(
-            lowered=lowered,
+        semantic_dict = semantic.to_dict()
+
+        selected, route_action, confidence, transition_reason = self._select_frame_from_semantic(
+            semantic=semantic_dict,
             previous_frame=previous_frame,
-            deterministic=deterministic,
-            llm_candidate=llm_candidate,
+        )
+        definition = self.frames[selected]
+        filtered_facts, filtered_confidence, rejected_llm_facts = self._filter_llm_facts(
+            facts=semantic.extracted_facts,
+            fact_confidence=semantic.fact_confidence,
+            definition=definition,
         )
 
-        definition = self.frames[selected]
-        next_question = self._dynamic_next_question(definition, known_facts, is_zh=is_zh) or (
+        facts_for_partition = {**known_facts, **filtered_facts}
+        next_question = self._dynamic_next_question(definition, facts_for_partition, is_zh=is_zh) or (
             definition.default_next_question_zh if is_zh else definition.default_next_question_en
         )
-        accepted_facts, rejected_facts = self._partition_facts(known_facts, definition)
-        score = {"high": 0.9, "medium": 0.65, "low": 0.35}.get(confidence, 0.65)
+        accepted_facts, rejected_facts = self._partition_facts(facts_for_partition, definition)
+        if rejected_llm_facts:
+            rejected_facts = sorted(set(rejected_facts) | set(rejected_llm_facts))
 
-        candidate_debug: list[dict[str, Any]] = []
-        if deterministic:
-            candidate_debug.append({"source": "deterministic", "frame_id": deterministic, "selected": deterministic == selected})
-        if llm_candidate:
-            candidate_debug.append({
-                "source": "llm",
-                "frame_id": llm_candidate.get("frame_id"),
-                "turn_intent": llm_candidate.get("turn_intent"),
-                "confidence": llm_candidate.get("confidence"),
-                "reason": llm_candidate.get("reason"),
-                "selected": llm_candidate.get("frame_id") == selected,
-            })
+        score = {"high": 0.9, "medium": 0.65, "low": 0.35}.get(confidence, 0.65)
+        candidate_debug = [
+            {
+                "source": "restricted_llm_turn_analysis",
+                "frame_id": semantic.frame_id,
+                "turn_intent": semantic.turn_intent,
+                "frame_action": semantic.frame_action,
+                "confidence": semantic.confidence,
+                "selected": semantic.frame_id == selected,
+                "reason": semantic.reason,
+            }
+        ]
         if previous_frame:
-            candidate_debug.append({"source": "previous_active_frame", "frame_id": previous_frame, "selected": previous_frame == selected})
-        candidate_debug.extend(self._rejected_candidate_debug([], selected=selected, lowered=lowered))
+            candidate_debug.append(
+                {
+                    "source": "previous_active_frame",
+                    "frame_id": previous_frame,
+                    "selected": previous_frame == selected,
+                }
+            )
 
         return CaseFrameDecision(
             frame_id=definition.frame_id,
@@ -468,6 +492,15 @@ class CaseFrameService:
             default_next_question=next_question,
             risk_level=definition.risk_level,
             live_current_sensitive=definition.live_current_sensitive,
+            semantic_turn_intent=semantic.turn_intent,
+            semantic_frame_action=semantic.frame_action,
+            semantic_router_confidence=semantic.confidence,
+            positive_evidence=semantic.positive_evidence,
+            negative_evidence=semantic.negative_evidence,
+            positive_issue_flags=semantic.positive_issue_flags,
+            extracted_facts=filtered_facts,
+            fact_confidence=filtered_confidence,
+            semantic_router_debug=semantic_dict,
         )
 
     def apply_to_state(
@@ -479,9 +512,14 @@ class CaseFrameService:
     ) -> tuple[MatterState, dict[str, Any], dict[str, Any]]:
         facts = dict(known_facts or {})
         original_keys = set(facts.keys())
+
+        for key, value in (decision.extracted_facts or {}).items():
+            if self._fact_present(value):
+                facts[key] = value
+
         for key in decision.forbidden_fact_keys:
             facts.pop(key, None)
-        # Store frame metadata as facts because the current MatterState schema is intentionally simple.
+
         facts["active_case_frame_id"] = decision.frame_id
         facts["case_family"] = decision.case_family
         facts["operation_type"] = decision.operation_type
@@ -499,8 +537,15 @@ class CaseFrameService:
         if decision.visa_type:
             updated.visa_type = decision.visa_type
         updated.carried_intake_facts = facts
+
         for key in decision.forbidden_fact_keys:
             updated.fact_status.pop(key, None)
+        for key, confidence in (decision.fact_confidence or {}).items():
+            if key in facts and self._fact_present(facts.get(key)):
+                label = confidence if confidence in {"low", "medium", "high"} else "medium"
+                updated.fact_status[key] = f"known:{label}"
+
+        updated.risk_flags = self._risk_flags_for_decision(decision)
 
         debug = decision.to_dict()
         debug["removed_fact_keys"] = sorted(original_keys - set(facts.keys()))
@@ -576,6 +621,127 @@ class CaseFrameService:
         }
         return fact_slot_states, interaction_plan, debug
 
+
+    def _frame_registry_for_llm(self) -> dict[str, dict[str, Any]]:
+        registry: dict[str, dict[str, Any]] = {}
+        for frame_id, definition in self.frames.items():
+            registry[frame_id] = {
+                "frame_id": definition.frame_id,
+                "case_family": definition.case_family,
+                "operation_type": definition.operation_type,
+                "user_goal": definition.user_goal,
+                "issue_type": definition.issue_type,
+                "visa_type": definition.visa_type,
+                "response_tier": definition.response_tier,
+                "valid_fact_keys": list(definition.valid_fact_keys),
+                "askable_fact_keys": list(definition.askable_fact_keys),
+                "forbidden_fact_keys": list(definition.forbidden_fact_keys),
+                "risk_level": definition.risk_level,
+                "description": self._frame_description(definition),
+            }
+        return registry
+
+    def _frame_description(self, definition: CaseFrameDefinition) -> str:
+        if definition.frame_id == "visa_topic_triage":
+            return "Temporary entry frame for broad, vague visa questions without concrete facts."
+        if definition.frame_id == "485_student_visa_expired_or_status_risk":
+            return "485 question involving expired/recently expired Student visa, unlawful-status concern, completion letter misunderstanding, or urgent current-status risk."
+        if definition.frame_id == "485_english_test_or_pte_timing":
+            return "485 timing question involving PTE/English test preparation near visa expiry."
+        if definition.frame_id == "student_500_compliance_risk":
+            return "Student visa 500 compliance risk involving work hours, attendance, school warning, or course progress."
+        if definition.case_family == "refusal_review":
+            return "Only for positive refusal, review, ART, appeal, or decision-notice facts."
+        return f"{definition.case_family}: {definition.user_goal}"
+
+    def _select_frame_from_semantic(
+        self,
+        *,
+        semantic: dict[str, Any],
+        previous_frame: str | None,
+    ) -> tuple[str, str, str, str]:
+        candidate = self._valid_frame_id(semantic.get("frame_id"))
+        turn_intent = str(semantic.get("turn_intent") or "other")
+        frame_action = str(semantic.get("frame_action") or "ask_clarifying_category")
+        confidence = str(semantic.get("confidence") or "low")
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "low"
+        flags = semantic.get("positive_issue_flags") if isinstance(semantic.get("positive_issue_flags"), dict) else {}
+
+        if candidate and self.frames[candidate].case_family == "refusal_review" and not bool(flags.get("refusal_or_review")):
+            candidate = None
+
+        if previous_frame == "visa_topic_triage":
+            if candidate and candidate != "visa_topic_triage" and turn_intent in {
+                "concrete_case_scenario",
+                "recommendation_request",
+                "topic_switch",
+                "document_update",
+                "answer_to_previous_question",
+            }:
+                return candidate, "switch_frame", confidence if confidence != "low" else "medium", "LLM classified a concrete case after temporary triage; switching frame."
+            return "visa_topic_triage", "continue_active_frame", confidence if confidence != "low" else "medium", "Still broad/vague after triage; staying in triage."
+
+        if previous_frame and previous_frame in self.frames and previous_frame != "visa_topic_triage":
+            if turn_intent in {"fact_update", "answer_to_previous_question"} or frame_action == "continue_active_frame":
+                return previous_frame, "continue_active_frame", confidence if confidence != "low" else "medium", "Fact update; preserving active concrete frame."
+            if frame_action == "switch_frame" and candidate and candidate != previous_frame:
+                return candidate, "switch_frame", confidence, "LLM proposed explicit topic switch."
+            if candidate == previous_frame:
+                return previous_frame, "continue_active_frame", confidence, "LLM confirmed active frame."
+            if candidate and confidence == "high" and turn_intent in {"concrete_case_scenario", "topic_switch", "recommendation_request"}:
+                return candidate, "switch_frame", confidence, "High-confidence new concrete frame."
+            return previous_frame, "continue_active_frame", "medium", "No validated switch; preserving active concrete frame."
+
+        if candidate:
+            action = "create_new_frame" if candidate != "visa_topic_triage" else "stay_triage"
+            return candidate, action, confidence, "LLM selected initial frame."
+
+        return "visa_topic_triage", "stay_triage", "low", "Safe triage fallback."
+
+    def _filter_llm_facts(
+        self,
+        *,
+        facts: dict[str, Any],
+        fact_confidence: dict[str, str],
+        definition: CaseFrameDefinition,
+    ) -> tuple[dict[str, Any], dict[str, str], list[str]]:
+        allowed = set(definition.valid_fact_keys) | {
+            "issue_type",
+            "visa_type",
+            "operation_type",
+            "active_case_frame_id",
+            "case_family",
+            "answer_preference",
+            "answer_tier",
+        }
+        forbidden = set(definition.forbidden_fact_keys)
+        accepted: dict[str, Any] = {}
+        accepted_conf: dict[str, str] = {}
+        rejected: list[str] = []
+        for key, value in (facts or {}).items():
+            key_s = str(key)
+            if key_s in forbidden or (definition.valid_fact_keys and key_s not in allowed):
+                rejected.append(key_s)
+                continue
+            if not self._fact_present(value):
+                continue
+            accepted[key_s] = value
+            conf = str((fact_confidence or {}).get(key_s) or "medium").lower()
+            accepted_conf[key_s] = conf if conf in {"low", "medium", "high"} else "medium"
+        return accepted, accepted_conf, sorted(set(rejected))
+
+    def _risk_flags_for_decision(self, decision: CaseFrameDecision) -> RiskFlags:
+        review_related = decision.case_family == "refusal_review"
+        urgent_status = decision.response_tier == "urgent_provisional_recommendation"
+        return RiskFlags(
+            deadline_sensitive=bool(review_related or urgent_status),
+            cancellation_related=bool(decision.issue_type == "visa_cancellation"),
+            detention_related=False,
+            character_issue=False,
+            pic4020_issue=bool(decision.operation_type == "pic4020_risk"),
+            review_related=review_related,
+        )
 
     # ------------------------------------------------------------------
     # Transition-first routing helpers

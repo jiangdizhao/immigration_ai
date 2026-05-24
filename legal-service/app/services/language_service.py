@@ -271,8 +271,10 @@ class LanguageService:
                     {
                         "role": "system",
                         "content": (
-                            "You convert Chinese Australian immigration-law user messages into an internal English canonical query.\n"
-                            "Preserve visa subclasses, dates, document names, locations, refusal/cancellation/review/travel intent, and uncertainty.\n"
+                            "You translate the user's Chinese Australian immigration-law message into a concise internal English query.\n"
+                            "Preserve only what the user positively said: visa subclasses, dates, documents, locations, goals, uncertainty, and facts.\n"
+                            "Do NOT list missing categories. Do NOT write phrases like 'has not provided refusal/cancellation/review details'.\n"
+                            "Do NOT introduce refusal, cancellation, review, tribunal, ART, deadline, travel, or document issues unless the user positively mentioned them.\n"
                             "Do not answer the question. Do not add legal advice.\n"
                             "Return ONLY valid JSON with this shape: {\"internal_question_en\": string}."
                         ),
@@ -287,49 +289,11 @@ class LanguageService:
             return None
 
     def _cheap_chinese_to_english(self, question: str) -> str | None:
-        q = question.strip()
-        compact = re.sub(r"\s+", "", q)
-        if not compact:
-            return None
-
-        if compact.lower() in {"你好", "您好", "嗨", "hello", "hi"}:
+        # Keep this deliberately tiny. Semantic Chinese interpretation is handled
+        # by RestrictedLLMTurnAnalysisService, not by case-by-case keyword maps.
+        compact = re.sub(r"\s+", "", (question or "").strip()).lower()
+        if compact in {"你好", "您好", "嗨", "hello", "hi"}:
             return "Hello."
-
-        if any(term in compact for term in ["预约", "预订", "约律师", "咨询律师", "见律师"]):
-            return "I want to book a lawyer consultation."
-
-        has_student = any(term in compact for term in ["学生签证", "500签证", "subclass500", "500"])
-        has_refusal = any(term in compact for term in ["拒签", "被拒", "拒绝", "拒了"])
-        has_review = any(term in compact.lower() for term in ["复审", "上诉", "art", "aat", "还能申请复审", "可以复审"])
-        has_deadline = any(term in compact for term in ["截止", "期限", "多少天", "来得及", "最后一天"])
-        has_bridging = any(term in compact.lower() for term in ["过桥签", "过桥签证", "bridging", "bva", "bvb", "bvc", "bve"])
-        has_travel = any(term in compact for term in ["离境", "出境", "回澳", "回来", "返回澳洲", "旅行", "出国"])
-
-        condition_match = re.search(r"\b(8\d{3})\b", q)
-        if condition_match and any(term in compact for term in ["条件", "condition", "什么意思", "是什么"]):
-            return f"What does visa condition {condition_match.group(1)} mean?"
-
-        if has_bridging and has_travel:
-            return "Can I leave Australia and come back if I only hold a bridging visa?"
-
-        if has_review:
-            if has_deadline:
-                return "Can I still apply for review and what is the review deadline?"
-            if has_refusal or has_student:
-                return "Can I still apply for review of my student visa refusal?"
-            return "Can I still apply for review?"
-
-        if has_student and has_refusal:
-            if any(term in compact for term in ["下一步", "怎么办", "该做什么", "怎么处理"]):
-                return "My student visa was refused. What should I do next?"
-            return "My student visa was refused."
-
-        if any(term in compact for term in ["拒签信", "决定信", "通知书"]):
-            if any(term in compact for term in ["没有", "没收到", "找不到"]):
-                return "I do not have the refusal notice."
-            if any(term in compact for term in ["有", "收到了", "拿到了"]):
-                return "I have the refusal notice."
-
         return None
 
     def _fallback_chinese_to_english(self, question: str) -> str:

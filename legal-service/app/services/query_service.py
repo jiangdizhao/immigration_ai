@@ -311,7 +311,7 @@ class QueryService:
         enriched_debug = self._enrich_retrieval_debug(
             retrieval_debug=retrieval_debug,
             contextualization=artifacts.contextualization,
-            original_question=payload.question,
+            original_question=original_question,
             effective_question=effective_question,
             live_result=live_result,
             initial_sufficiency_gate=initial_sufficiency_gate,
@@ -373,6 +373,8 @@ class QueryService:
                     "fact_status_reasoning": fact_status_report,
                     "pre_llm_router": enriched_debug["pre_llm_router"],
                     "case_frame": case_frame_debug,
+                    "raw_user_question": original_question,
+                    "internal_question_en": payload.question,
                     "answer_preference": frame_decision.answer_preference,
                 },
             )
