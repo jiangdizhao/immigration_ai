@@ -24,6 +24,8 @@ from app.schemas.state import (
     SufficiencyGateResult,
 )
 from app.services.case_state_service import CaseStateService
+from app.services.case_frame_service import CaseFrameService
+from app.services.provisional_recommendation_service import ProvisionalRecommendationService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.fact_status_reasoning_service import FactStatusReasoningService
 from app.services.citation_quality_service import CitationQualityService
@@ -79,6 +81,8 @@ class QueryService:
         public_answer_guard: PublicAnswerGuard | None = None,
         interaction_control_service: InteractionControlService | None = None,
         focused_policy_issue_service: FocusedPolicyIssueService | None = None,
+        case_frame_service: CaseFrameService | None = None,
+        provisional_recommendation_service: ProvisionalRecommendationService | None = None,
         fact_status_reasoning_service: FactStatusReasoningService | None = None,
         citation_quality_service: CitationQualityService | None = None,
     ) -> None:
@@ -96,6 +100,8 @@ class QueryService:
         self.public_answer_guard = public_answer_guard or PublicAnswerGuard()
         self.interaction_control_service = interaction_control_service or InteractionControlService()
         self.focused_policy_issue_service = focused_policy_issue_service or FocusedPolicyIssueService()
+        self.case_frame_service = case_frame_service or CaseFrameService()
+        self.provisional_recommendation_service = provisional_recommendation_service or ProvisionalRecommendationService()
         self.fact_status_reasoning_service = fact_status_reasoning_service or FactStatusReasoningService()
         self.citation_quality_service = citation_quality_service or CitationQualityService()
         self.max_history_turns = 12
@@ -148,6 +154,22 @@ class QueryService:
         effective_question = prepared.effective_question
         merged_intake_facts = prepared.merged_intake_facts
 
+        frame_decision = self.case_frame_service.route(
+            question=effective_question,
+            original_question=original_question,
+            current_state=state,
+            known_facts=merged_intake_facts,
+            answer_preference=getattr(payload, "answer_preference", "answer_first"),
+        )
+        state, merged_intake_facts, case_frame_debug = self.case_frame_service.apply_to_state(
+            state=state,
+            known_facts=merged_intake_facts,
+            decision=frame_decision,
+        )
+        frame_skip_retrieval = frame_decision.response_tier == "triage_question"
+        provisional_recommendation_debug: dict[str, Any] = {"applied": False, "reason": "not_reached"}
+        case_frame_interaction_debug: dict[str, Any] = {}
+
         effective_payload = QueryRequest(
             **{
                 **payload.model_dump(),
@@ -165,7 +187,7 @@ class QueryService:
         focused_policy_finding: dict[str, Any] | None = None
         fact_status_report: dict[str, Any] | None = None
 
-        if turn_analysis.retrieval_needed:
+        if turn_analysis.retrieval_needed and not frame_skip_retrieval:
             local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
         else:
             local_chunks, retrieval_debug = [], {
@@ -173,7 +195,9 @@ class QueryService:
                 "results": [],
                 "top_titles": [],
                 "skipped_retrieval": True,
+                "skip_reason": "case_frame_triage" if frame_skip_retrieval else "pre_llm_router",
             }
+        retrieval_debug["case_frame"] = case_frame_debug
         artifacts.retrieval_debug = retrieval_debug
 
         schedule_aware_assessment = None
@@ -339,6 +363,8 @@ class QueryService:
                     "focused_policy_finding": focused_policy_finding,
                     "fact_status_reasoning": fact_status_report,
                     "pre_llm_router": enriched_debug["pre_llm_router"],
+                    "case_frame": case_frame_debug,
+                    "answer_preference": frame_decision.answer_preference,
                 },
             )
             response.matter_id = matter.id
@@ -369,6 +395,17 @@ class QueryService:
             known_facts=merged_intake_facts,
         )
 
+        response, provisional_recommendation_debug = self.provisional_recommendation_service.apply_to_response(
+            response=response,
+            case_frame=case_frame_debug,
+            known_facts=merged_intake_facts,
+            chunks=merged_chunks,
+            retrieval_debug=enriched_debug,
+            response_language=language_context.response_language,
+            original_question=original_question,
+            effective_question=effective_question,
+        )
+
         state = self.state_machine.finalize_after_reasoning(
             state=state,
             turn_input=turn_input,
@@ -396,6 +433,7 @@ class QueryService:
             state=state,
             known_facts=state.carried_intake_facts,
         )
+        case_hypothesis = self.case_frame_service.align_case_hypothesis(case_hypothesis, frame_decision)
         if case_hypothesis.primary_operation_type:
             state.operation_type = case_hypothesis.primary_operation_type
 
@@ -410,6 +448,13 @@ class QueryService:
             fact_slot_states=fact_slot_states,
             policy=policy,
             evidence=evidence,
+        )
+        fact_slot_states, interaction_plan, case_frame_interaction_debug = self.case_frame_service.apply_interaction_policy(
+            fact_slot_states=fact_slot_states,
+            interaction_plan=interaction_plan,
+            known_facts=state.carried_intake_facts,
+            decision=frame_decision,
+            response_language=language_context.response_language,
         )
         state.case_hypothesis = case_hypothesis
         state.fact_slot_states = fact_slot_states

@@ -28,6 +28,7 @@ import { Progress } from "./ui/progress";
 import { Textarea } from "./ui/textarea";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
+  AnswerPreference,
   IntakeFacts,
   WidgetAssistantMessage,
   WidgetMessage,
@@ -290,7 +291,11 @@ export function ImmigrationAIWorkspace() {
     );
   };
 
-  const sendToWidgetRoute = async (nextMessages: WidgetMessage[], facts: IntakeFacts) => {
+  const sendToWidgetRoute = async (
+    nextMessages: WidgetMessage[],
+    facts: IntakeFacts,
+    answerPreference: AnswerPreference = "answer_first"
+  ) => {
     const response = await fetchWithErrorHandlers("/api/widget-chat", {
       method: "POST",
       headers: {
@@ -300,6 +305,7 @@ export function ImmigrationAIWorkspace() {
         id: chatId,
         matterId,
         intakeFacts: facts,
+        answerPreference,
         selectedChatModel: DEFAULT_CHAT_MODEL,
         messages: nextMessages.map((message) => ({
           id: message.id,
@@ -312,7 +318,7 @@ export function ImmigrationAIWorkspace() {
     return (await response.json()) as WidgetRouteResponse;
   };
 
-  const submitMessage = async (messageText: string) => {
+  const submitMessage = async (messageText: string, answerPreference: AnswerPreference = "answer_first") => {
     const trimmed = messageText.trim();
     if (!trimmed || status !== "ready") return;
 
@@ -331,7 +337,7 @@ export function ImmigrationAIWorkspace() {
     setError(null);
 
     try {
-      const data = await sendToWidgetRoute(nextMessages, intakeFacts);
+      const data = await sendToWidgetRoute(nextMessages, intakeFacts, answerPreference);
       await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
@@ -381,7 +387,7 @@ export function ImmigrationAIWorkspace() {
     setError(null);
 
     try {
-      const data = await sendToWidgetRoute(backendMessages, mergedFacts);
+      const data = await sendToWidgetRoute(backendMessages, mergedFacts, "answer_first");
       await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
@@ -395,6 +401,19 @@ export function ImmigrationAIWorkspace() {
     } finally {
       setStatus("ready");
     }
+  };
+
+
+  const handleGenerateRecommendationNow = async () => {
+    if (status !== "ready") return;
+    const text = latestAssistant?.responseLanguage?.toString().toLowerCase().startsWith("zh")
+      ? "请基于现有信息直接给我一个建议。"
+      : "Please give me a recommendation based on the current information.";
+    await submitMessage(text, "final_recommendation");
+  };
+
+  const handleContinueIntake = () => {
+    toast.info("You can answer the optional question above, or type any extra detail in the message box.");
   };
 
   const handleBookConsultation = () => {
@@ -601,6 +620,38 @@ export function ImmigrationAIWorkspace() {
                             onSubmitDraftFacts={handleSubmitDraftFacts}
                             responseLanguage={message.responseLanguage}
                           />
+                        ) : null}
+
+
+                        {isAssistant && isLatestAssistant && !message.isStreaming && (
+                          message.nextAction === "ask_followup" ||
+                          (message.interactionPlan?.requested_facts?.length ?? 0) > 0
+                        ) ? (
+                          <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <Button
+                              className="rounded-full bg-[#001736] px-4 text-white hover:bg-[#002b5b]"
+                              disabled={status !== "ready"}
+                              onClick={handleGenerateRecommendationNow}
+                              size="sm"
+                              type="button"
+                            >
+                              {message.responseLanguage?.toString().toLowerCase().startsWith("zh")
+                                ? "基于现有信息直接给建议"
+                                : "Answer with current information"}
+                            </Button>
+                            <Button
+                              className="rounded-full"
+                              disabled={status !== "ready"}
+                              onClick={handleContinueIntake}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              {message.responseLanguage?.toString().toLowerCase().startsWith("zh")
+                                ? "继续补充信息"
+                                : "Continue answering questions"}
+                            </Button>
+                          </div>
                         ) : null}
 
                         {SHOW_WORKSPACE_DEBUG && isAssistant && message.retrievalDebug ? (

@@ -602,8 +602,8 @@ class CaseStateService:
     ) -> OperationProfile | None:
         if operation_type and operation_type in OPERATION_PROFILES:
             return OPERATION_PROFILES[operation_type]
-        if issue_type == "student_visa":
-            return OPERATION_PROFILES["student_refusal_next_steps"]
+        # Do not default every Student visa matter to refusal/review.
+        # The CaseFrameRouter chooses student_refusal_next_steps only when refusal/review is explicit.
         if issue_type == "visa_conditions":
             return OPERATION_PROFILES["visa_condition_explainer"]
         if visa_type == "bridging":

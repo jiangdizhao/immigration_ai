@@ -33,6 +33,7 @@ const widgetRequestBodySchema = z.object({
   selectedChatModel: z.string(),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   responseLanguage: z.enum(["en", "zh"]).optional(),
+  answerPreference: z.enum(["auto", "answer_first", "continue_intake", "final_recommendation"]).optional().default("answer_first"),
 });
 
 type ResponseLanguage = "en" | "zh";
@@ -435,6 +436,7 @@ export async function POST(request: Request) {
       selectedChatModel,
       intakeFacts,
       responseLanguage: requestedResponseLanguage,
+      answerPreference,
     } = widgetRequestBodySchema.parse(json);
 
     if (!allowedModelIds.has(selectedChatModel)) {
@@ -474,6 +476,7 @@ export async function POST(request: Request) {
         preferred_source_types: sourceTypes,
         intake_facts: intakeFacts ?? {},
         top_k: 8,
+        answer_preference: answerPreference,
       }),
       cache: "no-store",
     });

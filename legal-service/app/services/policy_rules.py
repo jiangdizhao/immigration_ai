@@ -192,6 +192,9 @@ class PolicyRules:
         reasons: list[str] = []
         confidence_cap: str | None = None
         answer_mode = assessment.answer_mode
+        answer_preference = str((state_obj.carried_intake_facts or {}).get("answer_preference") or "answer_first")
+        case_frame_id = str((state_obj.carried_intake_facts or {}).get("active_case_frame_id") or "")
+        answer_tier = str((state_obj.carried_intake_facts or {}).get("answer_tier") or "")
 
         if self._is_high_risk(state_obj.risk_flags, question):
             return PolicyDecision(
@@ -216,6 +219,21 @@ class PolicyRules:
                 reasons=["focused_policy_finding_resolved"],
                 answer_mode=ANSWER_MODE_WARNING,
                 coverage_summary={**assessment.model_dump(), "focused_policy_finding": focused_policy_finding},
+            )
+
+        if (
+            answer_preference in {"answer_first", "final_recommendation", "auto"}
+            and answer_mode in {ANSWER_MODE_FOLLOWUP, ANSWER_MODE_LIVE_FETCH, ANSWER_MODE_QUALIFIED, ANSWER_MODE_WARNING}
+            and case_frame_id not in {"", "visa_topic_triage"}
+        ):
+            return PolicyDecision(
+                answer_allowed=True,
+                escalate=False,
+                next_action="answer",
+                confidence_cap="low" if (assessment.required_facts_missing or assessment.required_source_classes_missing or ev_obj.missing_information) else "medium",
+                reasons=["answer_preference_allows_provisional_recommendation", answer_preference, answer_tier],
+                answer_mode=ANSWER_MODE_WARNING,
+                coverage_summary={**assessment.model_dump(), "answer_preference": answer_preference, "case_frame_id": case_frame_id, "answer_tier": answer_tier},
             )
 
         if suff_obj.need_live_fetch and not self._live_fetch_used(live_retrieval):
