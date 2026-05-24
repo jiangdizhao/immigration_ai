@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
+import os
 import re
 from typing import Any
 
+from openai import OpenAI
+
+from app.core.config import get_settings
 from app.schemas.state import CaseHypothesis, FactSlotState, InteractionFactRequest, InteractionPlan, MatterState
 
 
@@ -153,6 +158,9 @@ class CaseFrameService:
     }
 
     def __init__(self) -> None:
+        self.settings = get_settings()
+        self.model = os.getenv("FRAME_ROUTER_MODEL", os.getenv("GENERAL_QA_MODEL", "gpt-5.4-mini"))
+        self._client: OpenAI | None = None
         refusal_forbidden = self.COMMON_REFUSAL_FACTS
         self.frames: dict[str, CaseFrameDefinition] = {
             "visa_topic_triage": CaseFrameDefinition(
@@ -369,6 +377,16 @@ class CaseFrameService:
             ),
         }
 
+
+    @property
+    def client(self) -> OpenAI:
+        if self._client is None:
+            if not self.settings.openai_api_key:
+                raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
+            self._client = OpenAI(api_key=self.settings.openai_api_key)
+        return self._client
+
+
     def route(
         self,
         *,
@@ -378,22 +396,56 @@ class CaseFrameService:
         known_facts: dict[str, Any] | None,
         answer_preference: str | None = None,
     ) -> CaseFrameDecision:
+        """
+        Transition-first frame router.
+
+        The LLM and deterministic rules may propose a frame, but state transition
+        rules decide whether to continue the current frame, switch, create a new
+        frame, or stay in temporary triage.
+        """
         known_facts = dict(known_facts or {})
         preference = self._normalize_answer_preference(answer_preference, question, original_question)
         text = "\n".join([question or "", original_question or ""]).strip()
         lowered = text.lower()
         is_zh = self._looks_zh(text)
-        candidate_frames = self._candidate_frames(lowered=lowered, known_facts=known_facts, current_state=current_state)
-        selected = candidate_frames[0][0]
-        score = candidate_frames[0][1]
-        reason = candidate_frames[0][2]
-        definition = self.frames[selected]
         previous_frame = self._current_frame_id(current_state, known_facts)
-        route_action = "continue_active_frame" if previous_frame == selected else ("create_new_frame" if not previous_frame else "switch_frame")
-        rejected = self._rejected_candidate_debug(candidate_frames, selected=selected, lowered=lowered)
-        confidence = "high" if score >= 0.78 else "medium" if score >= 0.52 else "low"
-        next_question = self._dynamic_next_question(definition, known_facts, is_zh=is_zh) or (definition.default_next_question_zh if is_zh else definition.default_next_question_en)
+
+        deterministic = self._deterministic_frame_candidate(lowered=lowered, known_facts=known_facts)
+        llm_candidate = self._llm_frame_candidate(
+            text=text,
+            previous_frame=previous_frame,
+            known_facts=known_facts,
+        )
+        selected, route_action, confidence, transition_reason = self._select_frame_by_transition(
+            lowered=lowered,
+            previous_frame=previous_frame,
+            deterministic=deterministic,
+            llm_candidate=llm_candidate,
+        )
+
+        definition = self.frames[selected]
+        next_question = self._dynamic_next_question(definition, known_facts, is_zh=is_zh) or (
+            definition.default_next_question_zh if is_zh else definition.default_next_question_en
+        )
         accepted_facts, rejected_facts = self._partition_facts(known_facts, definition)
+        score = {"high": 0.9, "medium": 0.65, "low": 0.35}.get(confidence, 0.65)
+
+        candidate_debug: list[dict[str, Any]] = []
+        if deterministic:
+            candidate_debug.append({"source": "deterministic", "frame_id": deterministic, "selected": deterministic == selected})
+        if llm_candidate:
+            candidate_debug.append({
+                "source": "llm",
+                "frame_id": llm_candidate.get("frame_id"),
+                "turn_intent": llm_candidate.get("turn_intent"),
+                "confidence": llm_candidate.get("confidence"),
+                "reason": llm_candidate.get("reason"),
+                "selected": llm_candidate.get("frame_id") == selected,
+            })
+        if previous_frame:
+            candidate_debug.append({"source": "previous_active_frame", "frame_id": previous_frame, "selected": previous_frame == selected})
+        candidate_debug.extend(self._rejected_candidate_debug([], selected=selected, lowered=lowered))
+
         return CaseFrameDecision(
             frame_id=definition.frame_id,
             case_family=definition.case_family,
@@ -411,11 +463,8 @@ class CaseFrameService:
             forbidden_fact_keys=list(definition.forbidden_fact_keys),
             accepted_facts=accepted_facts,
             rejected_facts=rejected_facts,
-            candidate_frames=[
-                {"frame_id": fid, "score": sc, "reason": why, "selected": fid == selected}
-                for fid, sc, why in candidate_frames[:5]
-            ] + rejected,
-            reason=reason,
+            candidate_frames=candidate_debug,
+            reason=transition_reason,
             default_next_question=next_question,
             risk_level=definition.risk_level,
             live_current_sensitive=definition.live_current_sensitive,
@@ -526,6 +575,162 @@ class CaseFrameService:
             "mode_after_frame_policy": getattr(interaction_plan, "mode", None),
         }
         return fact_slot_states, interaction_plan, debug
+
+
+    # ------------------------------------------------------------------
+    # Transition-first routing helpers
+    # ------------------------------------------------------------------
+    def _select_frame_by_transition(
+        self,
+        *,
+        lowered: str,
+        previous_frame: str | None,
+        deterministic: str | None,
+        llm_candidate: dict[str, Any] | None,
+    ) -> tuple[str, str, str, str]:
+        concrete_signal = self._has_concrete_case_signal(lowered)
+        short_update = self._is_short_fact_update(lowered)
+        llm_frame = self._valid_frame_id(llm_candidate.get("frame_id") if llm_candidate else None)
+        proposed = deterministic or llm_frame
+
+        if previous_frame == "visa_topic_triage":
+            if concrete_signal:
+                selected = self._valid_frame_id(proposed) or "other_visa_general"
+                if selected == "visa_topic_triage":
+                    selected = "other_visa_general"
+                return selected, "switch_frame", "high", "Triage frame is temporary; concrete facts require switching to a case frame."
+            return "visa_topic_triage", "continue_active_frame", "high", "Still a broad triage turn without concrete case facts."
+
+        if previous_frame and previous_frame in self.frames and not self._clear_topic_shift(lowered, previous_frame):
+            if short_update or not concrete_signal:
+                return previous_frame, "continue_active_frame", "high", "Short fact update; preserving active concrete frame."
+
+        if proposed and proposed in self.frames:
+            action = "create_new_frame" if not previous_frame else ("continue_active_frame" if previous_frame == proposed else "switch_frame")
+            return proposed, action, "high" if deterministic else "medium", "Selected proposed concrete frame after transition validation."
+
+        if self._broad_visa_inquiry(lowered):
+            return "visa_topic_triage", "create_new_frame" if not previous_frame else "switch_frame", "high", "Broad visa inquiry; use temporary triage frame."
+
+        if previous_frame and previous_frame in self.frames and not self._clear_topic_shift(lowered, previous_frame):
+            return previous_frame, "continue_active_frame", "medium", "No better concrete frame; preserving active frame."
+
+        return "other_visa_general", "create_new_frame" if not previous_frame else "switch_frame", "low", "Fallback general visa frame."
+
+    def _deterministic_frame_candidate(self, *, lowered: str, known_facts: dict[str, Any]) -> str | None:
+        has_500 = self._has_student_500(lowered, known_facts)
+        has_485 = self._has_485(lowered, known_facts)
+        if self._broad_visa_inquiry(lowered) and not self._has_concrete_case_signal(lowered):
+            return "visa_topic_triage"
+        if self._condition_query(lowered):
+            return "visa_condition_explainer"
+        if self._explicit_refusal_or_review(lowered):
+            if has_485:
+                return "485_refusal_review"
+            if has_500:
+                return "500_refusal_review"
+            return "500_refusal_review"
+        if has_500 and self._student_compliance_risk(lowered):
+            return "student_500_compliance_risk"
+        if has_485 and self._student_expired_485_status(lowered):
+            return "485_student_visa_expired_or_status_risk"
+        if has_485 and self._pte_or_english_timing(lowered):
+            return "485_english_test_or_pte_timing"
+        if has_485 and self._age_qualification(lowered):
+            return "485_age_qualification_policy"
+        if has_485 and self._higher_ed_485(lowered):
+            return "485_post_higher_education"
+        if has_500 and self._student_expiry_or_extension(lowered):
+            return "500_expiry_or_extension"
+        if has_485:
+            return "485_general_triage"
+        if has_500:
+            return "student_visa_general_triage"
+        return None
+
+    def _llm_frame_candidate(self, *, text: str, previous_frame: str | None, known_facts: dict[str, Any]) -> dict[str, Any] | None:
+        """LLM proposes a frame; deterministic transition rules still decide."""
+        if not text.strip():
+            return None
+        try:
+            system_prompt = (
+                "Classify the latest Australian migration-law chat turn into exactly one case frame.\n"
+                "Return ONLY valid JSON with keys: turn_intent, frame_id, confidence, reason.\n"
+                "If previous_frame is visa_topic_triage and the latest turn gives concrete case facts, choose a concrete frame.\n"
+                "If latest turn is a short fact update and previous_frame is concrete, choose previous_frame.\n"
+            )
+            user_prompt = json.dumps(
+                {
+                    "latest_turn": text,
+                    "previous_frame": previous_frame,
+                    "known_facts": known_facts,
+                    "allowed_frames": sorted(self.frames.keys()),
+                },
+                ensure_ascii=False,
+            )
+            result = self.client.responses.create(
+                model=self.model,
+                input=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            )
+            parsed = self._extract_json_object(result.output_text or "")
+            if not isinstance(parsed, dict):
+                return None
+            frame_id = self._valid_frame_id(parsed.get("frame_id"))
+            if not frame_id:
+                return None
+            parsed["frame_id"] = frame_id
+            return parsed
+        except Exception:
+            return None
+
+    def _valid_frame_id(self, value: Any) -> str | None:
+        frame_id = str(value or "").strip()
+        return frame_id if frame_id in self.frames else None
+
+    def _extract_json_object(self, text: str) -> dict[str, Any] | None:
+        text = (text or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start : end + 1])
+                return parsed if isinstance(parsed, dict) else None
+            except Exception:
+                return None
+        return None
+
+    def _has_concrete_case_signal(self, text: str) -> bool:
+        q = (text or "").lower()
+        concrete_terms = [
+            "485", "500", "subclass", "student visa", "temporary graduate",
+            "bachelor", "master", "masters", "phd", "degree", "diploma",
+            "expired", "expires", "unlawful", "completion letter", "pte",
+            "english test", "work hours", "work limit", "attendance", "school warning",
+            "refused", "refusal", "cancel", "cancellation", "bridging", "condition",
+            "学士", "本科", "硕士", "博士", "过期", "到期", "签证过期",
+            "非法", "completion", "工作时间", "出勤", "学校", "拒签", "取消",
+            "过桥签", "签证条件", "英语", "语言", "考试",
+        ]
+        return any(term in q for term in concrete_terms)
+
+    def _is_short_fact_update(self, text: str) -> bool:
+        q = (text or "").strip().lower()
+        if not q:
+            return False
+        if len(q.split()) <= 12 and any(term in q for term in [
+            "in australia", "outside australia", "onshore", "offshore", "yes", "no", "not yet", "not sure",
+            "已经", "还没", "没有", "在澳洲", "在澳大利亚", "境内", "境外", "递交了", "没递交",
+            "只有学校", "home affairs", "vevo",
+        ]):
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # Candidate routing

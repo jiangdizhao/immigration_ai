@@ -203,7 +203,7 @@ class QueryService:
         schedule_aware_assessment = None
         schedule_aware_chunks: list[Any] = []
         schedule_aware_debug: dict[str, Any] = {"is_active": False}
-        if turn_analysis.retrieval_needed:
+        if turn_analysis.retrieval_needed and not frame_skip_retrieval:
             schedule_aware_assessment, schedule_aware_chunks, schedule_aware_debug = (
                 self.schedule_aware_reasoning_service.assess(
                     db=db,
@@ -223,13 +223,22 @@ class QueryService:
                 retrieval_debug["schedule_aware_targeted_retrieval"] = schedule_aware_debug.get("targeted_retrieval", {})
                 artifacts.retrieval_debug = retrieval_debug
 
-        initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
-            question=effective_question,
-            issue_type=state.issue_type,
-            operation_type=state.operation_type,
-            known_facts=merged_intake_facts,
-            retrieval_debug=retrieval_debug,
-        )
+        if frame_skip_retrieval:
+            initial_sufficiency_gate = SufficiencyGateResult(
+                local_sufficient=True,
+                reason="case_frame_triage_skip_retrieval",
+                need_live_fetch=False,
+                preferred_domains=[],
+                preferred_source_types=[],
+            )
+        else:
+            initial_sufficiency_gate = self.policy_rules.judge_local_sufficiency(
+                question=effective_question,
+                issue_type=state.issue_type,
+                operation_type=state.operation_type,
+                known_facts=merged_intake_facts,
+                retrieval_debug=retrieval_debug,
+            )
         artifacts.sufficiency_gate = initial_sufficiency_gate
 
         live_result = LiveRetrievalResult()
