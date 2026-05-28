@@ -49,12 +49,12 @@ class LiveTriggerPolicy:
         if any(term in q for term in self.FRESHNESS_TERMS):
             add(
                 "freshness_request",
-                ["immi.homeaffairs.gov.au", "legislation.gov.au"],
+                ["immi.homeaffairs.gov.au", "www.homeaffairs.gov.au", "legislation.gov.au"],
                 ["guidance", "legislation"],
             )
 
-        # Principle trigger: reform-heavy / policy-sensitive 485 eligibility questions should
-        # verify current official rules even when the user does not say "latest" or "current".
+        # Reform-heavy / policy-sensitive 485 eligibility questions should verify
+        # current official rules even when the user does not say "latest" or "current".
         if self._is_485_policy_sensitive_question(q=q, op=op, issue_type=issue_type, known_facts=known_facts):
             if not self._has_current_exact_485_support(rows=rows, source_classes_present=source_classes_present):
                 add(
@@ -64,15 +64,31 @@ class LiveTriggerPolicy:
                     ["current_485_policy_rule"],
                 )
 
-
+        # Student 500 current-policy questions need the same principle. This is
+        # deliberately broad enough for the 500 current-policy overlay layer:
+        # GS, funds, English, work rights, course/research changes, and critical technology.
         if self._is_500_policy_sensitive_question(q=q, op=op, issue_type=issue_type, known_facts=known_facts):
-            if not self._has_current_exact_500_support(rows=rows, source_classes_present=source_classes_present, q=q):
-                add(
-                    "policy_sensitive_500_current_rule_check",
-                    ["www.homeaffairs.gov.au", "immi.homeaffairs.gov.au", "legislation.gov.au"],
-                    ["guidance", "legislation"],
-                    ["current_500_policy_rule"],
-                )
+            if not self._has_current_exact_500_support(
+                rows=rows,
+                source_classes_present=source_classes_present,
+                q=q,
+                op=op,
+                known_facts=known_facts,
+            ):
+                if self._is_critical_technology_context(q=q, op=op, known_facts=known_facts):
+                    add(
+                        "policy_sensitive_500_critical_technology_check",
+                        ["www.homeaffairs.gov.au", "immi.homeaffairs.gov.au", "legislation.gov.au"],
+                        ["guidance", "legislation"],
+                        ["critical_technology_policy", "condition_8208_current_policy", "pic4003b_policy"],
+                    )
+                else:
+                    add(
+                        "policy_sensitive_500_current_rule_check",
+                        ["immi.homeaffairs.gov.au", "www.homeaffairs.gov.au", "legislation.gov.au"],
+                        ["guidance", "legislation"],
+                        ["current_500_policy_rule"],
+                    )
 
         if op in {"review_rights", "review_deadline"} or any(x in q for x in ["review", "appeal", "tribunal", "deadline", "time limit"]):
             needed = {"review_rights", "review_deadline", "art_procedure", "official_next_steps"}
@@ -130,58 +146,6 @@ class LiveTriggerPolicy:
             preferred_source_types=preferred_source_types,
         )
 
-    def _is_500_policy_sensitive_question(
-        self,
-        *,
-        q: str,
-        op: str | None,
-        issue_type: str | None,
-        known_facts: dict[str, Any],
-    ) -> bool:
-        is_500 = (
-            bool(op and (op.startswith("student_500") or op.startswith("500_")))
-            or "student visa" in q
-            or "subclass 500" in q
-            or re.search(r"\b500\b", q) is not None
-            or str(known_facts.get("visa_subclass") or "") == "500"
-            or str(known_facts.get("visa_type") or "") == "student"
-            or (issue_type or "") == "student_visa"
-        )
-        if not is_500:
-            return False
-
-        policy_terms = [
-            "critical technology", "critical technologies", "condition 8208", "8208", "pic 4003b",
-            "ai", "cybersecurity", "cyber security", "quantum", "phd", "doctoral", "research topic",
-            "genuine student", "gs requirement", "financial capacity", "funds", "living costs",
-            "english requirement", "english test", "pte", "ielts", "work hours", "work rights",
-            "48 hours", "fortnight", "course change", "provider change", "new rule", "changed",
-            "current", "latest", "today", "now",
-        ]
-        if any(term in q for term in policy_terms):
-            return True
-
-        decisive_fact_keys = {
-            "critical_technology_context", "condition_8208_applies", "research_topic",
-            "work_hours_issue", "work_hours_per_fortnight", "financial_capacity_evidence",
-            "english_requirement_status", "study_purpose",
-        }
-        return any(key in known_facts for key in decisive_fact_keys)
-
-    def _has_current_exact_500_support(self, *, rows: list[dict[str, Any]], source_classes_present: set[str], q: str) -> bool:
-        if "critical technology" in q or "8208" in q or "pic 4003b" in q or "cybersecurity" in q or "quantum" in q:
-            if "critical_technology_policy" in source_classes_present:
-                return True
-            joined = "\n".join(str(row.get("title") or "") + "\n" + str(row.get("text_preview") or "") for row in rows).lower()
-            return all(term in joined for term in ["critical technology"]) and ("8208" in joined or "4003b" in joined)
-
-        exact_classes = {
-            "student_visa_overview", "genuine_student_guidance", "financial_capacity_guidance",
-            "english_requirement_guidance", "conditions_guidance", "visa_condition_definition",
-            "visa_conditions_schedule", "critical_technology_policy",
-        }
-        return bool(source_classes_present & exact_classes)
-
     def _is_485_policy_sensitive_question(
         self,
         *,
@@ -216,6 +180,63 @@ class LiveTriggerPolicy:
         }
         return any(key in known_facts for key in decisive_fact_keys)
 
+    def _is_500_policy_sensitive_question(
+        self,
+        *,
+        q: str,
+        op: str | None,
+        issue_type: str | None,
+        known_facts: dict[str, Any],
+    ) -> bool:
+        is_500 = (
+            bool(op and (op.startswith("student_500_") or op in {"student_visa_general_triage", "500_expiry_or_extension"}))
+            or "500" in q
+            or "student visa" in q
+            or "student 500" in q
+            or str(known_facts.get("visa_subclass") or "") == "500"
+            or str(known_facts.get("visa_type") or "") == "student"
+            or (issue_type or "") == "student_visa"
+        )
+        if not is_500:
+            return False
+
+        if self._is_critical_technology_context(q=q, op=op, known_facts=known_facts):
+            return True
+
+        policy_terms = [
+            "genuine student", "gs requirement", "financial capacity", "funds", "living costs",
+            "english", "ielts", "pte", "oshc", "health insurance", "work hours", "work rights",
+            "48 hours", "condition 8105", "condition 8104", "condition 8202", "condition 8208",
+            "can i apply", "eligible", "eligibility", "requirement", "requirements", "current",
+            "latest", "new rule", "changed", "course change", "provider change", "phd", "research",
+            "资金", "英语", "工作时间", "关键技术", "研究", "博士", "换课程", "换学校",
+        ]
+        if any(term in q for term in policy_terms):
+            return True
+
+        decisive_fact_keys = {
+            "critical_technology_context", "condition_8208_applies", "work_hours_issue",
+            "work_hours_per_fortnight", "financial_capacity_evidence", "english_requirement_status",
+            "oshc_status", "study_purpose", "course_type", "course_change_or_research_topic_change",
+        }
+        return any(key in known_facts for key in decisive_fact_keys)
+
+    def _is_critical_technology_context(self, *, q: str, op: str | None, known_facts: dict[str, Any]) -> bool:
+        return bool(
+            op == "student_500_critical_technology_policy_check"
+            or known_facts.get("critical_technology_context")
+            or known_facts.get("condition_8208_applies")
+            or any(
+                term in q
+                for term in [
+                    "critical technology", "critical technologies", "condition 8208", "pic 4003b",
+                    "ai", "artificial intelligence", "cybersecurity", "cyber security", "quantum",
+                    "advanced computing", "phd", "doctoral research", "postgraduate research",
+                    "关键技术", "人工智能", "网络安全", "量子", "博士", "研究型",
+                ]
+            )
+        )
+
     def _has_current_exact_485_support(self, *, rows: list[dict[str, Any]], source_classes_present: set[str]) -> bool:
         exact_classes = {
             "485_age_requirement", "485_higher_education_485231", "485_vocational_485221_485224",
@@ -225,6 +246,27 @@ class LiveTriggerPolicy:
         has_exact_class = bool(source_classes_present & exact_classes)
         has_recent_guidance = self._has_recent_home_affairs_485_guidance(rows)
         return has_exact_class and has_recent_guidance
+
+    def _has_current_exact_500_support(
+        self,
+        *,
+        rows: list[dict[str, Any]],
+        source_classes_present: set[str],
+        q: str,
+        op: str | None,
+        known_facts: dict[str, Any],
+    ) -> bool:
+        if self._is_critical_technology_context(q=q, op=op, known_facts=known_facts):
+            if "critical_technology_policy" not in source_classes_present:
+                return False
+            return self._has_home_affairs_critical_technology_guidance(rows)
+
+        exact_classes = {
+            "student_visa_overview", "requirements_overview", "genuine_student_guidance",
+            "financial_capacity_guidance", "english_requirement_guidance", "conditions_guidance",
+            "visa_condition_definition", "visa_conditions_schedule",
+        }
+        return bool(source_classes_present & exact_classes)
 
     def _has_recent_home_affairs_485_guidance(self, rows: list[dict[str, Any]]) -> bool:
         for row in rows:
@@ -240,6 +282,19 @@ class LiveTriggerPolicy:
                 continue
             age_days = (datetime.now(timezone.utc).date() - parsed.date()).days
             if age_days <= 180:
+                return True
+        return False
+
+    def _has_home_affairs_critical_technology_guidance(self, rows: list[dict[str, Any]]) -> bool:
+        for row in rows:
+            authority = str(row.get("authority") or "").lower()
+            title = str(row.get("title") or "").lower()
+            url = str(row.get("url") or "").lower()
+            preview = str(row.get("text_preview") or "").lower()
+            blob = "\n".join([title, url, preview])
+            if "home affairs" not in authority and "homeaffairs.gov.au" not in url:
+                continue
+            if "critical technology" in blob and ("8208" in blob or "pic 4003b" in blob or "student visa" in blob):
                 return True
         return False
 
