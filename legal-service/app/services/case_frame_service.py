@@ -504,6 +504,72 @@ class CaseFrameService:
             semantic_router_debug=semantic_dict,
         )
 
+    def repair_decision(
+        self,
+        *,
+        decision: CaseFrameDecision,
+        frame_id: str,
+        known_facts: dict[str, Any],
+        reason: str,
+    ) -> CaseFrameDecision:
+        """Create a repaired decision after FrameConsistencyGate detects split state."""
+        if frame_id not in self.frames:
+            return decision
+
+        definition = self.frames[frame_id]
+        filtered_facts, filtered_confidence, rejected_llm_facts = self._filter_llm_facts(
+            facts=decision.extracted_facts or {},
+            fact_confidence=decision.fact_confidence or {},
+            definition=definition,
+        )
+        facts_for_partition = {**(known_facts or {}), **filtered_facts}
+        accepted_facts, rejected_facts = self._partition_facts(facts_for_partition, definition)
+        if rejected_llm_facts:
+            rejected_facts = sorted(set(rejected_facts) | set(rejected_llm_facts))
+
+        candidate_frames = list(decision.candidate_frames or [])
+        candidate_frames.append(
+            {
+                "source": "frame_consistency_gate",
+                "frame_id": frame_id,
+                "selected": True,
+                "reason": reason,
+            }
+        )
+
+        return CaseFrameDecision(
+            frame_id=definition.frame_id,
+            case_family=definition.case_family,
+            operation_type=definition.operation_type,
+            user_goal=definition.user_goal,
+            issue_type=definition.issue_type,
+            visa_type=definition.visa_type,
+            response_tier=definition.response_tier,
+            route_action="repair_frame",
+            confidence="high" if decision.confidence == "low" else decision.confidence,
+            score=max(decision.score, 0.88),
+            answer_preference=decision.answer_preference,
+            valid_fact_keys=list(definition.valid_fact_keys),
+            askable_fact_keys=list(definition.askable_fact_keys),
+            forbidden_fact_keys=list(definition.forbidden_fact_keys),
+            accepted_facts=accepted_facts,
+            rejected_facts=rejected_facts,
+            candidate_frames=candidate_frames,
+            reason=reason,
+            default_next_question=definition.default_next_question_zh or definition.default_next_question_en,
+            risk_level=definition.risk_level,
+            live_current_sensitive=definition.live_current_sensitive,
+            semantic_turn_intent=decision.semantic_turn_intent,
+            semantic_frame_action=decision.semantic_frame_action,
+            semantic_router_confidence=decision.semantic_router_confidence,
+            positive_evidence=decision.positive_evidence,
+            negative_evidence=decision.negative_evidence,
+            positive_issue_flags=decision.positive_issue_flags,
+            extracted_facts=filtered_facts,
+            fact_confidence=filtered_confidence,
+            semantic_router_debug=decision.semantic_router_debug,
+        )
+
     def apply_to_state(
         self,
         *,

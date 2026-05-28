@@ -32,6 +32,7 @@ from app.services.citation_quality_service import CitationQualityService
 from app.services.interaction_control_service import InteractionControlService
 from app.services.language_service import LanguageService
 from app.services.focused_policy_issue_service import FocusedPolicyIssueService
+from app.services.frame_consistency_service import FrameConsistencyGate
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
 from app.services.policy_rules import PolicyRules
@@ -82,6 +83,7 @@ class QueryService:
         interaction_control_service: InteractionControlService | None = None,
         focused_policy_issue_service: FocusedPolicyIssueService | None = None,
         case_frame_service: CaseFrameService | None = None,
+        frame_consistency_gate: FrameConsistencyGate | None = None,
         provisional_recommendation_service: ProvisionalRecommendationService | None = None,
         fact_status_reasoning_service: FactStatusReasoningService | None = None,
         citation_quality_service: CitationQualityService | None = None,
@@ -101,6 +103,7 @@ class QueryService:
         self.interaction_control_service = interaction_control_service or InteractionControlService()
         self.focused_policy_issue_service = focused_policy_issue_service or FocusedPolicyIssueService()
         self.case_frame_service = case_frame_service or CaseFrameService()
+        self.frame_consistency_gate = frame_consistency_gate or FrameConsistencyGate()
         self.provisional_recommendation_service = provisional_recommendation_service or ProvisionalRecommendationService()
         self.fact_status_reasoning_service = fact_status_reasoning_service or FactStatusReasoningService()
         self.citation_quality_service = citation_quality_service or CitationQualityService()
@@ -161,11 +164,37 @@ class QueryService:
             known_facts=merged_intake_facts,
             answer_preference=getattr(payload, "answer_preference", "answer_first"),
         )
+        pre_focused_policy_issue = self.focused_policy_issue_service.detect_issue(
+            question=effective_question,
+            operation_type=frame_decision.operation_type,
+            known_facts=merged_intake_facts,
+        )
+        frame_consistency = self.frame_consistency_gate.evaluate(
+            question=effective_question,
+            original_question=original_question,
+            previous_frame=str((current_state.carried_intake_facts or {}).get("active_case_frame_id") or ""),
+            candidate_frame=frame_decision.frame_id,
+            candidate_family=frame_decision.case_family,
+            positive_issue_flags=frame_decision.positive_issue_flags,
+            known_facts=merged_intake_facts,
+            focused_policy_issue=pre_focused_policy_issue,
+            available_frame_ids=set(self.case_frame_service.frames.keys()),
+        )
+        if frame_consistency.repair_frame_id:
+            frame_decision = self.case_frame_service.repair_decision(
+                decision=frame_decision,
+                frame_id=frame_consistency.repair_frame_id,
+                known_facts=merged_intake_facts,
+                reason=frame_consistency.reason,
+            )
+
         state, merged_intake_facts, case_frame_debug = self.case_frame_service.apply_to_state(
             state=state,
             known_facts=merged_intake_facts,
             decision=frame_decision,
         )
+        frame_consistency_debug = frame_consistency.to_dict()
+        case_frame_debug["frame_consistency"] = frame_consistency_debug
         frame_skip_retrieval = frame_decision.response_tier == "triage_question"
         provisional_recommendation_debug: dict[str, Any] = {"applied": False, "reason": "not_reached"}
         case_frame_interaction_debug: dict[str, Any] = {}
@@ -179,11 +208,7 @@ class QueryService:
             }
         )
 
-        focused_policy_issue = self.focused_policy_issue_service.detect_issue(
-            question=effective_question,
-            operation_type=state.operation_type,
-            known_facts=merged_intake_facts,
-        )
+        focused_policy_issue = None if frame_skip_retrieval else pre_focused_policy_issue
         focused_policy_finding: dict[str, Any] | None = None
         fact_status_report: dict[str, Any] | None = None
 
@@ -198,6 +223,7 @@ class QueryService:
                 "skip_reason": "case_frame_triage" if frame_skip_retrieval else "pre_llm_router",
             }
         retrieval_debug["case_frame"] = case_frame_debug
+        retrieval_debug["frame_consistency"] = frame_consistency_debug
         artifacts.retrieval_debug = retrieval_debug
 
         schedule_aware_assessment = None
@@ -254,7 +280,7 @@ class QueryService:
             live_chunks = self._live_chunks_to_shims(live_result)
         artifacts.live_retrieval = live_result
 
-        if focused_policy_issue and turn_analysis.live_fetch_allowed:
+        if focused_policy_issue and not frame_skip_retrieval and turn_analysis.live_fetch_allowed:
             focused_policy_finding = self.focused_policy_issue_service.resolve_from_chunks(
                 issue=focused_policy_issue,
                 chunks=[*live_chunks, *local_chunks],
