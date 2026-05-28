@@ -72,6 +72,20 @@ class PolicyRules:
             source_classes_present=source_classes_present,
             retrieval_rows=rows,
         )
+        schedule_policy_request = self._schedule_policy_overlay_live_request(retrieval_debug)
+        if schedule_policy_request:
+            if schedule_policy_request["reason"] not in live_trigger.reasons:
+                live_trigger.reasons.append(schedule_policy_request["reason"])
+            for domain in schedule_policy_request["preferred_domains"]:
+                if domain not in live_trigger.preferred_domains:
+                    live_trigger.preferred_domains.append(domain)
+            for source_type in schedule_policy_request["preferred_source_types"]:
+                if source_type not in live_trigger.preferred_source_types:
+                    live_trigger.preferred_source_types.append(source_type)
+            for missing_class in schedule_policy_request["missing"]:
+                if missing_class not in live_trigger.required_source_classes_missing:
+                    live_trigger.required_source_classes_missing.append(missing_class)
+            live_trigger.should_live_fetch = True
 
         fact_coverage = {key: fact_is_present(known_facts, key) for key in profile.required_facts}
         required_facts_missing = [key for key, present in fact_coverage.items() if not present]
@@ -418,3 +432,41 @@ class PolicyRules:
                 bool(re.search(r"\bcriminal\b", q)),
             ]
         )
+
+    def _schedule_policy_overlay_live_request(self, retrieval_debug: dict[str, Any]) -> dict[str, Any] | None:
+        assessment = retrieval_debug.get("schedule_aware_criterion_reasoning") or {}
+        if not isinstance(assessment, dict):
+            return None
+        flags = set(str(x) for x in (assessment.get("current_policy_flags") or []))
+        overlays = assessment.get("policy_overlays") or []
+        if not isinstance(overlays, list):
+            overlays = []
+        needs_live = bool(flags & {"needs_live_policy_check", "unknown_current_policy", "current_policy_risk", "superseded_policy_risk"})
+        needs_live = needs_live or any(bool(item.get("freshness_required")) for item in overlays if isinstance(item, dict))
+        if not needs_live:
+            return None
+
+        preferred_domains = ["immi.homeaffairs.gov.au", "legislation.gov.au"]
+        preferred_source_types = ["guidance", "legislation"]
+        missing = ["current_policy_overlay_evidence"]
+        for item in overlays:
+            if not isinstance(item, dict):
+                continue
+            policy_key = str(item.get("policy_key") or "")
+            if policy_key and policy_key not in missing:
+                missing.append(policy_key)
+            for url in item.get("preferred_urls") or []:
+                host = self._domain_from_url(str(url))
+                if host and host not in preferred_domains:
+                    preferred_domains.insert(0, host)
+        return {
+            "reason": "schedule_policy_overlay_needs_live_check",
+            "preferred_domains": preferred_domains,
+            "preferred_source_types": preferred_source_types,
+            "missing": missing,
+        }
+
+    def _domain_from_url(self, url: str) -> str | None:
+        match = re.search(r"https?://([^/]+)", url or "", flags=re.I)
+        return match.group(1).lower() if match else None
+
