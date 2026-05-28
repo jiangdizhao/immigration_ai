@@ -136,6 +136,8 @@ class Subclass485CriterionPack:
                 source_classes=("485_requirements_overview",),
                 next_question="What qualification did you complete, and is this your first 485 application?",
                 customer_explanation="Before checking eligibility, the correct 485 stream must be identified.",
+                answer_blocking=True,
+                customer_ask_priority=1,
             ),
             "485.schedule1.valid_application": CriterionNode(
                 id="485.schedule1.valid_application",
@@ -152,6 +154,8 @@ class Subclass485CriterionPack:
                 source_classes=("485_schedule1_application_requirements", "schedule1_validity"),
                 next_question="Where are you now, what visa do you currently hold, and when do you plan to apply?",
                 customer_explanation="A visa application must first be validly made before grant criteria matter.",
+                answer_blocking=True,
+                customer_ask_priority=5,
             ),
             "485.common.application_window": CriterionNode(
                 id="485.common.application_window",
@@ -286,6 +290,130 @@ class Subclass485CriterionPack:
                 source_classes=("485_replacement_stream", "485_requirements_overview"),
                 next_question="Did you previously hold a 485 visa, and what disruption prevented you from using the full visa period?",
             ),
+            "485.policy.age_and_qualification_current": CriterionNode(
+                id="485.policy.age_and_qualification_current",
+                label="Current 485 age and qualification policy overlay",
+                layer="current_policy_overlay",
+                legal_basis=("Current Home Affairs 485 policy / post-2024 age and exception framework",),
+                applies_to_pathways=("higher_education",),
+                required_facts=("age", "qualification_level"),
+                optional_facts=("qualification_type",),
+                source_queries=(
+                    "Subclass 485 age limit Post-Higher Education Work stream 35 years of age or under",
+                    "Temporary Graduate visa changes 1 July 2024 age Masters research PhD Hong Kong BNO",
+                ),
+                source_classes=("485_age_requirement", "485_higher_education_485231", "485_requirements_overview"),
+                policy_key="485_post_higher_education_age_qualification_current",
+                affected_nodes=("485.higher_education.degree", "485.schedule1.valid_application"),
+                freshness_required=True,
+                preferred_urls=(
+                    "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/temporary-graduate-485/changes",
+                    "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/temporary-graduate-485/post-higher-education-work",
+                ),
+                live_query_hints=(
+                    "Temporary Graduate visa changes age limit Post-Higher Education Work stream",
+                    "Subclass 485 Masters research PhD age exception Home Affairs",
+                ),
+                next_question="What is your age and exact qualification type, such as Bachelor, Master by coursework, Masters (research), or PhD?",
+                customer_explanation="Current 485 age and exception policy can change the result even when the stable degree pathway is identified.",
+                customer_ask_priority=10,
+                default_customer_action="warn_and_check_current_policy",
+            ),
+            "485.policy.higher_education_qualification_current": CriterionNode(
+                id="485.policy.higher_education_qualification_current",
+                label="Current higher-education qualification policy overlay",
+                layer="current_policy_overlay",
+                legal_basis=("Current Home Affairs 485 higher-education qualification framework",),
+                applies_to_pathways=("higher_education",),
+                required_facts=("qualification_level",),
+                optional_facts=("qualification_type", "minister_specified_qualification_status"),
+                source_queries=(
+                    "Subclass 485 Post-Higher Education Work stream qualification current rule",
+                    "Temporary Graduate visa higher education qualification specified by Minister",
+                ),
+                source_classes=("485_higher_education_485231", "485_minister_specified_qualification", "485_requirements_overview"),
+                policy_key="485_higher_education_qualification_current",
+                affected_nodes=("485.higher_education.degree", "485.higher_education.minister_instrument"),
+                freshness_required=True,
+                preferred_urls=(
+                    "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/temporary-graduate-485/post-higher-education-work",
+                    "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/temporary-graduate-485/changes",
+                ),
+                live_query_hints=(
+                    "Subclass 485 post higher education qualification current policy",
+                    "Temporary Graduate visa qualification changes Home Affairs",
+                ),
+                next_question="What exact degree did you complete, and was it coursework or research if it was a Masters?",
+                customer_ask_priority=15,
+                default_customer_action="warn_and_check_current_policy",
+            ),
+            "485.policy.regional_or_second_current": CriterionNode(
+                id="485.policy.regional_or_second_current",
+                label="Current second/regional 485 policy overlay",
+                layer="current_policy_overlay",
+                legal_basis=("Current Home Affairs second/regional Subclass 485 policy",),
+                applies_to_pathways=("regional_extension", "subsequent_regional"),
+                required_facts=("previous_485_held", "regional_study_location"),
+                optional_facts=("regional_residence_duration",),
+                source_queries=(
+                    "Subclass 485 second Post-Higher Education Work regional extension current rule",
+                    "Temporary Graduate visa second post-higher education work regional current policy",
+                ),
+                source_classes=("485_second_regional_485232_485235", "485_regional_residence_requirement", "485_requirements_overview"),
+                policy_key="485_regional_or_second_current",
+                affected_nodes=("485.regional_extension",),
+                freshness_required=True,
+                live_query_hints=("Subclass 485 second post-higher education work regional Home Affairs current",),
+                next_question="Have you held a first 485 visa, and where did you live/study/work regionally?",
+                ask_only_if_user_wants_full_check=True,
+                customer_ask_priority=25,
+                default_customer_action="warn_and_check_current_policy",
+            ),
+            "485.policy.replacement_or_disruption_current": CriterionNode(
+                id="485.policy.replacement_or_disruption_current",
+                label="Current replacement/disruption 485 policy overlay",
+                layer="current_policy_overlay",
+                legal_basis=("Current Home Affairs Subclass 485 replacement/disruption policy",),
+                applies_to_pathways=("replacement",),
+                required_facts=("previous_485_held", "replacement_reason"),
+                source_queries=(
+                    "Subclass 485 replacement stream current policy disruption",
+                    "Temporary Graduate visa replacement stream eligibility timeframe Home Affairs",
+                ),
+                source_classes=("485_replacement_stream", "485_requirements_overview"),
+                policy_key="485_replacement_or_disruption_current",
+                affected_nodes=("485.replacement",),
+                freshness_required=True,
+                live_query_hints=("Subclass 485 replacement stream Home Affairs current policy",),
+                next_question="What disruption prevented you from using your previous 485 visa period?",
+                ask_only_if_user_wants_full_check=True,
+                customer_ask_priority=25,
+                default_customer_action="warn_and_check_current_policy",
+            ),
+            "cross_policy.critical_technology_pic4003b": CriterionNode(
+                id="cross_policy.critical_technology_pic4003b",
+                label="Critical technology / PIC 4003B policy overlay",
+                layer="current_policy_overlay",
+                legal_basis=("PIC 4003B / critical technology screening / related visa conditions",),
+                required_facts=("critical_technology_context",),
+                optional_facts=("course_type", "research_topic", "condition_8208_applies"),
+                source_queries=(
+                    "Home Affairs critical technology PIC 4003B condition 8208 student visa 500 temporary graduate 485",
+                    "critical technology visa screening PIC 4003B Home Affairs",
+                ),
+                source_classes=("critical_technology_policy", "conditions_guidance", "legislation_primary"),
+                policy_key="critical_technology_pic4003b_condition8208",
+                affected_nodes=("485.higher_education.degree", "485.schedule1.valid_application"),
+                freshness_required=True,
+                preferred_urls=("https://www.homeaffairs.gov.au/about-us/our-portfolios/national-security/technology-and-data-security/critical-technology",),
+                live_query_hints=(
+                    "Home Affairs critical technology PIC 4003B condition 8208",
+                    "critical technology visa screening Home Affairs student visa temporary graduate",
+                ),
+                next_question="Is the course or research topic related to critical technology, such as AI, cyber security, quantum, advanced computing, or similar areas?",
+                customer_ask_priority=5,
+                default_customer_action="warn_and_check_current_policy",
+            ),
             "485.common.health_insurance": CriterionNode(
                 id="485.common.health_insurance",
                 label="Health insurance / visa condition dependency",
@@ -339,21 +467,28 @@ class Subclass485CriterionPack:
             ids.extend([
                 "485.higher_education.degree",
                 "485.higher_education.minister_instrument",
+                "485.policy.age_and_qualification_current",
+                "485.policy.higher_education_qualification_current",
             ])
         elif active_pathway in {"regional_extension", "subsequent_regional"}:
-            ids.extend(["485.regional_extension"])
+            ids.extend([
+                "485.regional_extension",
+                "485.policy.regional_or_second_current",
+            ])
         elif active_pathway == "replacement":
-            ids.extend(["485.replacement"])
+            ids.extend([
+                "485.replacement",
+                "485.policy.replacement_or_disruption_current",
+            ])
         else:
-            # If unclear, do not activate every stream. Ask classification facts first.
             pass
+
+        if facts.get("critical_technology_context"):
+            ids.append("cross_policy.critical_technology_pic4003b")
 
         ids.append("485.common.health_insurance")
         return [self.nodes[item] for item in ids if item in self.nodes]
 
-    # ------------------------------------------------------------------
-    # Pathway and status helpers
-    # ------------------------------------------------------------------
     def _candidate_pathways(self, question: str, facts: dict[str, Any]) -> list[str]:
         q = (question or "").lower()
         qualification = str(facts.get("qualification_level") or facts.get("qualification_type") or "").lower()
@@ -406,6 +541,33 @@ class Subclass485CriterionPack:
     ) -> tuple[CriterionStatus | None, str | None, list[str]]:
         risks: list[str] = []
 
+        if node.id == "485.policy.age_and_qualification_current":
+            age = self._duration_as_float(facts.get("age"))
+            qualification = str(facts.get("qualification_level") or facts.get("qualification") or "").lower()
+            if age is not None and age > 35 and any(term in qualification for term in ["master", "masters", "bachelor", "degree"]):
+                return (
+                    "current_policy_risk",
+                    "The user's age/qualification facts may be affected by the current Subclass 485 age and qualification policy overlay.",
+                    ["485_age_over_35_policy_risk"],
+                )
+
+        if node.id == "485.policy.higher_education_qualification_current":
+            value = str(facts.get("minister_specified_qualification_status") or "").lower()
+            if value in {"not_listed", "no", "false"}:
+                return (
+                    "current_policy_risk",
+                    "The qualification may not be covered by the current higher-education qualification framework.",
+                    ["minister_specified_qualification_issue"],
+                )
+
+        if node.id == "cross_policy.critical_technology_pic4003b":
+            if facts.get("critical_technology_context"):
+                return (
+                    "needs_live_policy_check",
+                    "Critical technology issues depend on current official policy, PIC 4003B/condition rules, and course/research details.",
+                    ["critical_technology_policy_check_required"],
+                )
+
         if node.id == "485.vocational.skills_assessment":
             value = str(facts.get("skills_assessment_status") or "").lower()
             if value in {"no", "not_applied", "none", "not started", "not_started"}:
@@ -437,6 +599,12 @@ class Subclass485CriterionPack:
             facts.setdefault("visa_subclass", "485")
             facts.setdefault("visa_type", "temporary_graduate")
 
+        age_match = re.search(r"\b(?:i\s+am\s+|age\s*)?(\d{2})\s*(?:years?\s*old)?\b", q)
+        if age_match:
+            age = int(age_match.group(1))
+            if 10 <= age <= 80:
+                facts.setdefault("age", age)
+
         if any(term in q for term in ["diploma", "advanced diploma"]):
             facts.setdefault("qualification_level", "diploma")
         elif "associate degree" in q:
@@ -450,6 +618,13 @@ class Subclass485CriterionPack:
         elif "phd" in q or "doctorate" in q:
             facts.setdefault("qualification_level", "phd")
 
+        if any(term in q for term in ["coursework", "course work"]):
+            facts.setdefault("qualification_type", "coursework")
+        if "masters (research)" in q or "master by research" in q or "masters by research" in q:
+            facts.setdefault("qualification_type", "masters_research")
+        if "master by coursework" in q or "masters by coursework" in q:
+            facts.setdefault("qualification_type", "masters_coursework")
+
         if any(term in q for term in ["second 485", "second temporary graduate", "regional extension"]):
             facts.setdefault("first_485_or_subsequent", "second_485")
             facts.setdefault("previous_485_held", True)
@@ -460,6 +635,9 @@ class Subclass485CriterionPack:
             facts.setdefault("regional_history", True)
         if "replacement" in q:
             facts.setdefault("replacement_reason", "user_mentioned_replacement")
+
+        if any(term in q for term in ["critical technology", "critical technologies", "ai", "cybersecurity", "quantum", "phd research", "doctoral research"]):
+            facts.setdefault("critical_technology_context", True)
 
         return facts
 

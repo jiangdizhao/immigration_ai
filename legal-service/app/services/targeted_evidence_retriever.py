@@ -62,7 +62,7 @@ class TargetedEvidenceRetriever:
             node_chunks: list[Any] = []
             node_source_titles: list[str] = []
             node_source_classes: set[str] = set()
-            retrieval_queries = list(node.source_queries[:2])
+            retrieval_queries = list(dict.fromkeys([*list(node.source_queries), *list(getattr(node, 'live_query_hints', ()) or [])]))[:3]
 
             for query in retrieval_queries:
                 payload = QueryRequest(
@@ -142,6 +142,11 @@ class TargetedEvidenceRetriever:
         node_id = node.id
         q = query_text or ""
 
+        if node.layer == "current_policy_overlay":
+            if any(term in q for term in ["current", "latest", "today", "now", "changed", "new rule", "age", "critical technology", "masters", "master", "regional", "replacement"]):
+                return 0
+            return 2
+
         if "age" in node_id or "age" in " ".join(node.source_classes):
             if re.search(r"\b\d{2}\s*(?:years?\s*old)?\b|\bage\b|\byears old\b", q):
                 return 0
@@ -214,6 +219,13 @@ class TargetedEvidenceRetriever:
             if any(term in blob for term in ["35 years", "35 years old", "years old or younger", "age"]):
                 score += 6.0
 
+        if node.layer == "current_policy_overlay":
+            if any(term in blob for term in ["current", "changes", "post-higher education", "35 years", "critical technology", "pic 4003b", "condition 8208"]):
+                score += 5.0
+            for url in getattr(node, "preferred_urls", ()) or ():
+                if url and url.lower() in blob:
+                    score += 2.0
+
         if "temporary graduate" in title or "subclass 485" in title:
             score += 1.5
         if "department of home affairs" in str(getattr(source, "authority", "") or "").lower():
@@ -230,7 +242,9 @@ class TargetedEvidenceRetriever:
     def _source_types_for_node(self, base_payload: QueryRequest, node: CriterionNode) -> list[str]:
         existing = list(base_payload.preferred_source_types or [])
         wanted = ["legislation", "guidance", "procedure"]
-        if node.layer == "schedule1_validity":
+        if node.layer == "current_policy_overlay":
+            wanted = ["guidance", "legislation", "procedure"]
+        elif node.layer == "schedule1_validity":
             wanted = ["legislation", "procedure", "guidance"]
         elif node.layer == "schedule2_grant":
             wanted = ["legislation", "guidance", "procedure"]

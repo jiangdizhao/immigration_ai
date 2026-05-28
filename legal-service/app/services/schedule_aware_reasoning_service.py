@@ -90,6 +90,8 @@ class ScheduleAwareReasoningService:
             return {}
         missing = assessment.get("missing_facts") or []
         risk_flags = assessment.get("risk_flags") or []
+        policy_overlays = assessment.get("policy_overlays") or []
+        current_policy_flags = assessment.get("current_policy_flags") or []
         return {
             "schedule_aware_active": bool(assessment.get("is_active")),
             "subclass": assessment.get("subclass"),
@@ -99,9 +101,16 @@ class ScheduleAwareReasoningService:
             "recommended_next_question": assessment.get("recommended_next_question"),
             "missing_facts": missing,
             "risk_flags": risk_flags,
+            "policy_overlays": policy_overlays,
+            "current_policy_flags": current_policy_flags,
+            "answer_blocking_missing_facts": assessment.get("answer_blocking_missing_facts") or [],
+            "answerable_provisionally": assessment.get("answerable_provisionally", True),
             "criteria": assessment.get("criteria") or [],
             "instruction": (
-                "Use this criterion trace as the legal structure for Subclass 485. "
-                "Do not mix criteria from unrelated subclasses. Treat Schedule 1 as validity and Schedule 2 as grant criteria."
+                "Use this criterion trace as the legal structure for schedule-aware reasoning. "
+                "Treat Schedule 1 as validity and Schedule 2 as grant criteria. "
+                "Treat current_policy_overlay criteria as freshness-sensitive policy checks, not as ordinary missing facts. "
+                "Do not expose every missing criterion to customers; answer first and ask at most one high-priority question."
             ),
         }
+
