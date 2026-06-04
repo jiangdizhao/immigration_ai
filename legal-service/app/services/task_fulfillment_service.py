@@ -158,7 +158,7 @@ class TaskFulfillmentService:
                 label_zh = "整理下一步计划"
                 label_en = "prepare a next-step plan"
 
-        if not offered and response.next_action != "answer":
+        if not offered:
             return None
 
         return {
