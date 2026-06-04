@@ -82,6 +82,12 @@ export function GuidedIntakeCard({
     );
   }
 
+  // In customer mode, do not display analysis_ready as a fake assistant answer.
+  // The real answer should come from the assistant text or a real task action.
+  if (!requestedFacts.length && mode === "analysis_ready" && !SHOW_WIDGET_DEBUG) {
+    return null;
+  }
+
   if (!requestedFacts.length && mode !== "analysis_ready") {
     return null;
   }

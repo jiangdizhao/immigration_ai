@@ -105,6 +105,18 @@ class PublicAnswerGuard:
                 strategy="pass_through",
             )
 
+        # Prefer targeted repair over whole-answer replacement. This avoids the
+        # canned-template feeling while still removing internal machine wording.
+        if text and matched:
+            repaired = self._repair_machine_style_text(text, response_language=response_language)
+            if repaired and not self._matched_patterns(repaired):
+                return PublicAnswerGuardResult(
+                    answer=repaired,
+                    triggered=True,
+                    matched_patterns=matched,
+                    strategy="targeted_phrase_repair",
+                )
+
         replacement, strategy = self._replacement_answer(
             response_language=response_language,
             original_question=original_question,
@@ -118,13 +130,48 @@ class PublicAnswerGuard:
             answer=replacement,
             triggered=True,
             matched_patterns=matched or ["blank_or_machine_style_answer"],
-            strategy=strategy,
+            strategy=f"fallback_after_repair_failed:{strategy}",
         )
 
     def _matched_patterns(self, text: str) -> list[str]:
         if not text:
             return []
         return [pattern.pattern for pattern in self.FORBIDDEN_PATTERNS if pattern.search(text)]
+
+    def _repair_machine_style_text(self, text: str, *, response_language: str) -> str:
+        repaired = text
+        replacements = [
+            (r"\bthe retrieved material does not provide\b", "I cannot safely confirm"),
+            (r"\bthe retrieved sources? do(?:es)? not provide\b", "I cannot safely confirm"),
+            (r"\bthe provided sources? do(?:es)? not support\b", "I cannot safely confirm"),
+            (r"\bthis is not supported by the retrieved material\b", "I cannot safely confirm this from the available information"),
+            (r"\boperation answerability\b", "the current information"),
+            (r"\brequired source classes?\b", "the right official rule"),
+            (r"\bevidence package\b", "the available information"),
+            (r"\bcontext insufficient\b", "more details are needed"),
+            (r"\bunsupported specificity\b", "a point that needs checking"),
+            (r"\blocal corpus\b", "available information"),
+            (r"\blegal corpus\b", "available information"),
+            (r"\bretrieval\b", "information check"),
+        ]
+        for pattern, replacement in replacements:
+            repaired = re.sub(pattern, replacement, repaired, flags=re.I)
+
+        if (response_language or "").lower().startswith("zh"):
+            zh_replacements = [
+                ("检索材料", "目前信息"),
+                ("检索来源", "目前信息"),
+                ("证据包", "目前信息"),
+                ("本地语料", "目前信息"),
+                ("法律语料", "目前信息"),
+                ("source class", "官方规则"),
+                ("retrieval", "信息核对"),
+            ]
+            for source, target in zh_replacements:
+                repaired = repaired.replace(source, target)
+
+        return re.sub(r"\s{2,}", " ", repaired).strip()
+
 
     def _replacement_answer(
         self,

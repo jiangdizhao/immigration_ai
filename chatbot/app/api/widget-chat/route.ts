@@ -385,6 +385,8 @@ function logWidgetDebug(params: {
     dbg.sufficiency_gate?.answerability?.required_source_classes_missing ?? []
   );
   console.log("policy:", dbg.policy ?? {});
+  console.log("conversationAction:", dbg.conversation_action ?? null);
+  console.log("taskFulfillment:", dbg.task_fulfillment ?? null);
   console.log("liveTrigger:", dbg.sufficiency_gate?.live_trigger ?? null);
   console.log("riskFlags:", dbg.risk_flags ?? {});
   console.log("interactionMode:", params.response.interaction_plan?.mode ?? null);

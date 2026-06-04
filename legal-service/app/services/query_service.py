@@ -42,6 +42,8 @@ from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
 from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
 from app.services.state_machine import StateMachine, TurnInput
+from app.services.conversation_action_service import ConversationActionService
+from app.services.task_fulfillment_service import TaskFulfillmentService
 
 
 @dataclass(slots=True)
@@ -87,6 +89,8 @@ class QueryService:
         provisional_recommendation_service: ProvisionalRecommendationService | None = None,
         fact_status_reasoning_service: FactStatusReasoningService | None = None,
         citation_quality_service: CitationQualityService | None = None,
+        conversation_action_service: ConversationActionService | None = None,
+        task_fulfillment_service: TaskFulfillmentService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -107,6 +111,8 @@ class QueryService:
         self.provisional_recommendation_service = provisional_recommendation_service or ProvisionalRecommendationService()
         self.fact_status_reasoning_service = fact_status_reasoning_service or FactStatusReasoningService()
         self.citation_quality_service = citation_quality_service or CitationQualityService()
+        self.conversation_action_service = conversation_action_service or ConversationActionService()
+        self.task_fulfillment_service = task_fulfillment_service or TaskFulfillmentService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -130,6 +136,65 @@ class QueryService:
         matter = self._get_or_create_matter(db, payload)
 
         current_state = self.state_machine.hydrate_state(matter.metadata_json)
+
+
+        conversation_action = self.conversation_action_service.analyze(
+            raw_user_message=original_question if "original_question" in locals() else payload.question,
+            internal_question_en=payload.question,
+            current_state=current_state,
+            pending_offer=(current_state.carried_intake_facts or {}).get("pending_offer"),
+            conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
+        )
+
+        if conversation_action.should_handle_as_task:
+            response = self.task_fulfillment_service.build_response(
+                action=conversation_action,
+                state=current_state,
+                raw_user_message=original_question if "original_question" in locals() else payload.question,
+                internal_question_en=payload.question,
+                response_language=(
+                    language_context.response_language
+                    if "language_context" in locals()
+                    else (payload.response_language or "en")
+                ),
+                matter_id=matter.id,
+            )
+
+            task_state = current_state.model_copy(deep=True)
+            task_state.latest_question = payload.question
+            task_state.last_contextualized_question = payload.question
+            task_state.next_action = response.next_action
+            task_state.last_answer_type = "specific_grounded"
+            task_state.carried_intake_facts = dict(task_state.carried_intake_facts or {})
+            task_state.carried_intake_facts.pop("pending_offer", None)
+            task_state.conversation_state = "ESCALATION_READY" if response.escalate else "ANSWERED_GENERAL"
+
+            task_state = self.state_machine.append_turn_pair(
+                state=task_state,
+                user_question=payload.question,
+                effective_question=payload.question,
+                assistant_answer=response.answer,
+                next_action=response.next_action,
+                confidence=response.confidence,
+            )
+
+            response.conversation_state = task_state.conversation_state
+            response.case_hypothesis = task_state.case_hypothesis
+            response.fact_slot_states = task_state.fact_slot_states
+            response.interaction_plan = task_state.interaction_plan
+            debug = dict(response.retrieval_debug or {})
+            debug["conversation_action"] = conversation_action.to_debug_dict()
+            response.retrieval_debug = debug
+
+            self._update_matter_from_state(
+                matter=matter,
+                payload=payload,
+                state=task_state,
+                effective_question=payload.question,
+            )
+            db.commit()
+            db.refresh(matter)
+            return response
         turn_analysis = self.pre_llm_router_service.analyze(
             question=payload.question,
             current_state=current_state,
@@ -603,6 +668,25 @@ class QueryService:
         debug["citation_quality"] = citation_quality_debug
         response.retrieval_debug = debug
         response.response_language = language_context.response_language
+
+
+        pending_offer = self.task_fulfillment_service.propose_pending_offer(
+            response=response,
+            state=state,
+            original_question=original_question if "original_question" in locals() else payload.question,
+            response_language=(
+                language_context.response_language
+                if "language_context" in locals()
+                else (response.response_language or payload.response_language or "en")
+            ),
+        )
+        state.carried_intake_facts = dict(state.carried_intake_facts or {})
+        if pending_offer:
+            state.carried_intake_facts["pending_offer"] = pending_offer
+        elif response.next_action == "answer":
+            # Avoid stale continuation when no new service was offered.
+            state.carried_intake_facts.pop("pending_offer", None)
+
 
         self._update_matter_from_state(
             matter=matter,
