@@ -21,3 +21,19 @@ legal-service/.env
 Thumbs.db
 .vscode/
 .idea/chatbot/my_test/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local cleanup / patch artifacts
+.cleanup_trash/
+.patch_backups/
+cleanup_reports/
+
+# Local test files
+chatbot/my_test/
+
+# Local handoff docs, if not intended for repo
+doc/*.docx
