@@ -1,17 +1,16 @@
-
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import re
-from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.db.models import Citation, Matter
 from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.semantic_contracts import SemanticTurnAnalysis
 from app.schemas.state import (
     AnswerPackage,
     ContextualizationResult,
@@ -23,30 +22,30 @@ from app.schemas.state import (
     PolicyDecision,
     SufficiencyGateResult,
 )
-from app.services.case_state_service import CaseStateService
 from app.services.case_frame_service import CaseFrameService
-from app.services.provisional_recommendation_service import ProvisionalRecommendationService
+from app.services.case_state_service import CaseStateService
+from app.services.citation_quality_service import CitationQualityService
+from app.services.communication_plan_service import CommunicationPlanService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.fact_status_reasoning_service import FactStatusReasoningService
-from app.services.citation_quality_service import CitationQualityService
-from app.services.interaction_control_service import InteractionControlService
-from app.services.language_service import LanguageService
 from app.services.focused_policy_issue_service import FocusedPolicyIssueService
 from app.services.frame_consistency_service import FrameConsistencyGate
+from app.services.interaction_control_service import InteractionControlService
+from app.services.language_service import LanguageService
+from app.services.legal_decision_service import LegalDecisionService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.lightweight_response_service import LightweightResponseService
+from app.services.natural_response_service import NaturalResponseService
 from app.services.policy_rules import PolicyRules
 from app.services.pre_llm_router_service import PreLLMRouterService, PreLLMTurnAnalysis
+from app.services.provisional_recommendation_service import ProvisionalRecommendationService
 from app.services.public_answer_guard import PublicAnswerGuard
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
 from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
+from app.services.semantic_turn_service import SemanticTurnService
 from app.services.state_machine import StateMachine, TurnInput
-from app.services.conversation_action_service import ConversationActionService
 from app.services.task_fulfillment_service import TaskFulfillmentService
-from app.services.legal_decision_service import LegalDecisionService
-from app.services.communication_plan_service import CommunicationPlanService
-from app.services.natural_response_service import NaturalResponseService
 
 
 @dataclass(slots=True)
@@ -70,7 +69,59 @@ class _LiveChunkShim:
     source: _LiveSourceShim
 
 
+@dataclass(slots=True)
+class _SemanticTaskAction:
+    """Task-action adapter derived from SemanticTurnAnalysis.
+
+    It intentionally does not classify natural language. It only adapts the
+    already-filled semantic JSON form into the shape expected by the task
+    fulfillment service.
+    """
+
+    action_type: str = "legal_question"
+    should_handle_as_task: bool = False
+    task_type: str | None = None
+    confidence: str = "low"
+    reason: str = ""
+    matched_phrases: list[str] = field(default_factory=list)
+    accepted_offer: dict[str, Any] | None = None
+    semantic_turn: dict[str, Any] | None = None
+
+    def to_debug_dict(self) -> dict[str, Any]:
+        return {
+            "action_type": self.action_type,
+            "should_handle_as_task": self.should_handle_as_task,
+            "task_type": self.task_type,
+            "confidence": self.confidence,
+            "reason": self.reason,
+            "matched_phrases": list(self.matched_phrases),
+            "accepted_offer": self.accepted_offer,
+            "semantic_turn": self.semantic_turn,
+            "semantic_regex_used": False,
+        }
+
+
 class QueryService:
+    """Clean orchestration service for the legal-service query endpoint.
+
+    Design principles:
+    - SemanticTurnService is the only early service-action authority.
+    - Regex/keyword matching in this file is limited to literal/source cleanup
+      and citation/retrieval scoring, not user-intent routing.
+    - LegalDecisionObject + CommunicationPlan + NaturalResponseService handle
+      customer-facing non-template wording after the legal pipeline has produced
+      a bounded answer.
+    """
+
+    TASK_DEFAULTS: dict[str, str] = {
+        "draft_request": "draft_user_statement",
+        "checklist_request": "document_checklist",
+        "lawyer_summary_request": "lawyer_brief",
+        "timeline_request": "timeline_plan",
+        "booking_request": "booking_handoff",
+        "accept_previous_offer": "next_step_plan",
+    }
+
     def __init__(
         self,
         retrieval_service: RetrievalService | None = None,
@@ -92,8 +143,11 @@ class QueryService:
         provisional_recommendation_service: ProvisionalRecommendationService | None = None,
         fact_status_reasoning_service: FactStatusReasoningService | None = None,
         citation_quality_service: CitationQualityService | None = None,
-        conversation_action_service: ConversationActionService | None = None,
+        semantic_turn_service: SemanticTurnService | None = None,
         task_fulfillment_service: TaskFulfillmentService | None = None,
+        legal_decision_service: LegalDecisionService | None = None,
+        communication_plan_service: CommunicationPlanService | None = None,
+        natural_response_service: NaturalResponseService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -114,7 +168,7 @@ class QueryService:
         self.provisional_recommendation_service = provisional_recommendation_service or ProvisionalRecommendationService()
         self.fact_status_reasoning_service = fact_status_reasoning_service or FactStatusReasoningService()
         self.citation_quality_service = citation_quality_service or CitationQualityService()
-        self.conversation_action_service = conversation_action_service or ConversationActionService()
+        self.semantic_turn_service = semantic_turn_service or SemanticTurnService()
         self.task_fulfillment_service = task_fulfillment_service or TaskFulfillmentService()
         self.legal_decision_service = legal_decision_service or LegalDecisionService()
         self.communication_plan_service = communication_plan_service or CommunicationPlanService()
@@ -130,7 +184,10 @@ class QueryService:
             question=payload.question,
             requested_language=payload.response_language,
         )
-        if language_context.internal_question_en.strip() != payload.question.strip() or payload.response_language != language_context.response_language:
+        if (
+            language_context.internal_question_en.strip() != payload.question.strip()
+            or payload.response_language != language_context.response_language
+        ):
             payload = QueryRequest(
                 **{
                     **payload.model_dump(),
@@ -140,78 +197,51 @@ class QueryService:
             )
 
         matter = self._get_or_create_matter(db, payload)
-
         current_state = self.state_machine.hydrate_state(matter.metadata_json)
+        pending_offer = (current_state.carried_intake_facts or {}).get("pending_offer")
 
-
-        conversation_action = self.conversation_action_service.analyze(
-            raw_user_message=original_question if "original_question" in locals() else payload.question,
-            internal_question_en=payload.question,
+        semantic_turn = self._analyze_semantic_turn(
+            original_question=original_question,
+            payload=payload,
             current_state=current_state,
-            pending_offer=(current_state.carried_intake_facts or {}).get("pending_offer"),
-            conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
+            pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
+            response_language=language_context.response_language,
         )
 
-        if conversation_action.should_handle_as_task:
-            response = self.task_fulfillment_service.build_response(
-                action=conversation_action,
-                state=current_state,
-                raw_user_message=original_question if "original_question" in locals() else payload.question,
-                internal_question_en=payload.question,
-                response_language=(
-                    language_context.response_language
-                    if "language_context" in locals()
-                    else (payload.response_language or "en")
-                ),
-                matter_id=matter.id,
-            )
-
-            task_state = current_state.model_copy(deep=True)
-            task_state.latest_question = payload.question
-            task_state.last_contextualized_question = payload.question
-            task_state.next_action = response.next_action
-            task_state.last_answer_type = "specific_grounded"
-            task_state.carried_intake_facts = dict(task_state.carried_intake_facts or {})
-            task_state.carried_intake_facts.pop("pending_offer", None)
-            task_state.conversation_state = "ESCALATION_READY" if response.escalate else "ANSWERED_GENERAL"
-
-            task_state = self.state_machine.append_turn_pair(
-                state=task_state,
-                user_question=payload.question,
-                effective_question=payload.question,
-                assistant_answer=response.answer,
-                next_action=response.next_action,
-                confidence=response.confidence,
-            )
-
-            response.conversation_state = task_state.conversation_state
-            response.case_hypothesis = task_state.case_hypothesis
-            response.fact_slot_states = task_state.fact_slot_states
-            response.interaction_plan = task_state.interaction_plan
-            debug = dict(response.retrieval_debug or {})
-            debug["conversation_action"] = conversation_action.to_debug_dict()
-            response.retrieval_debug = debug
-
-            self._update_matter_from_state(
+        task_action = self._task_action_from_semantic(
+            semantic_turn=semantic_turn,
+            pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
+        )
+        if task_action.should_handle_as_task:
+            return self._handle_task_action(
+                db=db,
                 matter=matter,
                 payload=payload,
-                state=task_state,
-                effective_question=payload.question,
+                original_question=original_question,
+                current_state=current_state,
+                language=language_context.response_language,
+                task_action=task_action,
             )
-            db.commit()
-            db.refresh(matter)
-            return response
+
+        semantic_facts = self._facts_from_semantic_turn(semantic_turn)
+        effective_intake_facts = {
+            **(payload.intake_facts or {}),
+            **semantic_facts,
+        }
+
         turn_analysis = self.pre_llm_router_service.analyze(
             question=payload.question,
             current_state=current_state,
-            intake_facts=payload.intake_facts or {},
+            intake_facts=effective_intake_facts,
             conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
         )
+        self._apply_semantic_overrides_to_turn_analysis(turn_analysis, semantic_turn)
+
         turn_input = TurnInput(
             question=payload.question,
             preferred_jurisdiction=payload.preferred_jurisdiction,
             preferred_source_types=payload.preferred_source_types,
-            intake_facts=payload.intake_facts or {},
+            intake_facts=effective_intake_facts,
             issue_summary=matter.issue_summary,
         )
 
@@ -228,47 +258,19 @@ class QueryService:
         effective_question = prepared.effective_question
         merged_intake_facts = prepared.merged_intake_facts
 
-        frame_decision = self.case_frame_service.route(
-            question=effective_question,
+        frame_decision, case_frame_debug, frame_consistency_debug, frame_skip_retrieval = self._route_case_frame(
+            state=state,
+            current_state=current_state,
+            known_facts=merged_intake_facts,
             original_question=original_question,
-            current_state=state,
-            known_facts=merged_intake_facts,
-            answer_preference=getattr(payload, "answer_preference", "answer_first"),
+            effective_question=effective_question,
         )
-        pre_focused_policy_issue = self.focused_policy_issue_service.detect_issue(
-            question=effective_question,
-            operation_type=frame_decision.operation_type,
-            known_facts=merged_intake_facts,
-        )
-        frame_consistency = self.frame_consistency_gate.evaluate(
-            question=effective_question,
-            original_question=original_question,
-            previous_frame=str((current_state.carried_intake_facts or {}).get("active_case_frame_id") or ""),
-            candidate_frame=frame_decision.frame_id,
-            candidate_family=frame_decision.case_family,
-            positive_issue_flags=frame_decision.positive_issue_flags,
-            known_facts=merged_intake_facts,
-            focused_policy_issue=pre_focused_policy_issue,
-            available_frame_ids=set(self.case_frame_service.frames.keys()),
-        )
-        if frame_consistency.repair_frame_id:
-            frame_decision = self.case_frame_service.repair_decision(
-                decision=frame_decision,
-                frame_id=frame_consistency.repair_frame_id,
-                known_facts=merged_intake_facts,
-                reason=frame_consistency.reason,
-            )
-
         state, merged_intake_facts, case_frame_debug = self.case_frame_service.apply_to_state(
             state=state,
             known_facts=merged_intake_facts,
             decision=frame_decision,
         )
-        frame_consistency_debug = frame_consistency.to_dict()
         case_frame_debug["frame_consistency"] = frame_consistency_debug
-        frame_skip_retrieval = frame_decision.response_tier == "triage_question"
-        provisional_recommendation_debug: dict[str, Any] = {"applied": False, "reason": "not_reached"}
-        case_frame_interaction_debug: dict[str, Any] = {}
 
         effective_payload = QueryRequest(
             **{
@@ -279,9 +281,527 @@ class QueryService:
             }
         )
 
-        focused_policy_issue = None if frame_skip_retrieval else pre_focused_policy_issue
+        response, evidence, policy, enriched_debug, schedule_aware_assessment, focused_policy_issue, focused_policy_finding = self._retrieve_and_reason(
+            db=db,
+            payload=payload,
+            effective_payload=effective_payload,
+            matter=matter,
+            state=state,
+            artifacts=artifacts,
+            turn_analysis=turn_analysis,
+            frame_decision=frame_decision,
+            frame_skip_retrieval=frame_skip_retrieval,
+            case_frame_debug=case_frame_debug,
+            frame_consistency_debug=frame_consistency_debug,
+            original_question=original_question,
+            effective_question=effective_question,
+            merged_intake_facts=merged_intake_facts,
+            language_debug=language_context.to_debug_dict(),
+        )
+
+        response, evidence, policy = self._apply_post_reasoning_guards(
+            response=response,
+            evidence=evidence,
+            policy=policy,
+            state=state,
+            frame_decision=frame_decision,
+            case_frame_debug=case_frame_debug,
+            focused_policy_issue=focused_policy_issue,
+            focused_policy_finding=focused_policy_finding,
+            merged_intake_facts=merged_intake_facts,
+            fact_status_report=enriched_debug.get("fact_status_reasoning"),
+            chunks_debug=enriched_debug,
+            response_language=language_context.response_language,
+            original_question=original_question,
+            effective_question=effective_question,
+        )
+
+        case_hypothesis, fact_slot_states, interaction_plan, case_frame_interaction_debug = self._build_interaction_state(
+            state=state,
+            response=response,
+            evidence=evidence,
+            policy=policy,
+            frame_decision=frame_decision,
+            effective_question=effective_question,
+            response_language=language_context.response_language,
+        )
+        state.case_hypothesis = case_hypothesis
+        state.fact_slot_states = fact_slot_states
+        state.interaction_plan = interaction_plan
+
+        response = self._normalize_response_for_user(
+            response=response,
+            policy=policy,
+            evidence=evidence,
+            fact_slot_states=fact_slot_states,
+            case_hypothesis=case_hypothesis,
+        )
+
+        response, fact_slot_states, interaction_plan = self.language_service.localize_response_bundle(
+            response=response,
+            fact_slot_states=fact_slot_states,
+            interaction_plan=interaction_plan,
+            response_language=language_context.response_language,
+        )
+
+        response, fact_slot_states, interaction_plan, interaction_control_debug = (
+            self.interaction_control_service.apply_customer_flow_guards(
+                response=response,
+                fact_slot_states=fact_slot_states,
+                interaction_plan=interaction_plan,
+                state=state,
+                known_facts=state.carried_intake_facts,
+                case_hypothesis=case_hypothesis,
+                question=effective_question,
+            )
+        )
+        state.fact_slot_states = fact_slot_states
+        state.interaction_plan = interaction_plan
+
+        response, public_answer_guard_debug = self.public_answer_guard.sanitize_response(
+            response=response,
+            response_language=language_context.response_language,
+            original_question=original_question,
+            effective_question=effective_question,
+            policy=policy,
+            case_hypothesis=case_hypothesis,
+            interaction_plan=interaction_plan,
+            fact_slot_states=fact_slot_states,
+        )
+
+        response.conversation_state = state.conversation_state
+        response.case_hypothesis = case_hypothesis
+        response.fact_slot_states = fact_slot_states
+        response.interaction_plan = interaction_plan
+        response.response_language = language_context.response_language
+        response.compact_sources = self._compact_source_titles(response)
+        response = self._filter_compact_sources(response, state)
+
+        response, citation_quality_debug = self.citation_quality_service.filter_response_citations(
+            response=response,
+            focused_policy_issue=focused_policy_issue,
+            focused_policy_finding=focused_policy_finding,
+        )
+
+        semantic_turn_dict = semantic_turn.model_dump()
+        legal_decision = self.legal_decision_service.build(
+            response=response,
+            state=state,
+            semantic_turn=semantic_turn_dict,
+            original_question=original_question,
+            effective_question=effective_question,
+            retrieval_debug=response.retrieval_debug,
+        )
+        communication_plan = self.communication_plan_service.build(
+            decision=legal_decision,
+            semantic_turn=semantic_turn_dict,
+            response_language=language_context.response_language,
+        )
+        response, natural_response_debug = self.natural_response_service.apply_to_response(
+            response=response,
+            legal_decision=legal_decision,
+            communication_plan=communication_plan,
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=state.carried_intake_facts,
+        )
+
+        # Run public-answer guard once more after natural rewrite.
+        response, final_public_guard_debug = self.public_answer_guard.sanitize_response(
+            response=response,
+            response_language=language_context.response_language,
+            original_question=original_question,
+            effective_question=effective_question,
+            policy=policy,
+            case_hypothesis=case_hypothesis,
+            interaction_plan=interaction_plan,
+            fact_slot_states=fact_slot_states,
+        )
+
+        state.carried_intake_facts = dict(state.carried_intake_facts or {})
+        structured_pending_offer = self.communication_plan_service.pending_offer_from_plan(
+            communication_plan,
+            operation_type=state.operation_type,
+            case_frame_id=str((state.carried_intake_facts or {}).get("active_case_frame_id") or "") or None,
+        )
+        if structured_pending_offer:
+            state.carried_intake_facts["pending_offer"] = structured_pending_offer
+        elif response.next_action == "answer":
+            state.carried_intake_facts.pop("pending_offer", None)
+
+        debug = dict(response.retrieval_debug or {})
+        debug.update(
+            {
+                "language": language_context.to_debug_dict(),
+                "semantic_turn_analysis": semantic_turn_dict,
+                "case_hypothesis": case_hypothesis.model_dump(),
+                "fact_slot_states": [slot.model_dump() for slot in fact_slot_states],
+                "interaction_plan": interaction_plan.model_dump(),
+                "case_frame_interaction": case_frame_interaction_debug,
+                "public_answer_guard": public_answer_guard_debug,
+                "final_public_answer_guard": final_public_guard_debug,
+                "interaction_control": interaction_control_debug,
+                "citation_quality": citation_quality_debug,
+                "legal_decision_object": legal_decision.model_dump(),
+                "communication_plan": communication_plan.model_dump(),
+                "natural_response": natural_response_debug,
+            }
+        )
+        if schedule_aware_assessment:
+            response.legal_reasoning_trace = schedule_aware_assessment
+        response.retrieval_debug = debug
+
+        state = self.state_machine.finalize_after_reasoning(
+            state=state,
+            turn_input=turn_input,
+            effective_question=effective_question,
+            policy=policy,
+            evidence=evidence,
+            answer_package=AnswerPackage(
+                answer_type="specific_grounded" if response.next_action == "answer" else "general_guidance",
+                answer=response.answer,
+                confidence=response.confidence,  # type: ignore[arg-type]
+                issue_type=response.issue_type,
+                operation_type=state.operation_type,
+                escalate=response.escalate,
+                next_action=response.next_action,  # type: ignore[arg-type]
+            ),
+            assistant_answer=response.answer,
+            confidence=response.confidence,
+            next_action=response.next_action,
+            issue_type=response.issue_type or state.issue_type,
+            visa_type=state.visa_type,
+        )
+
+        response.conversation_state = state.conversation_state
+        response.case_hypothesis = state.case_hypothesis
+        response.fact_slot_states = state.fact_slot_states
+        response.interaction_plan = state.interaction_plan
+
+        self._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=state,
+            effective_question=effective_question,
+        )
+        self._persist_citations(db, matter, response)
+
+        db.commit()
+        db.refresh(matter)
+        return response
+
+    # ------------------------------------------------------------------
+    # Semantic turn and task helpers
+    # ------------------------------------------------------------------
+    def _analyze_semantic_turn(
+        self,
+        *,
+        original_question: str,
+        payload: QueryRequest,
+        current_state: MatterState,
+        pending_offer: dict[str, Any] | None,
+        response_language: str,
+    ) -> SemanticTurnAnalysis:
+        try:
+            allowed_case_frames = sorted(self.case_frame_service.frames.keys())
+        except Exception:
+            allowed_case_frames = []
+
+        return self.semantic_turn_service.analyze(
+            raw_user_message=original_question,
+            internal_question_en=payload.question,
+            current_state=current_state,
+            pending_offer=pending_offer,
+            conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
+            allowed_case_frames=allowed_case_frames,
+            allowed_operations=[],
+            response_language=response_language,
+        )
+
+    def _task_action_from_semantic(
+        self,
+        *,
+        semantic_turn: SemanticTurnAnalysis,
+        pending_offer: dict[str, Any] | None,
+    ) -> _SemanticTaskAction:
+        act = semantic_turn.conversation_act
+        task_type = semantic_turn.task_intent.task_type
+
+        if task_type == "none":
+            if semantic_turn.task_intent.uses_pending_offer and isinstance(pending_offer, dict):
+                task_type = str(pending_offer.get("offer_type") or "next_step_plan")  # type: ignore[assignment]
+            else:
+                task_type = self.TASK_DEFAULTS.get(act, "none")  # type: ignore[assignment]
+
+        should_handle = bool(
+            semantic_turn.should_handle_as_task
+            or semantic_turn.task_intent.uses_pending_offer
+            or task_type != "none"
+            or act in self.TASK_DEFAULTS
+        )
+
+        return _SemanticTaskAction(
+            action_type=act,
+            should_handle_as_task=should_handle,
+            task_type=task_type if task_type != "none" else None,
+            confidence=semantic_turn.confidence,
+            reason=semantic_turn.rationale or "derived_from_semantic_turn_analysis",
+            matched_phrases=[],
+            accepted_offer=pending_offer if semantic_turn.task_intent.uses_pending_offer else None,
+            semantic_turn=semantic_turn.model_dump(),
+        )
+
+    def _handle_task_action(
+        self,
+        *,
+        db: Session,
+        matter: Matter,
+        payload: QueryRequest,
+        original_question: str,
+        current_state: MatterState,
+        language: str,
+        task_action: _SemanticTaskAction,
+    ) -> QueryResponse:
+        response = self.task_fulfillment_service.build_response(
+            action=task_action,  # duck-typed adapter
+            state=current_state,
+            raw_user_message=original_question,
+            internal_question_en=payload.question,
+            response_language=language,
+            matter_id=matter.id,
+        )
+
+        task_state = current_state.model_copy(deep=True)
+        task_state.latest_question = payload.question
+        task_state.last_contextualized_question = payload.question
+        task_state.next_action = response.next_action
+        task_state.last_answer_type = "specific_grounded"
+        task_state.carried_intake_facts = dict(task_state.carried_intake_facts or {})
+        task_state.carried_intake_facts.pop("pending_offer", None)
+        task_state.conversation_state = "ESCALATION_READY" if response.escalate else "ANSWERED_GENERAL"
+
+        task_state = self.state_machine.append_turn_pair(
+            state=task_state,
+            user_question=payload.question,
+            effective_question=payload.question,
+            assistant_answer=response.answer,
+            next_action=response.next_action,
+            confidence=response.confidence,
+        )
+
+        response.conversation_state = task_state.conversation_state
+        response.case_hypothesis = task_state.case_hypothesis
+        response.fact_slot_states = task_state.fact_slot_states
+        response.interaction_plan = task_state.interaction_plan
+
+        debug = dict(response.retrieval_debug or {})
+        debug["conversation_action"] = task_action.to_debug_dict()
+        debug["semantic_turn_analysis"] = task_action.semantic_turn
+        response.retrieval_debug = debug
+
+        self._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=task_state,
+            effective_question=payload.question,
+        )
+        db.commit()
+        db.refresh(matter)
+        return response
+
+    def _facts_from_semantic_turn(self, semantic_turn: SemanticTurnAnalysis) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+
+        for fact in semantic_turn.extracted_facts:
+            if fact.status == "filled" and fact.value not in (None, ""):
+                out[fact.fact_key] = fact.value
+            elif fact.status == "user_unsure":
+                out[fact.fact_key] = "not_sure"
+            elif fact.status == "not_applicable":
+                out[fact.fact_key] = "not_applicable"
+
+        routing = semantic_turn.case_routing
+        if routing.issue_type:
+            out["issue_type"] = routing.issue_type
+        if routing.operation_type:
+            out["operation_type"] = routing.operation_type
+        if routing.visa_type:
+            out["visa_type"] = routing.visa_type
+
+        if semantic_turn.current_policy_need.requires_current_policy_check:
+            out["requires_current_policy_check"] = True
+            if semantic_turn.current_policy_need.policy_area:
+                out["current_policy_area"] = semantic_turn.current_policy_need.policy_area
+            if semantic_turn.current_policy_need.source_classes_required:
+                out["current_policy_source_classes_required"] = list(semantic_turn.current_policy_need.source_classes_required)
+
+        return out
+
+    def _apply_semantic_overrides_to_turn_analysis(
+        self,
+        turn_analysis: PreLLMTurnAnalysis,
+        semantic_turn: SemanticTurnAnalysis,
+    ) -> None:
+        if semantic_turn.should_contextualize_with_history:
+            turn_analysis.can_skip_contextualization_llm = False
+        if not semantic_turn.should_retrieve_legal_sources:
+            turn_analysis.retrieval_needed = False
+            turn_analysis.live_fetch_allowed = False
+        turn_analysis.reasons.append("semantic_turn_analysis_applied")
+
+    # ------------------------------------------------------------------
+    # Matter lifecycle
+    # ------------------------------------------------------------------
+    def _get_or_create_matter(self, db: Session, payload: QueryRequest) -> Matter:
+        if payload.matter_id:
+            matter = db.get(Matter, payload.matter_id)
+            if matter is not None:
+                return matter
+
+        if payload.session_id:
+            matter = (
+                db.query(Matter)
+                .filter(Matter.session_id == payload.session_id)
+                .order_by(Matter.last_user_message_at.desc().nullslast(), Matter.created_at.desc())
+                .first()
+            )
+            if matter is not None:
+                return matter
+
+        matter = Matter(
+            session_id=payload.session_id,
+            issue_summary=self._build_issue_summary(payload.question),
+            status="open",
+            issue_type=None,
+            visa_type=None,
+            risk_level="medium",
+            last_user_message_at=self._now_utc(),
+            metadata_json={
+                "preferred_jurisdiction": payload.preferred_jurisdiction,
+                "preferred_source_types": payload.preferred_source_types or [],
+                "intake_facts": payload.intake_facts or {},
+                "carried_intake_facts": payload.intake_facts or {},
+                "initial_question": payload.question,
+                "conversation_history": [],
+            },
+        )
+        db.add(matter)
+        db.flush()
+        return matter
+
+    def _update_matter_from_state(
+        self,
+        *,
+        matter: Matter,
+        payload: QueryRequest,
+        state: MatterState,
+        effective_question: str,
+    ) -> None:
+        matter.session_id = payload.session_id or matter.session_id
+        issue_summary_basis = effective_question if len(payload.question.strip()) < 24 else payload.question
+        matter.issue_summary = self._build_issue_summary(issue_summary_basis)
+        matter.last_user_message_at = self._now_utc()
+
+        if state.issue_type:
+            matter.issue_type = state.issue_type
+        if state.visa_type:
+            matter.visa_type = state.visa_type
+
+        matter.risk_level = self._map_risk_level(
+            next_action=state.next_action,
+            confidence=(state.last_answer_type or "general_guidance"),
+            risk_flags=state.risk_flags.model_dump(),
+        )
+
+        existing_meta = deepcopy(matter.metadata_json or {})
+        existing_meta.update(
+            {
+                "preferred_jurisdiction": payload.preferred_jurisdiction,
+                "preferred_source_types": payload.preferred_source_types or [],
+                "intake_facts": payload.intake_facts or {},
+                "initial_question": existing_meta.get("initial_question") or payload.question,
+            }
+        )
+        matter.metadata_json = self.state_machine.to_metadata_json(state, base_metadata=existing_meta)
+
+    # ------------------------------------------------------------------
+    # Case frame / retrieval / reasoning pipeline
+    # ------------------------------------------------------------------
+    def _route_case_frame(
+        self,
+        *,
+        state: MatterState,
+        current_state: MatterState,
+        known_facts: dict[str, Any],
+        original_question: str,
+        effective_question: str,
+    ) -> tuple[Any, dict[str, Any], dict[str, Any], bool]:
+        frame_decision = self.case_frame_service.route(
+            question=effective_question,
+            original_question=original_question,
+            current_state=state,
+            known_facts=known_facts,
+            answer_preference=known_facts.get("answer_preference") or "answer_first",
+        )
+        pre_focused_policy_issue = self.focused_policy_issue_service.detect_issue(
+            question=effective_question,
+            operation_type=frame_decision.operation_type,
+            known_facts=known_facts,
+        )
+        frame_consistency = self.frame_consistency_gate.evaluate(
+            question=effective_question,
+            original_question=original_question,
+            previous_frame=str((current_state.carried_intake_facts or {}).get("active_case_frame_id") or ""),
+            candidate_frame=frame_decision.frame_id,
+            candidate_family=frame_decision.case_family,
+            positive_issue_flags=frame_decision.positive_issue_flags,
+            known_facts=known_facts,
+            focused_policy_issue=pre_focused_policy_issue,
+            available_frame_ids=set(self.case_frame_service.frames.keys()),
+        )
+        if frame_consistency.repair_frame_id:
+            frame_decision = self.case_frame_service.repair_decision(
+                decision=frame_decision,
+                frame_id=frame_consistency.repair_frame_id,
+                known_facts=known_facts,
+                reason=frame_consistency.reason,
+            )
+
+        frame_consistency_debug = frame_consistency.to_dict()
+        frame_skip_retrieval = frame_decision.response_tier == "triage_question"
+        case_frame_debug = frame_decision.to_dict() if hasattr(frame_decision, "to_dict") else frame_decision.model_dump()
+        case_frame_debug["frame_consistency"] = frame_consistency_debug
+        return frame_decision, case_frame_debug, frame_consistency_debug, frame_skip_retrieval
+
+    def _retrieve_and_reason(
+        self,
+        *,
+        db: Session,
+        payload: QueryRequest,
+        effective_payload: QueryRequest,
+        matter: Matter,
+        state: MatterState,
+        artifacts: Any,
+        turn_analysis: PreLLMTurnAnalysis,
+        frame_decision: Any,
+        frame_skip_retrieval: bool,
+        case_frame_debug: dict[str, Any],
+        frame_consistency_debug: dict[str, Any],
+        original_question: str,
+        effective_question: str,
+        merged_intake_facts: dict[str, Any],
+        language_debug: dict[str, Any],
+    ) -> tuple[QueryResponse, EvidencePackage, PolicyDecision, dict[str, Any], Any, dict[str, Any] | None, dict[str, Any] | None]:
+        provisional_recommendation_debug: dict[str, Any] = {"applied": False, "reason": "not_reached"}
+        focused_policy_issue = None
         focused_policy_finding: dict[str, Any] | None = None
-        fact_status_report: dict[str, Any] | None = None
+
+        pre_focused_policy_issue = self.focused_policy_issue_service.detect_issue(
+            question=effective_question,
+            operation_type=frame_decision.operation_type,
+            known_facts=merged_intake_facts,
+        )
+        focused_policy_issue = None if frame_skip_retrieval else pre_focused_policy_issue
 
         if turn_analysis.retrieval_needed and not frame_skip_retrieval:
             local_chunks, retrieval_debug = self.retrieval_service.retrieve(db, effective_payload)
@@ -291,14 +811,14 @@ class QueryService:
                 "results": [],
                 "top_titles": [],
                 "skipped_retrieval": True,
-                "skip_reason": "case_frame_triage" if frame_skip_retrieval else "pre_llm_router",
+                "skip_reason": "case_frame_triage" if frame_skip_retrieval else "pre_llm_router_or_semantic_turn",
             }
+
         retrieval_debug["case_frame"] = case_frame_debug
         retrieval_debug["frame_consistency"] = frame_consistency_debug
         artifacts.retrieval_debug = retrieval_debug
 
         schedule_aware_assessment = None
-        schedule_aware_chunks: list[Any] = []
         schedule_aware_debug: dict[str, Any] = {"is_active": False}
         if turn_analysis.retrieval_needed and not frame_skip_retrieval:
             schedule_aware_assessment, schedule_aware_chunks, schedule_aware_debug = (
@@ -318,7 +838,6 @@ class QueryService:
                 )
                 retrieval_debug["schedule_aware_criterion_reasoning"] = schedule_aware_assessment
                 retrieval_debug["schedule_aware_targeted_retrieval"] = schedule_aware_debug.get("targeted_retrieval", {})
-                artifacts.retrieval_debug = retrieval_debug
 
         if frame_skip_retrieval:
             initial_sufficiency_gate = SufficiencyGateResult(
@@ -415,9 +934,17 @@ class QueryService:
             final_sufficiency_gate=final_sufficiency_gate,
             risk_flags=state.risk_flags.model_dump(),
         )
-
         enriched_debug["focused_policy_issue"] = focused_policy_issue
         enriched_debug["focused_policy_finding"] = focused_policy_finding
+        enriched_debug["fact_status_reasoning"] = fact_status_report
+        enriched_debug["pre_llm_router"] = {
+            "turn_type": turn_analysis.turn_type,
+            "display_mode": turn_analysis.display_mode,
+            "no_llm_needed": turn_analysis.no_llm_needed,
+            "reasons": turn_analysis.reasons,
+            "extracted_facts": turn_analysis.extraction.facts,
+            "fact_confidence": turn_analysis.extraction.fact_confidence,
+        }
 
         if self.lightweight_response_service.can_answer_without_llm(
             analysis=turn_analysis,
@@ -442,14 +969,6 @@ class QueryService:
                 response=response,
             )
         else:
-            enriched_debug["pre_llm_router"] = {
-                "turn_type": turn_analysis.turn_type,
-                "display_mode": turn_analysis.display_mode,
-                "no_llm_needed": turn_analysis.no_llm_needed,
-                "reasons": turn_analysis.reasons,
-                "extracted_facts": turn_analysis.extraction.facts,
-                "fact_confidence": turn_analysis.extraction.fact_confidence,
-            }
             response = self.reasoning_service.answer_from_chunks(
                 payload=payload,
                 chunks=merged_chunks,
@@ -462,8 +981,8 @@ class QueryService:
                     "intake_facts": merged_intake_facts,
                     "effective_question": effective_question,
                     "original_user_question": original_question,
-                    "response_language": language_context.response_language,
-                    "language": language_context.to_debug_dict(),
+                    "response_language": payload.response_language,
+                    "language": language_debug,
                     "schedule_aware_assessment": self.schedule_aware_reasoning_service.answerability_context(schedule_aware_assessment),
                     "focused_policy_issue": focused_policy_issue,
                     "focused_policy_finding": focused_policy_finding,
@@ -484,10 +1003,31 @@ class QueryService:
                 evidence_package=evidence,
                 live_retrieval=live_result.model_dump(),
             )
+
         artifacts.evidence_package = evidence
         artifacts.policy_decision = policy
+        return response, evidence, policy, enriched_debug, schedule_aware_assessment, focused_policy_issue, focused_policy_finding
 
+    def _apply_post_reasoning_guards(
+        self,
+        *,
+        response: QueryResponse,
+        evidence: EvidencePackage,
+        policy: PolicyDecision,
+        state: MatterState,
+        frame_decision: Any,
+        case_frame_debug: dict[str, Any],
+        focused_policy_issue: dict[str, Any] | None,
+        focused_policy_finding: dict[str, Any] | None,
+        merged_intake_facts: dict[str, Any],
+        fact_status_report: dict[str, Any] | None,
+        chunks_debug: dict[str, Any],
+        response_language: str,
+        original_question: str,
+        effective_question: str,
+    ) -> tuple[QueryResponse, EvidencePackage, PolicyDecision]:
         response = self._apply_policy_to_response(response, policy, state)
+
         if focused_policy_finding and focused_policy_finding.get("resolved"):
             response = self.focused_policy_issue_service.apply_finding_to_response(
                 response=response,
@@ -502,15 +1042,18 @@ class QueryService:
             fact_status_report=fact_status_report,
             known_facts=merged_intake_facts,
         )
+        debug = dict(response.retrieval_debug or {})
+        debug["fact_status_response"] = fact_status_response_debug
+        response.retrieval_debug = debug
 
         response, provisional_recommendation_debug = self.provisional_recommendation_service.apply_to_response(
             response=response,
             case_frame=case_frame_debug,
             known_facts=merged_intake_facts,
             fact_status=state.fact_status,
-            chunks=merged_chunks,
-            retrieval_debug=enriched_debug,
-            response_language=language_context.response_language,
+            chunks=[],  # retained for interface compatibility; evidence is in retrieval_debug
+            retrieval_debug=chunks_debug,
+            response_language=response_language,
             original_question=original_question,
             effective_question=effective_question,
         )
@@ -538,31 +1081,23 @@ class QueryService:
                     "issue_type": state.issue_type,
                 }
             )
-            artifacts.evidence_package = evidence
-            artifacts.policy_decision = policy
 
-        state = self.state_machine.finalize_after_reasoning(
-            state=state,
-            turn_input=turn_input,
-            effective_question=effective_question,
-            policy=policy,
-            evidence=evidence,
-            answer_package=AnswerPackage(
-                answer_type="specific_grounded" if response.next_action == "answer" else "general_guidance",
-                answer=response.answer,
-                confidence=response.confidence,  # type: ignore[arg-type]
-                issue_type=response.issue_type,
-                operation_type=state.operation_type,
-                escalate=response.escalate,
-                next_action=response.next_action,  # type: ignore[arg-type]
-            ),
-            assistant_answer=response.answer,
-            confidence=response.confidence,
-            next_action=response.next_action,
-            issue_type=response.issue_type or state.issue_type,
-            visa_type=state.visa_type,
-        )
+        debug = dict(response.retrieval_debug or {})
+        debug["provisional_recommendation"] = provisional_recommendation_debug
+        response.retrieval_debug = debug
+        return response, evidence, policy
 
+    def _build_interaction_state(
+        self,
+        *,
+        state: MatterState,
+        response: QueryResponse,
+        evidence: EvidencePackage,
+        policy: PolicyDecision,
+        frame_decision: Any,
+        effective_question: str,
+        response_language: str,
+    ) -> tuple[Any, list[Any], Any, dict[str, Any]]:
         case_hypothesis = self.case_state_service.build_case_hypothesis(
             question=effective_question,
             state=state,
@@ -589,233 +1124,12 @@ class QueryService:
             interaction_plan=interaction_plan,
             known_facts=state.carried_intake_facts,
             decision=frame_decision,
-            response_language=language_context.response_language,
+            response_language=response_language,
         )
-        state.case_hypothesis = case_hypothesis
-        state.fact_slot_states = fact_slot_states
-        state.interaction_plan = interaction_plan
-
-        response = self._normalize_response_for_user(
-            response=response,
-            policy=policy,
-            evidence=evidence,
-            fact_slot_states=fact_slot_states,
-            case_hypothesis=case_hypothesis,
-        )
-
-        response, fact_slot_states, interaction_plan = self.language_service.localize_response_bundle(
-            response=response,
-            fact_slot_states=fact_slot_states,
-            interaction_plan=interaction_plan,
-            response_language=language_context.response_language,
-        )
-
-        response, fact_slot_states, interaction_plan, interaction_control_debug = (
-            self.interaction_control_service.apply_customer_flow_guards(
-                response=response,
-                fact_slot_states=fact_slot_states,
-                interaction_plan=interaction_plan,
-                state=state,
-                known_facts=state.carried_intake_facts,
-                case_hypothesis=case_hypothesis,
-                question=effective_question,
-            )
-        )
-        state.fact_slot_states = fact_slot_states
-        state.interaction_plan = interaction_plan
-
-        response, public_answer_guard_debug = self.public_answer_guard.sanitize_response(
-            response=response,
-            response_language=language_context.response_language,
-            original_question=original_question,
-            effective_question=effective_question,
-            policy=policy,
-            case_hypothesis=case_hypothesis,
-            interaction_plan=interaction_plan,
-            fact_slot_states=fact_slot_states,
-        )
-
-        response.conversation_state = state.conversation_state
-        response.case_hypothesis = case_hypothesis
-        response.fact_slot_states = fact_slot_states
-        response.interaction_plan = interaction_plan
-        debug = dict(response.retrieval_debug or {})
-        debug["language"] = language_context.to_debug_dict()
-        debug["case_hypothesis"] = case_hypothesis.model_dump()
-        debug["fact_slot_states"] = [slot.model_dump() for slot in fact_slot_states]
-        debug["interaction_plan"] = interaction_plan.model_dump()
-        debug["public_answer_guard"] = public_answer_guard_debug
-        debug["interaction_control"] = interaction_control_debug
-        debug.setdefault("pre_llm_router", {
-            "turn_type": turn_analysis.turn_type,
-            "display_mode": turn_analysis.display_mode,
-            "no_llm_needed": turn_analysis.no_llm_needed,
-            "reasons": turn_analysis.reasons,
-            "extracted_facts": turn_analysis.extraction.facts,
-            "fact_confidence": turn_analysis.extraction.fact_confidence,
-        })
-        if schedule_aware_assessment:
-            response.legal_reasoning_trace = schedule_aware_assessment
-        response.retrieval_debug = debug
-        response.compact_sources = self._compact_source_titles(response)
-        if state.operation_type and str(state.operation_type).startswith("485"):
-            filtered_sources = [
-                item for item in response.compact_sources
-                if not re.search(r"\bbridging\b|\bBVB\b|travel on a bridging", item, flags=re.I)
-            ]
-            if filtered_sources:
-                response.compact_sources = filtered_sources
-        response, citation_quality_debug = self.citation_quality_service.filter_response_citations(
-            response=response,
-            focused_policy_issue=focused_policy_issue,
-            focused_policy_finding=focused_policy_finding,
-        )
-        debug = dict(response.retrieval_debug or {})
-        debug["citation_quality"] = citation_quality_debug
-        response.retrieval_debug = debug
-        response.response_language = language_context.response_language
-
-
-
-        semantic_turn_dict = conversation_action.semantic_turn if "conversation_action" in locals() else None
-        legal_decision = self.legal_decision_service.build(
-            response=response,
-            state=state,
-            semantic_turn=semantic_turn_dict,
-            original_question=original_question,
-            effective_question=effective_question,
-            retrieval_debug=response.retrieval_debug,
-        )
-        communication_plan = self.communication_plan_service.build(
-            decision=legal_decision,
-            semantic_turn=semantic_turn_dict,
-            response_language=language_context.response_language,
-        )
-        response, natural_response_debug = self.natural_response_service.apply_to_response(
-            response=response,
-            legal_decision=legal_decision,
-            communication_plan=communication_plan,
-            original_question=original_question,
-            effective_question=effective_question,
-            known_facts=state.carried_intake_facts,
-        )
-        debug = dict(response.retrieval_debug or {})
-        debug["semantic_turn_analysis"] = semantic_turn_dict
-        debug["legal_decision_object"] = legal_decision.model_dump()
-        debug["communication_plan"] = communication_plan.model_dump()
-        debug["natural_response"] = natural_response_debug
-        response.retrieval_debug = debug
-
-        state.carried_intake_facts = dict(state.carried_intake_facts or {})
-        structured_pending_offer = self.communication_plan_service.pending_offer_from_plan(
-            communication_plan,
-            operation_type=state.operation_type,
-            case_frame_id=str((state.carried_intake_facts or {}).get("active_case_frame_id") or "") or None,
-        )
-        if structured_pending_offer:
-            state.carried_intake_facts["pending_offer"] = structured_pending_offer
-        elif response.next_action == "answer":
-            state.carried_intake_facts.pop("pending_offer", None)
-
-        self._update_matter_from_state(
-            matter=matter,
-            payload=payload,
-            state=state,
-            effective_question=effective_question,
-        )
-        self._persist_citations(db, matter, response)
-
-        db.commit()
-        db.refresh(matter)
-
-        return response
+        return case_hypothesis, fact_slot_states, interaction_plan, case_frame_interaction_debug
 
     # ------------------------------------------------------------------
-    # Matter lifecycle
-    # ------------------------------------------------------------------
-    def _get_or_create_matter(self, db: Session, payload: QueryRequest) -> Matter:
-        if payload.matter_id:
-            matter = db.get(Matter, payload.matter_id)
-            if matter is not None:
-                return matter
-
-        if payload.session_id:
-            matter = (
-                db.query(Matter)
-                .filter(Matter.session_id == payload.session_id)
-                .order_by(Matter.last_user_message_at.desc().nullslast(), Matter.created_at.desc())
-                .first()
-            )
-            if matter is not None:
-                return matter
-
-        matter = Matter(
-            session_id=payload.session_id,
-            issue_summary=self._build_issue_summary(payload.question),
-            status="open",
-            issue_type=self._infer_issue_type(payload.question),
-            visa_type=self._infer_visa_type(payload.question),
-            risk_level="medium",
-            last_user_message_at=self._now_utc(),
-            metadata_json={
-                "preferred_jurisdiction": payload.preferred_jurisdiction,
-                "preferred_source_types": payload.preferred_source_types or [],
-                "intake_facts": payload.intake_facts or {},
-                "carried_intake_facts": payload.intake_facts or {},
-                "initial_question": payload.question,
-                "conversation_history": [],
-            },
-        )
-        db.add(matter)
-        db.flush()
-        return matter
-
-    def _update_matter_from_state(
-        self,
-        *,
-        matter: Matter,
-        payload: QueryRequest,
-        state: MatterState,
-        effective_question: str,
-    ) -> None:
-        matter.session_id = payload.session_id or matter.session_id
-        issue_summary_basis = effective_question if len(payload.question.strip()) < 24 else payload.question
-        matter.issue_summary = self._build_issue_summary(issue_summary_basis)
-        matter.last_user_message_at = self._now_utc()
-
-        if state.issue_type:
-            matter.issue_type = state.issue_type
-        else:
-            inferred = self._infer_issue_type(effective_question)
-            if inferred:
-                matter.issue_type = inferred
-
-        if state.visa_type:
-            matter.visa_type = state.visa_type
-        else:
-            inferred_visa_type = self._infer_visa_type(effective_question)
-            if inferred_visa_type:
-                matter.visa_type = inferred_visa_type
-
-        matter.risk_level = self._map_risk_level(
-            next_action=state.next_action,
-            confidence=(state.last_answer_type or "general_guidance"),
-            risk_flags=state.risk_flags.model_dump(),
-        )
-
-        existing_meta = deepcopy(matter.metadata_json or {})
-        existing_meta.update(
-            {
-                "preferred_jurisdiction": payload.preferred_jurisdiction,
-                "preferred_source_types": payload.preferred_source_types or [],
-                "intake_facts": payload.intake_facts or {},
-                "initial_question": existing_meta.get("initial_question") or payload.question,
-            }
-        )
-        matter.metadata_json = self.state_machine.to_metadata_json(state, base_metadata=existing_meta)
-
-    # ------------------------------------------------------------------
-    # Node adapters
+    # State-machine node adapters
     # ------------------------------------------------------------------
     def _contextualize_turn(
         self,
@@ -853,6 +1167,7 @@ class QueryService:
                 carried_facts=dict(turn_analysis.extraction.facts),
                 reason="pre_llm_router_no_contextualization_needed",
             )
+
         raw = self.reasoning_service.contextualize_question(
             question=question,
             conversation_history=conversation_history,
@@ -877,13 +1192,14 @@ class QueryService:
         turn_analysis: PreLLMTurnAnalysis | None = None,
     ) -> IssueAndOperation:
         fallback = IssueAndOperation(
-            issue_type=current_issue_type,
-            operation_type=current_operation_type,
-            visa_type=current_visa_type,
+            issue_type=intake_facts.get("issue_type") or current_issue_type,
+            operation_type=intake_facts.get("operation_type") or current_operation_type,
+            visa_type=intake_facts.get("visa_type") or current_visa_type,
             jurisdiction=preferred_jurisdiction,
         )
         if turn_analysis is not None and turn_analysis.can_skip_classification_llm:
             return turn_analysis.extraction.to_issue_operation(fallback=fallback)
+
         heuristic = turn_analysis.extraction.to_issue_operation(fallback=fallback) if turn_analysis is not None else fallback
         refined = self.fact_extraction_service.classify_issue_and_operation(
             question=question,
@@ -935,6 +1251,7 @@ class QueryService:
         raw = {}
         if getattr(response, "retrieval_debug", None):
             raw = (response.retrieval_debug or {}).get("evidence") or {}
+        evidence: EvidencePackage | None = None
         if isinstance(raw, EvidencePackage):
             evidence = raw
         elif isinstance(raw, dict) and raw:
@@ -942,8 +1259,6 @@ class QueryService:
                 evidence = EvidencePackage(**raw)
             except Exception:
                 evidence = None
-        else:
-            evidence = None
 
         if evidence is None:
             evidence = EvidencePackage(
@@ -978,15 +1293,10 @@ class QueryService:
             response.confidence = self._cap_confidence(response.confidence, policy.confidence_cap)
         if not response.issue_type:
             response.issue_type = state.issue_type
-        if getattr(response, "retrieval_debug", None) is not None:
-            debug = dict(response.retrieval_debug or {})
-            debug["policy"] = policy.model_dump()
-            response.retrieval_debug = debug
+        debug = dict(response.retrieval_debug or {})
+        debug["policy"] = policy.model_dump()
+        response.retrieval_debug = debug
         return response
-
-
-
-
 
     def _normalize_response_for_user(
         self,
@@ -1158,7 +1468,6 @@ class QueryService:
             "risk_flags": risk_flags or {},
         }
 
-
     def _normalize_condition_text(self, text: str) -> str:
         normalized = text or ""
         return re.sub(
@@ -1196,7 +1505,7 @@ class QueryService:
         condition_no = self._extract_condition_number(question)
 
         score = 0.0
-        if getattr(source, "id", "").startswith("live-source-"):
+        if str(getattr(source, "id", "") or "").startswith("live-source-"):
             score += 0.18
         if "department of home affairs" in authority:
             score += 0.12
@@ -1257,6 +1566,16 @@ class QueryService:
                 titles.append(label)
         return titles[:3]
 
+    def _filter_compact_sources(self, response: QueryResponse, state: MatterState) -> QueryResponse:
+        if state.operation_type and str(state.operation_type).startswith("485"):
+            filtered_sources = [
+                item for item in response.compact_sources
+                if not re.search(r"\bbridging\b|\bBVB\b|travel on a bridging", item, flags=re.I)
+            ]
+            if filtered_sources:
+                response.compact_sources = filtered_sources
+        return response
+
     # ------------------------------------------------------------------
     # Persistence helpers
     # ------------------------------------------------------------------
@@ -1288,7 +1607,6 @@ class QueryService:
             chunk_id = getattr(citation, "chunk_id", None)
             case_id = getattr(citation, "case_id", None)
 
-            # non_db_backed_response_citation
             if (
                 not source_id
                 or source_id.startswith(synthetic_prefixes)
@@ -1323,36 +1641,6 @@ class QueryService:
         if len(text) <= 240:
             return text
         return text[:237].rstrip() + "..."
-
-    def _infer_issue_type(self, question: str) -> str | None:
-        lowered = question.lower()
-        if "refusal" in lowered:
-            return "visa_refusal"
-        if "cancel" in lowered or "cancellation" in lowered:
-            return "visa_cancellation"
-        if "student visa" in lowered:
-            return "student_visa"
-        if "partner visa" in lowered:
-            return "partner_visa"
-        if "skilled" in lowered:
-            return "skilled_migration"
-        return None
-
-    def _infer_visa_type(self, question: str) -> str | None:
-        lowered = question.lower()
-        if "student visa" in lowered or "subclass 500" in lowered:
-            return "student"
-        if "485" in lowered or "temporary graduate" in lowered:
-            return "temporary_graduate"
-        if "partner visa" in lowered:
-            return "partner"
-        if "visitor visa" in lowered:
-            return "visitor"
-        if "bridging visa" in lowered or "bva" in lowered or "bvb" in lowered or "bvc" in lowered or "bve" in lowered:
-            return "bridging"
-        if "skilled visa" in lowered or "skilled migration" in lowered:
-            return "skilled"
-        return None
 
     def _map_risk_level(self, *, next_action: str | None, confidence: str | None, risk_flags: dict[str, Any] | None = None) -> str:
         risk_flags = risk_flags or {}
