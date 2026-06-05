@@ -9,7 +9,6 @@ from openai import OpenAI
 from app.core.config import get_settings
 from app.schemas.query import QueryResponse
 from app.schemas.state import MatterState
-from app.services.conversation_action_service import ConversationAction
 
 
 class TaskFulfillmentService:
@@ -36,7 +35,7 @@ class TaskFulfillmentService:
     def build_response(
         self,
         *,
-        action: ConversationAction,
+        action: Any,
         state: MatterState,
         raw_user_message: str,
         internal_question_en: str,
@@ -112,7 +111,7 @@ class TaskFulfillmentService:
     def _generate(
         self,
         *,
-        action: ConversationAction,
+        action: Any,
         task_type: str,
         state: MatterState,
         raw_user_message: str,
