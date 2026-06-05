@@ -44,6 +44,9 @@ from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoning
 from app.services.state_machine import StateMachine, TurnInput
 from app.services.conversation_action_service import ConversationActionService
 from app.services.task_fulfillment_service import TaskFulfillmentService
+from app.services.legal_decision_service import LegalDecisionService
+from app.services.communication_plan_service import CommunicationPlanService
+from app.services.natural_response_service import NaturalResponseService
 
 
 @dataclass(slots=True)
@@ -113,6 +116,9 @@ class QueryService:
         self.citation_quality_service = citation_quality_service or CitationQualityService()
         self.conversation_action_service = conversation_action_service or ConversationActionService()
         self.task_fulfillment_service = task_fulfillment_service or TaskFulfillmentService()
+        self.legal_decision_service = legal_decision_service or LegalDecisionService()
+        self.communication_plan_service = communication_plan_service or CommunicationPlanService()
+        self.natural_response_service = natural_response_service or NaturalResponseService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -670,23 +676,46 @@ class QueryService:
         response.response_language = language_context.response_language
 
 
-        pending_offer = self.task_fulfillment_service.propose_pending_offer(
+
+        semantic_turn_dict = conversation_action.semantic_turn if "conversation_action" in locals() else None
+        legal_decision = self.legal_decision_service.build(
             response=response,
             state=state,
-            original_question=original_question if "original_question" in locals() else payload.question,
-            response_language=(
-                language_context.response_language
-                if "language_context" in locals()
-                else (response.response_language or payload.response_language or "en")
-            ),
+            semantic_turn=semantic_turn_dict,
+            original_question=original_question,
+            effective_question=effective_question,
+            retrieval_debug=response.retrieval_debug,
         )
-        state.carried_intake_facts = dict(state.carried_intake_facts or {})
-        if pending_offer:
-            state.carried_intake_facts["pending_offer"] = pending_offer
-        elif response.next_action == "answer":
-            # Avoid stale continuation when no new service was offered.
-            state.carried_intake_facts.pop("pending_offer", None)
+        communication_plan = self.communication_plan_service.build(
+            decision=legal_decision,
+            semantic_turn=semantic_turn_dict,
+            response_language=language_context.response_language,
+        )
+        response, natural_response_debug = self.natural_response_service.apply_to_response(
+            response=response,
+            legal_decision=legal_decision,
+            communication_plan=communication_plan,
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=state.carried_intake_facts,
+        )
+        debug = dict(response.retrieval_debug or {})
+        debug["semantic_turn_analysis"] = semantic_turn_dict
+        debug["legal_decision_object"] = legal_decision.model_dump()
+        debug["communication_plan"] = communication_plan.model_dump()
+        debug["natural_response"] = natural_response_debug
+        response.retrieval_debug = debug
 
+        state.carried_intake_facts = dict(state.carried_intake_facts or {})
+        structured_pending_offer = self.communication_plan_service.pending_offer_from_plan(
+            communication_plan,
+            operation_type=state.operation_type,
+            case_frame_id=str((state.carried_intake_facts or {}).get("active_case_frame_id") or "") or None,
+        )
+        if structured_pending_offer:
+            state.carried_intake_facts["pending_offer"] = structured_pending_offer
+        elif response.next_action == "answer":
+            state.carried_intake_facts.pop("pending_offer", None)
 
         self._update_matter_from_state(
             matter=matter,

@@ -387,6 +387,10 @@ function logWidgetDebug(params: {
   console.log("policy:", dbg.policy ?? {});
   console.log("conversationAction:", dbg.conversation_action ?? null);
   console.log("taskFulfillment:", dbg.task_fulfillment ?? null);
+  console.log("semanticTurnAnalysis:", dbg.semantic_turn_analysis ?? null);
+  console.log("legalDecisionObject:", dbg.legal_decision_object ?? null);
+  console.log("communicationPlan:", dbg.communication_plan ?? null);
+  console.log("naturalResponse:", dbg.natural_response ?? null);
   console.log("liveTrigger:", dbg.sufficiency_gate?.live_trigger ?? null);
   console.log("riskFlags:", dbg.risk_flags ?? {});
   console.log("interactionMode:", params.response.interaction_plan?.mode ?? null);
