@@ -104,13 +104,17 @@ function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
 }
 
 function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
-  if (message.compactSources?.length) return message.compactSources.slice(0, 4);
+  if (message.compactSources?.length) {
+    return message.compactSources.slice(0, 4);
+  }
 
   const fallback = (message.citations ?? [])
     .map((citation) => {
       const title = citation.title?.trim();
       const authority = citation.authority?.trim();
-      if (authority && title) return `${authority} — ${title}`;
+      if (authority && title) {
+        return `${authority} — ${title}`;
+      }
       return title || authority || "";
     })
     .filter(Boolean);
@@ -118,71 +122,126 @@ function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assis
   return Array.from(new Set(fallback)).slice(0, 4);
 }
 
+function stableTextKey(value: string) {
+  let hash = 0;
+
+  for (let position = 0; position < value.length; position += 1) {
+    hash = (hash * 31 + value.charCodeAt(position)) >>> 0;
+  }
+
+  return hash.toString(36);
+}
+
+function keyedTextParts(parts: string[]) {
+  const counts = new Map<string, number>();
+
+  return parts.map((part) => {
+    const count = counts.get(part) ?? 0;
+    counts.set(part, count + 1);
+
+    return {
+      key: `${stableTextKey(part)}-${count}`,
+      value: part,
+    };
+  });
+}
+
+function keyedTextLines(text: string) {
+  const counts = new Map<string, number>();
+
+  return text.split(/\r?\n/).map((rawLine) => {
+    const seed = rawLine || "<blank>";
+    const count = counts.get(seed) ?? 0;
+    counts.set(seed, count + 1);
+
+    return {
+      key: `${stableTextKey(seed)}-${count}`,
+      rawLine,
+    };
+  });
+}
+
 function InlineRichText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  const parts = keyedTextParts(text.split(/(\*\*[^*]+\*\*)/g));
+
   return (
     <>
-      {parts.map((part, index) => {
-        if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-          return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+      {parts.map(({ key, value }) => {
+        if (value.startsWith("**") && value.endsWith("**") && value.length > 4) {
+          return <strong key={key}>{value.slice(2, -2)}</strong>;
         }
-        return <span key={`${part}-${index}`}>{part}</span>;
+
+        return <span key={key}>{value}</span>;
       })}
     </>
   );
 }
 
 function AssistantFormattedText({ text }: { text: string }) {
-  const lines = text.split(/\r?\n/);
+  const lines = keyedTextLines(text);
+
   return (
     <div className="space-y-2">
-      {lines.map((rawLine, index) => {
+      {lines.map(({ key, rawLine }) => {
         const line = rawLine.trimEnd();
         const trimmed = line.trim();
+
         if (!trimmed) {
-          return <div className="h-1" key={`blank-${index}`} />;
+          return <div className="h-1" key={`blank-${key}`} />;
         }
+
         if (trimmed === "---") {
-          return <div className="my-3 border-t border-slate-200" key={`rule-${index}`} />;
+          return <div className="my-3 border-t border-slate-200" key={`rule-${key}`} />;
         }
+
         if (trimmed.startsWith("### ")) {
           return (
-            <h4 className="pt-2 text-sm font-semibold leading-6 text-slate-900" key={`h3-${index}`}>
+            <h4 className="pt-2 text-sm font-semibold leading-6 text-slate-900" key={`h3-${key}`}>
               <InlineRichText text={trimmed.replace(/^###\s+/, "")} />
             </h4>
           );
         }
+
         if (trimmed.startsWith("## ")) {
           return (
-            <h3 className="pt-2 text-base font-semibold leading-7 text-slate-950" key={`h2-${index}`}>
+            <h3 className="pt-2 text-base font-semibold leading-7 text-slate-950" key={`h2-${key}`}>
               <InlineRichText text={trimmed.replace(/^##\s+/, "")} />
             </h3>
           );
         }
+
         if (/^[-*]\s+/.test(trimmed)) {
           return (
-            <div className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800" key={`li-${index}`}>
+            <div className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800" key={`li-${key}`}>
               <span className="mt-[0.65rem] size-1.5 shrink-0 rounded-full bg-slate-400" />
-              <span><InlineRichText text={trimmed.replace(/^[-*]\s+/, "")} /></span>
+              <span>
+                <InlineRichText text={trimmed.replace(/^[-*]\s+/, "")} />
+              </span>
             </div>
           );
         }
+
         if (/^\d+[.)）]\s+/.test(trimmed)) {
           return (
-            <p className="pl-1 text-[15px] leading-7 text-slate-800" key={`num-${index}`}>
+            <p className="pl-1 text-[15px] leading-7 text-slate-800" key={`num-${key}`}>
               <InlineRichText text={trimmed} />
             </p>
           );
         }
+
         if (trimmed.startsWith(">")) {
           return (
-            <blockquote className="rounded-2xl border-l-4 border-slate-300 bg-slate-50 px-3 py-2 text-[15px] leading-7 text-slate-700" key={`quote-${index}`}>
+            <blockquote
+              className="rounded-2xl border-l-4 border-slate-300 bg-slate-50 px-3 py-2 text-[15px] leading-7 text-slate-700"
+              key={`quote-${key}`}
+            >
               <InlineRichText text={trimmed.replace(/^>\s?/, "")} />
             </blockquote>
           );
         }
+
         return (
-          <p className="text-[15px] leading-7 text-slate-800" key={`p-${index}`}>
+          <p className="text-[15px] leading-7 text-slate-800" key={`p-${key}`}>
             <InlineRichText text={trimmed} />
           </p>
         );
@@ -212,15 +271,21 @@ function isZhLanguage(responseLanguage?: string | null) {
 
   const isNearBottom = () => {
     const container = listRef.current;
-    if (!container) return true;
+    if (!container) {
+      return true;
+    }
 
     return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
   };
 
   const scrollToBottom = (force = false) => {
     const container = listRef.current;
-    if (!container) return;
-    if (!force && !shouldAutoScrollRef.current) return;
+    if (!container) {
+      return;
+    }
+    if (!force && !shouldAutoScrollRef.current) {
+      return;
+    }
 
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
@@ -232,12 +297,16 @@ function isZhLanguage(responseLanguage?: string | null) {
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     scrollToBottom();
   }, [messages, open, status]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     const handleViewportChange = () => {
       scrollToBottom();
@@ -407,7 +476,9 @@ function isZhLanguage(responseLanguage?: string | null) {
   };
 
   const handleSubmitDraftFacts = async () => {
-    if (status !== "ready") return;
+    if (status !== "ready") {
+      return;
+    }
 
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
@@ -457,6 +528,19 @@ function isZhLanguage(responseLanguage?: string | null) {
 
   const handleBookConsultation = () => {
     toast.info("Consultation booking flow placeholder. Connect this to your real booking page next.");
+  };
+
+
+  const runWidgetAction = (action: Promise<unknown>) => {
+    action.catch((actionError) => {
+      const message =
+        actionError instanceof Error
+          ? actionError.message
+          : "Unable to complete this action right now.";
+
+      setError(message);
+      toast.error(message);
+    });
   };
 
   return (
@@ -527,7 +611,7 @@ function isZhLanguage(responseLanguage?: string | null) {
                     className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-left text-[11px] leading-5 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
                     key={question}
                     onClick={() => {
-                      void submitMessage(question);
+                      runWidgetAction(submitMessage(question));
                     }}
                     type="button"
                   >
@@ -637,15 +721,15 @@ function isZhLanguage(responseLanguage?: string | null) {
                         {showGuidedCard ? (
                           <div className="mt-4">
                             <GuidedIntakeCard
-                              interactionPlan={message.interactionPlan}
-                              factSlotStates={message.factSlotStates}
                               draftFacts={draftFacts}
+                              factSlotStates={message.factSlotStates}
+                              interactionPlan={message.interactionPlan}
+                              isSubmitting={status !== "ready"}
+                              onBookConsultation={handleBookConsultation}
                               onDraftChange={handleDraftChange}
                               onSubmitDraftFacts={() => {
-                                void handleSubmitDraftFacts();
+                                runWidgetAction(handleSubmitDraftFacts());
                               }}
-                              onBookConsultation={handleBookConsultation}
-                              isSubmitting={status !== "ready"}
                               responseLanguage={message.responseLanguage ?? null}
                             />
                           </div>
@@ -662,7 +746,7 @@ function isZhLanguage(responseLanguage?: string | null) {
                                   className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm leading-6 text-slate-700 transition hover:bg-slate-100"
                                   key={question}
                                   onClick={() => {
-                                    void submitMessage(question);
+                                    runWidgetAction(submitMessage(question));
                                   }}
                                   type="button"
                                 >
@@ -721,10 +805,10 @@ function isZhLanguage(responseLanguage?: string | null) {
                               Source details
                             </p>
                             <div className="space-y-2">
-                              {message.citations.slice(0, 3).map((citation, index) => (
+                              {message.citations.slice(0, 3).map((citation) => (
                                 <div
                                   className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                                  key={`${citation.title}-${index}`}
+                                  key={`${citation.title ?? "source"}-${stableTextKey(citation.url ?? citation.quote ?? citation.authority ?? "")}`}
                                 >
                                   <div className="font-medium text-slate-900">
                                     {citation.title}
@@ -798,7 +882,7 @@ function isZhLanguage(responseLanguage?: string | null) {
             className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
-              void submitMessage(input);
+              runWidgetAction(submitMessage(input));
             }}
           >
             <div className="rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-slate-300 focus-within:ring-2 focus-within:ring-slate-200">
@@ -808,7 +892,7 @@ function isZhLanguage(responseLanguage?: string | null) {
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    void submitMessage(input);
+                    runWidgetAction(submitMessage(input));
                   }
                 }}
                 placeholder="Describe your situation..."
@@ -823,13 +907,13 @@ function isZhLanguage(responseLanguage?: string | null) {
                 disabled={status !== "ready" || input.trim().length === 0}
                 type="submit"
               >
-                {status !== "ready" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
+                {status === "ready" ? (
                   <>
                     Send
                     <Send className="ml-2 size-4" />
                   </>
+                ) : (
+                  <Loader2 className="size-4 animate-spin" />
                 )}
               </Button>
             </div>
