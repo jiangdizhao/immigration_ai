@@ -30,9 +30,23 @@ class NaturalResponseService:
         "policy gate",
     )
 
+    BANNED_LINE_FRAGMENTS = (
+        "Outcome Graphic",
+        "Risk Pie",
+        "AMEC-style",
+        "YouTube",
+        "donate",
+        "抖內",
+        "電台",
+        "电台",
+    )
+
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.model = os.getenv("NATURAL_RESPONSE_MODEL", os.getenv("RECOMMENDATION_MODEL", os.getenv("REASONING_MODEL", "gpt-5.4-mini")))
+        self.model = os.getenv(
+            "NATURAL_RESPONSE_MODEL",
+            os.getenv("RECOMMENDATION_MODEL", os.getenv("REASONING_MODEL", "gpt-5.4-mini")),
+        )
         self.enabled = os.getenv("NATURAL_RESPONSE_REWRITE_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
         self._client: OpenAI | None = None
 
@@ -102,23 +116,40 @@ class NaturalResponseService:
             "compact_sources": compact_sources,
         }
         system_prompt = (
-            "You are the final public-answer writer for an Australian immigration-law website assistant.\n"
-            "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.\n"
-            "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.\n"
-            "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.\n"
-            "Keep layout elegant: use 3-5 sections, short paragraphs, blank lines between sections, and avoid deeply nested bullets.\n"
-            "Do NOT force every answer into the same template; choose headings that fit the case.\n"
-            "For urgent visa-status matters, prefer sections such as: 初步判断, 为什么紧急, 现在马上做, 准备给律师看的材料, 下一步. You may vary the exact headings.\n"
-            "Start with the most useful case-specific point, not a generic disclaimer.\n"
-            "Commit to facts the user already gave. Do not re-ask known facts.\n"
-            "Preserve caveats, uncertainty, and escalation warnings.\n"
-            "Do not invent deadlines, risk percentages, legal provisions, citations, outcomes, outcome graphics, risk pies, or AMEC-style scores.\n"
-            "Do not include marketing, donation requests, YouTube messages, or unrelated links.\n"
-            "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.\n"
-            "Ask at most one useful next question, and only if the plan says to ask one.\n"
-            "If the plan offers a next service, include it naturally in one short sentence.\n"
-            "Return only the final answer text.\n"
-            f"{language_rule}\n"
+            "You are the final public-answer writer for an Australian immigration-law website assistant.
+"
+            "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.
+"
+            "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.
+"
+            "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.
+"
+            "Keep layout elegant: use 3-5 sections, short paragraphs, blank lines between sections, and avoid deeply nested bullets.
+"
+            "Do NOT force every answer into the same template; choose headings that fit the case.
+"
+            "For urgent visa-status matters, prefer sections such as: 初步判断, 为什么紧急, 现在马上做, 准备给律师看的材料, 下一步. You may vary the exact headings.
+"
+            "Start with the most useful case-specific point, not a generic disclaimer.
+"
+            "Commit to facts the user already gave. Do not re-ask known facts.
+"
+            "Preserve caveats, uncertainty, and escalation warnings.
+"
+            "Do not invent deadlines, risk percentages, legal provisions, citations, outcomes, outcome graphics, risk pies, or AMEC-style scores.
+"
+            "Do not include marketing, donation requests, YouTube messages, or unrelated links.
+"
+            "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.
+"
+            "Ask at most one useful next question, and only if the plan says to ask one.
+"
+            "If the plan offers a next service, include it naturally in one short sentence.
+"
+            "Return only the final answer text.
+"
+            f"{language_rule}
+"
         )
         try:
             result = self.client.responses.create(
@@ -139,28 +170,14 @@ class NaturalResponseService:
             out = out.replace(word, "available information")
             out = out.replace(word.title(), "available information")
 
-        banned_fragments = (
-            "Outcome Graphic",
-            "Risk Pie",
-            "AMEC-style",
-            "YouTube",
-            "donate",
-            "抖內",
-            "电台频道",
-            "電台頻道",
-        )
-        lines = []
+        raw_lines = []
         for line in out.splitlines():
-            if any(fragment.lower() in line.lower() for fragment in banned_fragments):
+            if any(fragment.lower() in line.lower() for fragment in self.BANNED_LINE_FRAGMENTS):
                 continue
-            lines.append(line)
-        out = "\n".join(lines)
+            raw_lines.append(line.rstrip())
 
-        # Preserve the model's heading/bullet layout. Earlier versions rebuilt the
-        # whole answer with " ".join(tokens), which destroyed Markdown line breaks
-        # and made otherwise structured answers look dense and unelegant.
         cleaned_lines: list[str] = []
-        for line in out.splitlines():
+        for line in raw_lines:
             kept_tokens: list[str] = []
             for token in line.split():
                 stripped = token.strip(".,;:()[]{}|｜")
