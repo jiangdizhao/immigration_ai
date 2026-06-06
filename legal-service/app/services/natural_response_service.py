@@ -47,7 +47,11 @@ class NaturalResponseService:
             "NATURAL_RESPONSE_MODEL",
             os.getenv("RECOMMENDATION_MODEL", os.getenv("REASONING_MODEL", "gpt-5.4-mini")),
         )
-        self.enabled = os.getenv("NATURAL_RESPONSE_REWRITE_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
+        self.enabled = os.getenv("NATURAL_RESPONSE_REWRITE_ENABLED", "true").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
         self._client: OpenAI | None = None
 
     @property
@@ -90,7 +94,13 @@ class NaturalResponseService:
             return response, debug
 
         response.answer = self._light_sanitize(generated)
-        debug.update({"applied": True, "reason": "natural_response_rewrite", "strategy": communication_plan.strategy})
+        debug.update(
+            {
+                "applied": True,
+                "reason": "natural_response_rewrite",
+                "strategy": communication_plan.strategy,
+            }
+        )
         return response, debug
 
     def _generate(
@@ -115,24 +125,26 @@ class NaturalResponseService:
             "communication_plan": communication_plan.model_dump(),
             "compact_sources": compact_sources,
         }
-        "\n".join([
-            "You are the final public-answer writer for an Australian immigration-law website assistant.",
-            "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.",
-            "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.",
-            "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.",
-            "Do NOT force every answer into the same template; choose headings that fit the case.",
-            "For urgent visa-status matters, prefer a layout like: initial view, why it is urgent, what to do now, documents to prepare, next service/consultation. You may vary the exact headings.",
-            "Start with the most useful case-specific point, not a generic disclaimer.",
-            "Commit to facts the user already gave. Do not re-ask known facts.",
-            "Preserve caveats, uncertainty, and escalation warnings.",
-            "Do not invent deadlines, risk percentages, legal provisions, citations, outcomes, outcome graphics, risk pies, or AMEC-style scores.",
-            "Do not include marketing, donation requests, YouTube messages, or unrelated links.",
-            "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.",
-            "Ask at most one useful next question, and only if the plan says to ask one.",
-            "If the plan offers a next service, include it naturally in one short sentence.",
-            "Return only the final answer text.",
-            language_rule,
-        ])
+        system_prompt = "\n".join(
+            [
+                "You are the final public-answer writer for an Australian immigration-law website assistant.",
+                "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.",
+                "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.",
+                "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.",
+                "Do not force every answer into the same template; choose headings that fit the case.",
+                "For urgent visa-status matters, prefer a layout like: initial view, why it is urgent, what to do now, documents to prepare, next service/consultation. You may vary the exact headings.",
+                "Start with the most useful case-specific point, not a generic disclaimer.",
+                "Commit to facts the user already gave. Do not re-ask known facts.",
+                "Preserve caveats, uncertainty, and escalation warnings.",
+                "Do not invent deadlines, risk percentages, legal provisions, citations, outcomes, outcome graphics, risk pies, or AMEC-style scores.",
+                "Do not include marketing, donation requests, YouTube messages, or unrelated links.",
+                "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.",
+                "Ask at most one useful next question, and only if the plan says to ask one.",
+                "If the plan offers a next service, include it naturally in one short sentence.",
+                "Return only the final answer text.",
+                language_rule,
+            ]
+        )
         try:
             result = self.client.responses.create(
                 model=self.model,
@@ -147,12 +159,13 @@ class NaturalResponseService:
             return None
 
     def _light_sanitize(self, text: str) -> str:
+        """Remove unsafe/marketing fragments while preserving Markdown layout."""
         out = (text or "").strip()
         for word in self.INTERNAL_WORDS:
             out = out.replace(word, "available information")
             out = out.replace(word.title(), "available information")
 
-        raw_lines = []
+        raw_lines: list[str] = []
         for line in out.splitlines():
             if any(fragment.lower() in line.lower() for fragment in self.BANNED_LINE_FRAGMENTS):
                 continue

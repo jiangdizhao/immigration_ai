@@ -18,18 +18,6 @@ class TaskFulfillmentService:
     already derived from SemanticTurnAnalysis and completes the requested service.
     """
 
-    INTERNAL_WORDS = (
-        "retrieval",
-        "source classes",
-        "evidence package",
-        "local corpus",
-        "backend",
-        "policy gate",
-        "operation answerability",
-    )
-
-    BANNED_LINE_FRAGMENTS = ("Outcome Graphic", "Risk Pie", "AMEC-style", "YouTube", "donate", "抖內", "電台", "电台")
-
     def __init__(self) -> None:
         self.settings = get_settings()
         self.model = os.getenv("TASK_FULFILLMENT_MODEL", os.getenv("REASONING_MODEL", "gpt-5.4-mini"))
@@ -64,8 +52,13 @@ class TaskFulfillmentService:
             internal_question_en=internal_question_en,
             is_zh=is_zh,
         )
+
         if not generated:
-            generated = self._fallback(task_type=task_type, state=state, is_zh=is_zh)
+            generated = self._fallback(
+                task_type=task_type,
+                state=state,
+                is_zh=is_zh,
+            )
 
         generated = self._sanitize(generated)
 
@@ -106,6 +99,11 @@ class TaskFulfillmentService:
         original_question: str,
         response_language: str,
     ) -> dict[str, Any] | None:
+        """Deprecated compatibility method.
+
+        Pending offers are now created from CommunicationPlanService, not by
+        regex-scanning the assistant's public answer.
+        """
         return None
 
     def _generate(
@@ -121,36 +119,25 @@ class TaskFulfillmentService:
         language_rule = "Write in Simplified Chinese." if is_zh else "Write in English."
         facts = dict(state.carried_intake_facts or {})
         history = [turn.model_dump() for turn in state.conversation_history[-8:]]
-        system_prompt = (
-            "You are a senior Australian migration-law intake assistant.
-"
-            "Complete the user's requested service action directly.
-"
-            "Do not restart generic legal Q&A and do not merely acknowledge the request.
-"
-            "Use only the structured task_type, semantic_turn_analysis, known facts, and recent history.
-"
-            "Do not invent legal conclusions, exact deadlines, risk percentages, scores, charts, or guaranteed outcomes.
-"
-            "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.
-"
-            "Write naturally and case-specifically. Use a polished layout with headings and bullets where useful.
-"
-            "Do not offer to complete the same task in a later message; the requested artifact itself is the answer.
-"
-            "Keep the artifact compact and copy-ready: no more than one level of bullets unless the task genuinely requires it.
-"
-            "If the task is a lawyer brief, produce a concise document with sections: case summary, known facts, urgent issues to check, documents to attach, and questions for the lawyer.
-"
-            "If the task is a draft, produce an editable draft first and then a short customization note.
-"
-            "If the task is a checklist, group materials by purpose.
-"
-            "If the task is an action plan or timeline, give ordered next steps and keep legal certainty bounded.
-"
-            f"{language_rule}
-"
+        system_prompt = "\n".join(
+            [
+                "You are a senior Australian migration-law intake assistant.",
+                "Complete the user's requested service action directly.",
+                "Do not restart generic legal Q&A and do not merely acknowledge the request.",
+                "Use only the structured task_type, semantic_turn_analysis, known facts, and recent history.",
+                "Do not invent legal conclusions, exact deadlines, risk percentages, scores, charts, or guaranteed outcomes.",
+                "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.",
+                "Write naturally and case-specifically. Use a polished layout with headings and bullets where useful.",
+                "Do not offer to complete the same task in a later message; the requested artifact itself is the answer.",
+                "Keep the artifact compact and copy-ready: no more than one level of bullets unless the task genuinely requires it.",
+                "If the task is a lawyer brief, produce a concise document with sections: case summary, known facts, urgent issues to check, documents to attach, and questions for the lawyer.",
+                "If the task is a draft, produce an editable draft first and then a short customization note.",
+                "If the task is a checklist, group materials by purpose.",
+                "If the task is an action plan or timeline, give ordered next steps and keep legal certainty bounded.",
+                language_rule,
+            ]
         )
+
         user_payload = {
             "task_type": task_type,
             "conversation_action": action.to_debug_dict() if hasattr(action, "to_debug_dict") else {},
@@ -174,6 +161,7 @@ class TaskFulfillmentService:
                 "Preserve uncertainty and recommend lawyer review for high-risk status, refusal, cancellation, or deadline matters.",
             ],
         }
+
         try:
             result = self.client.responses.create(
                 model=self.model,
@@ -189,155 +177,159 @@ class TaskFulfillmentService:
 
     def _fallback(self, *, task_type: str, state: MatterState, is_zh: bool) -> str:
         facts_text = self._facts_text(state.carried_intake_facts or {}, is_zh=is_zh)
+
         if is_zh:
             if task_type == "lawyer_brief":
-                return (
-                    "## 给律师看的案情摘要
-
-"
-                    f"**当前问题：** {state.issue_type or '签证/移民问题'}
-"
-                    f"**当前处理方向：** {state.operation_type or '需要进一步确认'}
-
-"
-                    "### 已知事实
-"
-                    f"{facts_text}
-
-"
-                    "### 请律师重点核对
-"
-                    "- 当前 VEVO / ImmiAccount 显示的签证状态；
-"
-                    "- 关键到期日、是否已经出现 unlawful 或过桥签证风险；
-"
-                    "- 是否仍可在境内递交申请，或是否需要先处理 BVE / 其他补救路径；
-"
-                    "- 哪些文件需要马上准备，以及是否有紧急期限。
-
-"
-                    "### 建议一并发送的文件
-"
-                    "护照、VEVO 截图、签证 grant letter、学校文件、completion letter、成绩单、保险，以及任何 Home Affairs / 学校 / agent 邮件。"
+                return "\n".join(
+                    [
+                        "## 给律师看的案情摘要",
+                        "",
+                        f"**当前问题：** {state.issue_type or '签证/移民问题'}",
+                        f"**当前处理方向：** {state.operation_type or '需要进一步确认'}",
+                        "",
+                        "### 已知事实",
+                        facts_text,
+                        "",
+                        "### 请律师重点核对",
+                        "- 当前 VEVO / ImmiAccount 显示的签证状态；",
+                        "- 关键到期日、是否已经出现 unlawful 或过桥签证风险；",
+                        "- 是否仍可在境内递交申请，或是否需要先处理 BVE / 其他补救路径；",
+                        "- 哪些文件需要马上准备，以及是否有紧急期限。",
+                        "",
+                        "### 建议一并发送的文件",
+                        "护照、VEVO 截图、签证 grant letter、学校文件、completion letter、成绩单、保险，以及任何 Home Affairs / 学校 / agent 邮件。",
+                    ]
                 )
             if task_type == "document_checklist":
-                return (
-                    "## 材料清单
-
-"
-                    "### 身份和签证状态
-"
-                    "- 护照首页
-- VEVO 截图
-- 最近一次签证 grant letter
-
-"
-                    "### 学校和学习材料
-"
-                    "- CoE、completion letter、成绩单
-- 学校或 agent 的相关邮件
-
-"
-                    "### 其他可能相关材料
-"
-                    "- 保险、英文成绩、AFP 或体检记录（如已准备）"
+                return "\n".join(
+                    [
+                        "## 材料清单",
+                        "",
+                        "### 身份和签证状态",
+                        "- 护照首页",
+                        "- VEVO 截图",
+                        "- 最近一次签证 grant letter",
+                        "",
+                        "### 学校和学习材料",
+                        "- CoE、completion letter、成绩单",
+                        "- 学校或 agent 的相关邮件",
+                        "",
+                        "### 其他可能相关材料",
+                        "- 保险、英文成绩、AFP 或体检记录（如已准备）",
+                    ]
                 )
             if task_type in {"status_action_plan", "timeline_plan", "next_step_plan"}:
-                return (
-                    "## 下一步行动
-
-"
-                    "### 先确认身份
-"
-                    "马上查 VEVO 和 ImmiAccount，保存当前状态截图和关键日期。
-
-"
-                    "### 暂时不要冒险
-"
-                    "在身份和工作权利确认前，不要默认可以继续工作或旅行。
-
-"
-                    "### 尽快让专业人士核对
-"
-                    "如果涉及逾期、拒签、取消或 BVE 风险，应尽快让律师或注册移民代理核对。"
+                return "\n".join(
+                    [
+                        "## 下一步行动",
+                        "",
+                        "### 先确认身份",
+                        "马上查 VEVO 和 ImmiAccount，保存当前状态截图和关键日期。",
+                        "",
+                        "### 暂时不要冒险",
+                        "在身份和工作权利确认前，不要默认可以继续工作或旅行。",
+                        "",
+                        "### 尽快让专业人士核对",
+                        "如果涉及逾期、拒签、取消或 BVE 风险，应尽快让律师或注册移民代理核对。",
+                    ]
                 )
-            return (
-                "## 可修改说明草稿
-
-"
-                "我希望说明，我的学习和签证安排是基于真实的学习及职业规划。我会结合自己的过往学习、课程选择、未来目标和实际情况，解释为什么当前安排具有合理性。
-
-"
-                "请根据你的真实经历补充课程名称、学习原因、职业目标和相关证据。"
+            return "\n".join(
+                [
+                    "## 可修改说明草稿",
+                    "",
+                    "我希望说明，我的学习和签证安排是基于真实的学习及职业规划。我会结合自己的过往学习、课程选择、未来目标和实际情况，解释为什么当前安排具有合理性。",
+                    "",
+                    "请根据你的真实经历补充课程名称、学习原因、职业目标和相关证据。",
+                ]
             )
+
         if task_type == "lawyer_brief":
-            return (
-                "## Lawyer brief
-
-"
-                f"**Issue:** {state.issue_type or 'visa / migration issue'}
-"
-                f"**Working direction:** {state.operation_type or 'to be confirmed'}
-
-"
-                f"**Known facts:** {facts_text}
-
-"
-                "**Please check:** current VEVO / ImmiAccount status, key dates, unlawful-status or bridging-visa risk, whether an onshore application remains available, and what documents must be prepared urgently."
+            return "\n".join(
+                [
+                    "## Lawyer brief",
+                    "",
+                    f"**Issue:** {state.issue_type or 'visa / migration issue'}",
+                    f"**Working direction:** {state.operation_type or 'to be confirmed'}",
+                    "",
+                    f"**Known facts:** {facts_text}",
+                    "",
+                    "**Please check:** current VEVO / ImmiAccount status, key dates, unlawful-status or bridging-visa risk, whether an onshore application remains available, and what documents must be prepared urgently.",
+                ]
             )
-        return (
-            "## Practical next steps
 
-"
-            "- Check VEVO and ImmiAccount.
-"
-            "- Save key documents and screenshots.
-"
-            "- Do not assume work or travel rights until current status is confirmed.
-"
-            "- Get urgent advice from a lawyer or registered migration agent if the matter involves expiry, unlawful status, refusal, cancellation, or BVE."
+        return "\n".join(
+            [
+                "## Practical next steps",
+                "",
+                "- Check VEVO and ImmiAccount.",
+                "- Save key documents and screenshots.",
+                "- Do not assume work or travel rights until current status is confirmed.",
+                "- Get urgent advice from a lawyer or registered migration agent if the matter involves expiry, unlawful status, refusal, cancellation, or BVE.",
+            ]
         )
 
     def _facts_text(self, facts: dict[str, Any], *, is_zh: bool) -> str:
         if not facts:
             return "暂未整理" if is_zh else "not yet organized"
-        hidden = {"active_case_frame_id", "case_family", "operation_type", "answer_preference", "answer_tier", "pending_offer"}
-        parts = []
+
+        hidden = {
+            "active_case_frame_id",
+            "case_family",
+            "operation_type",
+            "answer_preference",
+            "answer_tier",
+            "pending_offer",
+        }
+
+        parts: list[str] = []
         for key, value in facts.items():
             if key in hidden or value in (None, ""):
                 continue
             parts.append(f"- {key}: {value}")
-        return "
-".join(parts[:12]) if parts else ("暂未整理" if is_zh else "not yet organized")
+
+        return "\n".join(parts[:12]) if parts else ("暂未整理" if is_zh else "not yet organized")
 
     def _sanitize(self, text: str) -> str:
+        """Remove unsafe/marketing fragments while preserving Markdown layout."""
         cleaned = (text or "").strip()
-        for word in self.INTERNAL_WORDS:
+        internal_words = [
+            "retrieval",
+            "source classes",
+            "evidence package",
+            "local corpus",
+            "backend",
+            "policy gate",
+            "operation answerability",
+        ]
+        for word in internal_words:
             cleaned = cleaned.replace(word, "available information")
             cleaned = cleaned.replace(word.title(), "available information")
-        raw_lines = [line.rstrip() for line in cleaned.splitlines() if not any(b.lower() in line.lower() for b in self.BANNED_LINE_FRAGMENTS)]
-        cleaned_lines: list[str] = []
+
+        banned_fragments = ("Outcome Graphic", "Risk Pie", "AMEC-style", "YouTube", "donate", "抖內", "電台", "电台")
+        raw_lines = [line.rstrip() for line in cleaned.splitlines() if not any(b.lower() in line.lower() for b in banned_fragments)]
+
+        sanitized_lines: list[str] = []
         for line in raw_lines:
-            kept_tokens: list[str] = []
+            kept: list[str] = []
             for token in line.split():
                 stripped = token.strip(".,;:()[]{}|｜")
                 if stripped.endswith("%") and stripped[:-1].isdigit():
                     continue
                 if "/100" in stripped:
                     continue
-                kept_tokens.append(token)
-            cleaned_lines.append(" ".join(kept_tokens).rstrip())
+                kept.append(token)
+            sanitized_lines.append(" ".join(kept).rstrip())
+
         compacted: list[str] = []
         blank_seen = False
-        for line in cleaned_lines:
+        for line in sanitized_lines:
             if line.strip():
                 compacted.append(line)
                 blank_seen = False
             elif not blank_seen:
                 compacted.append("")
                 blank_seen = True
-        return "
-".join(compacted).strip()
+        return "\n".join(compacted).strip()
 
     def _should_escalate(self, state: MatterState) -> bool:
         flags = state.risk_flags
@@ -355,4 +347,4 @@ class TaskFulfillmentService:
             return True
         if not text:
             return False
-        return any("㐀" <= ch <= "﫿" for ch in text)
+        return any("\u3400" <= ch <= "\ufaff" for ch in text)
