@@ -907,9 +907,15 @@ class SemanticTurnService:
         return value_s or None
 
     def _debug_safe(self, value: Any) -> Any:
+        """Return a JSON-serializable deep copy for debug payloads.
+
+        Important: never return the original dict/list object. The caller may
+        insert this value back into the same object as raw_model_output. Returning
+        the original object can create a circular reference, which FastAPI/Pydantic
+        cannot serialize in QueryResponse.
+        """
         try:
-            json.dumps(value, ensure_ascii=False)
-            return value
+            return json.loads(json.dumps(value, ensure_ascii=False, default=str))
         except Exception:
             return str(value)
 
