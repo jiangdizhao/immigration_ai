@@ -14,10 +14,10 @@ export function ConsultationEscalationCard({
 }: Props) {
   return (
     <Alert className="border-amber-300/60 bg-amber-50/60">
-      <AlertTitle>Consultation recommended</AlertTitle>
+      <AlertTitle>Lawyer review recommended</AlertTitle>
       <AlertDescription className="mt-2 space-y-3">
         <p className="text-sm">
-          This matter may need lawyer review before giving a specific answer.
+          This may depend on key dates, current visa status, and documents.
         </p>
 
         {warnings?.length ? (

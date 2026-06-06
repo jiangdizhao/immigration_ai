@@ -118,6 +118,79 @@ function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assis
   return Array.from(new Set(fallback)).slice(0, 4);
 }
 
+function InlineRichText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+          return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={`${part}-${index}`}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function AssistantFormattedText({ text }: { text: string }) {
+  const lines = text.split(/\r?\n/);
+  return (
+    <div className="space-y-2">
+      {lines.map((rawLine, index) => {
+        const line = rawLine.trimEnd();
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div className="h-1" key={`blank-${index}`} />;
+        }
+        if (trimmed === "---") {
+          return <div className="my-3 border-t border-slate-200" key={`rule-${index}`} />;
+        }
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h4 className="pt-2 text-sm font-semibold leading-6 text-slate-900" key={`h3-${index}`}>
+              <InlineRichText text={trimmed.replace(/^###\s+/, "")} />
+            </h4>
+          );
+        }
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h3 className="pt-2 text-base font-semibold leading-7 text-slate-950" key={`h2-${index}`}>
+              <InlineRichText text={trimmed.replace(/^##\s+/, "")} />
+            </h3>
+          );
+        }
+        if (/^[-*]\s+/.test(trimmed)) {
+          return (
+            <div className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800" key={`li-${index}`}>
+              <span className="mt-[0.65rem] size-1.5 shrink-0 rounded-full bg-slate-400" />
+              <span><InlineRichText text={trimmed.replace(/^[-*]\s+/, "")} /></span>
+            </div>
+          );
+        }
+        if (/^\d+[.)）]\s+/.test(trimmed)) {
+          return (
+            <p className="pl-1 text-[15px] leading-7 text-slate-800" key={`num-${index}`}>
+              <InlineRichText text={trimmed} />
+            </p>
+          );
+        }
+        if (trimmed.startsWith(">")) {
+          return (
+            <blockquote className="rounded-2xl border-l-4 border-slate-300 bg-slate-50 px-3 py-2 text-[15px] leading-7 text-slate-700" key={`quote-${index}`}>
+              <InlineRichText text={trimmed.replace(/^>\s?/, "")} />
+            </blockquote>
+          );
+        }
+        return (
+          <p className="text-[15px] leading-7 text-slate-800" key={`p-${index}`}>
+            <InlineRichText text={trimmed} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ImmigrationAssistantWidget() {
 
 function isZhLanguage(responseLanguage?: string | null) {
@@ -518,7 +591,7 @@ function isZhLanguage(responseLanguage?: string | null) {
                         transition={{ duration: 0.2 }}
                       >
                         <div>
-                          {message.text}
+                          {isAssistant ? <AssistantFormattedText text={message.text} /> : message.text}
                           {isAssistant && message.isStreaming ? (
                             <span className="ml-0.5 inline-block animate-pulse text-slate-400">
                               ▍
@@ -682,13 +755,17 @@ function isZhLanguage(responseLanguage?: string | null) {
                         ) : null}
 
                         {assistantReady && message.escalate && !showGuidedCard ? (
-                          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm leading-6 text-red-800">
+                          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                             <div className="flex items-start gap-2">
                               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                               <div>
-                                <p className="font-medium">{messageZh ? "建议预约律师咨询。" : "A consultation with a lawyer is recommended."}</p>
-                                <p className="mt-1 text-red-700">
-                                  {messageZh ? "这个问题可能取决于具体事实、日期或文件，需要进一步审查。" : "This issue may depend on facts, dates, or documents that need review."}
+                                <p className="font-semibold">
+                                  {messageZh ? "建议尽快预约律师核对。" : "Lawyer review is recommended."}
+                                </p>
+                                <p className="mt-1 text-amber-800">
+                                  {messageZh
+                                    ? "这个问题可能取决于关键日期、VEVO 状态和具体文件。"
+                                    : "This may depend on key dates, VEVO status, and documents."}
                                 </p>
                               </div>
                             </div>

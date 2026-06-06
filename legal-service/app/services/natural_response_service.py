@@ -106,8 +106,9 @@ class NaturalResponseService:
             "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.\n"
             "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.\n"
             "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.\n"
+            "Keep layout elegant: use 3-5 sections, short paragraphs, blank lines between sections, and avoid deeply nested bullets.\n"
             "Do NOT force every answer into the same template; choose headings that fit the case.\n"
-            "For urgent visa-status matters, prefer a layout like: initial view, why it is urgent, what to do now, documents to prepare, next service/consultation. You may vary the exact headings.\n"
+            "For urgent visa-status matters, prefer sections such as: 初步判断, 为什么紧急, 现在马上做, 准备给律师看的材料, 下一步. You may vary the exact headings.\n"
             "Start with the most useful case-specific point, not a generic disclaimer.\n"
             "Commit to facts the user already gave. Do not re-ask known facts.\n"
             "Preserve caveats, uncertainty, and escalation warnings.\n"
@@ -155,12 +156,29 @@ class NaturalResponseService:
             lines.append(line)
         out = "\n".join(lines)
 
-        pieces = []
-        for token in out.split():
-            stripped = token.strip(".,;:()[]{}|｜")
-            if stripped.endswith("%") and stripped[:-1].isdigit():
-                continue
-            if "/100" in stripped:
-                continue
-            pieces.append(token)
-        return " ".join(pieces).strip()
+        # Preserve the model's heading/bullet layout. Earlier versions rebuilt the
+        # whole answer with " ".join(tokens), which destroyed Markdown line breaks
+        # and made otherwise structured answers look dense and unelegant.
+        cleaned_lines: list[str] = []
+        for line in out.splitlines():
+            kept_tokens: list[str] = []
+            for token in line.split():
+                stripped = token.strip(".,;:()[]{}|｜")
+                if stripped.endswith("%") and stripped[:-1].isdigit():
+                    continue
+                if "/100" in stripped:
+                    continue
+                kept_tokens.append(token)
+            cleaned_lines.append(" ".join(kept_tokens).rstrip())
+
+        compacted: list[str] = []
+        blank_seen = False
+        for line in cleaned_lines:
+            if line.strip():
+                compacted.append(line)
+                blank_seen = False
+            elif not blank_seen:
+                compacted.append("")
+                blank_seen = True
+        return "
+".join(compacted).strip()

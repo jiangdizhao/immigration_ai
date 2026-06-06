@@ -576,12 +576,15 @@ class SemanticTurnService:
             case_routing["operation_type"] = task_intent.get("operation_type")
         if task_intent.get("topic") == "student_visa" and not case_routing.get("issue_type"):
             case_routing["issue_type"] = "student_visa"
+        issue_type = self._canonical_issue_type(case_routing.get("issue_type"))
+        visa_type = self._canonical_visa_type(case_routing.get("visa_type"))
+        operation_type = self._canonical_operation_type(case_routing.get("operation_type"))
         return {
             "frame_action": self._normalize_frame_action(case_routing.get("frame_action")),
             "proposed_case_frame_id": self._str_or_none(case_routing.get("proposed_case_frame_id")),
-            "issue_type": self._str_or_none(case_routing.get("issue_type")),
-            "visa_type": self._str_or_none(case_routing.get("visa_type")),
-            "operation_type": self._str_or_none(case_routing.get("operation_type")),
+            "issue_type": issue_type,
+            "visa_type": visa_type,
+            "operation_type": operation_type,
             "user_goal": self._str_or_none(case_routing.get("user_goal")),
             "topic_relation": self._normalize_topic_relation(case_routing.get("topic_relation")),
             "confidence": self._normalize_confidence(case_routing.get("confidence") or top.get("confidence")),
@@ -630,13 +633,20 @@ class SemanticTurnService:
         return list(deduped.values())
 
     def _normalize_fact_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        fact_key = str(item.get("fact_key") or item.get("key") or "").strip()
         value = item.get("value")
+        if fact_key == "issue_type":
+            value = self._canonical_issue_type(value) or value
+        elif fact_key == "visa_type":
+            value = self._canonical_visa_type(value) or value
+        elif fact_key == "operation_type":
+            value = self._canonical_operation_type(value) or value
         status_raw = item.get("status")
         if status_raw in (None, ""):
             status_raw = "filled" if value not in (None, "") else "not_filled"
         status = self._normalize_fact_status(status_raw)
         return {
-            "fact_key": str(item.get("fact_key") or item.get("key") or "").strip(),
+            "fact_key": fact_key,
             "value": value,
             "status": status,
             "confidence": self._normalize_confidence(item.get("confidence")),
@@ -822,6 +832,54 @@ class SemanticTurnService:
     # ------------------------------------------------------------------
     # Scalar normalization helpers
     # ------------------------------------------------------------------
+    def _canonical_issue_type(self, value: Any) -> str | None:
+        value_s = str(value or "").strip().lower().replace("-", "_")
+        if not value_s:
+            return None
+        if "student" in value_s or "500" in value_s:
+            return "student_visa"
+        if "485" in value_s or "temporary_graduate" in value_s or "temporary graduate" in value_s:
+            return "temporary_graduate_visa"
+        if "bridging" in value_s or value_s in {"bva", "bvb", "bvc", "bve"}:
+            return "bridging_visa"
+        if "refusal" in value_s or "review" in value_s:
+            return "visa_refusal"
+        if "cancel" in value_s or "noicc" in value_s:
+            return "visa_cancellation"
+        return str(value).strip()
+
+    def _canonical_visa_type(self, value: Any) -> str | None:
+        value_s = str(value or "").strip().lower().replace("-", "_")
+        if not value_s:
+            return None
+        if value_s in {"500", "subclass_500"} or "student" in value_s:
+            return "student"
+        if value_s in {"485", "subclass_485"} or "temporary_graduate" in value_s or "temporary graduate" in value_s:
+            return "temporary_graduate"
+        if value_s in {"010", "020", "030", "050", "bva", "bvb", "bvc", "bve"} or "bridging" in value_s:
+            return "bridging"
+        if "partner" in value_s:
+            return "partner"
+        if "visitor" in value_s or value_s == "600":
+            return "visitor"
+        return str(value).strip()
+
+    def _canonical_operation_type(self, value: Any) -> str | None:
+        value_s = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if not value_s:
+            return None
+        if value_s in {"status_risk", "expiry_status_risk", "student_visa_expiry_status_risk"}:
+            return "500_expiry_or_extension"
+        if "student" in value_s and ("expiry" in value_s or "expired" in value_s or "status" in value_s):
+            return "500_expiry_or_extension"
+        if value_s in {"lawyer_brief", "lawyer_summary", "case_summary"}:
+            return "lawyer_brief"
+        if value_s in {"document_checklist", "checklist"}:
+            return "document_checklist"
+        if value_s in {"485_eligibility", "485_eligibility_overview"}:
+            return "485_eligibility_overview"
+        return str(value).strip()
+
     def _normalize_language(self, value: Any) -> str:
         value_s = str(value or "").lower()
         return "zh" if value_s.startswith("zh") else "en"

@@ -128,6 +128,8 @@ class TaskFulfillmentService:
             "Do not invent legal conclusions, exact deadlines, risk percentages, scores, charts, or guaranteed outcomes.\n"
             "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.\n"
             "Write naturally and case-specifically. Use a polished layout with headings and bullets where useful.\n"
+            "Do not offer to complete the same task in a later message; the requested artifact itself is the answer.\n"
+            "Keep the artifact compact and copy-ready: no more than one level of bullets unless the task genuinely requires it.\n"
             "If the task is a lawyer brief, produce a concise document with sections: case summary, known facts, urgent issues to check, documents to attach, and questions for the lawyer.\n"
             "If the task is a draft, produce an editable draft first and then a short customization note.\n"
             "If the task is a checklist, group materials by purpose.\n"
@@ -274,16 +276,31 @@ class TaskFulfillmentService:
         lines = [line for line in cleaned.splitlines() if not any(b.lower() in line.lower() for b in banned_fragments)]
         cleaned = "\n".join(lines)
 
-        kept = []
-        for token in cleaned.split():
-            stripped = token.strip(".,;:()[]{}")
-            if stripped.endswith("%") and stripped[:-1].isdigit():
-                continue
-            if "/100" in stripped:
-                continue
-            kept.append(token)
+        # Preserve headings and bullets. Joining all tokens with a single space
+        # makes lawyer briefs and checklists look like dense plain text.
+        cleaned_lines: list[str] = []
+        for line in cleaned.splitlines():
+            kept_tokens: list[str] = []
+            for token in line.split():
+                stripped = token.strip(".,;:()[]{}|｜")
+                if stripped.endswith("%") and stripped[:-1].isdigit():
+                    continue
+                if "/100" in stripped:
+                    continue
+                kept_tokens.append(token)
+            cleaned_lines.append(" ".join(kept_tokens).rstrip())
 
-        return " ".join(kept).strip()
+        compacted: list[str] = []
+        blank_seen = False
+        for line in cleaned_lines:
+            if line.strip():
+                compacted.append(line)
+                blank_seen = False
+            elif not blank_seen:
+                compacted.append("")
+                blank_seen = True
+        return "
+".join(compacted).strip()
 
     def _should_escalate(self, state: MatterState) -> bool:
         flags = state.risk_flags
