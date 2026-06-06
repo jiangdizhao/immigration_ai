@@ -11,7 +11,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
@@ -83,7 +83,9 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
     return "Guided intake update.";
   }
 
-  const lines = populatedEntries.map(([key, value]) => `${key}: ${String(value)}`);
+  const lines = populatedEntries.map(
+    ([key, value]) => `${key}: ${String(value)}`
+  );
   return `Guided intake update:\n${lines.join("\n")}`;
 }
 
@@ -96,14 +98,18 @@ function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
     return "I updated the intake details.";
   }
 
-  const labels = populatedEntries.map(([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " "));
+  const labels = populatedEntries.map(
+    ([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " ")
+  );
   if (labels.length === 1) {
     return `I updated my ${labels[0]}.`;
   }
   return `I updated these intake details: ${labels.join(", ")}.`;
 }
 
-function compactSourcesForMessage(message: Extract<WidgetMessage, { role: "assistant" }>) {
+function compactSourcesForMessage(
+  message: Extract<WidgetMessage, { role: "assistant" }>
+) {
   if (message.compactSources?.length) {
     return message.compactSources.slice(0, 4);
   }
@@ -167,7 +173,11 @@ function InlineRichText({ text }: { text: string }) {
   return (
     <>
       {parts.map(({ key, value }) => {
-        if (value.startsWith("**") && value.endsWith("**") && value.length > 4) {
+        if (
+          value.startsWith("**") &&
+          value.endsWith("**") &&
+          value.length > 4
+        ) {
           return <strong key={key}>{value.slice(2, -2)}</strong>;
         }
 
@@ -191,12 +201,20 @@ function AssistantFormattedText({ text }: { text: string }) {
         }
 
         if (trimmed === "---") {
-          return <div className="my-3 border-t border-slate-200" key={`rule-${key}`} />;
+          return (
+            <div
+              className="my-3 border-t border-slate-200"
+              key={`rule-${key}`}
+            />
+          );
         }
 
         if (trimmed.startsWith("### ")) {
           return (
-            <h4 className="pt-2 text-sm font-semibold leading-6 text-slate-900" key={`h3-${key}`}>
+            <h4
+              className="pt-2 text-sm font-semibold leading-6 text-slate-900"
+              key={`h3-${key}`}
+            >
               <InlineRichText text={trimmed.replace(/^###\s+/, "")} />
             </h4>
           );
@@ -204,7 +222,10 @@ function AssistantFormattedText({ text }: { text: string }) {
 
         if (trimmed.startsWith("## ")) {
           return (
-            <h3 className="pt-2 text-base font-semibold leading-7 text-slate-950" key={`h2-${key}`}>
+            <h3
+              className="pt-2 text-base font-semibold leading-7 text-slate-950"
+              key={`h2-${key}`}
+            >
               <InlineRichText text={trimmed.replace(/^##\s+/, "")} />
             </h3>
           );
@@ -212,7 +233,10 @@ function AssistantFormattedText({ text }: { text: string }) {
 
         if (/^[-*]\s+/.test(trimmed)) {
           return (
-            <div className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800" key={`li-${key}`}>
+            <div
+              className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800"
+              key={`li-${key}`}
+            >
               <span className="mt-[0.65rem] size-1.5 shrink-0 rounded-full bg-slate-400" />
               <span>
                 <InlineRichText text={trimmed.replace(/^[-*]\s+/, "")} />
@@ -223,7 +247,10 @@ function AssistantFormattedText({ text }: { text: string }) {
 
         if (/^\d+[.)）]\s+/.test(trimmed)) {
           return (
-            <p className="pl-1 text-[15px] leading-7 text-slate-800" key={`num-${key}`}>
+            <p
+              className="pl-1 text-[15px] leading-7 text-slate-800"
+              key={`num-${key}`}
+            >
               <InlineRichText text={trimmed} />
             </p>
           );
@@ -251,17 +278,18 @@ function AssistantFormattedText({ text }: { text: string }) {
 }
 
 export function ImmigrationAssistantWidget() {
-
-function isZhLanguage(responseLanguage?: string | null) {
-  return (responseLanguage ?? "").toLowerCase().startsWith("zh");
-}
+  function isZhLanguage(responseLanguage?: string | null) {
+    return (responseLanguage ?? "").toLowerCase().startsWith("zh");
+  }
 
   const [open, setOpen] = useState(false);
   const [chatId] = useState(() => generateUUID());
   const [matterId, setMatterId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
-  const [status, setStatus] = useState<"ready" | "submitted" | "typing">("ready");
+  const [status, setStatus] = useState<"ready" | "submitted" | "typing">(
+    "ready"
+  );
   const [error, setError] = useState<string | null>(null);
   const [showQuickQuestions, setShowQuickQuestions] = useState(true);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
@@ -275,14 +303,17 @@ function isZhLanguage(responseLanguage?: string | null) {
       return true;
     }
 
-    return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    return (
+      container.scrollHeight - container.scrollTop - container.clientHeight < 80
+    );
   };
 
-  const scrollToBottom = (force = false) => {
+  const scrollToBottom = useCallback((force = false) => {
     const container = listRef.current;
     if (!container) {
       return;
     }
+
     if (!force && !shouldAutoScrollRef.current) {
       return;
     }
@@ -290,7 +321,7 @@ function isZhLanguage(responseLanguage?: string | null) {
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-  };
+  }, []);
 
   const handleMessageListScroll = () => {
     shouldAutoScrollRef.current = isNearBottom();
@@ -300,8 +331,9 @@ function isZhLanguage(responseLanguage?: string | null) {
     if (!open) {
       return;
     }
+
     scrollToBottom();
-  }, [messages, open, status]);
+  }, [open, scrollToBottom]);
 
   useEffect(() => {
     if (!open) {
@@ -317,16 +349,20 @@ function isZhLanguage(responseLanguage?: string | null) {
 
     return () => {
       window.removeEventListener("resize", handleViewportChange);
-      window.visualViewport?.removeEventListener("resize", handleViewportChange);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        handleViewportChange
+      );
     };
-  }, [open]);
+  }, [open, scrollToBottom]);
 
   const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
       setMatterId(data.matterId);
     }
 
-    const knownFactsFromBackend = data.interactionPlan?.known_facts_summary ?? {};
+    const knownFactsFromBackend =
+      data.interactionPlan?.known_facts_summary ?? {};
     if (Object.keys(knownFactsFromBackend).length > 0) {
       setIntakeFacts((current) => ({
         ...knownFactsFromBackend,
@@ -337,7 +373,9 @@ function isZhLanguage(responseLanguage?: string | null) {
     const fullText =
       data.text?.trim() && data.text.trim().length > 0
         ? data.text.trim()
-        : data.responseLanguage === "zh" ? "抱歉，我现在无法生成回复。" : "Sorry, I could not generate a response right now.";
+        : data.responseLanguage === "zh"
+          ? "抱歉，我现在无法生成回复。"
+          : "Sorry, I could not generate a response right now.";
 
     const assistantMessageId = generateUUID();
 
@@ -527,9 +565,10 @@ function isZhLanguage(responseLanguage?: string | null) {
   };
 
   const handleBookConsultation = () => {
-    toast.info("Consultation booking flow placeholder. Connect this to your real booking page next.");
+    toast.info(
+      "Consultation booking flow placeholder. Connect this to your real booking page next."
+    );
   };
-
 
   const runWidgetAction = (action: Promise<unknown>) => {
     action.catch((actionError) => {
@@ -646,20 +685,26 @@ function isZhLanguage(responseLanguage?: string | null) {
                     const isUser = message.role === "user";
                     const isAssistant = isAssistantMessage(message);
                     const assistantReady = isAssistant && !message.isStreaming;
-                    const messageZh = isAssistant && isZhLanguage(message.responseLanguage);
+                    const messageZh =
+                      isAssistant && isZhLanguage(message.responseLanguage);
                     const showGuidedCard =
                       assistantReady &&
                       !!message.interactionPlan &&
-                      ((message.interactionPlan.requested_facts?.length ?? 0) > 0 ||
+                      ((message.interactionPlan.requested_facts?.length ?? 0) >
+                        0 ||
                         message.interactionPlan.mode === "escalation" ||
                         (SHOW_WIDGET_DEBUG &&
                           (message.interactionPlan.mode === "guided_intake" ||
                             message.interactionPlan.mode === "analysis_ready" ||
-                            (message.interactionPlan.warnings?.length ?? 0) > 0)));
+                            (message.interactionPlan.warnings?.length ?? 0) >
+                              0)));
                     const hasRequestedFacts =
                       assistantReady &&
-                      (message.interactionPlan?.requested_facts?.length ?? 0) > 0;
-                    const visibleSources = isAssistant ? compactSourcesForMessage(message) : [];
+                      (message.interactionPlan?.requested_facts?.length ?? 0) >
+                        0;
+                    const visibleSources = isAssistant
+                      ? compactSourcesForMessage(message)
+                      : [];
 
                     return (
                       <motion.div
@@ -675,7 +720,11 @@ function isZhLanguage(responseLanguage?: string | null) {
                         transition={{ duration: 0.2 }}
                       >
                         <div>
-                          {isAssistant ? <AssistantFormattedText text={message.text} /> : message.text}
+                          {isAssistant ? (
+                            <AssistantFormattedText text={message.text} />
+                          ) : (
+                            message.text
+                          )}
                           {isAssistant && message.isStreaming ? (
                             <span className="ml-0.5 inline-block animate-pulse text-slate-400">
                               ▍
@@ -683,7 +732,9 @@ function isZhLanguage(responseLanguage?: string | null) {
                           ) : null}
                         </div>
 
-                        {SHOW_WIDGET_DEBUG && assistantReady && message.confidence ? (
+                        {SHOW_WIDGET_DEBUG &&
+                        assistantReady &&
+                        message.confidence ? (
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className="border-slate-200 bg-slate-50 text-slate-700"
@@ -730,36 +781,46 @@ function isZhLanguage(responseLanguage?: string | null) {
                               onSubmitDraftFacts={() => {
                                 runWidgetAction(handleSubmitDraftFacts());
                               }}
-                              responseLanguage={message.responseLanguage ?? null}
+                              responseLanguage={
+                                message.responseLanguage ?? null
+                              }
                             />
                           </div>
                         ) : null}
 
-                        {assistantReady && !hasRequestedFacts && message.followUpQuestions?.length ? (
+                        {assistantReady &&
+                        !hasRequestedFacts &&
+                        message.followUpQuestions?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               {messageZh ? "后续问题" : "Follow-up questions"}
                             </p>
                             <div className="flex flex-col gap-2">
-                              {message.followUpQuestions.slice(0, 3).map((question) => (
-                                <button
-                                  className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm leading-6 text-slate-700 transition hover:bg-slate-100"
-                                  key={question}
-                                  onClick={() => {
-                                    runWidgetAction(submitMessage(question));
-                                  }}
-                                  type="button"
-                                >
-                                  {question}
-                                </button>
-                              ))}
+                              {message.followUpQuestions
+                                .slice(0, 3)
+                                .map((question) => (
+                                  <button
+                                    className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm leading-6 text-slate-700 transition hover:bg-slate-100"
+                                    key={question}
+                                    onClick={() => {
+                                      runWidgetAction(submitMessage(question));
+                                    }}
+                                    type="button"
+                                  >
+                                    {question}
+                                  </button>
+                                ))}
                             </div>
                           </div>
                         ) : null}
 
-                        {SHOW_WIDGET_DEBUG && assistantReady && message.missingFacts?.length ? (
+                        {SHOW_WIDGET_DEBUG &&
+                        assistantReady &&
+                        message.missingFacts?.length ? (
                           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
-                            <p className="mb-1 font-medium">Important details still needed</p>
+                            <p className="mb-1 font-medium">
+                              Important details still needed
+                            </p>
                             <ul className="list-disc space-y-1 pl-5">
                               {message.missingFacts.slice(0, 4).map((fact) => (
                                 <li key={fact}>{fact}</li>
@@ -768,7 +829,9 @@ function isZhLanguage(responseLanguage?: string | null) {
                           </div>
                         ) : null}
 
-                        {SHOW_WIDGET_DEBUG && assistantReady && message.evidenceGaps?.length ? (
+                        {SHOW_WIDGET_DEBUG &&
+                        assistantReady &&
+                        message.evidenceGaps?.length ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
                             <p className="mb-1 font-medium">Evidence gaps</p>
                             <ul className="list-disc space-y-1 pl-5">
@@ -779,9 +842,13 @@ function isZhLanguage(responseLanguage?: string | null) {
                           </div>
                         ) : null}
 
-                        {SHOW_WIDGET_DEBUG && assistantReady && message.retrievalDebug?.effective_question ? (
+                        {SHOW_WIDGET_DEBUG &&
+                        assistantReady &&
+                        message.retrievalDebug?.effective_question ? (
                           <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm leading-6 text-sky-900">
-                            <p className="mb-1 font-medium">Resolved question used by backend</p>
+                            <p className="mb-1 font-medium">
+                              Resolved question used by backend
+                            </p>
                             <p>{message.retrievalDebug.effective_question}</p>
                           </div>
                         ) : null}
@@ -799,7 +866,9 @@ function isZhLanguage(responseLanguage?: string | null) {
                           </div>
                         ) : null}
 
-                        {SHOW_WIDGET_DEBUG && assistantReady && message.citations?.length ? (
+                        {SHOW_WIDGET_DEBUG &&
+                        assistantReady &&
+                        message.citations?.length ? (
                           <div className="mt-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                               Source details
@@ -814,7 +883,9 @@ function isZhLanguage(responseLanguage?: string | null) {
                                     {citation.title}
                                   </div>
                                   <div className="mt-1 text-xs text-slate-500">
-                                    {[citation.authority].filter(Boolean).join(" — ")}
+                                    {[citation.authority]
+                                      .filter(Boolean)
+                                      .join(" — ")}
                                   </div>
                                   {citation.quote ? (
                                     <div className="mt-2 text-xs leading-5 text-slate-600">
@@ -838,13 +909,17 @@ function isZhLanguage(responseLanguage?: string | null) {
                           </div>
                         ) : null}
 
-                        {assistantReady && message.escalate && !showGuidedCard ? (
+                        {assistantReady &&
+                        message.escalate &&
+                        !showGuidedCard ? (
                           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                             <div className="flex items-start gap-2">
                               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                               <div>
                                 <p className="font-semibold">
-                                  {messageZh ? "建议尽快预约律师核对。" : "Lawyer review is recommended."}
+                                  {messageZh
+                                    ? "建议尽快预约律师核对。"
+                                    : "Lawyer review is recommended."}
                                 </p>
                                 <p className="mt-1 text-amber-800">
                                   {messageZh
