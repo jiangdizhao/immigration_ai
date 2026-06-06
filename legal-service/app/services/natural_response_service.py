@@ -12,9 +12,9 @@ from app.schemas.semantic_contracts import CommunicationPlan, LegalDecisionObjec
 
 
 class NaturalResponseService:
-    """Rewrite normal legal answers into natural consultant-style wording.
+    """Rewrite legal answers into polished consultant-style public wording.
 
-    This is not a legal decision maker. It receives the already validated
+    This service is not a legal decision maker. It receives the already validated
     LegalDecisionObject and CommunicationPlan, then rewrites the public answer to
     avoid canned wording while preserving legal uncertainty and constraints.
     """
@@ -105,10 +105,14 @@ class NaturalResponseService:
             "You are the final public-answer writer for an Australian immigration-law website assistant.\n"
             "You do not decide legal truth. You rewrite the supplied answer using only the LegalDecisionObject and CommunicationPlan.\n"
             "Write like a helpful professional intake consultant: direct, practical, friendly, and not canned.\n"
+            "Use a polished layout: short section headings, concise paragraphs, and bullets where they improve readability.\n"
+            "Do NOT force every answer into the same template; choose headings that fit the case.\n"
+            "For urgent visa-status matters, prefer a layout like: initial view, why it is urgent, what to do now, documents to prepare, next service/consultation. You may vary the exact headings.\n"
             "Start with the most useful case-specific point, not a generic disclaimer.\n"
             "Commit to facts the user already gave. Do not re-ask known facts.\n"
             "Preserve caveats, uncertainty, and escalation warnings.\n"
-            "Do not invent deadlines, risk percentages, legal provisions, citations, or outcomes.\n"
+            "Do not invent deadlines, risk percentages, legal provisions, citations, outcomes, outcome graphics, risk pies, or AMEC-style scores.\n"
+            "Do not include marketing, donation requests, YouTube messages, or unrelated links.\n"
             "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.\n"
             "Ask at most one useful next question, and only if the plan says to ask one.\n"
             "If the plan offers a next service, include it naturally in one short sentence.\n"
@@ -133,10 +137,27 @@ class NaturalResponseService:
         for word in self.INTERNAL_WORDS:
             out = out.replace(word, "available information")
             out = out.replace(word.title(), "available information")
-        # Remove accidental fake numeric risk displays without using them for semantics.
+
+        banned_fragments = (
+            "Outcome Graphic",
+            "Risk Pie",
+            "AMEC-style",
+            "YouTube",
+            "donate",
+            "抖內",
+            "电台频道",
+            "電台頻道",
+        )
+        lines = []
+        for line in out.splitlines():
+            if any(fragment.lower() in line.lower() for fragment in banned_fragments):
+                continue
+            lines.append(line)
+        out = "\n".join(lines)
+
         pieces = []
         for token in out.split():
-            stripped = token.strip(".,;:()[]{}")
+            stripped = token.strip(".,;:()[]{}|｜")
             if stripped.endswith("%") and stripped[:-1].isdigit():
                 continue
             if "/100" in stripped:

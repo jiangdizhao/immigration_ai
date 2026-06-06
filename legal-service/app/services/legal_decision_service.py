@@ -32,6 +32,9 @@ class LegalDecisionService:
         "answer_preference",
         "answer_tier",
         "pending_offer",
+        "requires_current_policy_check",
+        "current_policy_area",
+        "current_policy_source_classes_required",
     }
 
     HIGH_URGENCY_OPERATIONS = {
@@ -42,6 +45,13 @@ class LegalDecisionService:
         "student_500_cancellation_noicc_or_s48_risk",
         "student_refusal_next_steps",
         "review_deadline",
+    }
+
+    STATUS_OPERATIONS = {
+        "485_student_visa_expired_or_status_risk",
+        "500_expiry_or_extension",
+        "student_500_expiry_extension_or_status_risk",
+        "student_500_transition_to_485",
     }
 
     def build(
@@ -63,8 +73,8 @@ class LegalDecisionService:
         missing_facts = self._missing_facts(response)
         evidence = self._evidence_coverage(response=response, retrieval_debug=retrieval_debug or {})
         risk = self._risk_assessment(state=state, operation_type=operation_type, semantic=semantic, response=response)
-        legal_position = self._legal_position(response=response, risk=risk)
-        action = self._action_recommendation(response=response, operation_type=operation_type, risk=risk)
+        legal_position = self._legal_position(response=response, risk=risk, facts=facts, operation_type=operation_type)
+        action = self._action_recommendation(response=response, operation_type=operation_type, risk=risk, facts=facts)
 
         answer_mode = self._answer_mode(response=response, risk=risk)
         confidence = response.confidence if response.confidence in {"low", "medium", "high"} else "low"
@@ -75,7 +85,7 @@ class LegalDecisionService:
             issue_type=state.issue_type or response.issue_type,
             visa_type=state.visa_type,
             operation_type=operation_type,
-            answer_mode=answer_mode,
+            answer_mode=answer_mode,  # type: ignore[arg-type]
             confidence=confidence,  # type: ignore[arg-type]
             known_facts=known_facts,
             missing_facts=missing_facts,
@@ -86,8 +96,9 @@ class LegalDecisionService:
             action_recommendation=action,
             public_answer_constraints=[
                 "Do not provide a final legal conclusion unless supported by facts and sources.",
-                "Do not invent deadlines, risk percentages, or guaranteed outcomes.",
+                "Do not invent deadlines, risk percentages, scores, charts, or guaranteed outcomes.",
                 "Commit to facts the user has already provided.",
+                "Use a clear, elegant layout with short headings when helpful.",
                 "Ask at most one useful next question unless the user explicitly asks for full intake.",
             ],
             internal_debug_notes=[
@@ -120,7 +131,8 @@ class LegalDecisionService:
     def _evidence_coverage(self, *, response: QueryResponse, retrieval_debug: dict[str, Any]) -> EvidenceCoverage:
         counts = retrieval_debug.get("source_class_counts") or {}
         present = sorted(str(key) for key, value in counts.items() if value)
-        answerability = ((retrieval_debug.get("sufficiency_gate") or {}).get("answerability") or {}) if isinstance(retrieval_debug.get("sufficiency_gate"), dict) else {}
+        sufficiency_gate = retrieval_debug.get("sufficiency_gate") if isinstance(retrieval_debug.get("sufficiency_gate"), dict) else {}
+        answerability = (sufficiency_gate or {}).get("answerability") or {}
         missing = answerability.get("required_source_classes_missing") or []
         required = answerability.get("source_classes_present") or present
         live_used = bool(retrieval_debug.get("live_fetch_used"))
@@ -151,8 +163,11 @@ class LegalDecisionService:
         semantic_risk = semantic.risk_signals if semantic else None
         high_by_operation = operation_type in self.HIGH_URGENCY_OPERATIONS
         should_escalate = bool(response.escalate or high_by_operation or (semantic_risk and semantic_risk.requires_lawyer_handoff))
-        deadline = bool(flags.deadline_sensitive or (semantic_risk and semantic_risk.deadline_sensitive))
-        status = bool(high_by_operation or (semantic_risk and (semantic_risk.possible_unlawful_status or semantic_risk.visa_expiry_or_status_problem)))
+        deadline = bool(flags.deadline_sensitive or high_by_operation or (semantic_risk and semantic_risk.deadline_sensitive))
+        status = bool(
+            operation_type in self.STATUS_OPERATIONS
+            or (semantic_risk and (semantic_risk.possible_unlawful_status or semantic_risk.visa_expiry_or_status_problem))
+        )
         cancellation = bool(flags.cancellation_related or (semantic_risk and semantic_risk.cancellation_or_noicc))
         review = bool(flags.review_related or (semantic_risk and semantic_risk.refusal_or_review))
         urgency = "urgent" if should_escalate and (deadline or status or cancellation) else "high" if should_escalate else "medium"
@@ -170,22 +185,34 @@ class LegalDecisionService:
             user_safe_warning="This should be checked promptly with a lawyer or registered migration agent." if should_escalate else None,
         )
 
-    def _legal_position(self, *, response: QueryResponse, risk: RiskAssessment) -> LegalPosition:
-        can_say = []
-        if response.answer:
+    def _legal_position(self, *, response: QueryResponse, risk: RiskAssessment, facts: dict[str, Any], operation_type: str | None) -> LegalPosition:
+        can_say: list[str] = []
+        conclusion: str | None = None
+
+        if operation_type in self.STATUS_OPERATIONS or risk.status_sensitive:
+            conclusion = "This should be treated as an urgent visa-status issue, not a routine visa question."
+            can_say.extend([
+                "The user has indicated they may be in Australia after their Student visa expired.",
+                "Current VEVO / ImmiAccount status should be checked immediately before assuming any lawful status, work rights, or travel rights.",
+                "A completion letter or school document should not be treated as automatically extending a visa unless an official visa status confirms this.",
+            ])
+        elif response.answer:
             can_say.append("A provisional, general response can be provided from the current known facts and evidence.")
+
         cannot_say = [
             "Do not say the user definitely is or is not eligible unless the validated legal decision supports it.",
+            "Do not say the user is definitely unlawful without verified VEVO/current-status evidence.",
             "Do not give exact deadlines unless the required notice/date and source are available.",
             "Do not guarantee visa grant, review success, or lawful status.",
+            "Do not use fake risk percentages, scores, pie charts, or marketing claims.",
         ]
-        caveats = []
+        caveats: list[str] = []
         if risk.should_escalate_to_lawyer:
             caveats.append("A lawyer or registered migration agent should verify documents, dates, and current status.")
         if response.missing_facts:
             caveats.append("Some case-specific details remain missing, so the answer should stay provisional.")
         return LegalPosition(
-            provisional_conclusion=None,
+            provisional_conclusion=conclusion,
             can_say=can_say,
             cannot_say=cannot_say,
             uncertainty_reasons=list(response.missing_facts or []),
@@ -193,20 +220,40 @@ class LegalDecisionService:
             forbidden_overclaims=cannot_say,
         )
 
-    def _action_recommendation(self, *, response: QueryResponse, operation_type: str | None, risk: RiskAssessment) -> ActionRecommendation:
+    def _action_recommendation(self, *, response: QueryResponse, operation_type: str | None, risk: RiskAssessment, facts: dict[str, Any]) -> ActionRecommendation:
         next_action = "suggest_consultation" if risk.should_escalate_to_lawyer else "ask_one_fact" if (response.follow_up_questions or response.missing_facts) else "answer"
+        today_actions: list[str] = []
+        documents: list[str] = []
+
+        if operation_type in self.STATUS_OPERATIONS or risk.status_sensitive:
+            today_actions = [
+                "Check VEVO and ImmiAccount immediately to confirm current visa status and expiry information.",
+                "Save screenshots or PDF copies of current status, visa grant letters, expiry dates, and any bridging-visa information.",
+                "Do not assume ongoing work or travel rights until current status is confirmed.",
+                "Contact a lawyer or registered migration agent urgently if VEVO does not show a valid visa or bridging visa.",
+            ]
+            documents = [
+                "Passport bio page",
+                "VEVO screenshot or ImmiAccount status page",
+                "Student 500 grant letter and expiry date",
+                "Completion letter, CoE, and transcript",
+                "Health insurance evidence",
+                "Any Home Affairs, university, or agent correspondence",
+                "Any AFP, English test, or 485-preparation documents if already obtained",
+            ]
+
         pending = None
         if risk.should_escalate_to_lawyer:
             pending = {"offer_type": "lawyer_brief", "label_en": "prepare a lawyer consultation summary", "label_zh": "整理一份给律师看的案情摘要"}
         elif operation_type == "document_checklist":
             pending = {"offer_type": "document_checklist", "label_en": "prepare a document checklist", "label_zh": "整理材料清单"}
-        elif operation_type in {"485_student_visa_expired_or_status_risk", "500_expiry_or_extension", "student_500_transition_to_485"}:
+        elif operation_type in self.STATUS_OPERATIONS:
             pending = {"offer_type": "status_action_plan", "label_en": "prepare a next-step action plan", "label_zh": "整理下一步行动清单"}
 
         return ActionRecommendation(
             next_best_action=next_action,  # type: ignore[arg-type]
-            today_actions=[],
-            document_preparation=[],
+            today_actions=today_actions,
+            document_preparation=documents,
             one_next_question=(response.follow_up_questions or [None])[0],
             one_next_fact_key=(response.missing_facts or [None])[0],
             pending_offer_to_create=pending,

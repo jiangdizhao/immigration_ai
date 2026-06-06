@@ -7,8 +7,8 @@ class CommunicationPlanService:
     """Create communication requirements from a validated legal decision.
 
     This service does not classify raw user language. It turns structured legal
-    state into natural communication constraints, avoiding reusable canned
-    paragraphs while preserving safety.
+    state into natural communication constraints. It encourages elegant layout
+    without forcing every answer into the same canned template.
     """
 
     def build(
@@ -42,12 +42,39 @@ class CommunicationPlanService:
         else:
             plan.style_rules.tone = "professional_friendly"
 
+        if decision.legal_position.provisional_conclusion:
+            plan.content.must_include_points.append(decision.legal_position.provisional_conclusion)
         plan.content.must_include_points.extend(decision.legal_position.can_say)
         plan.content.must_not_include_points.extend(decision.legal_position.cannot_say)
         plan.content.caveats_to_include.extend(decision.legal_position.required_caveats)
         plan.content.practical_actions.extend(decision.action_recommendation.today_actions)
         plan.content.documents_to_prepare.extend(decision.action_recommendation.document_preparation)
         plan.content.optional_next_question = decision.action_recommendation.one_next_question
+
+        # Layout guidance: formal, readable, but not a hard-coded paragraph template.
+        if plan.strategy == "urgent_status_triage":
+            plan.content.should_include_points.extend([
+                "Use clear short headings, for example: 初步判断, 为什么紧急, 现在马上做, 准备给律师看的材料, 下一步.",
+                "Keep the opening direct and case-specific.",
+                "Use bullets for actions and documents.",
+            ])
+        elif plan.strategy == "task_fulfillment":
+            plan.content.should_include_points.extend([
+                "Complete the requested artifact first.",
+                "Use clean headings and bullets so the output can be copied to a lawyer, school, Home Affairs, or the user.",
+            ])
+        else:
+            plan.content.should_include_points.extend([
+                "Use an elegant, readable structure with 2-4 short headings only when helpful.",
+                "Prefer concise paragraphs and bullets over dense blocks of text.",
+            ])
+
+        # Firm prohibitions learned from competitor comparison.
+        plan.content.must_not_include_points.extend([
+            "Do not use fake percentages, risk scores, outcome graphics, pie charts, or AMEC-style marketing claims.",
+            "Do not include donation, YouTube, unrelated advertising, or raw links unless the product has an approved booking URL.",
+            "Do not sound like a copied template; vary wording naturally and anchor the answer to the user's facts.",
+        ])
 
         if decision.missing_facts and decision.action_recommendation.one_next_question:
             plan.question_policy = "ask_one_required_question"
@@ -66,9 +93,9 @@ class CommunicationPlanService:
             plan.call_to_action.show_booking_cta = True
             plan.call_to_action.booking_reason = decision.risk_assessment.escalation_reason
             plan.call_to_action.urgent_cta_text = (
-                "建议尽快让律师或注册移民代理核对关键日期和文件。"
+                "建议尽快让律师或注册移民代理核对关键日期、VEVO 状态和文件。"
                 if plan.response_language == "zh"
-                else "A lawyer or registered migration agent should check the key dates and documents promptly."
+                else "A lawyer or registered migration agent should check the key dates, VEVO status, and documents promptly."
             )
 
         plan.final_answer_generation_prompt = self._prompt_summary(plan)
@@ -101,8 +128,10 @@ class CommunicationPlanService:
     def _prompt_summary(self, plan: CommunicationPlan) -> str:
         return (
             "Write naturally as a professional immigration-law intake assistant. "
-            "Do not use a fixed template. Start with the most useful case-specific point. "
+            "Use an elegant, readable layout with short headings and bullets where helpful, but do not force every answer into the same template. "
+            "Start with the most useful case-specific point. "
             "Preserve uncertainty and do not invent legal conclusions. "
+            "Do not use fake scores, percentages, charts, or marketing content. "
             "Ask at most one next question."
         )
 
