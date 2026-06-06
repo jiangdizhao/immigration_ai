@@ -124,7 +124,7 @@ class Schedule2CandidateSearchService:
 
         # 6. Clause keyword fallback over the Schedule 2 index.
         if len(candidates) < 2:
-            for sub, (score, refs) in self._rough_text_search(q, facts).items():
+            for sub, score, refs in self._rough_text_search(q, facts).items():
                 add(sub, score=score, match_type="semantic", reason="Rough text match against Schedule 2 clause index", clauses=refs)
 
         ranked = sorted(candidates.values(), key=lambda item: item.score, reverse=True)
