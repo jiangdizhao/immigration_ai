@@ -21,6 +21,11 @@ import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
+import { Textarea } from "./ui/textarea";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
   AnswerPreference,
@@ -29,11 +34,6 @@ import type {
   WidgetMessage,
   WidgetRouteResponse,
 } from "./guided-intake-types";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
-import { Progress } from "./ui/progress";
-import { Textarea } from "./ui/textarea";
 
 const TYPEWRITER_TICK_MS = 38;
 const TYPEWRITER_WORDS_PER_TICK = 3;
@@ -93,9 +93,7 @@ function splitIntoDisplayTokens(text: string) {
   return text.match(/\S+\s*/g) ?? [text];
 }
 
-function isAssistantMessage(
-  message: WidgetMessage
-): message is WidgetAssistantMessage {
+function isAssistantMessage(message: WidgetMessage): message is WidgetAssistantMessage {
   return message.role === "assistant";
 }
 
@@ -108,9 +106,7 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
     return "Guided intake update.";
   }
 
-  const lines = populatedEntries.map(
-    ([key, value]) => `${key}: ${String(value)}`
-  );
+  const lines = populatedEntries.map(([key, value]) => `${key}: ${String(value)}`);
   return `Guided intake update:\n${lines.join("\n")}`;
 }
 
@@ -123,9 +119,7 @@ function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
     return "I updated the intake details.";
   }
 
-  const labels = populatedEntries.map(
-    ([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " ")
-  );
+  const labels = populatedEntries.map(([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " "));
   if (labels.length === 1) {
     return `I updated my ${labels[0]}.`;
   }
@@ -133,20 +127,14 @@ function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
 }
 
 function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
-  if (!message) {
-    return [];
-  }
-  if (message.compactSources?.length) {
-    return message.compactSources.slice(0, 4);
-  }
+  if (!message) return [];
+  if (message.compactSources?.length) return message.compactSources.slice(0, 4);
 
   const fallback = (message.citations ?? [])
     .map((citation) => {
       const title = citation.title?.trim();
       const authority = citation.authority?.trim();
-      if (authority && title) {
-        return `${authority} — ${title}`;
-      }
+      if (authority && title) return `${authority} — ${title}`;
       return title || authority || "";
     })
     .filter(Boolean);
@@ -155,45 +143,27 @@ function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
 }
 
 function formatKey(value?: string | null) {
-  if (!value) {
-    return "Not classified yet";
-  }
+  if (!value) return "Not classified yet";
   return value.replaceAll("_", " ");
 }
 
 function statusText(status: "ready" | "submitted" | "typing") {
-  if (status === "submitted") {
-    return "Checking sources";
-  }
-  if (status === "typing") {
-    return "Drafting answer";
-  }
+  if (status === "submitted") return "Checking sources";
+  if (status === "typing") return "Drafting answer";
   return "Ready";
 }
 
 function confidencePercent(confidence?: string | null) {
-  if (confidence === "high") {
-    return 92;
-  }
-  if (confidence === "medium") {
-    return 66;
-  }
-  if (confidence === "low") {
-    return 36;
-  }
+  if (confidence === "high") return 92;
+  if (confidence === "medium") return 66;
+  if (confidence === "low") return 36;
   return 18;
 }
 
 function valuePreview(value: string | number | boolean | null | undefined) {
-  if (value === true) {
-    return "Yes";
-  }
-  if (value === false) {
-    return "No";
-  }
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  if (value === null || value === undefined || value === "") return "—";
   return String(value);
 }
 
@@ -202,9 +172,7 @@ export function ImmigrationAIWorkspace() {
   const [matterId, setMatterId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState<"ready" | "submitted" | "typing">(
-    "ready"
-  );
+  const [status, setStatus] = useState<"ready" | "submitted" | "typing">("ready");
   const [error, setError] = useState<string | null>(null);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
   const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
@@ -216,30 +184,20 @@ export function ImmigrationAIWorkspace() {
     [messages]
   );
   const latestSources = compactSourcesForMessage(latestAssistant);
-  const latestKnownFacts =
-    latestAssistant?.interactionPlan?.known_facts_summary ?? {};
-  const latestRequestedFact =
-    latestAssistant?.interactionPlan?.requested_facts?.[0] ?? null;
+  const latestKnownFacts = latestAssistant?.interactionPlan?.known_facts_summary ?? {};
+  const latestRequestedFact = latestAssistant?.interactionPlan?.requested_facts?.[0] ?? null;
   const confidence = latestAssistant?.confidence ?? null;
 
   const isNearBottom = () => {
     const container = listRef.current;
-    if (!container) {
-      return true;
-    }
-    return (
-      container.scrollHeight - container.scrollTop - container.clientHeight < 96
-    );
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 96;
   };
 
   const scrollToBottom = (force = false) => {
     const container = listRef.current;
-    if (!container) {
-      return;
-    }
-    if (!force && !shouldAutoScrollRef.current) {
-      return;
-    }
+    if (!container) return;
+    if (!force && !shouldAutoScrollRef.current) return;
 
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
@@ -252,15 +210,14 @@ export function ImmigrationAIWorkspace() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [scrollToBottom]);
+  }, [messages, status]);
 
   const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
       setMatterId(data.matterId);
     }
 
-    const knownFactsFromBackend =
-      data.interactionPlan?.known_facts_summary ?? {};
+    const knownFactsFromBackend = data.interactionPlan?.known_facts_summary ?? {};
     if (Object.keys(knownFactsFromBackend).length > 0) {
       setIntakeFacts((current) => ({
         ...current,
@@ -361,14 +318,9 @@ export function ImmigrationAIWorkspace() {
     return (await response.json()) as WidgetRouteResponse;
   };
 
-  const submitMessage = async (
-    messageText: string,
-    answerPreference: AnswerPreference = "answer_first"
-  ) => {
+  const submitMessage = async (messageText: string, answerPreference: AnswerPreference = "answer_first") => {
     const trimmed = messageText.trim();
-    if (!trimmed || status !== "ready") {
-      return;
-    }
+    if (!trimmed || status !== "ready") return;
 
     const nextUserMessage: WidgetMessage = {
       id: generateUUID(),
@@ -385,11 +337,7 @@ export function ImmigrationAIWorkspace() {
     setError(null);
 
     try {
-      const data = await sendToWidgetRoute(
-        nextMessages,
-        intakeFacts,
-        answerPreference
-      );
+      const data = await sendToWidgetRoute(nextMessages, intakeFacts, answerPreference);
       await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
@@ -405,17 +353,12 @@ export function ImmigrationAIWorkspace() {
     }
   };
 
-  const handleDraftChange = (
-    key: string,
-    value: string | number | boolean | null
-  ) => {
+  const handleDraftChange = (key: string, value: string | number | boolean | null) => {
     setDraftFacts((current) => ({ ...current, [key]: value }));
   };
 
   const handleSubmitDraftFacts = async () => {
-    if (status !== "ready") {
-      return;
-    }
+    if (status !== "ready") return;
 
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
@@ -444,11 +387,7 @@ export function ImmigrationAIWorkspace() {
     setError(null);
 
     try {
-      const data = await sendToWidgetRoute(
-        backendMessages,
-        mergedFacts,
-        "answer_first"
-      );
+      const data = await sendToWidgetRoute(backendMessages, mergedFacts, "answer_first");
       await appendAssistantMessage(data);
     } catch (requestError) {
       const message =
@@ -463,25 +402,31 @@ export function ImmigrationAIWorkspace() {
       setStatus("ready");
     }
   };
+
+
+  const handleGenerateRecommendationNow = async () => {
+    if (status !== "ready") return;
+    const text = latestAssistant?.responseLanguage?.toString().toLowerCase().startsWith("zh")
+      ? "请基于现有信息直接给我一个建议。"
+      : "Please give me a recommendation based on the current information.";
+    await submitMessage(text, "final_recommendation");
+  };
+
+  const handleContinueIntake = () => {
+    toast.info("You can answer the optional question above, or type any extra detail in the message box.");
+  };
+
   const handleBookConsultation = () => {
-    toast.info(
-      "Booking flow placeholder. Connect this to your lawyer's calendar or booking page next."
-    );
+    toast.info("Booking flow placeholder. Connect this to your lawyer's calendar or booking page next.");
   };
 
   return (
-    <section
-      className="relative mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"
-      id="ai-workspace"
-    >
+    <section id="ai-workspace" className="relative mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10 rounded-[48px] bg-[radial-gradient(circle_at_18%_20%,rgba(125,211,252,0.28),transparent_32%),radial-gradient(circle_at_84%_12%,rgba(168,85,247,0.25),transparent_30%),linear-gradient(135deg,#001736_0%,#002b5b_48%,#0f172a_100%)]" />
 
       <div className="mb-7 flex flex-col justify-between gap-5 px-2 text-white md:flex-row md:items-end">
         <div className="max-w-3xl">
-          <Badge
-            className="mb-4 rounded-full border-white/15 bg-white/10 px-4 py-1.5 text-white hover:bg-white/10"
-            variant="outline"
-          >
+          <Badge className="mb-4 rounded-full border-white/15 bg-white/10 px-4 py-1.5 text-white hover:bg-white/10" variant="outline">
             <Sparkles className="mr-2 size-3.5 text-cyan-200" />
             AI-powered first contact · Lawyer handoff ready
           </Badge>
@@ -489,9 +434,7 @@ export function ImmigrationAIWorkspace() {
             Ask the AI Legal Desk in a full workspace, not a tiny chat bubble.
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-            This central workspace follows the Stitch template direction:
-            premium legal-tech branding, rich context panels, guided intake,
-            compact sources, and a clear consultation path.
+            This central workspace follows the Stitch template direction: premium legal-tech branding, rich context panels, guided intake, compact sources, and a clear consultation path.
           </p>
         </div>
 
@@ -505,9 +448,7 @@ export function ImmigrationAIWorkspace() {
           </div>
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-300">Matter</span>
-            <span className="font-mono text-xs text-cyan-100">
-              {matterId ? matterId.slice(0, 8) : "new"}
-            </span>
+            <span className="font-mono text-xs text-cyan-100">{matterId ? matterId.slice(0, 8) : "new"}</span>
           </div>
         </div>
       </div>
@@ -520,16 +461,12 @@ export function ImmigrationAIWorkspace() {
             </div>
             <div>
               <p className="font-semibold text-slate-950">Sovereign Nexus AI</p>
-              <p className="text-xs text-slate-500">
-                Migration intake workspace
-              </p>
+              <p className="text-xs text-slate-500">Migration intake workspace</p>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Try a scenario
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Try a scenario</p>
             {quickQuestions.map((question) => (
               <button
                 className="group w-full rounded-2xl border border-slate-200 bg-white p-3 text-left text-sm leading-6 text-slate-700 shadow-sm transition hover:border-[#002b5b]/30 hover:bg-[#001736] hover:text-white"
@@ -545,26 +482,17 @@ export function ImmigrationAIWorkspace() {
           </div>
 
           <div className="mt-8 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Process
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Process</p>
             {processSteps.map((item) => {
               const Icon = item.icon;
               return (
-                <div
-                  className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm"
-                  key={item.title}
-                >
+                <div className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm" key={item.title}>
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#002b5b]">
                     <Icon className="size-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-950">
-                      {item.title}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {item.text}
-                    </p>
+                    <p className="text-sm font-medium text-slate-950">{item.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{item.text}</p>
                   </div>
                 </div>
               );
@@ -580,32 +508,20 @@ export function ImmigrationAIWorkspace() {
                   <span className="inline-flex size-2 rounded-full bg-emerald-400" />
                   Live AI legal assistant
                 </div>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">
-                  Immigration consultation workspace
-                </h3>
+                <h3 className="mt-1 text-xl font-semibold text-slate-950">Immigration consultation workspace</h3>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge
-                  className="rounded-full bg-slate-100 text-slate-700 hover:bg-slate-100"
-                  variant="secondary"
-                >
+                <Badge className="rounded-full bg-slate-100 text-slate-700 hover:bg-slate-100" variant="secondary">
                   General information only
                 </Badge>
-                <Badge
-                  className="rounded-full bg-cyan-50 text-cyan-800 hover:bg-cyan-50"
-                  variant="secondary"
-                >
+                <Badge className="rounded-full bg-cyan-50 text-cyan-800 hover:bg-cyan-50" variant="secondary">
                   AU migration focus
                 </Badge>
               </div>
             </div>
           </div>
 
-          <div
-            className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
-            onScroll={handleMessageListScroll}
-            ref={listRef}
-          >
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6" onScroll={handleMessageListScroll} ref={listRef}>
             {messages.length === 0 ? (
               <div className="flex h-full min-h-[440px] items-center justify-center">
                 <div className="mx-auto max-w-2xl text-center">
@@ -613,13 +529,10 @@ export function ImmigrationAIWorkspace() {
                     <Sparkles className="size-7" />
                   </div>
                   <h4 className="text-2xl font-semibold tracking-tight text-slate-950">
-                    Start with a visa question, refusal issue, condition, or
-                    consultation request.
+                    Start with a visa question, refusal issue, condition, or consultation request.
                   </h4>
                   <p className="mt-3 text-sm leading-7 text-slate-600">
-                    The assistant will answer in a customer-friendly way, ask
-                    one decisive follow-up when needed, and keep technical state
-                    in the background.
+                    The assistant will answer in a customer-friendly way, ask one decisive follow-up when needed, and keep technical state in the background.
                   </p>
                   <div className="mt-6 flex flex-wrap justify-center gap-2">
                     {quickQuestions.slice(0, 3).map((question) => (
@@ -630,9 +543,7 @@ export function ImmigrationAIWorkspace() {
                         onClick={() => submitMessage(question)}
                         type="button"
                       >
-                        {question.length > 58
-                          ? `${question.slice(0, 58)}...`
-                          : question}
+                        {question.length > 58 ? `${question.slice(0, 58)}...` : question}
                       </button>
                     ))}
                   </div>
@@ -642,14 +553,10 @@ export function ImmigrationAIWorkspace() {
               <div className="space-y-5 pb-4">
                 {messages.map((message) => {
                   const isAssistant = message.role === "assistant";
-                  const isLatestAssistant =
-                    isAssistant && latestAssistant?.id === message.id;
+                  const isLatestAssistant = isAssistant && latestAssistant?.id === message.id;
                   return (
                     <div
-                      className={cn(
-                        "flex gap-3",
-                        isAssistant ? "items-start" : "justify-end"
-                      )}
+                      className={cn("flex gap-3", isAssistant ? "items-start" : "justify-end")}
                       key={message.id}
                     >
                       {isAssistant ? (
@@ -658,12 +565,7 @@ export function ImmigrationAIWorkspace() {
                         </div>
                       ) : null}
 
-                      <div
-                        className={cn(
-                          "max-w-[86%] space-y-3",
-                          !isAssistant && "flex flex-col items-end"
-                        )}
-                      >
+                      <div className={cn("max-w-[86%] space-y-3", !isAssistant && "flex flex-col items-end") }>
                         <div
                           className={cn(
                             "rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm",
@@ -672,9 +574,7 @@ export function ImmigrationAIWorkspace() {
                               : "bg-[#001736] text-white"
                           )}
                         >
-                          <div className="whitespace-pre-wrap">
-                            {message.text}
-                          </div>
+                          <div className="whitespace-pre-wrap">{message.text}</div>
                           {isAssistant && message.isStreaming ? (
                             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                               <Loader2 className="size-3.5 animate-spin" />
@@ -683,51 +583,33 @@ export function ImmigrationAIWorkspace() {
                           ) : null}
                         </div>
 
-                        {isAssistant &&
-                        !message.isStreaming &&
-                        compactSourcesForMessage(message).length ? (
+                        {isAssistant && !message.isStreaming && compactSourcesForMessage(message).length ? (
                           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              Sources considered
-                            </p>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Sources considered</p>
                             <div className="space-y-1.5">
-                              {compactSourcesForMessage(message).map(
-                                (source) => (
-                                  <div
-                                    className="flex items-start gap-2 text-xs leading-5 text-slate-600"
-                                    key={source}
-                                  >
-                                    <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                                    <span>{source}</span>
-                                  </div>
-                                )
-                              )}
+                              {compactSourcesForMessage(message).map((source) => (
+                                <div className="flex items-start gap-2 text-xs leading-5 text-slate-600" key={source}>
+                                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                                  <span>{source}</span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
 
-                        {isAssistant &&
-                        !message.isStreaming &&
-                        message.escalate ? (
+                        {isAssistant && !message.isStreaming && message.escalate ? (
                           <Card className="rounded-2xl border-amber-200 bg-amber-50 shadow-sm">
                             <CardContent className="flex items-start gap-3 p-4 text-sm leading-6 text-amber-900">
                               <CalendarDays className="mt-0.5 size-5 shrink-0" />
                               <div>
-                                <p className="font-medium">
-                                  A lawyer consultation is recommended.
-                                </p>
-                                <p className="mt-1 text-amber-800">
-                                  This matter may depend on deadlines,
-                                  documents, or case-specific facts.
-                                </p>
+                                <p className="font-medium">A lawyer consultation is recommended.</p>
+                                <p className="mt-1 text-amber-800">This matter may depend on deadlines, documents, or case-specific facts.</p>
                               </div>
                             </CardContent>
                           </Card>
                         ) : null}
 
-                        {isAssistant &&
-                        isLatestAssistant &&
-                        !message.isStreaming ? (
+                        {isAssistant && isLatestAssistant && !message.isStreaming ? (
                           <GuidedIntakeCard
                             draftFacts={draftFacts}
                             factSlotStates={message.factSlotStates}
@@ -740,25 +622,51 @@ export function ImmigrationAIWorkspace() {
                           />
                         ) : null}
 
-                        {SHOW_WORKSPACE_DEBUG &&
-                        isAssistant &&
-                        message.retrievalDebug ? (
+
+                        {isAssistant && isLatestAssistant && !message.isStreaming && (
+                          message.nextAction === "ask_followup" ||
+                          (message.interactionPlan?.requested_facts?.length ?? 0) > 0
+                        ) ? (
+                          <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <Button
+                              className="rounded-full bg-[#001736] px-4 text-white hover:bg-[#002b5b]"
+                              disabled={status !== "ready"}
+                              onClick={handleGenerateRecommendationNow}
+                              size="sm"
+                              type="button"
+                            >
+                              {message.responseLanguage?.toString().toLowerCase().startsWith("zh")
+                                ? "基于现有信息直接给建议"
+                                : "Answer with current information"}
+                            </Button>
+                            <Button
+                              className="rounded-full"
+                              disabled={status !== "ready"}
+                              onClick={handleContinueIntake}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              {message.responseLanguage?.toString().toLowerCase().startsWith("zh")
+                                ? "继续补充信息"
+                                : "Continue answering questions"}
+                            </Button>
+                          </div>
+                        ) : null}
+
+                        {SHOW_WORKSPACE_DEBUG && isAssistant && message.retrievalDebug ? (
                           <details className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
-                            <summary className="cursor-pointer font-medium text-slate-700">
-                              Debug
-                            </summary>
-                            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">
-                              {JSON.stringify(message.retrievalDebug, null, 2)}
-                            </pre>
+                            <summary className="cursor-pointer font-medium text-slate-700">Debug</summary>
+                            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(message.retrievalDebug, null, 2)}</pre>
                           </details>
                         ) : null}
                       </div>
 
-                      {isAssistant ? null : (
+                      {!isAssistant ? (
                         <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
                           <UserRound className="size-4" />
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
@@ -789,8 +697,7 @@ export function ImmigrationAIWorkspace() {
               />
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-slate-500">
-                  The assistant provides general information and intake support,
-                  not legal advice.
+                  The assistant provides general information and intake support, not legal advice.
                 </p>
                 <Button
                   className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
@@ -798,11 +705,7 @@ export function ImmigrationAIWorkspace() {
                   onClick={() => submitMessage(input)}
                   type="button"
                 >
-                  {status !== "ready" ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <Send className="mr-2 size-4" />
-                  )}
+                  {status !== "ready" ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
                   Send
                 </Button>
               </div>
@@ -816,12 +719,8 @@ export function ImmigrationAIWorkspace() {
               <CardContent className="p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Case snapshot
-                    </p>
-                    <h4 className="mt-1 font-semibold text-slate-950">
-                      Current matter
-                    </h4>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Case snapshot</p>
+                    <h4 className="mt-1 font-semibold text-slate-950">Current matter</h4>
                   </div>
                   <div className="rounded-2xl bg-cyan-50 p-2 text-[#002b5b]">
                     <Clock3 className="size-4" />
@@ -832,29 +731,20 @@ export function ImmigrationAIWorkspace() {
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-slate-500">Operation</span>
                     <span className="max-w-[150px] truncate font-medium capitalize text-slate-800">
-                      {formatKey(
-                        latestAssistant?.caseHypothesis?.primary_operation_type
-                      )}
+                      {formatKey(latestAssistant?.caseHypothesis?.primary_operation_type)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-slate-500">Next action</span>
-                    <span className="font-medium capitalize text-slate-800">
-                      {formatKey(latestAssistant?.nextAction)}
-                    </span>
+                    <span className="font-medium capitalize text-slate-800">{formatKey(latestAssistant?.nextAction)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-slate-500">Confidence</span>
-                    <span className="font-medium capitalize text-slate-800">
-                      {confidence ?? "pending"}
-                    </span>
+                    <span className="font-medium capitalize text-slate-800">{confidence ?? "pending"}</span>
                   </div>
                 </div>
 
-                <Progress
-                  className="mt-4"
-                  value={confidencePercent(confidence)}
-                />
+                <Progress className="mt-4" value={confidencePercent(confidence)} />
               </CardContent>
             </Card>
 
@@ -862,44 +752,26 @@ export function ImmigrationAIWorkspace() {
               <CardContent className="p-5">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Known facts
-                    </p>
-                    <h4 className="mt-1 font-semibold text-slate-950">
-                      Intake summary
-                    </h4>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Known facts</p>
+                    <h4 className="mt-1 font-semibold text-slate-950">Intake summary</h4>
                   </div>
-                  <Badge
-                    className="rounded-full bg-slate-100 text-slate-600 hover:bg-slate-100"
-                    variant="secondary"
-                  >
+                  <Badge className="rounded-full bg-slate-100 text-slate-600 hover:bg-slate-100" variant="secondary">
                     {Object.keys(latestKnownFacts).length} facts
                   </Badge>
                 </div>
 
                 {Object.keys(latestKnownFacts).length ? (
                   <div className="space-y-2">
-                    {Object.entries(latestKnownFacts)
-                      .slice(0, 6)
-                      .map(([key, value]) => (
-                        <div
-                          className="rounded-2xl bg-slate-50 p-3 text-sm"
-                          key={key}
-                        >
-                          <p className="text-xs text-slate-500">
-                            {FACT_DISPLAY_LABELS[key] ??
-                              key.replaceAll("_", " ")}
-                          </p>
-                          <p className="mt-1 font-medium text-slate-800">
-                            {valuePreview(value)}
-                          </p>
-                        </div>
-                      ))}
+                    {Object.entries(latestKnownFacts).slice(0, 6).map(([key, value]) => (
+                      <div className="rounded-2xl bg-slate-50 p-3 text-sm" key={key}>
+                        <p className="text-xs text-slate-500">{FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " ")}</p>
+                        <p className="mt-1 font-medium text-slate-800">{valuePreview(value)}</p>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-sm leading-6 text-slate-500">
-                    Facts gathered through guided intake will appear here after
-                    the first assistant response.
+                    Facts gathered through guided intake will appear here after the first assistant response.
                   </p>
                 )}
               </CardContent>
@@ -907,49 +779,31 @@ export function ImmigrationAIWorkspace() {
 
             <Card className="rounded-[28px] border-slate-200 bg-white shadow-sm">
               <CardContent className="p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Sources
-                </p>
-                <h4 className="mt-1 font-semibold text-slate-950">
-                  Latest authorities
-                </h4>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Sources</p>
+                <h4 className="mt-1 font-semibold text-slate-950">Latest authorities</h4>
                 {latestSources.length ? (
                   <div className="mt-4 space-y-2">
                     {latestSources.map((source) => (
-                      <div
-                        className="flex items-start gap-2 rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-600"
-                        key={source}
-                      >
+                      <div className="flex items-start gap-2 rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-600" key={source}>
                         <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
                         <span>{source}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm leading-6 text-slate-500">
-                    Relevant source titles will appear after retrieval-backed
-                    answers.
-                  </p>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">Relevant source titles will appear after retrieval-backed answers.</p>
                 )}
               </CardContent>
             </Card>
 
             <Card className="overflow-hidden rounded-[28px] border-0 bg-gradient-to-br from-[#001736] via-[#002b5b] to-[#1d0052] text-white shadow-xl">
               <CardContent className="p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                  Human lawyer handoff
-                </p>
-                <h4 className="mt-2 text-xl font-semibold">
-                  Need case-specific advice?
-                </h4>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Human lawyer handoff</p>
+                <h4 className="mt-2 text-xl font-semibold">Need case-specific advice?</h4>
                 <p className="mt-3 text-sm leading-6 text-slate-200">
-                  Convert qualified users into a real consultation once
-                  deadlines, documents, or risk factors appear.
+                  Convert qualified users into a real consultation once deadlines, documents, or risk factors appear.
                 </p>
-                <Button
-                  className="mt-5 rounded-full bg-white text-[#001736] hover:bg-slate-100"
-                  onClick={handleBookConsultation}
-                >
+                <Button className="mt-5 rounded-full bg-white text-[#001736] hover:bg-slate-100" onClick={handleBookConsultation}>
                   Book consultation
                   <ArrowRight className="ml-2 size-4" />
                 </Button>
@@ -959,9 +813,7 @@ export function ImmigrationAIWorkspace() {
             {latestRequestedFact ? (
               <div className="rounded-[28px] border border-cyan-200 bg-cyan-50 p-4 text-sm leading-6 text-cyan-900">
                 <p className="font-medium">Current follow-up</p>
-                <p className="mt-1">
-                  {latestRequestedFact.prompt ?? latestRequestedFact.label}
-                </p>
+                <p className="mt-1">{latestRequestedFact.prompt ?? latestRequestedFact.label}</p>
               </div>
             ) : null}
           </div>
@@ -969,14 +821,8 @@ export function ImmigrationAIWorkspace() {
       </div>
 
       <div className="mt-5 flex flex-col gap-3 px-2 text-xs leading-5 text-slate-200 md:flex-row md:items-center md:justify-between">
-        <span>
-          Designed for customer mode: answer, one quick question, compact
-          sources, lawyer handoff.
-        </span>
-        <a
-          className="inline-flex items-center gap-1 text-cyan-200 hover:text-white"
-          href="#contact"
-        >
+        <span>Designed for customer mode: answer, one quick question, compact sources, lawyer handoff.</span>
+        <a className="inline-flex items-center gap-1 text-cyan-200 hover:text-white" href="#contact">
           Connect booking workflow later
           <ExternalLink className="size-3.5" />
         </a>
