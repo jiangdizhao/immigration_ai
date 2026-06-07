@@ -197,113 +197,6 @@ function valuePreview(value: string | number | boolean | null | undefined) {
   return String(value);
 }
 
-const WORKSPACE_PROGRESS_STAGES_ZH = [
-  {
-    afterMs: 0,
-    title: "正在理解你的问题",
-    detail: "正在识别签证类型、关键事实和当前问题焦点。",
-  },
-  {
-    afterMs: 6000,
-    title: "正在查找相关法规和官方信息",
-    detail: "复杂问题可能需要核对本地资料、Schedule 2 和官方来源。",
-  },
-  {
-    afterMs: 16_000,
-    title: "正在判断风险和下一步",
-    detail: "我会先给可用的一般性方向，再保留一个关键追问。",
-  },
-  {
-    afterMs: 30_000,
-    title: "正在整理最终答复",
-    detail: "这个问题需要多步核对，感谢等待。",
-  },
-] as const;
-
-const WORKSPACE_PROGRESS_STAGES_EN = [
-  {
-    afterMs: 0,
-    title: "Understanding your question",
-    detail: "Identifying the visa type, key facts, and current focus.",
-  },
-  {
-    afterMs: 6000,
-    title: "Checking relevant rules and official sources",
-    detail:
-      "Complex questions may require local sources, Schedule 2, and official guidance.",
-  },
-  {
-    afterMs: 16_000,
-    title: "Assessing risk and next steps",
-    detail:
-      "The answer should be useful first and keep one key follow-up question.",
-  },
-  {
-    afterMs: 30_000,
-    title: "Preparing the final answer",
-    detail: "This is taking several checks. Thanks for waiting.",
-  },
-] as const;
-
-function looksChineseText(text: string) {
-  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text);
-}
-
-function workspaceProgressStage(elapsedMs: number, isZh: boolean) {
-  const stages = isZh
-    ? WORKSPACE_PROGRESS_STAGES_ZH
-    : WORKSPACE_PROGRESS_STAGES_EN;
-  return stages.reduce((current, stage) => {
-    if (elapsedMs >= stage.afterMs) {
-      return stage;
-    }
-    return current;
-  });
-}
-
-function WorkspaceProcessingCard({
-  elapsedMs,
-  isZh,
-}: {
-  elapsedMs: number;
-  isZh: boolean;
-}) {
-  const stage = workspaceProgressStage(elapsedMs, isZh);
-  const seconds = Math.max(1, Math.floor(elapsedMs / 1000));
-
-  const _pendingElapsedMs =
-    submittedAt === null ? 0 : progressNow - submittedAt;
-  const latestUserMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === "user");
-  const _pendingIsZh =
-    latestUserMessage?.role === "user"
-      ? looksChineseText(latestUserMessage.text)
-      : false;
-
-  return (
-    <div className="flex gap-3">
-      <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-[#001736] text-white shadow-sm">
-        <Bot className="size-4" />
-      </div>
-      <div className="max-w-[86%] rounded-[24px] border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-700 shadow-sm">
-        <div className="flex items-start gap-3">
-          <Loader2 className="mt-1 size-4 shrink-0 animate-spin text-sky-600" />
-          <div className="min-w-0">
-            <p className="font-semibold text-slate-950">{stage.title}</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              {stage.detail}
-            </p>
-            <p className="mt-2 text-xs text-slate-400">
-              {isZh ? `已等待约 ${seconds} 秒` : `Waiting about ${seconds}s`}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ImmigrationAIWorkspace() {
   const [chatId] = useState(() => generateUUID());
   const [matterId, setMatterId] = useState<string | null>(null);
@@ -312,8 +205,6 @@ export function ImmigrationAIWorkspace() {
   const [status, setStatus] = useState<"ready" | "submitted" | "typing">(
     "ready"
   );
-  const [submittedAt, setSubmittedAt] = useState<number | null>(null);
-  const [_progressNow, setProgressNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
   const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
@@ -362,22 +253,6 @@ export function ImmigrationAIWorkspace() {
   useEffect(() => {
     scrollToBottom();
   }, [scrollToBottom]);
-
-  useEffect(() => {
-    if (status !== "submitted" || submittedAt === null) {
-      return;
-    }
-
-    setProgressNow(Date.now());
-    const intervalId = window.setInterval(() => {
-      setProgressNow(Date.now());
-      scrollToBottom(true);
-    }, 1000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [status, submittedAt, scrollToBottom]);
 
   const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
@@ -507,9 +382,6 @@ export function ImmigrationAIWorkspace() {
     scrollToBottom(true);
     setInput("");
     setStatus("submitted");
-    const requestStartedAt = Date.now();
-    setSubmittedAt(requestStartedAt);
-    setProgressNow(requestStartedAt);
     setError(null);
 
     try {
@@ -530,7 +402,6 @@ export function ImmigrationAIWorkspace() {
       toast.error(message);
     } finally {
       setStatus("ready");
-      setSubmittedAt(null);
     }
   };
 
@@ -570,9 +441,6 @@ export function ImmigrationAIWorkspace() {
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
     setStatus("submitted");
-    const requestStartedAt = Date.now();
-    setSubmittedAt(requestStartedAt);
-    setProgressNow(requestStartedAt);
     setError(null);
 
     try {
@@ -593,7 +461,6 @@ export function ImmigrationAIWorkspace() {
       toast.error(message);
     } finally {
       setStatus("ready");
-      setSubmittedAt(null);
     }
   };
   const handleBookConsultation = () => {
@@ -898,15 +765,6 @@ export function ImmigrationAIWorkspace() {
               </div>
             )}
           </div>
-
-          {status === "submitted" ? (
-            <div className="px-0 pb-4">
-              <WorkspaceProcessingCard
-                elapsedMs={pendingElapsedMs}
-                isZh={pendingIsZh}
-              />
-            </div>
-          ) : null}
 
           {error ? (
             <div className="border-t border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700 sm:px-6">
