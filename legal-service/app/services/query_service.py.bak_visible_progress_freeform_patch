@@ -316,9 +316,9 @@ class QueryService:
             issue_type="general_visa_consultation",
             missing_facts=[],
             follow_up_questions=[
-                "你可以直接用自己的话描述发生了什么吗？"
+                "你想咨询的是哪个签证类别或具体问题？"
                 if response_language == "zh"
-                else "Can you describe what happened in your own words?"
+                else "Which visa type or specific issue do you want help with?"
             ],
             citations=[],
             compact_sources=[],

@@ -583,8 +583,6 @@ export function ImmigrationAssistantWidget() {
     scrollToBottom(true);
     setInput("");
     setStatus("submitted");
-    setSubmittedAt(Date.now());
-    setProgressNow(Date.now());
     setError(null);
 
     if (nextMessages.length > 0) {
@@ -647,8 +645,6 @@ export function ImmigrationAssistantWidget() {
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
     setStatus("submitted");
-    setSubmittedAt(Date.now());
-    setProgressNow(Date.now());
     setError(null);
     setShowQuickQuestions(false);
 
@@ -697,7 +693,6 @@ export function ImmigrationAssistantWidget() {
     latestUserMessage?.role === "user"
       ? looksChinese(latestUserMessage.text)
       : false;
-  const pendingStage = processingStage(pendingElapsedMs, pendingIsZh);
 
   return (
     <Sheet onOpenChange={setOpen} open={open}>
@@ -1077,22 +1072,6 @@ export function ImmigrationAssistantWidget() {
               runWidgetAction(submitMessage(input));
             }}
           >
-            {status === "submitted" ? (
-              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-slate-700">
-                <div className="flex items-start gap-2">
-                  <Loader2 className="mt-1 size-4 shrink-0 animate-spin text-sky-600" />
-                  <div className="min-w-0">
-                    <div className="font-medium text-slate-900">
-                      {pendingStage.title}
-                    </div>
-                    <div className="mt-0.5 text-xs leading-5 text-slate-600">
-                      {pendingStage.detail}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             <div className="rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-slate-300 focus-within:ring-2 focus-within:ring-slate-200">
               <Textarea
                 className="min-h-[60px] resize-none border-0 bg-transparent px-0 py-1 text-sm shadow-none focus-visible:ring-0"

@@ -60,9 +60,7 @@ class FastTriageResponseService:
                 "The semantic resolver has already determined that this is a generic visa-consultation triage turn, not a concrete legal assessment.",
                 "Do not retrieve law. Do not cite sources. Do not pretend eligibility can be assessed.",
                 "Answer helpfully in 2-4 short paragraphs or compact bullets.",
-                "Do not ask the user to choose a category from a menu.",
-                "Invite the user to describe the situation in their own words. Mention example details only as optional prompts: current or previous visa, what happened, any notice/refusal, location, and key dates.",
-                "Ask exactly one broad free-form next question at the end.",
+                "Ask exactly one broad next question at the end: which visa type/subclass and what specific issue the user wants help with.",
                 "Do not mention internal systems or backend routing.",
                 "Write in Simplified Chinese." if is_zh else "Write in English.",
             ]
@@ -88,10 +86,10 @@ class FastTriageResponseService:
             return (
                 "可以，我可以先帮你做澳洲签证问题的初步分流。\n\n"
                 "目前你还没有说明具体签证类别或问题，所以我不能判断是否符合某个条件、是否有拒签风险，或是否需要复审。\n\n"
-                "一个关键问题：你可以直接用自己的话描述发生了什么吗？例如你现在或之前的签证、遇到的问题、是否收到通知/拒签信、人在澳洲还是境外，以及任何关键日期。"
+                "一个关键问题：你想咨询的是哪个签证类别或具体问题？例如 500 学签、485、配偶签、桥签、拒签、复审、签证条件或续签。"
             )
         return (
             "I can help you triage an Australian visa issue first.\n\n"
             "At this stage I do not yet know the visa subclass or the specific problem, so I cannot assess eligibility, refusal risk, review options, or deadlines.\n\n"
-            "One key question: can you describe what happened in your own words? Include your current or previous visa, the problem, any notice/refusal letter, whether you are in or outside Australia, and any key dates if you know them."
+            "One key question: which visa type or issue do you want help with, such as Student 500, 485, partner visa, bridging visa, refusal, review, visa conditions, or renewal?"
         )
