@@ -33,7 +33,10 @@ const widgetRequestBodySchema = z.object({
   selectedChatModel: z.string(),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   responseLanguage: z.enum(["en", "zh"]).optional(),
-  answerPreference: z.enum(["auto", "answer_first", "continue_intake", "final_recommendation"]).optional().default("answer_first"),
+  answerPreference: z
+    .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
+    .optional()
+    .default("answer_first"),
 });
 
 type ResponseLanguage = "en" | "zh";
@@ -110,9 +113,15 @@ type LegalServiceResponse = {
   retrieval_debug?: Record<string, any>;
 };
 
-function extractLatestUserText(messages: Array<z.infer<typeof messageSchema>>): string | null {
-  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUserMessage) return null;
+function extractLatestUserText(
+  messages: z.infer<typeof messageSchema>[]
+): string | null {
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === "user");
+  if (!lastUserMessage) {
+    return null;
+  }
 
   const text = lastUserMessage.parts
     .filter((part): part is { type: "text"; text: string } => {
@@ -129,12 +138,20 @@ function detectResponseLanguage(text: string): ResponseLanguage {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text) ? "zh" : "en";
 }
 
-function normalizeResponseLanguage(value: string | null | undefined, fallback: ResponseLanguage): ResponseLanguage {
+function normalizeResponseLanguage(
+  value: string | null | undefined,
+  fallback: ResponseLanguage
+): ResponseLanguage {
   return value?.toLowerCase().startsWith("zh") ? "zh" : fallback;
 }
 
-function fallbackText(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
-  if (data.answer?.trim()) return data.answer.trim();
+function fallbackText(
+  data: LegalServiceResponse,
+  responseLanguage: ResponseLanguage
+): string {
+  if (data.answer?.trim()) {
+    return data.answer.trim();
+  }
   return responseLanguage === "zh"
     ? "抱歉，我现在无法生成回复。"
     : "Sorry, I could not generate a response right now.";
@@ -169,37 +186,52 @@ function firstRequestedFactPrompt(data: LegalServiceResponse): string | null {
   return typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
 }
 
-function publicFallbackAnswer(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
+function publicFallbackAnswer(
+  data: LegalServiceResponse,
+  responseLanguage: ResponseLanguage
+): string {
   const nextPrompt = firstRequestedFactPrompt(data);
   const operation = data.case_hypothesis?.primary_operation_type ?? "";
-  const is485 = operation.startsWith("485") || operation.includes("temporary_graduate");
+  const is485 =
+    operation.startsWith("485") || operation.includes("temporary_graduate");
 
   if (responseLanguage === "zh") {
     let answer = is485
       ? "根据你提供的信息，这看起来是一个 Subclass 485 Temporary Graduate visa 问题。我可以先给你一般性方向，但还需要一个关键信息才能更准确判断。"
       : "我可以先给你一般性方向，但还需要一个关键信息，才能把说明更准确地对应到你的情况。";
-    if (nextPrompt) answer += `
+    if (nextPrompt) {
+      answer += `
 
 一个简单问题：${nextPrompt}`;
+    }
     return answer;
   }
 
   let answer = is485
     ? "Based on what you told me, this appears to be a Subclass 485 Temporary Graduate visa question. I can give a cautious first view, but I need one key detail before making it more specific."
     : "I can give general guidance, but I need one key detail before making it more specific to your situation.";
-  if (nextPrompt) answer += `
+  if (nextPrompt) {
+    answer += `
 
 One quick question: ${nextPrompt}`;
+  }
   return answer;
 }
 
-function publicSafeText(data: LegalServiceResponse, responseLanguage: ResponseLanguage): string {
+function publicSafeText(
+  data: LegalServiceResponse,
+  responseLanguage: ResponseLanguage
+): string {
   const text = fallbackText(data, responseLanguage);
-  return hasForbiddenPublicAnswerText(text) ? publicFallbackAnswer(data, responseLanguage) : text;
+  return hasForbiddenPublicAnswerText(text)
+    ? publicFallbackAnswer(data, responseLanguage)
+    : text;
 }
 
 function normalizeNextAction(nextAction: string | null | undefined) {
-  if (nextAction === "answer") return "provide_answer";
+  if (nextAction === "answer") {
+    return "provide_answer";
+  }
   if (
     nextAction === "ask_followup" ||
     nextAction === "suggest_consultation" ||
@@ -213,21 +245,29 @@ function normalizeNextAction(nextAction: string | null | undefined) {
 }
 
 function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean))
+  );
 }
 
 function normalizeCompactSources(data: LegalServiceResponse) {
   const fromBackend = uniqueStrings(
-    (data.compact_sources ?? []).filter((item): item is string => typeof item === "string")
+    (data.compact_sources ?? []).filter(
+      (item): item is string => typeof item === "string"
+    )
   );
-  if (fromBackend.length > 0) return fromBackend.slice(0, 4);
+  if (fromBackend.length > 0) {
+    return fromBackend.slice(0, 4);
+  }
 
   const fromCitations = uniqueStrings(
     (data.citations ?? [])
       .map((citation) => {
         const title = citation.title?.trim();
         const authority = citation.authority?.trim();
-        if (authority && title) return `${authority} — ${title}`;
+        if (authority && title) {
+          return `${authority} — ${title}`;
+        }
         return title || authority || "";
       })
       .filter(Boolean)
@@ -235,8 +275,12 @@ function normalizeCompactSources(data: LegalServiceResponse) {
   return fromCitations.slice(0, 4);
 }
 
-function normalizeCaseHypothesis(caseHypothesis: LegalServiceResponse["case_hypothesis"]) {
-  if (!caseHypothesis) return null;
+function normalizeCaseHypothesis(
+  caseHypothesis: LegalServiceResponse["case_hypothesis"]
+) {
+  if (!caseHypothesis) {
+    return null;
+  }
   return {
     issue_type: caseHypothesis.issue_type ?? null,
     visa_type: caseHypothesis.visa_type ?? null,
@@ -252,7 +296,9 @@ function normalizeCaseHypothesis(caseHypothesis: LegalServiceResponse["case_hypo
   };
 }
 
-function normalizeFactSlotStates(factSlotStates: LegalServiceResponse["fact_slot_states"]) {
+function normalizeFactSlotStates(
+  factSlotStates: LegalServiceResponse["fact_slot_states"]
+) {
   return (factSlotStates ?? [])
     .filter((slot) => slot?.fact_key)
     .map((slot) => ({
@@ -282,8 +328,12 @@ function normalizeFactSlotStates(factSlotStates: LegalServiceResponse["fact_slot
     }));
 }
 
-function normalizeInteractionPlan(interactionPlan: LegalServiceResponse["interaction_plan"]) {
-  if (!interactionPlan) return null;
+function normalizeInteractionPlan(
+  interactionPlan: LegalServiceResponse["interaction_plan"]
+) {
+  if (!interactionPlan) {
+    return null;
+  }
 
   const completed = interactionPlan.progress?.collected_required ?? 0;
   const total = interactionPlan.progress?.total_required ?? 0;
@@ -320,7 +370,9 @@ function normalizeInteractionPlan(interactionPlan: LegalServiceResponse["interac
   };
 }
 
-function normalizeRetrievalDebug(retrievalDebug: LegalServiceResponse["retrieval_debug"]) {
+function normalizeRetrievalDebug(
+  retrievalDebug: LegalServiceResponse["retrieval_debug"]
+) {
   const dbg = retrievalDebug ?? {};
   return {
     effective_question:
@@ -336,14 +388,22 @@ function normalizeRetrievalDebug(retrievalDebug: LegalServiceResponse["retrieval
   };
 }
 
-function extractEvidenceGaps(retrievalDebug: LegalServiceResponse["retrieval_debug"]) {
-  if (!SHOW_WIDGET_DEBUG) return [];
+function extractEvidenceGaps(
+  retrievalDebug: LegalServiceResponse["retrieval_debug"]
+) {
+  if (!SHOW_WIDGET_DEBUG) {
+    return [];
+  }
   const dbg = retrievalDebug ?? {};
   if (Array.isArray(dbg.evidence_gaps)) {
-    return dbg.evidence_gaps.filter((item: unknown): item is string => typeof item === "string");
+    return dbg.evidence_gaps.filter(
+      (item: unknown): item is string => typeof item === "string"
+    );
   }
   if (Array.isArray(dbg.internal_evidence_gaps)) {
-    return dbg.internal_evidence_gaps.filter((item: unknown): item is string => typeof item === "string");
+    return dbg.internal_evidence_gaps.filter(
+      (item: unknown): item is string => typeof item === "string"
+    );
   }
   return [];
 }
@@ -362,14 +422,28 @@ function logWidgetDebug(params: {
   console.log("matterId(out):", params.response.matter_id ?? null);
   console.log("responseLanguage:", params.responseLanguage);
   console.log("originalQuestion:", dbg.original_question ?? params.question);
-  console.log("effectiveQuestion:", dbg.effective_question ?? dbg.contextualization?.standalone_question ?? params.question);
+  console.log(
+    "effectiveQuestion:",
+    dbg.effective_question ??
+      dbg.contextualization?.standalone_question ??
+      params.question
+  );
   console.log("usedHistory:", dbg.contextualization?.used_history ?? false);
   console.log("contextReason:", dbg.contextualization?.reason ?? null);
-  console.log("localSufficient:", dbg.sufficiency_gate?.local_sufficient ?? null);
+  console.log(
+    "localSufficient:",
+    dbg.sufficiency_gate?.local_sufficient ?? null
+  );
   console.log("sufficiencyReason:", dbg.sufficiency_gate?.reason ?? null);
   console.log("needLiveFetch:", dbg.sufficiency_gate?.need_live_fetch ?? null);
-  console.log("initialLocalSufficient:", dbg.initial_sufficiency_gate?.local_sufficient ?? null);
-  console.log("initialSufficiencyReason:", dbg.initial_sufficiency_gate?.reason ?? null);
+  console.log(
+    "initialLocalSufficient:",
+    dbg.initial_sufficiency_gate?.local_sufficient ?? null
+  );
+  console.log(
+    "initialSufficiencyReason:",
+    dbg.initial_sufficiency_gate?.reason ?? null
+  );
   console.log("liveFetchUsed:", dbg.live_fetch_used ?? false);
   console.log("liveDomainsUsed:", dbg.live_domains_used ?? []);
   console.log("liveResultCount:", dbg.live_result_count ?? 0);
@@ -378,9 +452,18 @@ function logWidgetDebug(params: {
   console.log("authorityCounts:", dbg.authority_counts ?? {});
   console.log("bucketCounts:", dbg.bucket_counts ?? {});
   console.log("sourceClassCounts:", dbg.source_class_counts ?? {});
-  console.log("answerabilityProfile:", dbg.sufficiency_gate?.answerability?.profile_name ?? null);
-  console.log("answerMode:", dbg.sufficiency_gate?.answerability?.answer_mode ?? null);
-  console.log("missingRequiredFacts:", dbg.sufficiency_gate?.answerability?.required_facts_missing ?? []);
+  console.log(
+    "answerabilityProfile:",
+    dbg.sufficiency_gate?.answerability?.profile_name ?? null
+  );
+  console.log(
+    "answerMode:",
+    dbg.sufficiency_gate?.answerability?.answer_mode ?? null
+  );
+  console.log(
+    "missingRequiredFacts:",
+    dbg.sufficiency_gate?.answerability?.required_facts_missing ?? []
+  );
   console.log(
     "missingRequiredSourceClasses:",
     dbg.sufficiency_gate?.answerability?.required_source_classes_missing ?? []
@@ -395,10 +478,15 @@ function logWidgetDebug(params: {
   console.log("stageTiming:", dbg.stage_timing ?? null);
   console.log("liveTrigger:", dbg.sufficiency_gate?.live_trigger ?? null);
   console.log("riskFlags:", dbg.risk_flags ?? {});
-  console.log("interactionMode:", params.response.interaction_plan?.mode ?? null);
+  console.log(
+    "interactionMode:",
+    params.response.interaction_plan?.mode ?? null
+  );
   console.log(
     "requestedFacts:",
-    (params.response.interaction_plan?.requested_facts ?? []).map((fact) => fact?.fact_key ?? null)
+    (params.response.interaction_plan?.requested_facts ?? []).map(
+      (fact) => fact?.fact_key ?? null
+    )
   );
   console.log("compactSources:", params.response.compact_sources ?? []);
   console.log("userDisplayMode:", params.response.user_display_mode ?? null);
@@ -455,16 +543,23 @@ export async function POST(request: Request) {
 
     const question = extractLatestUserText(messages);
     if (!question) {
-      return emptyWidgetResponse("Please enter a question so I can help.", matterId ?? null, "en");
+      return emptyWidgetResponse(
+        "Please enter a question so I can help.",
+        matterId ?? null,
+        "en"
+      );
     }
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
 
-    const legalServiceUrl = process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
+    const legalServiceUrl =
+      process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
     const apiKey = process.env.LEGAL_SERVICE_API_KEY;
     const jurisdiction = process.env.LEGAL_SERVICE_JURISDICTION ?? "Cth";
-    const sourceTypes = (process.env.LEGAL_SERVICE_SOURCE_TYPES ?? "guidance,legislation,procedure")
+    const sourceTypes = (
+      process.env.LEGAL_SERVICE_SOURCE_TYPES ?? "guidance,legislation,procedure"
+    )
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
@@ -500,7 +595,10 @@ export async function POST(request: Request) {
     }
 
     const data = (await legalResponse.json()) as LegalServiceResponse;
-    const finalResponseLanguage = normalizeResponseLanguage(data.response_language, responseLanguage);
+    const finalResponseLanguage = normalizeResponseLanguage(
+      data.response_language,
+      responseLanguage
+    );
 
     logWidgetDebug({
       sessionId: id,
@@ -523,9 +621,10 @@ export async function POST(request: Request) {
         used_for: c.used_for ?? null,
       })),
       compactSources: normalizeCompactSources(data),
-      userDisplayMode: data.user_display_mode ?? data.interaction_plan?.answer_mode ?? null,
+      userDisplayMode:
+        data.user_display_mode ?? data.interaction_plan?.answer_mode ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
-      missingFacts: SHOW_WIDGET_DEBUG ? data.missing_facts ?? [] : [],
+      missingFacts: SHOW_WIDGET_DEBUG ? (data.missing_facts ?? []) : [],
       evidenceGaps: extractEvidenceGaps(data.retrieval_debug),
       escalate: Boolean(data.escalate),
       nextAction: normalizeNextAction(data.next_action),
@@ -535,7 +634,9 @@ export async function POST(request: Request) {
       caseHypothesis: normalizeCaseHypothesis(data.case_hypothesis),
       factSlotStates: normalizeFactSlotStates(data.fact_slot_states),
       interactionPlan: normalizeInteractionPlan(data.interaction_plan),
-      retrievalDebug: SHOW_WIDGET_DEBUG ? normalizeRetrievalDebug(data.retrieval_debug) : null,
+      retrievalDebug: SHOW_WIDGET_DEBUG
+        ? normalizeRetrievalDebug(data.retrieval_debug)
+        : null,
     });
   } catch (error) {
     console.error("widget-chat error:", error);

@@ -278,17 +278,51 @@ function AssistantFormattedText({ text }: { text: string }) {
 }
 
 const PROCESSING_STAGES_ZH = [
-  { afterMs: 0, title: "正在理解你的问题", detail: "先识别签证类别、事实和当前焦点。" },
-  { afterMs: 6000, title: "正在查找相关法规和官方信息", detail: "复杂问题可能需要核对 Schedule 2、本地资料和官方来源。" },
-  { afterMs: 16000, title: "正在做风险和下一步判断", detail: "我会尽量先给可用结论，再问一个最关键问题。" },
-  { afterMs: 30000, title: "正在整理最终答复", detail: "这个问题涉及多步核对，感谢等待。" },
+  {
+    afterMs: 0,
+    title: "正在理解你的问题",
+    detail: "先识别签证类别、事实和当前焦点。",
+  },
+  {
+    afterMs: 6000,
+    title: "正在查找相关法规和官方信息",
+    detail: "复杂问题可能需要核对 Schedule 2、本地资料和官方来源。",
+  },
+  {
+    afterMs: 16_000,
+    title: "正在做风险和下一步判断",
+    detail: "我会尽量先给可用结论，再问一个最关键问题。",
+  },
+  {
+    afterMs: 30_000,
+    title: "正在整理最终答复",
+    detail: "这个问题涉及多步核对，感谢等待。",
+  },
 ];
 
 const PROCESSING_STAGES_EN = [
-  { afterMs: 0, title: "Understanding your question", detail: "Identifying the visa type, facts, and current legal focus." },
-  { afterMs: 6000, title: "Checking relevant rules and sources", detail: "Complex questions may require Schedule 2, local sources, and official guidance." },
-  { afterMs: 16000, title: "Assessing risk and next steps", detail: "The answer should be useful first and ask only one key follow-up question." },
-  { afterMs: 30000, title: "Preparing the final answer", detail: "This is taking multiple checks. Thanks for waiting." },
+  {
+    afterMs: 0,
+    title: "Understanding your question",
+    detail: "Identifying the visa type, facts, and current legal focus.",
+  },
+  {
+    afterMs: 6000,
+    title: "Checking relevant rules and sources",
+    detail:
+      "Complex questions may require Schedule 2, local sources, and official guidance.",
+  },
+  {
+    afterMs: 16_000,
+    title: "Assessing risk and next steps",
+    detail:
+      "The answer should be useful first and ask only one key follow-up question.",
+  },
+  {
+    afterMs: 30_000,
+    title: "Preparing the final answer",
+    detail: "This is taking multiple checks. Thanks for waiting.",
+  },
 ];
 
 function looksChinese(text: string) {
@@ -302,7 +336,13 @@ function processingStage(elapsedMs: number, isZh: boolean) {
   );
 }
 
-function AssistantProcessingCard({ elapsedMs, isZh }: { elapsedMs: number; isZh: boolean }) {
+function AssistantProcessingCard({
+  elapsedMs,
+  isZh,
+}: {
+  elapsedMs: number;
+  isZh: boolean;
+}) {
   const stage = processingStage(elapsedMs, isZh);
   const seconds = Math.max(1, Math.floor(elapsedMs / 1000));
 
@@ -311,7 +351,9 @@ function AssistantProcessingCard({ elapsedMs, isZh }: { elapsedMs: number; isZh:
       <Loader2 className="mt-1 size-4 shrink-0 animate-spin text-sky-600" />
       <div className="min-w-0">
         <div className="font-medium text-slate-900">{stage.title}</div>
-        <div className="mt-1 text-sm leading-6 text-slate-600">{stage.detail}</div>
+        <div className="mt-1 text-sm leading-6 text-slate-600">
+          {stage.detail}
+        </div>
         <div className="mt-2 text-xs text-slate-400">
           {isZh ? `已等待约 ${seconds} 秒` : `Waiting about ${seconds}s`}
         </div>
@@ -644,8 +686,13 @@ export function ImmigrationAssistantWidget() {
   };
 
   const pendingElapsedMs = submittedAt === null ? 0 : progressNow - submittedAt;
-  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
-  const pendingIsZh = latestUserMessage?.role === "user" ? looksChinese(latestUserMessage.text) : false;
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const pendingIsZh =
+    latestUserMessage?.role === "user"
+      ? looksChinese(latestUserMessage.text)
+      : false;
 
   return (
     <Sheet onOpenChange={setOpen} open={open}>
