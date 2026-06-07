@@ -270,6 +270,17 @@ function WorkspaceProcessingCard({
 }) {
   const stage = workspaceProgressStage(elapsedMs, isZh);
   const seconds = Math.max(1, Math.floor(elapsedMs / 1000));
+
+  const _pendingElapsedMs =
+    submittedAt === null ? 0 : progressNow - submittedAt;
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const _pendingIsZh =
+    latestUserMessage?.role === "user"
+      ? looksChineseText(latestUserMessage.text)
+      : false;
+
   return (
     <div className="flex gap-3">
       <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-[#001736] text-white shadow-sm">
@@ -302,7 +313,7 @@ export function ImmigrationAIWorkspace() {
     "ready"
   );
   const [submittedAt, setSubmittedAt] = useState<number | null>(null);
-  const [progressNow, setProgressNow] = useState(() => Date.now());
+  const [_progressNow, setProgressNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
   const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
@@ -495,8 +506,10 @@ export function ImmigrationAIWorkspace() {
     setMessages(nextMessages);
     scrollToBottom(true);
     setInput("");
-    const requestStartedAt = Date.now();
     setStatus("submitted");
+    setSubmittedAt(Date.now());
+    setProgressNow(Date.now());
+    const requestStartedAt = Date.now();
     setSubmittedAt(requestStartedAt);
     setProgressNow(requestStartedAt);
     setError(null);
@@ -558,8 +571,10 @@ export function ImmigrationAIWorkspace() {
     scrollToBottom(true);
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
-    const requestStartedAt = Date.now();
     setStatus("submitted");
+    setSubmittedAt(Date.now());
+    setProgressNow(Date.now());
+    const requestStartedAt = Date.now();
     setSubmittedAt(requestStartedAt);
     setProgressNow(requestStartedAt);
     setError(null);
@@ -597,7 +612,7 @@ export function ImmigrationAIWorkspace() {
     .find((message) => message.role === "user");
   const pendingIsZh =
     latestUserMessage?.role === "user"
-      ? looksChineseText(latestUserMessage.text)
+      ? looksChinese(latestUserMessage.text)
       : false;
 
   return (
