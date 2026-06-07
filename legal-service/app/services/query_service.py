@@ -30,6 +30,7 @@ from app.services.fact_extraction_service import FactExtractionService
 from app.services.fact_status_reasoning_service import FactStatusReasoningService
 from app.services.focused_policy_issue_service import FocusedPolicyIssueService
 from app.services.frame_consistency_service import FrameConsistencyGate
+from app.services.full_context_turn_resolver_service import FullContextTurnResolverService
 from app.services.interaction_control_service import InteractionControlService
 from app.services.language_service import LanguageService
 from app.services.legal_decision_service import LegalDecisionService
@@ -148,6 +149,7 @@ class QueryService:
         legal_decision_service: LegalDecisionService | None = None,
         communication_plan_service: CommunicationPlanService | None = None,
         natural_response_service: NaturalResponseService | None = None,
+        full_context_turn_resolver_service: FullContextTurnResolverService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -173,6 +175,7 @@ class QueryService:
         self.legal_decision_service = legal_decision_service or LegalDecisionService()
         self.communication_plan_service = communication_plan_service or CommunicationPlanService()
         self.natural_response_service = natural_response_service or NaturalResponseService()
+        self.full_context_turn_resolver_service = full_context_turn_resolver_service or FullContextTurnResolverService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -208,11 +211,21 @@ class QueryService:
             response_language=language_context.response_language,
         )
 
+        full_context_resolution = self.full_context_turn_resolver_service.resolve(
+            raw_user_message=original_question,
+            internal_question_en=payload.question,
+            current_state=current_state,
+            semantic_turn=semantic_turn,
+            pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
+            conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
+            response_language=language_context.response_language,
+        )
+
         task_action = self._task_action_from_semantic(
             semantic_turn=semantic_turn,
             pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
         )
-        if task_action.should_handle_as_task:
+        if task_action.should_handle_as_task and full_context_resolution.allow_early_task_execution:
             return self._handle_task_action(
                 db=db,
                 matter=matter,
@@ -224,9 +237,11 @@ class QueryService:
             )
 
         semantic_facts = self._facts_from_semantic_turn(semantic_turn)
+        focus_facts = full_context_resolution.to_intake_facts()
         effective_intake_facts = {
             **(payload.intake_facts or {}),
             **semantic_facts,
+            **focus_facts,
         }
 
         turn_analysis = self.pre_llm_router_service.analyze(
@@ -434,6 +449,7 @@ class QueryService:
             {
                 "language": language_context.to_debug_dict(),
                 "semantic_turn_analysis": semantic_turn_dict,
+                "full_context_turn_resolution": full_context_resolution.model_dump(),
                 "case_hypothesis": case_hypothesis.model_dump(),
                 "fact_slot_states": [slot.model_dump() for slot in fact_slot_states],
                 "interaction_plan": interaction_plan.model_dump(),
