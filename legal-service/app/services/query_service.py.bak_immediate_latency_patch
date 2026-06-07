@@ -3,9 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import logging
 import re
-import time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -29,7 +27,6 @@ from app.services.case_state_service import CaseStateService
 from app.services.citation_quality_service import CitationQualityService
 from app.services.communication_plan_service import CommunicationPlanService
 from app.services.fact_extraction_service import FactExtractionService
-from app.services.fast_triage_response_service import FastTriageResponseService
 from app.services.fact_status_reasoning_service import FactStatusReasoningService
 from app.services.focused_policy_issue_service import FocusedPolicyIssueService
 from app.services.frame_consistency_service import FrameConsistencyGate
@@ -52,9 +49,6 @@ from app.services.state_machine import StateMachine, TurnInput
 from app.services.task_fulfillment_service import TaskFulfillmentService
 
 
-logger = logging.getLogger(__name__)
-
-
 @dataclass(slots=True)
 class _LiveSourceShim:
     id: str
@@ -74,46 +68,6 @@ class _LiveChunkShim:
     heading: str | None
     text: str
     source: _LiveSourceShim
-
-
-@dataclass(slots=True)
-class _QueryStageTimer:
-    request_id: str
-    matter_id: str | None = None
-    started_at: float = field(default_factory=time.perf_counter)
-    last_at: float = field(default_factory=time.perf_counter)
-    stages: list[dict[str, Any]] = field(default_factory=list)
-
-    def mark(self, stage: str, **metadata: Any) -> None:
-        now = time.perf_counter()
-        duration_ms = (now - self.last_at) * 1000.0
-        total_ms = (now - self.started_at) * 1000.0
-        row = {
-            "stage": stage,
-            "duration_ms": round(duration_ms, 1),
-            "total_ms": round(total_ms, 1),
-        }
-        if metadata:
-            row["metadata"] = {key: value for key, value in metadata.items() if value is not None}
-        self.stages.append(row)
-        self.last_at = now
-        logger.info(
-            "query_stage request_id=%s matter_id=%s stage=%s duration_ms=%.1f total_ms=%.1f",
-            self.request_id,
-            self.matter_id,
-            stage,
-            duration_ms,
-            total_ms,
-        )
-
-    def to_debug_dict(self) -> dict[str, Any]:
-        total_ms = (time.perf_counter() - self.started_at) * 1000.0
-        return {
-            "request_id": self.request_id,
-            "matter_id": self.matter_id,
-            "total_ms": round(total_ms, 1),
-            "stages": list(self.stages),
-        }
 
 
 @dataclass(slots=True)
@@ -196,7 +150,6 @@ class QueryService:
         communication_plan_service: CommunicationPlanService | None = None,
         natural_response_service: NaturalResponseService | None = None,
         full_context_turn_resolver_service: FullContextTurnResolverService | None = None,
-        fast_triage_response_service: FastTriageResponseService | None = None,
     ) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.reasoning_service = reasoning_service or ReasoningService()
@@ -223,166 +176,13 @@ class QueryService:
         self.communication_plan_service = communication_plan_service or CommunicationPlanService()
         self.natural_response_service = natural_response_service or NaturalResponseService()
         self.full_context_turn_resolver_service = full_context_turn_resolver_service or FullContextTurnResolverService()
-        self.fast_triage_response_service = fast_triage_response_service or FastTriageResponseService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
         return self.handle_query(db, payload)
 
-
-    def _should_use_llm_triage_fast_path(
-        self,
-        *,
-        semantic_turn: SemanticTurnAnalysis,
-        current_state: MatterState,
-        pending_offer: dict[str, Any] | None,
-    ) -> bool:
-        """Use the LLM semantic contract to authorize a generic-triage fast path.
-
-        This deliberately does not inspect raw text with regex/phrases. The fast
-        path is allowed only when the LLM semantic resolver says the turn is a
-        generic visa consultation with no task, no risk, and no substantive
-        visa/legal facts.
-        """
-
-        if pending_offer or current_state.conversation_history:
-            return False
-        if semantic_turn.should_handle_as_task or semantic_turn.task_intent.task_type != "none":
-            return False
-        risk = semantic_turn.risk_signals
-        if any([
-            risk.deadline_sensitive,
-            risk.possible_unlawful_status,
-            risk.visa_expiry_or_status_problem,
-            risk.refusal_or_review,
-            risk.cancellation_or_noicc,
-            risk.detention_related,
-            risk.character_related,
-            risk.pic4020_or_integrity,
-            risk.health_or_public_interest,
-            risk.family_or_minor_welfare,
-            risk.requires_lawyer_handoff,
-        ]):
-            return False
-
-        routing = semantic_turn.case_routing
-        issue_type = str(routing.issue_type or "").strip()
-        if issue_type not in {"", "visa_general", "other_visa_general", "general_visa_consultation"}:
-            return False
-        proposed_frame = str(routing.proposed_case_frame_id or "").strip()
-        if proposed_frame not in {"", "visa_topic_triage"}:
-            return False
-
-        generic_fact_keys = {
-            "user_wants_visa_consultation",
-            "issue_type",
-            "visa_type",
-            "specific_issue",
-            "preferred_language",
-            "country",
-        }
-        for fact in semantic_turn.extracted_facts or []:
-            if fact.status != "filled" or fact.value in (None, "", [], {}):
-                continue
-            if fact.fact_key not in generic_fact_keys:
-                return False
-        return True
-
-    def _handle_llm_triage_fast_path(
-        self,
-        *,
-        db: Session,
-        matter: Matter,
-        payload: QueryRequest,
-        original_question: str,
-        current_state: MatterState,
-        response_language: str,
-        semantic_turn: SemanticTurnAnalysis,
-        timing: _QueryStageTimer,
-    ) -> QueryResponse:
-        timing.mark("llm_triage_fast_path_selected", authorized_by="semantic_turn_llm")
-        answer, triage_debug = self.fast_triage_response_service.build(
-            raw_user_message=original_question,
-            semantic_turn=semantic_turn,
-            response_language=response_language,
-        )
-        timing.mark("llm_triage_fast_response")
-
-        response = QueryResponse(
-            matter_id=matter.id,
-            answer=answer,
-            response_language="zh" if response_language == "zh" else "en",
-            confidence="high",
-            issue_type="general_visa_consultation",
-            missing_facts=[],
-            follow_up_questions=[
-                "你想咨询的是哪个签证类别或具体问题？"
-                if response_language == "zh"
-                else "Which visa type or specific issue do you want help with?"
-            ],
-            citations=[],
-            compact_sources=[],
-            escalate=False,
-            next_action="ask_followup",
-            user_display_mode="direct_short",
-            retrieval_debug={
-                "fast_path": {
-                    "used": True,
-                    "type": "llm_authorized_generic_triage",
-                    "reason": semantic_turn.rationale,
-                    "triage_response": triage_debug,
-                },
-                "original_question": original_question,
-                "effective_question": payload.question,
-                "semantic_turn_analysis": semantic_turn.model_dump(),
-            },
-        )
-
-        fast_state = current_state.model_copy(deep=True)
-        fast_state.latest_question = payload.question
-        fast_state.last_contextualized_question = payload.question
-        fast_state.issue_type = "general_visa_consultation"
-        fast_state.operation_type = "visa_topic_triage"
-        fast_state.next_action = response.next_action
-        fast_state.last_answer_type = "general_guidance"
-        fast_state.carried_intake_facts = dict(fast_state.carried_intake_facts or {})
-        fast_state.carried_intake_facts.update({
-            "user_wants_visa_consultation": True,
-            "issue_type": "general_visa_consultation",
-            "preferred_language": "Chinese" if response_language == "zh" else "English",
-        })
-        fast_state.conversation_state = "FACT_GATHERING"
-        fast_state = self.state_machine.append_turn_pair(
-            state=fast_state,
-            user_question=payload.question,
-            effective_question=payload.question,
-            assistant_answer=response.answer,
-            next_action=response.next_action,
-            confidence=response.confidence,
-        )
-        response.conversation_state = fast_state.conversation_state
-        response.case_hypothesis = fast_state.case_hypothesis
-        response.fact_slot_states = fast_state.fact_slot_states
-        response.interaction_plan = fast_state.interaction_plan
-
-        timing.mark("llm_triage_fast_path_finalize")
-        response.retrieval_debug = {
-            **(response.retrieval_debug or {}),
-            "stage_timing": timing.to_debug_dict(),
-        }
-        self._update_matter_from_state(
-            matter=matter,
-            payload=payload,
-            state=fast_state,
-            effective_question=payload.question,
-        )
-        db.commit()
-        db.refresh(matter)
-        return response
-
     def handle_query(self, db: Session, payload: QueryRequest) -> QueryResponse:
         original_question = payload.question
-        timing = _QueryStageTimer(request_id=f"query-{int(time.time() * 1000)}")
         language_context = self.language_service.prepare_turn(
             question=payload.question,
             requested_language=payload.response_language,
@@ -399,13 +199,9 @@ class QueryService:
                 }
             )
 
-        timing.mark("language_context", response_language=language_context.response_language)
-
         matter = self._get_or_create_matter(db, payload)
         current_state = self.state_machine.hydrate_state(matter.metadata_json)
         pending_offer = (current_state.carried_intake_facts or {}).get("pending_offer")
-        timing.matter_id = matter.id
-        timing.mark("state_load")
 
         semantic_turn = self._analyze_semantic_turn(
             original_question=original_question,
@@ -414,23 +210,6 @@ class QueryService:
             pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
             response_language=language_context.response_language,
         )
-        timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
-
-        if self._should_use_llm_triage_fast_path(
-            semantic_turn=semantic_turn,
-            current_state=current_state,
-            pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
-        ):
-            return self._handle_llm_triage_fast_path(
-                db=db,
-                matter=matter,
-                payload=payload,
-                original_question=original_question,
-                current_state=current_state,
-                response_language=language_context.response_language,
-                semantic_turn=semantic_turn,
-                timing=timing,
-            )
 
         full_context_resolution = self.full_context_turn_resolver_service.resolve(
             raw_user_message=original_question,
@@ -441,7 +220,6 @@ class QueryService:
             conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
             response_language=language_context.response_language,
         )
-        timing.mark("full_context_resolver", execution_path=full_context_resolution.execution_path)
 
         task_action = self._task_action_from_semantic(
             semantic_turn=semantic_turn,
@@ -473,7 +251,6 @@ class QueryService:
             conversation_history=[turn.model_dump() for turn in current_state.conversation_history],
         )
         self._apply_semantic_overrides_to_turn_analysis(turn_analysis, semantic_turn)
-        timing.mark("pre_llm_router", turn_type=getattr(turn_analysis, 'turn_type', None))
 
         turn_input = TurnInput(
             question=payload.question,
@@ -495,7 +272,6 @@ class QueryService:
         artifacts = prepared.artifacts
         effective_question = prepared.effective_question
         merged_intake_facts = prepared.merged_intake_facts
-        timing.mark("state_machine_prepare")
 
         frame_decision, case_frame_debug, frame_consistency_debug, frame_skip_retrieval = self._route_case_frame(
             state=state,
@@ -510,7 +286,6 @@ class QueryService:
             decision=frame_decision,
         )
         case_frame_debug["frame_consistency"] = frame_consistency_debug
-        timing.mark("case_frame_route", frame_id=getattr(frame_decision, 'frame_id', None))
 
         effective_payload = QueryRequest(
             **{
@@ -538,7 +313,6 @@ class QueryService:
             merged_intake_facts=merged_intake_facts,
             language_debug=language_context.to_debug_dict(),
         )
-        timing.mark("retrieve_and_reason")
 
         response, evidence, policy = self._apply_post_reasoning_guards(
             response=response,
@@ -556,7 +330,6 @@ class QueryService:
             original_question=original_question,
             effective_question=effective_question,
         )
-        timing.mark("post_reasoning_guards")
 
         case_hypothesis, fact_slot_states, interaction_plan, case_frame_interaction_debug = self._build_interaction_state(
             state=state,
@@ -647,7 +420,6 @@ class QueryService:
             effective_question=effective_question,
             known_facts=state.carried_intake_facts,
         )
-        timing.mark("legal_decision_and_natural_response")
 
         # Run public-answer guard once more after natural rewrite.
         response, final_public_guard_debug = self.public_answer_guard.sanitize_response(
@@ -672,7 +444,6 @@ class QueryService:
         elif response.next_action == "answer":
             state.carried_intake_facts.pop("pending_offer", None)
 
-        timing.mark("final_response_packaging")
         debug = dict(response.retrieval_debug or {})
         debug.update(
             {
@@ -690,7 +461,6 @@ class QueryService:
                 "legal_decision_object": legal_decision.model_dump(),
                 "communication_plan": communication_plan.model_dump(),
                 "natural_response": natural_response_debug,
-                "stage_timing": timing.to_debug_dict(),
             }
         )
         if schedule_aware_assessment:

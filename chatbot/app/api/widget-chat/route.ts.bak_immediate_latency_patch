@@ -332,7 +332,6 @@ function normalizeRetrievalDebug(retrievalDebug: LegalServiceResponse["retrieval
     need_live_fetch: dbg.sufficiency_gate?.need_live_fetch ?? null,
     live_fetch_used: dbg.live_fetch_used ?? null,
     top_titles: Array.isArray(dbg.top_titles) ? dbg.top_titles : [],
-    stageTiming: dbg.stage_timing ?? null,
   };
 }
 
@@ -392,7 +391,6 @@ function logWidgetDebug(params: {
   console.log("legalDecisionObject:", dbg.legal_decision_object ?? null);
   console.log("communicationPlan:", dbg.communication_plan ?? null);
   console.log("naturalResponse:", dbg.natural_response ?? null);
-  console.log("stageTiming:", dbg.stage_timing ?? null);
   console.log("liveTrigger:", dbg.sufficiency_gate?.live_trigger ?? null);
   console.log("riskFlags:", dbg.risk_flags ?? {});
   console.log("interactionMode:", params.response.interaction_plan?.mode ?? null);
