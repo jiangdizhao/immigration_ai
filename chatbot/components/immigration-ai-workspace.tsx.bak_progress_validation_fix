@@ -507,8 +507,6 @@ export function ImmigrationAIWorkspace() {
     scrollToBottom(true);
     setInput("");
     setStatus("submitted");
-    setSubmittedAt(Date.now());
-    setProgressNow(Date.now());
     const requestStartedAt = Date.now();
     setSubmittedAt(requestStartedAt);
     setProgressNow(requestStartedAt);
@@ -572,8 +570,6 @@ export function ImmigrationAIWorkspace() {
     setIntakeFacts(mergedFacts);
     setDraftFacts({});
     setStatus("submitted");
-    setSubmittedAt(Date.now());
-    setProgressNow(Date.now());
     const requestStartedAt = Date.now();
     setSubmittedAt(requestStartedAt);
     setProgressNow(requestStartedAt);
@@ -605,15 +601,6 @@ export function ImmigrationAIWorkspace() {
       "Booking flow placeholder. Connect this to your lawyer's calendar or booking page next."
     );
   };
-
-  const pendingElapsedMs = submittedAt === null ? 0 : progressNow - submittedAt;
-  const latestUserMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === "user");
-  const pendingIsZh =
-    latestUserMessage?.role === "user"
-      ? looksChinese(latestUserMessage.text)
-      : false;
 
   return (
     <section
