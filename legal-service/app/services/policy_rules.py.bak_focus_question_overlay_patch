@@ -441,24 +441,17 @@ class PolicyRules:
         overlays = assessment.get("policy_overlays") or []
         if not isinstance(overlays, list):
             overlays = []
-
-        applicable_overlays = [
-            item
-            for item in overlays
-            if isinstance(item, dict) and self._policy_overlay_applicable_for_live(item, assessment)
-        ]
-        if not applicable_overlays:
-            return None
-
         needs_live = bool(flags & {"needs_live_policy_check", "unknown_current_policy", "current_policy_risk", "superseded_policy_risk"})
-        needs_live = needs_live or any(bool(item.get("freshness_required")) for item in applicable_overlays)
+        needs_live = needs_live or any(bool(item.get("freshness_required")) for item in overlays if isinstance(item, dict))
         if not needs_live:
             return None
 
         preferred_domains = ["immi.homeaffairs.gov.au", "legislation.gov.au"]
         preferred_source_types = ["guidance", "legislation"]
         missing = ["current_policy_overlay_evidence"]
-        for item in applicable_overlays:
+        for item in overlays:
+            if not isinstance(item, dict):
+                continue
             policy_key = str(item.get("policy_key") or "")
             if policy_key and policy_key not in missing:
                 missing.append(policy_key)
@@ -472,64 +465,6 @@ class PolicyRules:
             "preferred_source_types": preferred_source_types,
             "missing": missing,
         }
-
-    def _policy_overlay_applicable_for_live(self, item: dict[str, Any], assessment: dict[str, Any]) -> bool:
-        policy_key = str(item.get("policy_key") or "").strip()
-        if not policy_key:
-            return False
-
-        debug = assessment.get("debug") if isinstance(assessment.get("debug"), dict) else {}
-        fact_snapshot = debug.get("fact_snapshot") if isinstance(debug, dict) else {}
-        if not isinstance(fact_snapshot, dict):
-            fact_snapshot = {}
-        candidate_pathways = assessment.get("candidate_pathways") or []
-        text_blob = " ".join(
-            [
-                str(assessment.get("user_goal") or ""),
-                str(assessment.get("active_pathway") or ""),
-                " ".join(str(x) for x in candidate_pathways if x),
-                str(assessment.get("summary") or ""),
-                " ".join(f"{key} {value}" for key, value in fact_snapshot.items()),
-            ]
-        ).lower()
-
-        # Critical-technology / condition-8208 / PIC4003B overlays are real
-        # legal dependencies, but they should not be live-fetched merely because
-        # they are freshness_required. Require explicit focus/fact evidence.
-        if policy_key in {"500_critical_technology_condition8208", "critical_technology_pic4003b_condition8208"}:
-            if fact_snapshot.get("critical_technology_context") or fact_snapshot.get("condition_8208_applies"):
-                return True
-            critical_terms = (
-                "critical technology",
-                "critical technologies",
-                "condition 8208",
-                "pic 4003b",
-                "artificial intelligence",
-                "cybersecurity",
-                "cyber security",
-                "quantum",
-                "advanced computing",
-                "关键技术",
-                "人工智能",
-                "网络安全",
-                "量子",
-            )
-            return any(term in text_blob for term in critical_terms)
-
-        if policy_key == "500_work_rights_current":
-            return bool(
-                assessment.get("active_pathway") == "compliance"
-                or fact_snapshot.get("work_hours_issue")
-                or fact_snapshot.get("work_hours_per_fortnight")
-                or "work hours" in text_blob
-                or "工作时间" in text_blob
-            )
-
-        # Other current-policy overlays, such as genuine-student, funds,
-        # English, or 485 current-rule checks, may be live-relevant when their
-        # criterion pack activates them. They are not destructive and should
-        # remain available for evidence-gap recovery.
-        return True
 
     def _domain_from_url(self, url: str) -> str | None:
         match = re.search(r"https?://([^/]+)", url or "", flags=re.I)

@@ -50,15 +50,6 @@ class CommunicationPlanService:
         plan.content.practical_actions.extend(decision.action_recommendation.today_actions)
         plan.content.documents_to_prepare.extend(decision.action_recommendation.document_preparation)
         plan.content.optional_next_question = decision.action_recommendation.one_next_question
-        if not plan.content.optional_next_question and decision.missing_facts:
-            ordered_missing = sorted(
-                list(decision.missing_facts),
-                key=lambda item: getattr(item, "ask_priority", 999) or 999,
-            )
-            first_missing = next((item for item in ordered_missing if getattr(item, "user_question", None)), None)
-            if first_missing is not None:
-                plan.content.optional_next_question = first_missing.user_question
-                plan.content.optional_next_question_reason = f"Missing required fact: {first_missing.fact_key}"
 
         # Layout guidance: formal, readable, but not a hard-coded paragraph template.
         if plan.strategy == "urgent_status_triage":
@@ -85,9 +76,9 @@ class CommunicationPlanService:
             "Do not sound like a copied template; vary wording naturally and anchor the answer to the user's facts.",
         ])
 
-        if decision.missing_facts and plan.content.optional_next_question:
+        if decision.missing_facts and decision.action_recommendation.one_next_question:
             plan.question_policy = "ask_one_required_question"
-        elif plan.content.optional_next_question:
+        elif decision.action_recommendation.one_next_question:
             plan.question_policy = "ask_one_optional_question"
         else:
             plan.question_policy = "ask_none"

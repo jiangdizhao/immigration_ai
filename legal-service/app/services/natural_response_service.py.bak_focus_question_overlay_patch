@@ -140,8 +140,6 @@ class NaturalResponseService:
                 "Do not include marketing, donation requests, YouTube messages, or unrelated links.",
                 "Do not mention internal systems, retrieval, evidence packages, source classes, backend, or policy gates.",
                 "Ask at most one useful next question, and only if the plan says to ask one.",
-                "If communication_plan.question_policy is ask_one_required_question or ask_one_optional_question and communication_plan.content.optional_next_question is present, you MUST include exactly that question at the end.",
-                "Do not replace a required next question with a checklist, document-preparation section, service offer, or lawyer-brief suggestion.",
                 "If the plan offers a next service, include it naturally in one short sentence.",
                 "Return only the final answer text.",
                 language_rule,
