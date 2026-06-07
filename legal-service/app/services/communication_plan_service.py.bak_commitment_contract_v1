@@ -19,7 +19,6 @@ class CommunicationPlanService:
         response_language: str = "en",
     ) -> CommunicationPlan:
         semantic = self._coerce_semantic(semantic_turn)
-        is_followup_turn = bool(semantic and semantic.conversation_act in {"answer_to_previous_question", "fact_update", "continue_previous_answer"})
         plan = CommunicationPlan(response_language="zh" if response_language == "zh" else "en")
 
         if semantic and semantic.should_handle_as_task:
@@ -27,10 +26,6 @@ class CommunicationPlanService:
             plan.task_output.task_type = semantic.task_intent.task_type
             plan.task_output.complete_task_first = True
             plan.task_output.output_format = self._format_for_task(semantic.task_intent.task_type)  # type: ignore[assignment]
-        elif is_followup_turn and not decision.risk_assessment.should_escalate_to_lawyer:
-            # A narrow continuation should answer the latest point directly; it
-            # should not restart the full urgent/status template from turn one.
-            plan.strategy = "direct_consultant_answer"
         elif decision.risk_assessment.should_escalate_to_lawyer:
             plan.strategy = "urgent_status_triage" if decision.risk_assessment.urgency in {"high", "urgent"} else "lawyer_handoff"
         elif decision.answer_mode in {"answer_then_ask", "ask_followup"}:
@@ -65,34 +60,22 @@ class CommunicationPlanService:
                 plan.content.optional_next_question = first_missing.user_question
                 plan.content.optional_next_question_reason = f"Missing required fact: {first_missing.fact_key}"
 
-        # Layout guidance: provide communication intent, not fixed headings.
+        # Layout guidance: formal, readable, but not a hard-coded paragraph template.
         if plan.strategy == "urgent_status_triage":
             plan.content.should_include_points.extend([
-                "Open with the most case-specific risk or practical point; do not reuse a fixed heading template.",
-                "If a full VEVO/status warning was already given earlier, summarize it in one sentence rather than repeating the whole block.",
-                "Use bullets for actions only when they add clarity.",
+                "Use clear short headings, for example: 初步判断, 为什么紧急, 现在马上做, 准备给律师看的材料, 下一步.",
+                "Keep the opening direct and case-specific.",
+                "Use bullets for actions and documents.",
             ])
         elif plan.strategy == "task_fulfillment":
             plan.content.should_include_points.extend([
-                "Complete the requested output first; do not restart generic legal Q&A.",
-                "Use the structure implied by the user's requested output, not a fixed service template.",
-            ])
-        elif is_followup_turn:
-            plan.content.should_include_points.extend([
-                "Answer the latest narrow follow-up directly.",
-                "Do not repeat earlier broad warnings, document lists, or intake explanations unless the user asks for them again.",
+                "Complete the requested artifact first.",
+                "Use clean headings and bullets so the output can be copied to a lawyer, school, Home Affairs, or the user.",
             ])
         else:
             plan.content.should_include_points.extend([
-                "Use a natural, case-specific structure; headings are optional.",
+                "Use an elegant, readable structure with 2-4 short headings only when helpful.",
                 "Prefer concise paragraphs and bullets over dense blocks of text.",
-            ])
-
-        plan.content.must_not_include_points.extend(self._frame_hygiene_blockers(decision))
-        if is_followup_turn:
-            plan.content.must_not_include_points.extend([
-                "Do not repeat the full previous safety warning or document checklist unless the latest user message explicitly requests it.",
-                "Do not convert a narrow follow-up into a fresh broad intake answer.",
             ])
 
         # Firm prohibitions learned from competitor comparison.
@@ -138,37 +121,6 @@ class CommunicationPlanService:
             "language": plan.response_language,
             "status": "offered",
         }
-
-    def _frame_hygiene_blockers(self, decision: LegalDecisionObject) -> list[str]:
-        """Prevent unrelated visa-frame language from leaking into the public answer."""
-        blob_parts = [
-            str(decision.case_frame_id or ""),
-            str(decision.issue_type or ""),
-            str(decision.visa_type or ""),
-            str(decision.operation_type or ""),
-        ]
-        for fact in decision.known_facts:
-            blob_parts.append(f"{fact.fact_key}={fact.value}")
-        blob = " ".join(blob_parts).lower()
-
-        blockers: list[str] = []
-        is_partner_or_visitor = any(term in blob for term in [
-            "partner", "820", "801", "spouse", "marriage", "married", "visitor", "tourist", "600"
-        ])
-        is_student_or_485 = any(term in blob for term in [
-            "student", "subclass 500", " 500", "temporary_graduate", "temporary graduate", "485", "completion", "coe", "afp", "english"
-        ])
-
-        if is_partner_or_visitor and not is_student_or_485:
-            blockers.extend([
-                "Do not mention Student 500, Subclass 485, AFP, English-test evidence, CoE, completion letter, university/school documents, or student-visa grant letters unless the user explicitly mentioned them in this matter.",
-                "Keep status warnings specific to the partner/visitor-visa context: visitor visa expiry, current visa conditions, onshore lodgement constraints, bridging visa only if relevant, and relationship evidence.",
-            ])
-        elif is_student_or_485 and not is_partner_or_visitor:
-            blockers.extend([
-                "Do not mention Partner 820/801, spouse sponsorship, marriage evidence, or relationship-breakdown scenarios unless the user explicitly raised them in this matter.",
-            ])
-        return blockers
 
     def _format_for_task(self, task_type: str) -> str:
         mapping = {

@@ -247,15 +247,7 @@ class LegalDecisionService:
         flags = state.risk_flags
         semantic_risk = semantic.risk_signals if semantic else None
         high_by_operation = operation_type in self.HIGH_URGENCY_OPERATIONS
-
-        # Current-policy sensitivity alone should not become lawyer escalation.
-        # Escalation requires either an explicit policy/response escalation, a
-        # high-urgency operation, or an explicit semantic handoff signal.
-        should_escalate = bool(
-            response.escalate
-            or high_by_operation
-            or (semantic_risk and semantic_risk.requires_lawyer_handoff)
-        )
+        should_escalate = bool(response.escalate or high_by_operation or (semantic_risk and semantic_risk.requires_lawyer_handoff))
         deadline = bool(flags.deadline_sensitive or high_by_operation or (semantic_risk and semantic_risk.deadline_sensitive))
         status = bool(
             operation_type in self.STATUS_OPERATIONS
@@ -282,27 +274,13 @@ class LegalDecisionService:
         can_say: list[str] = []
         conclusion: str | None = None
 
-        status_context = operation_type in self.STATUS_OPERATIONS or risk.status_sensitive
-        if status_context:
-            conclusion = "This should be treated as a visa-status timing issue, not just a document-preparation issue."
-            can_say.append(
-                "Current VEVO / ImmiAccount status should be checked before assuming lawful stay, work rights, travel rights, or a bridging-visa position."
-            )
-            if self._is_student_or_485_context(facts=facts, operation_type=operation_type):
-                can_say.extend([
-                    "The user has indicated a Student visa / Subclass 485 timing context.",
-                    "A completion letter, CoE, transcript, or school document should not be treated as automatically extending a visa unless official visa status confirms it.",
-                ])
-            elif self._is_partner_or_visitor_context(facts=facts, operation_type=operation_type):
-                can_say.extend([
-                    "The user appears to be in a partner / visitor-visa context, so the public answer should not import Student 500, 485, AFP, English-test, CoE, or completion-letter warnings unless the user actually mentioned them.",
-                    "Marriage to an Australian citizen or permanent resident does not itself grant a visa or guarantee a Partner visa outcome.",
-                    "Visitor-visa expiry and conditions, including any no-further-stay condition if present, should be checked from the actual grant notice / VEVO record.",
-                ])
-            else:
-                can_say.append(
-                    "The user has indicated a timing/status issue; keep the warning generic unless the active frame clearly identifies a visa subclass."
-                )
+        if operation_type in self.STATUS_OPERATIONS or risk.status_sensitive:
+            conclusion = "This should be treated as an urgent visa-status issue, not a routine visa question."
+            can_say.extend([
+                "The user has indicated they may be in Australia after their Student visa expired.",
+                "Current VEVO / ImmiAccount status should be checked immediately before assuming any lawful status, work rights, or travel rights.",
+                "A completion letter or school document should not be treated as automatically extending a visa unless an official visa status confirms this.",
+            ])
         elif response.answer:
             can_say.append("A provisional, general response can be provided from the current known facts and evidence.")
 
@@ -326,22 +304,6 @@ class LegalDecisionService:
             required_caveats=caveats,
             forbidden_overclaims=cannot_say,
         )
-
-    def _fact_blob(self, *, facts: dict[str, Any], operation_type: str | None) -> str:
-        parts = [str(operation_type or "")]
-        for key, value in facts.items():
-            if value in (None, "", [], {}):
-                continue
-            parts.append(f"{key}={value}")
-        return " ".join(parts).lower()
-
-    def _is_student_or_485_context(self, *, facts: dict[str, Any], operation_type: str | None) -> bool:
-        blob = self._fact_blob(facts=facts, operation_type=operation_type)
-        return any(term in blob for term in ["student", "subclass 500", "500", "485", "temporary_graduate", "temporary graduate", "completion", "coe", "afp", "english"])
-
-    def _is_partner_or_visitor_context(self, *, facts: dict[str, Any], operation_type: str | None) -> bool:
-        blob = self._fact_blob(facts=facts, operation_type=operation_type)
-        return any(term in blob for term in ["partner", "820", "801", "spouse", "marriage", "married", "pr", "visitor", "tourist", "600"])
 
     def _action_recommendation(
         self,

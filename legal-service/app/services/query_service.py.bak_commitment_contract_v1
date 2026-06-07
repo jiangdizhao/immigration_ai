@@ -28,7 +28,6 @@ from app.services.case_frame_service import CaseFrameService
 from app.services.case_state_service import CaseStateService
 from app.services.citation_quality_service import CitationQualityService
 from app.services.communication_plan_service import CommunicationPlanService
-from app.services.continuation_contract_service import ContinuationContractService
 from app.services.fact_extraction_service import FactExtractionService
 from app.services.fast_triage_response_service import FastTriageResponseService
 from app.services.fact_status_reasoning_service import FactStatusReasoningService
@@ -195,7 +194,6 @@ class QueryService:
         task_fulfillment_service: TaskFulfillmentService | None = None,
         legal_decision_service: LegalDecisionService | None = None,
         communication_plan_service: CommunicationPlanService | None = None,
-        continuation_contract_service: ContinuationContractService | None = None,
         natural_response_service: NaturalResponseService | None = None,
         full_context_turn_resolver_service: FullContextTurnResolverService | None = None,
         fast_triage_response_service: FastTriageResponseService | None = None,
@@ -223,7 +221,6 @@ class QueryService:
         self.task_fulfillment_service = task_fulfillment_service or TaskFulfillmentService()
         self.legal_decision_service = legal_decision_service or LegalDecisionService()
         self.communication_plan_service = communication_plan_service or CommunicationPlanService()
-        self.continuation_contract_service = continuation_contract_service or ContinuationContractService()
         self.natural_response_service = natural_response_service or NaturalResponseService()
         self.full_context_turn_resolver_service = full_context_turn_resolver_service or FullContextTurnResolverService()
         self.fast_triage_response_service = fast_triage_response_service or FastTriageResponseService()
@@ -418,61 +415,6 @@ class QueryService:
             response_language=language_context.response_language,
         )
         timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
-
-        continuation_response = self.continuation_contract_service.try_fulfill(
-            raw_user_message=original_question,
-            internal_question_en=payload.question,
-            response_language=language_context.response_language,
-            current_state=current_state,
-            semantic_turn=semantic_turn,
-            matter_id=matter.id,
-        )
-        if continuation_response is not None:
-            timing.mark(
-                "continuation_contract_fulfilled",
-                turn_kind=(continuation_response.retrieval_debug or {})
-                .get("continuation_contract", {})
-                .get("turn_kind"),
-            )
-            continuation_state = current_state.model_copy(deep=True)
-            continuation_state.latest_question = payload.question
-            continuation_state.last_contextualized_question = payload.question
-            continuation_state.next_action = continuation_response.next_action
-            continuation_state.last_answer_type = "specific_grounded"
-            continuation_state.conversation_state = (
-                "ESCALATION_READY" if continuation_response.escalate else "ANSWERED_GENERAL"
-            )
-            continuation_state.carried_intake_facts = dict(
-                continuation_state.carried_intake_facts or {}
-            )
-            continuation_state.carried_intake_facts["last_turn_contract"] = (
-                continuation_response.retrieval_debug or {}
-            ).get("continuation_contract")
-            continuation_state = self.state_machine.append_turn_pair(
-                state=continuation_state,
-                user_question=payload.question,
-                effective_question=payload.question,
-                assistant_answer=continuation_response.answer,
-                next_action=continuation_response.next_action,
-                confidence=continuation_response.confidence,
-            )
-            continuation_response.conversation_state = continuation_state.conversation_state
-            continuation_response.case_hypothesis = continuation_state.case_hypothesis
-            continuation_response.fact_slot_states = continuation_state.fact_slot_states
-            continuation_response.interaction_plan = continuation_state.interaction_plan
-            continuation_response.retrieval_debug = {
-                **(continuation_response.retrieval_debug or {}),
-                "stage_timing": timing.to_debug_dict(),
-            }
-            self._update_matter_from_state(
-                matter=matter,
-                payload=payload,
-                state=continuation_state,
-                effective_question=payload.question,
-            )
-            db.commit()
-            db.refresh(matter)
-            return continuation_response
 
         if self._should_use_llm_triage_fast_path(
             semantic_turn=semantic_turn,
@@ -1590,10 +1532,7 @@ class QueryService:
         policy: PolicyDecision,
         state: MatterState,
     ) -> QueryResponse:
-        # PolicyDecision is the final control authority for escalation and
-        # next_action at this stage. Do not preserve an earlier draft-answer
-        # escalation if the deterministic policy layer rejected escalation.
-        response.escalate = bool(policy.escalate)
+        response.escalate = response.escalate or policy.escalate
         if policy.next_action:
             response.next_action = policy.next_action
         if policy.confidence_cap:

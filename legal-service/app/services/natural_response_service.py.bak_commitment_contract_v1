@@ -143,10 +143,6 @@ class NaturalResponseService:
                 "If communication_plan.question_policy is ask_one_required_question or ask_one_optional_question and communication_plan.content.optional_next_question is present, you MUST include exactly that question at the end.",
                 "Do not replace a required next question with a checklist, document-preparation section, service offer, or lawyer-brief suggestion.",
                 "If the plan offers a next service, include it naturally in one short sentence.",
-                "If communication_plan.call_to_action.offer_next_service is false, do not invent a new 'I can help next...' service offer.",
-                "For continuation or follow-up turns, answer the exact latest request first; do not restart broad triage or re-print a full previous checklist.",
-                "Treat communication_plan.content.must_not_include_points as hard exclusions, especially unrelated visa-frame terms and repeated safety blocks.",
-                "If the current answer conflicts with those exclusions, rewrite it more narrowly rather than adding more caveats.",
                 "Return only the final answer text.",
                 language_rule,
             ]
