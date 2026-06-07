@@ -7,22 +7,74 @@ from app.schemas.state import MatterState
 from app.services.full_context_turn_resolver_service import FullContextTurnResolverService
 
 
-class FakeResult:
+class _FakeResponse:
+    output_text: str
+
     def __init__(self, output_text: str) -> None:
         self.output_text = output_text
 
 
-class FakeResponses:
-    def __init__(self, output_text: str) -> None:
-        self.output_text = output_text
+class _FakeResponses:
+    def create(self, **_: object) -> _FakeResponse:
+        return _FakeResponse(json.dumps({
+            "response_language": "zh",
+            "turn_purpose": "fact_update",
+            "contains_substantive_new_facts": True,
+            "substantive_fact_keys": ["application_location", "family_location", "study_purpose_argument", "case_officer_comment"],
+            "visa_entities_update": [
+                {
+                    "subclass": "500",
+                    "merge_with_existing_entity": None,
+                    "label": "Student visa",
+                    "add_roles": ["refused_application", "applied_visa"],
+                    "add_facts": {"application_location": "overseas", "family_location": "overseas"},
+                    "confidence": "high",
+                    "reason": "500 was the refused application",
+                },
+                {
+                    "subclass": "485",
+                    "merge_with_existing_entity": None,
+                    "label": "Temporary Graduate visa",
+                    "add_roles": ["previous_visa"],
+                    "add_facts": {},
+                    "confidence": "high",
+                    "reason": "485 is prior history only",
+                },
+            ],
+            "current_focus": {
+                "focus_id": "focus_test",
+                "user_request_summary": "User added facts about a refused 500 Student visa.",
+                "primary_visa_entity_id": None,
+                "primary_subclass": "500",
+                "primary_role": "refused_application",
+                "supporting_entities": [{"entity_id": None, "subclass": "485", "role_in_this_focus": "previous_visa_history", "reason": "prior visa"}],
+                "candidate_focuses": [],
+                "issue_family": "visa_refusal",
+                "operation": "student_refusal_next_steps",
+                "suggested_case_frame_id": "500_refusal_review",
+                "schedule2_candidate_subclasses": ["500", "485"],
+                "schedule1_relevance": "none",
+                "deferred_dependencies": [],
+                "next_best_question": "你是哪一天收到拒签通知的？拒签信里是否写了 review rights / ART？",
+                "answer_strategy": "answer_first_then_ask",
+                "confidence": "high",
+                "reason": "refused/applied visa beats previous visa for refusal focus",
+            },
+            "artifact_request": {"requested": False, "artifact_type": "none", "explicit_acceptance": False, "uses_pending_offer": False, "reason": None},
+            "pending_offer_accepted": False,
+            "pending_offer_rejected_or_ignored": True,
+            "execution_path": "legal_reasoning_pipeline",
+            "force_schedule2_search": True,
+            "force_fact_merge_before_artifact": True,
+            "schedule2_candidates": [],
+            "new_fact_updates": {"application_location": "overseas", "family_location": "overseas"},
+            "reasons": ["smoke_fixture"],
+            "raw_model_output": {},
+        }, ensure_ascii=False))
 
-    def create(self, **_kwargs):
-        return FakeResult(self.output_text)
 
-
-class FakeClient:
-    def __init__(self, output_text: str) -> None:
-        self.responses = FakeResponses(output_text)
+class _FakeClient:
+    responses = _FakeResponses()
 
 
 def fact(key: str, value: object) -> SemanticFactValue:
@@ -38,88 +90,7 @@ def fact(key: str, value: object) -> SemanticFactValue:
 
 
 def main() -> None:
-    llm_json = {
-        "response_language": "zh",
-        "turn_purpose": "fact_update",
-        "contains_substantive_new_facts": True,
-        "substantive_fact_keys": [
-            "applying_location",
-            "family_location",
-            "explanation_given",
-            "refusal_officer_comment",
-        ],
-        "visa_entities_update": [
-            {
-                "subclass": "500",
-                "merge_with_existing_entity": None,
-                "label": "Student visa",
-                "add_roles": ["applied_visa", "refused_application"],
-                "add_facts": {
-                    "applying_location": "海外",
-                    "family_location": "海外",
-                    "explanation_given": "课程能帮我回国找工作",
-                    "refusal_officer_comment": "想留在澳洲",
-                },
-                "confidence": "high",
-                "reason": "The latest turn adds facts about the refused Student visa application.",
-            },
-            {
-                "subclass": "485",
-                "merge_with_existing_entity": None,
-                "label": "Temporary Graduate visa",
-                "add_roles": ["previous_visa_history"],
-                "add_facts": {},
-                "confidence": "high",
-                "reason": "485 is previous visa history, not the refused application.",
-            },
-        ],
-        "current_focus": {
-            "focus_id": "focus_test_500_refusal",
-            "user_request_summary": "User adds facts about offshore 500 refusal and GS reasoning.",
-            "primary_visa_entity_id": None,
-            "primary_subclass": "500",
-            "primary_role": "refused_application",
-            "supporting_entities": [
-                {"entity_id": None, "subclass": "485", "role_in_this_focus": "previous_visa_history", "reason": "Prior visa only."}
-            ],
-            "candidate_focuses": [],
-            "issue_family": "visa_refusal",
-            "operation": "student_refusal_next_steps",
-            "suggested_case_frame_id": "500_refusal_review",
-            "schedule2_candidate_subclasses": ["500", "485"],
-            "schedule1_relevance": "none",
-            "deferred_dependencies": [],
-            "next_best_question": "你收到拒签通知是哪一天？拒签信里是否写了 review rights / ART？",
-            "answer_strategy": "answer_first_then_ask",
-            "confidence": "high",
-            "reason": "Refused application is 500; 485 is background history.",
-        },
-        "artifact_request": {
-            "requested": False,
-            "artifact_type": "none",
-            "explicit_acceptance": False,
-            "uses_pending_offer": False,
-            "reason": "No explicit lawyer-brief request in latest message.",
-        },
-        "pending_offer_accepted": False,
-        "pending_offer_rejected_or_ignored": True,
-        "execution_path": "legal_reasoning_pipeline",
-        "force_schedule2_search": True,
-        "force_fact_merge_before_artifact": True,
-        "schedule2_candidates": [],
-        "new_fact_updates": {
-            "applying_location": "海外",
-            "family_location": "海外",
-            "explanation_given": "课程能帮我回国找工作",
-            "refusal_officer_comment": "想留在澳洲",
-        },
-        "reasons": ["fake_llm_smoke_test"],
-        "raw_model_output": {},
-    }
-
-    service = FullContextTurnResolverService()
-    service._client = FakeClient(json.dumps(llm_json, ensure_ascii=False))  # type: ignore[assignment]
-
+    service = FullContextTurnResolverService(client=_FakeClient())
     semantic = SemanticTurnAnalysis(
         response_language="zh",
         conversation_act="lawyer_summary_request",
@@ -143,7 +114,7 @@ def main() -> None:
         pending_offer={"offer_type": "lawyer_brief"},
         response_language="zh",
     )
-    print(result.model_dump_json(indent=2))
+    print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
     print("\nProjected intake facts:")
     for key, value in result.to_intake_facts().items():
         if key in {"legal_focus_frame", "visa_entity_updates"}:

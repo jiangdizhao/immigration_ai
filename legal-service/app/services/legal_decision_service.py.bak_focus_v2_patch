@@ -35,14 +35,6 @@ class LegalDecisionService:
         "requires_current_policy_check",
         "current_policy_area",
         "current_policy_source_classes_required",
-        "full_context_turn_purpose",
-        "full_context_execution_path",
-        "artifact_requested",
-        "artifact_type",
-        "legal_focus_frame",
-        "visa_entity_updates",
-        "active_focus_subclass",
-        "active_focus_role",
     }
 
     HIGH_URGENCY_OPERATIONS = {
@@ -78,7 +70,7 @@ class LegalDecisionService:
         case_frame_id = str(facts.get("active_case_frame_id") or "") or None
 
         known_facts = self._known_facts(facts)
-        missing_facts = self._missing_facts(response, retrieval_debug or {})
+        missing_facts = self._missing_facts(response)
         evidence = self._evidence_coverage(response=response, retrieval_debug=retrieval_debug or {})
         risk = self._risk_assessment(state=state, operation_type=operation_type, semantic=semantic, response=response)
         legal_position = self._legal_position(response=response, risk=risk, facts=facts, operation_type=operation_type)
@@ -125,87 +117,16 @@ class LegalDecisionService:
             out.append(KnownFact(fact_key=str(key), value=value, confidence="medium", source="conversation_history"))
         return out[:24]
 
-    def _missing_facts(self, response: QueryResponse, retrieval_debug: dict[str, Any] | None = None) -> list[MissingFact]:
-        """Collect missing facts from both response fields and answerability debug.
-
-        Answer-first policy may allow a provisional answer, but decisive missing
-        facts must survive so the final response can ask one useful question.
-        """
-        retrieval_debug = retrieval_debug or {}
-        raw_keys: list[str] = []
-
-        for key in response.missing_facts or []:
-            key_s = str(key).strip()
-            if key_s and key_s not in raw_keys:
-                raw_keys.append(key_s)
-
-        for key in self._missing_keys_from_retrieval_debug(retrieval_debug):
-            if key and key not in raw_keys:
-                raw_keys.append(key)
-
+    def _missing_facts(self, response: QueryResponse) -> list[MissingFact]:
         out: list[MissingFact] = []
-        for idx, key_s in enumerate(raw_keys[:6]):
-            out.append(
-                MissingFact(
-                    fact_key=key_s,
-                    label=key_s.replace("_", " "),
-                    blocking=key_s in {"notification_date", "refusal_notice_available", "onshore_offshore", "current_visa", "current_location"},
-                    user_question=self._question_for_missing_fact(key_s),
-                    ask_priority=idx + 1,
-                )
-            )
-
+        for idx, key in enumerate(response.missing_facts or []):
+            key_s = str(key).strip()
+            if not key_s:
+                continue
+            out.append(MissingFact(fact_key=key_s, label=key_s.replace("_", " "), blocking=False, ask_priority=idx + 1))
         if response.follow_up_questions and not out:
             out.append(MissingFact(fact_key="follow_up_detail", label="follow-up detail", user_question=response.follow_up_questions[0], ask_priority=1))
         return out[:6]
-
-    def _missing_keys_from_retrieval_debug(self, debug: dict[str, Any]) -> list[str]:
-        keys: list[str] = []
-
-        def add_many(value: Any) -> None:
-            if not isinstance(value, list):
-                return
-            for item in value:
-                key = str(item or "").strip()
-                if key and key not in keys:
-                    keys.append(key)
-
-        candidates = [
-            debug.get("answerability"),
-            debug.get("sufficiency_gate"),
-            debug.get("initial_sufficiency_gate"),
-            debug.get("final_sufficiency_gate"),
-            debug.get("policy"),
-        ]
-        for item in candidates:
-            if not isinstance(item, dict):
-                continue
-            if isinstance(item.get("answerability"), dict):
-                add_many(item["answerability"].get("required_facts_missing"))
-            add_many(item.get("required_facts_missing"))
-            if isinstance(item.get("coverage_summary"), dict):
-                add_many(item["coverage_summary"].get("required_facts_missing"))
-
-        # Some debug payloads keep the answerability object under coverage_summary.
-        coverage = debug.get("coverage_summary")
-        if isinstance(coverage, dict):
-            add_many(coverage.get("required_facts_missing"))
-
-        return keys
-
-    def _question_for_missing_fact(self, fact_key: str) -> str | None:
-        mapping = {
-            "notification_date": "你是哪一天收到拒签通知的？",
-            "decision_date": "拒签/决定通知上的日期是哪一天？",
-            "refusal_notice_available": "你手上有拒签决定书全文吗？",
-            "onshore_offshore": "你收到决定时人在澳洲境内还是境外？",
-            "current_visa": "VEVO 现在显示你持有什么签证或过桥签证？",
-            "current_location": "你现在人在澳洲境内还是境外？",
-            "visa_condition_number": "你的签证上显示的条件编号是什么？",
-            "course_type": "你申请的课程名称和 level 是什么？",
-            "study_purpose": "你当时是怎样解释选择这个课程和未来计划的？",
-        }
-        return mapping.get(fact_key)
 
     def _evidence_coverage(self, *, response: QueryResponse, retrieval_debug: dict[str, Any]) -> EvidenceCoverage:
         counts = retrieval_debug.get("source_class_counts") or {}
@@ -322,10 +243,9 @@ class LegalDecisionService:
             ]
 
         pending = None
-        # High-risk/lawyer-handoff answers may recommend consultation, but should not
-        # create an executable lawyer-brief pending offer. Artifacts are generated
-        # only when explicitly requested by the latest user turn.
-        if operation_type == "document_checklist":
+        if risk.should_escalate_to_lawyer:
+            pending = {"offer_type": "lawyer_brief", "label_en": "prepare a lawyer consultation summary", "label_zh": "整理一份给律师看的案情摘要"}
+        elif operation_type == "document_checklist":
             pending = {"offer_type": "document_checklist", "label_en": "prepare a document checklist", "label_zh": "整理材料清单"}
         elif operation_type in self.STATUS_OPERATIONS:
             pending = {"offer_type": "status_action_plan", "label_en": "prepare a next-step action plan", "label_zh": "整理下一步行动清单"}
@@ -334,7 +254,7 @@ class LegalDecisionService:
             next_best_action=next_action,  # type: ignore[arg-type]
             today_actions=today_actions,
             document_preparation=documents,
-            one_next_question=(response.follow_up_questions or [None])[0] or self._question_for_missing_fact((response.missing_facts or [None])[0] or ""),
+            one_next_question=(response.follow_up_questions or [None])[0],
             one_next_fact_key=(response.missing_facts or [None])[0],
             pending_offer_to_create=pending,
         )

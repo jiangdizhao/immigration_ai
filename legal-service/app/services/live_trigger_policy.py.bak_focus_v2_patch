@@ -222,42 +222,20 @@ class LiveTriggerPolicy:
         return any(key in known_facts for key in decisive_fact_keys)
 
     def _is_critical_technology_context(self, *, q: str, op: str | None, known_facts: dict[str, Any]) -> bool:
-        """Return true only for explicit critical-technology / 8208 / PIC 4003B contexts.
-
-        Broad Student 500 or Genuine Student questions must not trigger critical
-        technology live retrieval. In particular, short substrings like "ai" must
-        be matched as a standalone term, not inside unrelated words.
-        """
-        if op == "student_500_critical_technology_policy_check":
-            return True
-        if known_facts.get("critical_technology_context") is True:
-            return True
-        if known_facts.get("condition_8208_applies") is True:
-            return True
-
-        explicit_phrases = [
-            "critical technology",
-            "critical technologies",
-            "condition 8208",
-            "pic 4003b",
-            "artificial intelligence",
-            "cybersecurity",
-            "cyber security",
-            "quantum",
-            "advanced computing",
-            "关键技术",
-            "人工智能",
-            "网络安全",
-            "量子",
-        ]
-        if any(term in q for term in explicit_phrases):
-            return True
-        if re.search(r"ai", q):
-            return True
-
-        # Research/PhD alone is not enough. It only becomes a critical-tech signal
-        # when paired with a technology-sensitive term above, or explicit 8208/PIC.
-        return False
+        return bool(
+            op == "student_500_critical_technology_policy_check"
+            or known_facts.get("critical_technology_context")
+            or known_facts.get("condition_8208_applies")
+            or any(
+                term in q
+                for term in [
+                    "critical technology", "critical technologies", "condition 8208", "pic 4003b",
+                    "ai", "artificial intelligence", "cybersecurity", "cyber security", "quantum",
+                    "advanced computing", "phd", "doctoral research", "postgraduate research",
+                    "关键技术", "人工智能", "网络安全", "量子", "博士", "研究型",
+                ]
+            )
+        )
 
     def _has_current_exact_485_support(self, *, rows: list[dict[str, Any]], source_classes_present: set[str]) -> bool:
         exact_classes = {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Any, Literal
 
 from pydantic import Field
@@ -37,48 +36,13 @@ ExecutionPath = Literal[
     "triage_only",
 ]
 
-_SUBCLASS_RE = re.compile(r"^[0-9A-Z]{3,4}$")
-_INVALID_SUBCLASS_VALUES = {
-    "",
-    "visa_general",
-    "general",
-    "unknown",
-    "student",
-    "student_visa",
-    "temporary_graduate",
-    "temporary_graduate_visa",
-    "bridging",
-    "bridging_visa",
-    "partner",
-    "partner_visa",
-    "visitor",
-    "visitor_visa",
-}
-
-
-def normalize_subclass(value: Any) -> str | None:
-    """Return a real visa subclass code, or None.
-
-    Full-context focus values are allowed to be uncertain. What must not happen
-    is projecting generic labels such as ``visa_general`` into legacy routing
-    fields like ``visa_subclass``.
-    """
-
-    if value in (None, ""):
-        return None
-    text = str(value).strip().upper().replace("SUBCLASS", "").strip()
-    lowered = text.lower()
-    if lowered in _INVALID_SUBCLASS_VALUES:
-        return None
-    match = re.search(r"\b([0-9A-Z]{3,4})\b", text)
-    if match:
-        code = match.group(1).upper()
-        return code if _SUBCLASS_RE.match(code) else None
-    return text if _SUBCLASS_RE.match(text) else None
-
 
 class ArtifactRequest(BaseSchema):
-    """Whether the latest user turn explicitly asks for a generated artifact."""
+    """Whether the latest user turn explicitly asks for a generated artifact.
+
+    A pending offer is only a CTA. It must not become an executable artifact
+    unless the latest user turn explicitly accepts or requests the artifact.
+    """
 
     requested: bool = False
     artifact_type: ArtifactType = "none"
@@ -155,9 +119,8 @@ class LegalFocusFrame(BaseSchema):
 class FullContextTurnResolution(BaseSchema):
     """Single full-context turn resolver output.
 
-    The LLM produces this object. Backend code uses it as a controlled contract:
-    visa entities are persistent, focus is turn-specific, and artifacts require
-    explicit user request.
+    The LLM may propose this object, but backend code uses it as a controlled
+    contract. It keeps visa entities persistent and makes focus turn-specific.
     """
 
     response_language: Literal["en", "zh"] = "en"
@@ -189,15 +152,13 @@ class FullContextTurnResolution(BaseSchema):
         )
 
     def to_intake_facts(self) -> dict[str, Any]:
-        """Project focus/entity information into legacy Matter facts.
+        """Project focus/entity information into current Matter facts.
 
-        Only real visa subclass codes are projected into legacy fields such as
-        ``visa_subclass``. Generic labels such as ``visa_general`` are retained
-        inside ``legal_focus_frame`` but are not allowed to poison routing facts.
+        This helps older services align with the new focus model without
+        requiring a full backend rewrite.
         """
 
         focus = self.current_focus
-        primary_subclass = normalize_subclass(focus.primary_subclass)
         out: dict[str, Any] = {
             "full_context_turn_purpose": self.turn_purpose,
             "full_context_execution_path": self.execution_path,
@@ -208,15 +169,18 @@ class FullContextTurnResolution(BaseSchema):
         }
         out.update(self.new_fact_updates or {})
 
-        if primary_subclass:
-            out["active_focus_subclass"] = primary_subclass
-            out["target_visa_subclass"] = primary_subclass
-            out["visa_subclass"] = primary_subclass
+        if focus.primary_subclass:
+            out["active_focus_subclass"] = focus.primary_subclass
+            out["target_visa_subclass"] = focus.primary_subclass
+            # Existing services still use visa_subclass as a routing hint. Keep
+            # the role-specific facts too so previous/current/refused visas are
+            # not collapsed into one field.
+            out["visa_subclass"] = focus.primary_subclass
         if focus.primary_role:
             out["active_focus_role"] = focus.primary_role
-            if focus.primary_role in {"refused_application", "refused_visa", "post_decision_refusal"} and primary_subclass:
-                out["refused_visa_subclass"] = primary_subclass
-                out["applied_visa_subclass"] = primary_subclass
+            if focus.primary_role in {"refused_application", "refused_visa", "post_decision_refusal"} and focus.primary_subclass:
+                out["refused_visa_subclass"] = focus.primary_subclass
+                out["applied_visa_subclass"] = focus.primary_subclass
                 out["has_refusal"] = True
         if focus.operation:
             out["operation_type"] = focus.operation
@@ -229,11 +193,10 @@ class FullContextTurnResolution(BaseSchema):
         current_subclasses: list[str] = []
         for ent in focus.supporting_entities:
             role = ent.role_in_this_focus.lower()
-            sub = normalize_subclass(ent.subclass)
-            if sub and "previous" in role:
-                previous_subclasses.append(sub)
-            if sub and "current" in role:
-                current_subclasses.append(sub)
+            if ent.subclass and "previous" in role:
+                previous_subclasses.append(ent.subclass)
+            if ent.subclass and "current" in role:
+                current_subclasses.append(ent.subclass)
         if previous_subclasses:
             out["previous_visa_subclasses"] = previous_subclasses
             if len(previous_subclasses) == 1:
