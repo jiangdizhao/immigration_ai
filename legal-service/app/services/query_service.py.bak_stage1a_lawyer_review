@@ -47,7 +47,6 @@ from app.services.provisional_recommendation_service import ProvisionalRecommend
 from app.services.public_answer_guard import PublicAnswerGuard
 from app.services.reasoning_service import ReasoningService
 from app.services.retrieval_service import RetrievalService
-from app.services.review_trace_service import ReviewTraceService
 from app.services.schedule_aware_reasoning_service import ScheduleAwareReasoningService
 from app.services.semantic_turn_service import SemanticTurnService
 from app.services.state_machine import StateMachine, TurnInput
@@ -197,7 +196,6 @@ class QueryService:
         legal_decision_service: LegalDecisionService | None = None,
         communication_plan_service: CommunicationPlanService | None = None,
         continuation_contract_service: ContinuationContractService | None = None,
-        review_trace_service: ReviewTraceService | None = None,
         natural_response_service: NaturalResponseService | None = None,
         full_context_turn_resolver_service: FullContextTurnResolverService | None = None,
         fast_triage_response_service: FastTriageResponseService | None = None,
@@ -226,7 +224,6 @@ class QueryService:
         self.legal_decision_service = legal_decision_service or LegalDecisionService()
         self.communication_plan_service = communication_plan_service or CommunicationPlanService()
         self.continuation_contract_service = continuation_contract_service or ContinuationContractService()
-        self.review_trace_service = review_trace_service or ReviewTraceService()
         self.natural_response_service = natural_response_service or NaturalResponseService()
         self.full_context_turn_resolver_service = full_context_turn_resolver_service or FullContextTurnResolverService()
         self.fast_triage_response_service = fast_triage_response_service or FastTriageResponseService()
@@ -384,17 +381,6 @@ class QueryService:
         )
         db.commit()
         db.refresh(matter)
-        self._record_review_trace(
-            matter=matter,
-            payload=payload,
-            response=response,
-            state=fast_state,
-            semantic_turn=semantic_turn,
-            timing=timing,
-            original_question=original_question,
-            effective_question=payload.question,
-            extra_debug={"trace_path": "llm_triage_fast_path"},
-        )
         return response
 
     def handle_query(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -486,17 +472,6 @@ class QueryService:
             )
             db.commit()
             db.refresh(matter)
-            self._record_review_trace(
-                matter=matter,
-                payload=payload,
-                response=continuation_response,
-                state=continuation_state,
-                semantic_turn=semantic_turn,
-                timing=timing,
-                original_question=original_question,
-                effective_question=payload.question,
-                extra_debug={"trace_path": "continuation_contract"},
-            )
             return continuation_response
 
         if self._should_use_llm_triage_fast_path(
@@ -817,56 +792,7 @@ class QueryService:
 
         db.commit()
         db.refresh(matter)
-        self._record_review_trace(
-            matter=matter,
-            payload=payload,
-            response=response,
-            state=state,
-            semantic_turn=semantic_turn,
-            timing=timing,
-            original_question=original_question,
-            effective_question=effective_question,
-            legal_decision=legal_decision,
-            communication_plan=communication_plan,
-            extra_debug={"trace_path": "full_reasoning"},
-        )
         return response
-
-
-
-    def _record_review_trace(
-        self,
-        *,
-        matter: Matter,
-        payload: QueryRequest,
-        response: QueryResponse,
-        state: MatterState | None,
-        semantic_turn: Any | None,
-        timing: _QueryStageTimer | None,
-        original_question: str | None,
-        effective_question: str | None,
-        legal_decision: Any | None = None,
-        communication_plan: Any | None = None,
-        extra_debug: dict[str, Any] | None = None,
-    ) -> None:
-        """Passive lawyer-review trace hook.
-
-        This method must not mutate the response or influence control flow.
-        ReviewTraceService opens its own database session and catches failures.
-        """
-        self.review_trace_service.safe_record_answer_trace(
-            matter=matter,
-            payload=payload,
-            response=response,
-            state=state,
-            semantic_turn=semantic_turn,
-            original_question=original_question,
-            effective_question=effective_question,
-            stage_timing=timing.to_debug_dict() if timing is not None else None,
-            legal_decision=legal_decision,
-            communication_plan=communication_plan,
-            extra_debug=extra_debug,
-        )
 
     # ------------------------------------------------------------------
     # Semantic turn and task helpers
@@ -985,17 +911,6 @@ class QueryService:
         )
         db.commit()
         db.refresh(matter)
-        self._record_review_trace(
-            matter=matter,
-            payload=payload,
-            response=response,
-            state=task_state,
-            semantic_turn=task_action.semantic_turn,
-            timing=None,
-            original_question=original_question,
-            effective_question=payload.question,
-            extra_debug={"trace_path": "task_fulfillment"},
-        )
         return response
 
     def _facts_from_semantic_turn(self, semantic_turn: SemanticTurnAnalysis) -> dict[str, Any]:
