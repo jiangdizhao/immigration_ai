@@ -30,11 +30,7 @@ From the backend folder:
 
 ```bash
 cd legal-service
-<<<<<<< HEAD
 python -m uvicorn app.main:app --reload --port 8000
-=======
-
->>>>>>> 0f56388 (readme)
 ```
 
 Alternative restart command:
