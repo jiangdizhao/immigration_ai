@@ -9,15 +9,22 @@ export function KnownFactsSummary({ facts }: Props) {
     ([, value]) => value !== null && value !== undefined && value !== ""
   );
 
-  if (!entries.length) return null;
+  if (!entries.length) {
+    return null;
+  }
 
   return (
     <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
       <div className="mb-2 text-sm font-medium">Known facts so far</div>
       <div className="space-y-1">
         {entries.map(([key, value]) => (
-          <div key={key} className="flex items-start justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">{key.replaceAll("_", " ")}</span>
+          <div
+            className="flex items-start justify-between gap-3 text-sm"
+            key={key}
+          >
+            <span className="text-muted-foreground">
+              {key.replaceAll("_", " ")}
+            </span>
             <span className="text-right font-medium">{String(value)}</span>
           </div>
         ))}

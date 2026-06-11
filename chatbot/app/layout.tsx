@@ -9,7 +9,8 @@ import { SessionProvider } from "next-auth/react";
 export const metadata: Metadata = {
   metadataBase: new URL("https://example.com"),
   title: "Immigration Consult Service Center",
-  description: "Business-style immigration consultation website with an embedded AI intake assistant.",
+  description:
+    "Business-style immigration consultation website with an embedded AI intake assistant.",
 };
 
 export const viewport = {

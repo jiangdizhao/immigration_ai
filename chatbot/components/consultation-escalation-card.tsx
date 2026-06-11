@@ -28,7 +28,7 @@ export function ConsultationEscalationCard({
           </ul>
         ) : null}
 
-        <Button size="sm" onClick={onBookConsultation}>
+        <Button onClick={onBookConsultation} size="sm">
           Book a consultation
         </Button>
       </AlertDescription>

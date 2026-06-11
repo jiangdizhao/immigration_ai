@@ -1,11 +1,11 @@
 "use client";
 
+import { Menu, Scale, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Scale, X } from "lucide-react";
 import { useState } from "react";
-import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
 
 const navItems = [
   { label: "AI Workspace", href: "/ai-workspace" },
@@ -15,7 +15,9 @@ const navItems = [
 ];
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/") {
+    return pathname === "/";
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -26,13 +28,21 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#001736]/95 text-white shadow-[0_10px_40px_-22px_rgba(0,0,0,0.75)] backdrop-blur-2xl">
       <div className="mx-auto flex min-h-[72px] w-full max-w-7xl items-center justify-between px-5 lg:px-8">
-        <Link className="group flex items-center gap-3" href="/" onClick={() => setMobileOpen(false)}>
+        <Link
+          className="group flex items-center gap-3"
+          href="/"
+          onClick={() => setMobileOpen(false)}
+        >
           <div className="rounded-2xl border border-white/15 bg-white/10 p-2 shadow-sm transition group-hover:bg-white/15">
             <Scale className="size-5" />
           </div>
           <div>
-            <p className="font-semibold leading-tight tracking-tight">Sovereign Nexus Legal</p>
-            <p className="text-xs leading-tight text-slate-300">AI-assisted migration intake</p>
+            <p className="font-semibold leading-tight tracking-tight">
+              Sovereign Nexus Legal
+            </p>
+            <p className="text-xs leading-tight text-slate-300">
+              AI-assisted migration intake
+            </p>
           </div>
         </Link>
 
@@ -57,7 +67,10 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Button asChild className="rounded-full bg-white px-5 text-[#001736] hover:bg-slate-100">
+          <Button
+            asChild
+            className="rounded-full bg-white px-5 text-[#001736] hover:bg-slate-100"
+          >
             <Link href="/ai-workspace">Talk to AI</Link>
           </Button>
         </div>
@@ -81,7 +94,9 @@ export function SiteHeader() {
                 <Link
                   className={cn(
                     "rounded-2xl px-4 py-3 text-sm transition",
-                    active ? "bg-white/15 text-white" : "text-slate-200 hover:bg-white/10"
+                    active
+                      ? "bg-white/15 text-white"
+                      : "text-slate-200 hover:bg-white/10"
                   )}
                   href={item.href}
                   key={item.href}
@@ -91,7 +106,10 @@ export function SiteHeader() {
                 </Link>
               );
             })}
-            <Button asChild className="mt-2 rounded-full bg-white text-[#001736] hover:bg-slate-100">
+            <Button
+              asChild
+              className="mt-2 rounded-full bg-white text-[#001736] hover:bg-slate-100"
+            >
               <Link href="/ai-workspace" onClick={() => setMobileOpen(false)}>
                 Talk to AI
               </Link>

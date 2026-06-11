@@ -1,8 +1,7 @@
 import { ipAddress } from "@vercel/functions";
-import { auth } from "@/app/(auth)/auth";
 import { z } from "zod";
+import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
-import { ChatbotError } from "@/lib/errors";
 import {
   getImmigrationConversationByChatId,
   getOrCreateLocalImmigrationUserId,
@@ -10,6 +9,7 @@ import {
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
+import { ChatbotError } from "@/lib/errors";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 60;
@@ -633,7 +633,9 @@ export async function POST(request: Request) {
 
     if (frontendChatId) {
       try {
-        const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+        const latestUserMessage = [...messages]
+          .reverse()
+          .find((message) => message.role === "user");
         const userMessageId = latestUserMessage?.id ?? crypto.randomUUID();
         await saveMessages({
           messages: [
@@ -667,7 +669,10 @@ export async function POST(request: Request) {
           title: question.slice(0, 80) || "Immigration conversation",
         });
       } else {
-        await touchImmigrationConversation({ chatId: frontendChatId, userId: frontendUserId });
+        await touchImmigrationConversation({
+          chatId: frontendChatId,
+          userId: frontendUserId,
+        });
       }
     }
 

@@ -1,14 +1,18 @@
-import Link from "next/link";
 import { Mail, MapPin, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 export function SiteFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 lg:grid-cols-[1.2fr_0.8fr_0.8fr] lg:px-8">
         <div>
-          <p className="text-lg font-semibold text-slate-950">Sovereign Nexus Legal</p>
+          <p className="text-lg font-semibold text-slate-950">
+            Sovereign Nexus Legal
+          </p>
           <p className="mt-3 max-w-xl text-sm leading-7 text-slate-600">
-            A commercial demo interface for an immigration-law AI first-contact workflow. The assistant supports intake and general information; case-specific legal advice should be handled by a qualified lawyer.
+            A commercial demo interface for an immigration-law AI first-contact
+            workflow. The assistant supports intake and general information;
+            case-specific legal advice should be handled by a qualified lawyer.
           </p>
           <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
             <ShieldCheck className="size-4 text-[#002b5b]" />
@@ -19,10 +23,18 @@ export function SiteFooter() {
         <div>
           <p className="font-semibold text-slate-950">Pages</p>
           <div className="mt-4 grid gap-2 text-sm text-slate-600">
-            <Link className="hover:text-[#002b5b]" href="/ai-workspace">AI Workspace</Link>
-            <Link className="hover:text-[#002b5b]" href="/services">Services</Link>
-            <Link className="hover:text-[#002b5b]" href="/process">Process</Link>
-            <Link className="hover:text-[#002b5b]" href="/contact">Contact</Link>
+            <Link className="hover:text-[#002b5b]" href="/ai-workspace">
+              AI Workspace
+            </Link>
+            <Link className="hover:text-[#002b5b]" href="/services">
+              Services
+            </Link>
+            <Link className="hover:text-[#002b5b]" href="/process">
+              Process
+            </Link>
+            <Link className="hover:text-[#002b5b]" href="/contact">
+              Contact
+            </Link>
           </div>
         </div>
 

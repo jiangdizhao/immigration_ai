@@ -1,5 +1,9 @@
 export type ResponseLanguage = "en" | "zh" | string;
-export type AnswerPreference = "auto" | "answer_first" | "continue_intake" | "final_recommendation";
+export type AnswerPreference =
+  | "auto"
+  | "answer_first"
+  | "continue_intake"
+  | "final_recommendation";
 export type ConfidenceLevel = "low" | "medium" | "high";
 
 export type InputType =

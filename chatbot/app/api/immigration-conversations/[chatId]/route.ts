@@ -46,7 +46,10 @@ function extractTextFromParts(parts: unknown): string {
 export async function GET(_request: Request, context: RouteContext) {
   const userId = await currentConversationUserId();
   const chatId = await getChatId(context);
-  const conversation = await getImmigrationConversationByChatId({ chatId, userId });
+  const conversation = await getImmigrationConversationByChatId({
+    chatId,
+    userId,
+  });
 
   if (!conversation) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
@@ -57,7 +60,10 @@ export async function GET(_request: Request, context: RouteContext) {
   return Response.json({
     chatId: conversation.chatId,
     legalMatterId: conversation.legalMatterId ?? null,
-    title: conversation.title ?? conversation.chatTitle ?? "Immigration conversation",
+    title:
+      conversation.title ??
+      conversation.chatTitle ??
+      "Immigration conversation",
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     messages: messages.map((message) => ({

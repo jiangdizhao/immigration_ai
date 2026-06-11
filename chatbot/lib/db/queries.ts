@@ -22,8 +22,8 @@ import {
   type Chat,
   chat,
   type DBMessage,
-  immigrationConversation,
   document,
+  immigrationConversation,
   message,
   type Suggestion,
   stream,
@@ -189,7 +189,10 @@ export async function updateImmigrationConversation({
   legalMatterId?: string | null;
   title?: string | null;
 }) {
-  const conversation = await getImmigrationConversationByChatId({ chatId, userId });
+  const conversation = await getImmigrationConversationByChatId({
+    chatId,
+    userId,
+  });
   if (!conversation) {
     return null;
   }
@@ -205,7 +208,10 @@ export async function updateImmigrationConversation({
   }
   if (title !== undefined) {
     updates.title = title;
-    await updateChatTitleById({ chatId, title: title || "Immigration conversation" });
+    await updateChatTitleById({
+      chatId,
+      title: title || "Immigration conversation",
+    });
   }
 
   const [updated] = await db
@@ -224,7 +230,10 @@ export async function touchImmigrationConversation({
   chatId: string;
   userId: string;
 }) {
-  const conversation = await getImmigrationConversationByChatId({ chatId, userId });
+  const conversation = await getImmigrationConversationByChatId({
+    chatId,
+    userId,
+  });
   if (!conversation) {
     return null;
   }

@@ -363,10 +363,10 @@ function WorkspaceProcessingCard({
 
 export function ImmigrationAIWorkspace() {
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<
+  const [_conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
   >([]);
-  const [conversationLoading, setConversationLoading] = useState(false);
+  const [_conversationLoading, setConversationLoading] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
   const [matterId, setMatterId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
@@ -442,9 +442,12 @@ export function ImmigrationAIWorkspace() {
   }, [status, submittedAt, scrollToBottom]);
 
   const refreshConversationList = useCallback(async () => {
-    const response = await fetchWithErrorHandlers("/api/immigration-conversations", {
-      method: "GET",
-    });
+    const response = await fetchWithErrorHandlers(
+      "/api/immigration-conversations",
+      {
+        method: "GET",
+      }
+    );
     const data = (await response.json()) as {
       conversations?: ImmigrationConversationSummary[];
     };
@@ -479,11 +482,14 @@ export function ImmigrationAIWorkspace() {
   const createConversation = useCallback(async () => {
     setConversationLoading(true);
     try {
-      const response = await fetchWithErrorHandlers("/api/immigration-conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New immigration conversation" }),
-      });
+      const response = await fetchWithErrorHandlers(
+        "/api/immigration-conversations",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "New immigration conversation" }),
+        }
+      );
       const data = (await response.json()) as ImmigrationConversationSummary;
       setConversationId(data.chatId);
       setWorkspaceChatParam(data.chatId);
@@ -538,7 +544,9 @@ export function ImmigrationAIWorkspace() {
   const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
       setMatterId(data.matterId);
-      void refreshConversationList();
+      refreshConversationList().catch((refreshError) => {
+        console.error("Failed to refresh conversation list", refreshError);
+      });
     }
 
     const knownFactsFromBackend =
@@ -1121,7 +1129,9 @@ export function ImmigrationAIWorkspace() {
                 </p>
                 <Button
                   className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
-                  disabled={!input.trim() || status !== "ready" || !conversationReady}
+                  disabled={
+                    !input.trim() || status !== "ready" || !conversationReady
+                  }
                   onClick={() => submitMessage(input)}
                   type="button"
                 >

@@ -4,8 +4,8 @@ import { z } from "zod";
 import { allowedModelIds } from "@/lib/ai/models";
 import {
   getRequestPromptFromHints,
-  regularPrompt,
   type RequestHints,
+  regularPrompt,
 } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { ChatbotError } from "@/lib/errors";
@@ -67,7 +67,9 @@ Give general information only, not case-specific legal advice.
 Keep answers practical, clear, and suitable for first-contact website visitors.
 When appropriate, suggest booking a consultation with a real immigration lawyer.`;
 
-    const modelMessages = await convertToModelMessages(messages as ChatMessage[]);
+    const modelMessages = await convertToModelMessages(
+      messages as ChatMessage[]
+    );
 
     const result = await generateText({
       model: getLanguageModel(selectedChatModel),

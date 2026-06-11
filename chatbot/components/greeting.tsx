@@ -22,8 +22,8 @@ export const Greeting = () => {
         initial={{ opacity: 0, y: 10 }}
         transition={{ delay: 0.6 }}
       >
-        Ask about visa pathways, consultation preparation, supporting
-        documents, or next-step planning.
+        Ask about visa pathways, consultation preparation, supporting documents,
+        or next-step planning.
       </motion.div>
     </div>
   );

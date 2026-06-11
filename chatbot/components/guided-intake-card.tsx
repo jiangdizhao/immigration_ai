@@ -1,16 +1,16 @@
 "use client";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { FactInputField } from "./fact-input-field";
-import { KnownFactsSummary } from "./known-facts-summary";
 import { ConsultationEscalationCard } from "./consultation-escalation-card";
+import { FactInputField } from "./fact-input-field";
 import type {
-  InteractionPlan,
   FactSlotState,
   IntakeFacts,
+  InteractionPlan,
 } from "./guided-intake-types";
+import { KnownFactsSummary } from "./known-facts-summary";
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 
@@ -33,7 +33,9 @@ function slotKey(slot: FactSlotState) {
   return slot.key ?? slot.fact_key ?? "";
 }
 
-function requestKey(fact: NonNullable<InteractionPlan["requested_facts"]>[number]) {
+function requestKey(
+  fact: NonNullable<InteractionPlan["requested_facts"]>[number]
+) {
   return fact.key ?? fact.fact_key ?? "";
 }
 
@@ -47,16 +49,21 @@ export function GuidedIntakeCard({
   isSubmitting,
   responseLanguage,
 }: Props) {
-  if (!interactionPlan) return null;
+  if (!interactionPlan) {
+    return null;
+  }
 
   const zh = isZhLanguage(responseLanguage);
   const mode = interactionPlan.mode ?? "guided_intake";
   const allRequestedFacts = interactionPlan.requested_facts ?? [];
-  const requestedFacts = SHOW_WIDGET_DEBUG ? allRequestedFacts : allRequestedFacts.slice(0, 1);
+  const requestedFacts = SHOW_WIDGET_DEBUG
+    ? allRequestedFacts
+    : allRequestedFacts.slice(0, 1);
   const ratio =
     interactionPlan.progress?.ratio ??
     (interactionPlan.progress?.total
-      ? (interactionPlan.progress?.completed ?? 0) / interactionPlan.progress.total
+      ? (interactionPlan.progress?.completed ?? 0) /
+        interactionPlan.progress.total
       : 0);
 
   const slotMap = new Map(
@@ -64,27 +71,35 @@ export function GuidedIntakeCard({
   );
 
   const effectiveValue = (factKey: string) => {
-    if (Object.prototype.hasOwnProperty.call(draftFacts, factKey)) {
+    if (Object.hasOwn(draftFacts, factKey)) {
       return draftFacts[factKey];
     }
     const slot = slotMap.get(factKey);
-    if (!slot) return undefined;
-    if (slot.value !== undefined) return slot.value;
+    if (!slot) {
+      return undefined;
+    }
+    if (slot.value !== undefined) {
+      return slot.value;
+    }
     return undefined;
   };
 
   if (mode === "escalation") {
     return (
       <ConsultationEscalationCard
-        warnings={interactionPlan.warnings}
         onBookConsultation={onBookConsultation}
+        warnings={interactionPlan.warnings}
       />
     );
   }
 
   // In customer mode, do not display analysis_ready as a fake assistant answer.
   // The real answer should come from the assistant text or a real task action.
-  if (!requestedFacts.length && mode === "analysis_ready" && !SHOW_WIDGET_DEBUG) {
+  if (
+    !requestedFacts.length &&
+    mode === "analysis_ready" &&
+    !SHOW_WIDGET_DEBUG
+  ) {
     return null;
   }
 
@@ -97,17 +112,21 @@ export function GuidedIntakeCard({
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-slate-900">
           {requestedFacts.length
-            ? zh ? "一个简单问题" : "One quick question"
-            : zh ? "可以继续下一步" : "Ready for the next step"}
+            ? zh
+              ? "一个简单问题"
+              : "One quick question"
+            : zh
+              ? "可以继续下一步"
+              : "Ready for the next step"}
         </h3>
         <p className="text-sm leading-6 text-slate-600">
           {requestedFacts.length
-            ? (zh
-                ? "这可以帮助我根据你的情况给出更具体的说明。你也可以选择“不确定”后继续。"
-                : "This helps make the guidance more specific to your situation. You can also choose “Not sure” and continue.")
-            : (zh
-                ? "我已经有足够的基础信息，可以继续进行一般性分析。"
-                : "I have enough basic information to continue the general analysis.")}
+            ? zh
+              ? "这可以帮助我根据你的情况给出更具体的说明。你也可以选择“不确定”后继续。"
+              : "This helps make the guidance more specific to your situation. You can also choose “Not sure” and continue."
+            : zh
+              ? "我已经有足够的基础信息，可以继续进行一般性分析。"
+              : "I have enough basic information to continue the general analysis."}
         </p>
       </div>
 
@@ -119,7 +138,8 @@ export function GuidedIntakeCard({
             </h4>
             {interactionPlan.progress?.total ? (
               <span className="text-xs text-muted-foreground">
-                {interactionPlan.progress?.completed ?? 0}/{interactionPlan.progress.total}
+                {interactionPlan.progress?.completed ?? 0}/
+                {interactionPlan.progress.total}
               </span>
             ) : null}
           </div>
@@ -152,29 +172,39 @@ export function GuidedIntakeCard({
             const key = requestKey(fact);
             return (
               <FactInputField
-                key={key}
                 fact={{ ...fact, key }}
-                value={effectiveValue(key)}
+                key={key}
                 onChange={onDraftChange}
-                showMeta={SHOW_WIDGET_DEBUG}
                 responseLanguage={responseLanguage}
+                showMeta={SHOW_WIDGET_DEBUG}
+                value={effectiveValue(key)}
               />
             );
           })}
 
           <div className="flex items-center justify-end gap-2">
-            <Button onClick={onSubmitDraftFacts} disabled={isSubmitting}>
-              {isSubmitting ? (zh ? "正在提交..." : "Submitting...") : (zh ? "继续" : "Continue")}
+            <Button disabled={isSubmitting} onClick={onSubmitDraftFacts}>
+              {isSubmitting
+                ? zh
+                  ? "正在提交..."
+                  : "Submitting..."
+                : zh
+                  ? "继续"
+                  : "Continue"}
             </Button>
           </div>
         </div>
       ) : null}
 
-      {SHOW_WIDGET_DEBUG && !requestedFacts.length && mode === "analysis_ready" ? (
+      {SHOW_WIDGET_DEBUG &&
+      !requestedFacts.length &&
+      mode === "analysis_ready" ? (
         <Alert>
           <AlertTitle>{zh ? "可以继续分析" : "Ready for analysis"}</AlertTitle>
           <AlertDescription className="text-sm">
-            {zh ? "后端已经有足够信息，可以继续进行法律分析。" : "The backend has enough information to continue the legal analysis."}
+            {zh
+              ? "后端已经有足够信息，可以继续进行法律分析。"
+              : "The backend has enough information to continue the legal analysis."}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -189,8 +219,8 @@ export function GuidedIntakeCard({
               const key = slotKey(slot);
               return (
                 <div
-                  key={key}
                   className="rounded-lg border border-border/40 px-3 py-2"
+                  key={key}
                 >
                   <div className="font-medium">{slot.label ?? key}</div>
                   <div className="text-muted-foreground">

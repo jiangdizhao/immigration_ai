@@ -12,13 +12,19 @@ async function currentConversationUserId() {
 
 export async function GET() {
   const userId = await currentConversationUserId();
-  const conversations = await listImmigrationConversations({ userId, limit: 80 });
+  const conversations = await listImmigrationConversations({
+    userId,
+    limit: 80,
+  });
 
   return Response.json({
     conversations: conversations.map((conversation) => ({
       chatId: conversation.chatId,
       legalMatterId: conversation.legalMatterId ?? null,
-      title: conversation.title ?? conversation.chatTitle ?? "Immigration conversation",
+      title:
+        conversation.title ??
+        conversation.chatTitle ??
+        "Immigration conversation",
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
     })),

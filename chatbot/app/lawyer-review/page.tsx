@@ -22,9 +22,9 @@ type ConversationQueueItem = {
 type MatterReview = {
   matter_id: string;
   matter: Record<string, unknown>;
-  conversation_history: Array<Record<string, unknown>>;
-  traces: Array<Record<string, unknown>>;
-  reviews: Array<Record<string, unknown>>;
+  conversation_history: Record<string, unknown>[];
+  traces: Record<string, unknown>[];
+  reviews: Record<string, unknown>[];
 };
 
 const ERROR_CATEGORIES = [
@@ -43,7 +43,8 @@ const ERROR_CATEGORIES = [
 ];
 
 function preview(value: unknown, maxLength = 180) {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? "", null, 2);
+  const text =
+    typeof value === "string" ? value : JSON.stringify(value ?? "", null, 2);
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
@@ -72,7 +73,10 @@ export default function LawyerReviewPage() {
   }, []);
 
   const selectedTrace = useMemo(() => {
-    return (matter?.traces ?? []).find((trace) => trace.id === selectedTraceId) ?? null;
+    return (
+      (matter?.traces ?? []).find((trace) => trace.id === selectedTraceId) ??
+      null
+    );
   }, [matter, selectedTraceId]);
 
   async function api(path: string, init: RequestInit = {}) {
@@ -96,10 +100,14 @@ export default function LawyerReviewPage() {
     setMessage(null);
     try {
       window.localStorage.setItem("lawyerReviewToken", token);
-      const data = await api(`?conversations=true&status=${encodeURIComponent(status)}&limit=80`);
+      const data = await api(
+        `?conversations=true&status=${encodeURIComponent(status)}&limit=80`
+      );
       setQueue(Array.isArray(data) ? data : []);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to load queue");
+      setMessage(
+        error instanceof Error ? error.message : "Failed to load queue"
+      );
     } finally {
       setLoading(false);
     }
@@ -115,7 +123,9 @@ export default function LawyerReviewPage() {
       const firstTrace = (data?.traces ?? [])[0];
       setSelectedTraceId(firstTrace?.id ?? null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to load matter");
+      setMessage(
+        error instanceof Error ? error.message : "Failed to load matter"
+      );
     } finally {
       setLoading(false);
     }
@@ -141,9 +151,11 @@ export default function LawyerReviewPage() {
           lawyer_comment: comment || null,
           corrected_answer: correctedAnswer || null,
           lesson_candidate: lessonCandidate || null,
-          should_create_eval_case: categories.length > 0 && !categories.includes("good_answer"),
+          should_create_eval_case:
+            categories.length > 0 && !categories.includes("good_answer"),
           should_create_lesson: Boolean(lessonCandidate.trim()),
-          should_create_patch_task: severity === "high" || severity === "critical",
+          should_create_patch_task:
+            severity === "high" || severity === "critical",
           review_status: "submitted",
         }),
       });
@@ -153,7 +165,9 @@ export default function LawyerReviewPage() {
       }
       await loadQueue();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to submit review");
+      setMessage(
+        error instanceof Error ? error.message : "Failed to submit review"
+      );
     } finally {
       setLoading(false);
     }
@@ -174,10 +188,13 @@ export default function LawyerReviewPage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
             Immigration AI lawyer review
           </p>
-          <h1 className="mt-2 text-3xl font-bold">Conversation audit and turn-level feedback</h1>
+          <h1 className="mt-2 text-3xl font-bold">
+            Conversation audit and turn-level feedback
+          </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            This page is a passive review surface. It reads stored answer traces and submits
-            lawyer feedback. It does not alter chatbot inference, retrieval, or answer generation.
+            This page is a passive review surface. It reads stored answer traces
+            and submits lawyer feedback. It does not alter chatbot inference,
+            retrieval, or answer generation.
           </p>
         </header>
 
@@ -209,7 +226,9 @@ export default function LawyerReviewPage() {
               Load queue
             </button>
           </div>
-          {message ? <p className="mt-3 text-sm text-amber-700">{message}</p> : null}
+          {message ? (
+            <p className="mt-3 text-sm text-amber-700">{message}</p>
+          ) : null}
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.35fr]">
@@ -219,23 +238,35 @@ export default function LawyerReviewPage() {
               {queue.map((item) => (
                 <button
                   className="w-full rounded-2xl border p-4 text-left text-sm hover:border-sky-400 hover:bg-sky-50"
-                  key={item.id}
+                  key={item.matter_id}
                   onClick={() => loadMatter(item.matter_id)}
                   type="button"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-semibold">{item.issue_type || "Unclassified conversation"}</span>
+                    <span className="font-semibold">
+                      {item.issue_type || "Unclassified conversation"}
+                    </span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">
                       {item.unreviewed_trace_count ?? 0} unreviewed
                     </span>
                   </div>
-                  <p className="mt-2 text-slate-600">{preview(item.latest_user_message || item.first_user_message)}</p>
+                  <p className="mt-2 text-slate-600">
+                    {preview(
+                      item.latest_user_message || item.first_user_message
+                    )}
+                  </p>
                   <p className="mt-1 text-xs text-slate-400">
-                    matter {item.matter_id.slice(0, 8)} · traces {item.trace_count ?? 0} · reviewed {item.reviewed_trace_count ?? 0}
+                    matter {item.matter_id.slice(0, 8)} · traces{" "}
+                    {item.trace_count ?? 0} · reviewed{" "}
+                    {item.reviewed_trace_count ?? 0}
                   </p>
                 </button>
               ))}
-              {!queue.length ? <p className="text-sm text-slate-500">No conversations loaded.</p> : null}
+              {queue.length ? null : (
+                <p className="text-sm text-slate-500">
+                  No conversations loaded.
+                </p>
+              )}
             </div>
           </section>
 
@@ -245,9 +276,17 @@ export default function LawyerReviewPage() {
               {matter ? (
                 <div className="mt-4 space-y-4">
                   <div className="rounded-2xl bg-slate-50 p-4 text-sm">
-                    <p><strong>Matter:</strong> {matter.matter_id}</p>
-                    <p><strong>Issue:</strong> {String(matter.matter?.issue_type ?? "-")}</p>
-                    <p><strong>Visa:</strong> {String(matter.matter?.visa_type ?? "-")}</p>
+                    <p>
+                      <strong>Matter:</strong> {matter.matter_id}
+                    </p>
+                    <p>
+                      <strong>Issue:</strong>{" "}
+                      {String(matter.matter?.issue_type ?? "-")}
+                    </p>
+                    <p>
+                      <strong>Visa:</strong>{" "}
+                      {String(matter.matter?.visa_type ?? "-")}
+                    </p>
                   </div>
                   <div>
                     <h3 className="font-semibold">Conversation history</h3>
@@ -257,8 +296,12 @@ export default function LawyerReviewPage() {
                           className="rounded-xl bg-slate-50 p-3"
                           key={`${String(turn.role ?? "turn")}-${String(turn.timestamp ?? "")}-${String(turn.content ?? "").slice(0, 48)}`}
                         >
-                          <p className="text-xs font-semibold uppercase text-slate-500">{String(turn.role ?? "turn")}</p>
-                          <p className="mt-1 whitespace-pre-wrap">{String(turn.content ?? "")}</p>
+                          <p className="text-xs font-semibold uppercase text-slate-500">
+                            {String(turn.role ?? "turn")}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap">
+                            {String(turn.content ?? "")}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -273,14 +316,17 @@ export default function LawyerReviewPage() {
                           onClick={() => setSelectedTraceId(String(trace.id))}
                           type="button"
                         >
-                          {String(trace.id).slice(0, 8)} · {String(trace.review_status ?? "unreviewed")}
+                          {String(trace.id).slice(0, 8)} ·{" "}
+                          {String(trace.review_status ?? "unreviewed")}
                         </button>
                       ))}
                     </div>
                   </div>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-slate-500">Select a matter from the queue.</p>
+                <p className="mt-3 text-sm text-slate-500">
+                  Select a matter from the queue.
+                </p>
               )}
             </div>
 
@@ -289,15 +335,25 @@ export default function LawyerReviewPage() {
                 <h2 className="text-lg font-semibold">Selected answer</h2>
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="rounded-2xl border p-4">
-                    <p className="text-xs font-semibold uppercase text-slate-500">User</p>
-                    <p className="mt-1 whitespace-pre-wrap">{String(selectedTrace.user_message ?? "")}</p>
+                    <p className="text-xs font-semibold uppercase text-slate-500">
+                      User
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">
+                      {String(selectedTrace.user_message ?? "")}
+                    </p>
                   </div>
                   <div className="rounded-2xl border p-4">
-                    <p className="text-xs font-semibold uppercase text-slate-500">Assistant</p>
-                    <p className="mt-1 whitespace-pre-wrap">{String(selectedTrace.assistant_answer ?? "")}</p>
+                    <p className="text-xs font-semibold uppercase text-slate-500">
+                      Assistant
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">
+                      {String(selectedTrace.assistant_answer ?? "")}
+                    </p>
                   </div>
                   <details className="rounded-2xl border p-4">
-                    <summary className="cursor-pointer font-semibold">Debug trace</summary>
+                    <summary className="cursor-pointer font-semibold">
+                      Debug trace
+                    </summary>
                     <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-xs text-slate-600">
                       {JSON.stringify(selectedTrace.trace_json ?? {}, null, 2)}
                     </pre>
@@ -313,14 +369,24 @@ export default function LawyerReviewPage() {
                       placeholder="Reviewer name"
                       value={reviewerName}
                     />
-                    <select className="rounded-xl border px-3 py-2 text-sm" onChange={(event) => setRating(event.target.value)} value={rating}>
+                    <select
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      onChange={(event) => setRating(event.target.value)}
+                      value={rating}
+                    >
                       <option value="correct">Correct</option>
                       <option value="mostly_correct">Mostly correct</option>
-                      <option value="partially_correct">Partially correct</option>
+                      <option value="partially_correct">
+                        Partially correct
+                      </option>
                       <option value="incorrect">Incorrect</option>
                       <option value="unsafe">Unsafe / should not answer</option>
                     </select>
-                    <select className="rounded-xl border px-3 py-2 text-sm" onChange={(event) => setSeverity(event.target.value)} value={severity}>
+                    <select
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      onChange={(event) => setSeverity(event.target.value)}
+                      value={severity}
+                    >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>

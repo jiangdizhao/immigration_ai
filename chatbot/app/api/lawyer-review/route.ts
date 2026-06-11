@@ -13,7 +13,8 @@ function jsonError(message: string, status: number) {
 }
 
 async function legalFetch(path: string, init: RequestInit = {}) {
-  const legalServiceUrl = process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
+  const legalServiceUrl =
+    process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
   const apiKey = process.env.LEGAL_SERVICE_API_KEY;
   const response = await fetch(`${legalServiceUrl}${path}`, {
     ...init,
@@ -33,14 +34,18 @@ async function legalFetch(path: string, init: RequestInit = {}) {
   }
   if (!response.ok) {
     return Response.json(
-      { error: "legal-service review API failed", status: response.status, body },
+      {
+        error: "legal-service review API failed",
+        status: response.status,
+        body,
+      },
       { status: response.status }
     );
   }
   return Response.json(body);
 }
 
-export async function GET(request: Request) {
+export function GET(request: Request) {
   if (!isAuthorized(request)) {
     return jsonError("Unauthorized lawyer-review request", 401);
   }
@@ -55,9 +60,13 @@ export async function GET(request: Request) {
     return legalFetch(`/api/v1/review/matters/${encodeURIComponent(matterId)}`);
   }
   if (conversations === "true") {
-    return legalFetch(`/api/v1/review/conversations?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
+    return legalFetch(
+      `/api/v1/review/conversations?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+    );
   }
-  return legalFetch(`/api/v1/review/queue?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
+  return legalFetch(
+    `/api/v1/review/queue?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+  );
 }
 
 export async function POST(request: Request) {
@@ -70,10 +79,13 @@ export async function POST(request: Request) {
     return jsonError("traceId is required", 400);
   }
   const { traceId: _traceId, ...payload } = body;
-  return legalFetch(`/api/v1/review/traces/${encodeURIComponent(traceId)}/reviews`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return legalFetch(
+    `/api/v1/review/traces/${encodeURIComponent(traceId)}/reviews`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function PATCH(request: Request) {
