@@ -59,11 +59,7 @@ class NaturalResponseService:
         if self._client is None:
             if not self.settings.openai_api_key:
                 raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
-            self._client = OpenAI(
-                api_key=self.settings.openai_api_key,
-                max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "0")),
-                timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")),
-            )
+            self._client = OpenAI(api_key=self.settings.openai_api_key)
         return self._client
 
     def apply_to_response(

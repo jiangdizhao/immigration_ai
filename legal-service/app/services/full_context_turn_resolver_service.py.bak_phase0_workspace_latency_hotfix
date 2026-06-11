@@ -9,7 +9,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from app.core.config import get_settings
-from app.schemas.legal_focus import FullContextTurnResolution, LegalFocusFrame, VisaEntityUpdate, normalize_subclass
+from app.schemas.legal_focus import FullContextTurnResolution, normalize_subclass
 from app.schemas.semantic_contracts import SemanticTurnAnalysis
 from app.schemas.state import MatterState
 from app.schedule.schedule2_candidate_service import Schedule2CandidateSearchService
@@ -42,11 +42,7 @@ class FullContextTurnResolverService:
         if self._client is None:
             if not self.settings.openai_api_key:
                 raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
-            self._client = OpenAI(
-                api_key=self.settings.openai_api_key,
-                max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "0")),
-                timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")),
-            )
+            self._client = OpenAI(api_key=self.settings.openai_api_key)
         return self._client
 
     def resolve(
@@ -64,27 +60,13 @@ class FullContextTurnResolverService:
         semantic_facts = self._semantic_fact_dict(semantic_turn)
         combined_facts = {**known_facts, **semantic_facts}
         schedule_candidates = self._schedule_candidates(raw_user_message, combined_facts)
-        history = conversation_history or []
-        if self._should_use_first_turn_shortcut(
-            semantic_turn=semantic_turn,
-            pending_offer=pending_offer,
-            conversation_history=history,
-        ):
-            return self._first_turn_resolution(
-                raw_user_message=raw_user_message,
-                response_language=response_language,
-                semantic_turn=semantic_turn,
-                semantic_facts=semantic_facts,
-                schedule_candidates=schedule_candidates,
-            )
-
         payload = self._build_payload(
             raw_user_message=raw_user_message,
             internal_question_en=internal_question_en,
             current_state=current_state,
             semantic_turn=semantic_turn,
             pending_offer=pending_offer,
-            conversation_history=history,
+            conversation_history=conversation_history or [],
             response_language=response_language,
             schedule_candidates=schedule_candidates,
         )
@@ -125,117 +107,6 @@ class FullContextTurnResolverService:
                 reason=f"llm_resolution_failed:{type(exc).__name__}",
                 raw_text=str(exc)[:2000],
             )
-
-    def _should_use_first_turn_shortcut(
-        self,
-        *,
-        semantic_turn: SemanticTurnAnalysis,
-        pending_offer: dict[str, Any] | None,
-        conversation_history: list[dict[str, Any]],
-    ) -> bool:
-        """Avoid an expensive full-context LLM call on a brand-new matter.
-
-        On the first turn there is no prior conversation to resolve. The semantic
-        turn analysis plus Schedule 2 candidate search are enough to seed the
-        downstream legal reasoning pipeline. This keeps first-turn refusal/review
-        questions responsive and avoids 60-second OpenAI retry pauses in the
-        full-context resolver.
-        """
-
-        if conversation_history or pending_offer:
-            return False
-        if semantic_turn.should_handle_as_task or semantic_turn.task_intent.task_type != "none":
-            return False
-        return semantic_turn.conversation_act in {"legal_question", "clarification_request", "other"}
-
-    def _first_turn_resolution(
-        self,
-        *,
-        raw_user_message: str,
-        response_language: str | None,
-        semantic_turn: SemanticTurnAnalysis,
-        semantic_facts: dict[str, Any],
-        schedule_candidates: list[Any],
-    ) -> FullContextTurnResolution:
-        routing = semantic_turn.case_routing
-        facts = dict(semantic_facts or {})
-        candidate_subclasses = [
-            normalize_subclass(getattr(candidate, "subclass", None))
-            for candidate in schedule_candidates
-        ]
-        candidate_subclasses = [sub for sub in candidate_subclasses if sub]
-
-        primary_subclass = normalize_subclass(
-            facts.get("visa_subclass")
-            or facts.get("target_visa_subclass")
-            or facts.get("refused_visa_subclass")
-            or facts.get("applied_visa_subclass")
-        )
-        if not primary_subclass and candidate_subclasses:
-            primary_subclass = candidate_subclasses[0]
-
-        operation = routing.operation_type or facts.get("operation_type")
-        issue_family = routing.issue_type or facts.get("issue_type")
-        role_seed = f"{operation or ''} {issue_family or ''}".lower()
-        primary_role = (
-            "refused_application"
-            if any(token in role_seed for token in ("refusal", "refused", "review"))
-            else "subject_visa"
-        )
-
-        focus = LegalFocusFrame(
-            focus_id="first_turn_shortcut",
-            user_request_summary=raw_user_message[:240],
-            primary_visa_entity_id="primary_visa" if primary_subclass else None,
-            primary_subclass=primary_subclass,
-            primary_role=primary_role if primary_subclass else None,
-            issue_family=issue_family,
-            operation=operation,
-            suggested_case_frame_id=routing.proposed_case_frame_id,
-            schedule2_candidate_subclasses=candidate_subclasses,
-            schedule1_relevance="deferred",
-            answer_strategy="answer_first_then_ask",
-            confidence=semantic_turn.confidence if semantic_turn.confidence in {"low", "medium", "high"} else "medium",
-            reason="first_turn_no_history_shortcut_from_semantic_turn_and_schedule_candidates",
-        )
-
-        entity_updates: list[VisaEntityUpdate] = []
-        if primary_subclass:
-            entity_updates.append(
-                VisaEntityUpdate(
-                    subclass=primary_subclass,
-                    label=f"Subclass {primary_subclass}",
-                    add_roles=[primary_role],
-                    add_facts=facts,
-                    confidence=semantic_turn.confidence,
-                    reason="first_turn_primary_schedule_candidate",
-                )
-            )
-
-        return FullContextTurnResolution(
-            response_language="zh" if response_language == "zh" else "en",
-            turn_purpose="new_legal_question"
-            if semantic_turn.conversation_act == "legal_question"
-            else "unclear",
-            contains_substantive_new_facts=bool(facts),
-            substantive_fact_keys=sorted(facts.keys()),
-            visa_entities_update=entity_updates,
-            current_focus=focus,
-            artifact_request={"requested": False, "artifact_type": "none"},
-            execution_path="legal_reasoning_pipeline",
-            force_schedule2_search=True,
-            force_fact_merge_before_artifact=True,
-            schedule2_candidates=[candidate.model_dump() for candidate in schedule_candidates],
-            new_fact_updates=facts,
-            reasons=[
-                "first_turn_no_history_shortcut",
-                "semantic_turn_already_resolved_initial_focus",
-            ],
-            raw_model_output={
-                "shortcut": True,
-                "note": "No full-context LLM call was used because this is the first turn of the matter.",
-            },
-        )
 
     def _build_payload(
         self,

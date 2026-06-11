@@ -630,8 +630,7 @@ export function ImmigrationAIWorkspace() {
     answerPreference: AnswerPreference = "answer_first",
     activeConversationId: string | null = conversationId
   ) => {
-    const stableConversationId =
-      activeConversationId ?? conversationId ?? generateUUID();
+    const stableConversationId = activeConversationId ?? conversationId ?? generateUUID();
     const response = await fetchWithErrorHandlers("/api/widget-chat", {
       method: "POST",
       headers: {

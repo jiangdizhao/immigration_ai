@@ -363,10 +363,10 @@ function WorkspaceProcessingCard({
 
 export function ImmigrationAIWorkspace() {
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<
+  const [_conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
   >([]);
-  const [conversationLoading, setConversationLoading] = useState(false);
+  const [_conversationLoading, setConversationLoading] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
   const [matterId, setMatterId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
@@ -627,19 +627,16 @@ export function ImmigrationAIWorkspace() {
   const sendToWidgetRoute = async (
     nextMessages: WidgetMessage[],
     facts: IntakeFacts,
-    answerPreference: AnswerPreference = "answer_first",
-    activeConversationId: string | null = conversationId
+    answerPreference: AnswerPreference = "answer_first"
   ) => {
-    const stableConversationId =
-      activeConversationId ?? conversationId ?? generateUUID();
     const response = await fetchWithErrorHandlers("/api/widget-chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        id: stableConversationId,
-        frontendChatId: stableConversationId,
+        id: conversationId ?? generateUUID(),
+        frontendChatId: conversationId ?? undefined,
         matterId,
         intakeFacts: facts,
         answerPreference,
@@ -691,8 +688,7 @@ export function ImmigrationAIWorkspace() {
       const data = await sendToWidgetRoute(
         nextMessages,
         intakeFacts,
-        answerPreference,
-        activeConversationId
+        answerPreference
       );
       await appendAssistantMessage(data);
     } catch (requestError) {
@@ -761,8 +757,7 @@ export function ImmigrationAIWorkspace() {
       const data = await sendToWidgetRoute(
         backendMessages,
         mergedFacts,
-        "answer_first",
-        activeConversationId
+        "answer_first"
       );
       await appendAssistantMessage(data);
     } catch (requestError) {
@@ -837,7 +832,7 @@ export function ImmigrationAIWorkspace() {
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-300">Matter</span>
             <span className="font-mono text-xs text-cyan-100">
-              {matterId ? matterId.slice(0, 8) : "none yet"}
+              {matterId ? matterId.slice(0, 8) : "new"}
             </span>
           </div>
         </div>
@@ -854,67 +849,6 @@ export function ImmigrationAIWorkspace() {
               <p className="text-xs text-slate-500">
                 Migration intake workspace
               </p>
-            </div>
-          </div>
-
-          <div className="mb-6 space-y-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Conversations
-              </p>
-              <button
-                className="rounded-full bg-[#001736] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                disabled={status !== "ready" || conversationLoading}
-                onClick={() => {
-                  createConversation().catch((conversationError) => {
-                    const message =
-                      conversationError instanceof Error
-                        ? conversationError.message
-                        : "Unable to create a new conversation.";
-                    toast.error(message);
-                  });
-                }}
-                type="button"
-              >
-                New conversation
-              </button>
-            </div>
-
-            <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-              {conversationLoading ? (
-                <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
-                  Loading conversations...
-                </p>
-              ) : null}
-              {conversations.map((conversation) => (
-                <button
-                  className={cn(
-                    "w-full rounded-2xl border p-3 text-left text-xs leading-5 shadow-sm transition",
-                    conversation.chatId === conversationId
-                      ? "border-[#001736] bg-[#001736] text-white"
-                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-[#002b5b]/40 hover:bg-white"
-                  )}
-                  disabled={status !== "ready" || conversationLoading}
-                  key={conversation.chatId}
-                  onClick={() => loadConversation(conversation.chatId)}
-                  type="button"
-                >
-                  <span className="block truncate font-semibold">
-                    {conversation.title || "Immigration conversation"}
-                  </span>
-                  <span className="mt-1 block font-mono text-[11px] opacity-75">
-                    chat {conversation.chatId.slice(0, 8)} · matter{" "}
-                    {conversation.legalMatterId
-                      ? conversation.legalMatterId.slice(0, 8)
-                      : "none yet"}
-                  </span>
-                </button>
-              ))}
-              {!conversationLoading && conversations.length === 0 ? (
-                <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
-                  No conversations yet.
-                </p>
-              ) : null}
             </div>
           </div>
 
@@ -1017,7 +951,7 @@ export function ImmigrationAIWorkspace() {
                     {quickQuestions.slice(0, 3).map((question) => (
                       <button
                         className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-[#002b5b]/40 hover:bg-slate-50"
-                        disabled={status !== "ready" || !conversationReady}
+                        disabled={status !== "ready"}
                         key={question}
                         onClick={() => submitMessage(question)}
                         type="button"
