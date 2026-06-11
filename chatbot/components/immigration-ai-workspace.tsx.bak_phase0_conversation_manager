@@ -261,74 +261,6 @@ function workspaceProgressStage(elapsedMs: number, isZh: boolean) {
   });
 }
 
-type ImmigrationConversationSummary = {
-  chatId: string;
-  legalMatterId?: string | null;
-  title?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
-
-type ImmigrationStoredMessage = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  createdAt?: string | null;
-};
-
-type ImmigrationConversationDetail = ImmigrationConversationSummary & {
-  messages: ImmigrationStoredMessage[];
-};
-
-function assistantFromStoredMessage(
-  message: ImmigrationStoredMessage
-): WidgetAssistantMessage {
-  return {
-    id: message.id,
-    role: "assistant",
-    text: message.text,
-    isStreaming: false,
-    responseLanguage: looksChineseText(message.text) ? "zh" : "en",
-    citations: [],
-    compactSources: [],
-    userDisplayMode: null,
-    followUpQuestions: [],
-    missingFacts: [],
-    evidenceGaps: [],
-    confidence: null,
-    escalate: false,
-    nextAction: null,
-    matterId: null,
-    conversationState: null,
-    caseHypothesis: null,
-    factSlotStates: [],
-    interactionPlan: null,
-    retrievalDebug: null,
-  };
-}
-
-function widgetMessageFromStoredMessage(
-  message: ImmigrationStoredMessage
-): WidgetMessage {
-  if (message.role === "assistant") {
-    return assistantFromStoredMessage(message);
-  }
-  return {
-    id: message.id,
-    role: "user",
-    text: message.text,
-  };
-}
-
-function setWorkspaceChatParam(chatId: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const url = new URL(window.location.href);
-  url.searchParams.set("chatId", chatId);
-  window.history.replaceState(null, "", url.toString());
-}
-
 function WorkspaceProcessingCard({
   elapsedMs,
   isZh,
@@ -362,12 +294,7 @@ function WorkspaceProcessingCard({
 }
 
 export function ImmigrationAIWorkspace() {
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<
-    ImmigrationConversationSummary[]
-  >([]);
-  const [conversationLoading, setConversationLoading] = useState(false);
-  const [conversationReady, setConversationReady] = useState(false);
+  const [chatId] = useState(() => generateUUID());
   const [matterId, setMatterId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
   const [input, setInput] = useState("");
@@ -441,104 +368,9 @@ export function ImmigrationAIWorkspace() {
     };
   }, [status, submittedAt, scrollToBottom]);
 
-  const refreshConversationList = useCallback(async () => {
-    const response = await fetchWithErrorHandlers("/api/immigration-conversations", {
-      method: "GET",
-    });
-    const data = (await response.json()) as {
-      conversations?: ImmigrationConversationSummary[];
-    };
-    setConversations(data.conversations ?? []);
-    return data.conversations ?? [];
-  }, []);
-
-  const loadConversation = useCallback(
-    async (chatIdToLoad: string) => {
-      setConversationLoading(true);
-      try {
-        const response = await fetchWithErrorHandlers(
-          `/api/immigration-conversations/${chatIdToLoad}`,
-          { method: "GET" }
-        );
-        const data = (await response.json()) as ImmigrationConversationDetail;
-        setConversationId(data.chatId);
-        setWorkspaceChatParam(data.chatId);
-        setMatterId(data.legalMatterId ?? null);
-        setMessages((data.messages ?? []).map(widgetMessageFromStoredMessage));
-        setDraftFacts({});
-        setIntakeFacts({});
-        setConversationReady(true);
-        await refreshConversationList();
-      } finally {
-        setConversationLoading(false);
-      }
-    },
-    [refreshConversationList]
-  );
-
-  const createConversation = useCallback(async () => {
-    setConversationLoading(true);
-    try {
-      const response = await fetchWithErrorHandlers("/api/immigration-conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New immigration conversation" }),
-      });
-      const data = (await response.json()) as ImmigrationConversationSummary;
-      setConversationId(data.chatId);
-      setWorkspaceChatParam(data.chatId);
-      setMatterId(data.legalMatterId ?? null);
-      setMessages([]);
-      setDraftFacts({});
-      setIntakeFacts({});
-      setConversationReady(true);
-      await refreshConversationList();
-      return data.chatId;
-    } finally {
-      setConversationLoading(false);
-    }
-  }, [refreshConversationList]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function initializeConversation() {
-      try {
-        const conversationsFromApi = await refreshConversationList();
-        if (cancelled) {
-          return;
-        }
-        const url = new URL(window.location.href);
-        const requestedChatId = url.searchParams.get("chatId");
-        const target =
-          requestedChatId ||
-          conversationsFromApi[0]?.chatId ||
-          (await createConversation());
-        if (!cancelled && target) {
-          await loadConversation(target);
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Unable to load immigration conversations.";
-        setError(message);
-        toast.error(message);
-        setConversationReady(true);
-      }
-    }
-
-    initializeConversation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [createConversation, loadConversation, refreshConversationList]);
-
   const appendAssistantMessage = async (data: WidgetRouteResponse) => {
     if (data.matterId) {
       setMatterId(data.matterId);
-      void refreshConversationList();
     }
 
     const knownFactsFromBackend =
@@ -627,8 +459,7 @@ export function ImmigrationAIWorkspace() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        id: conversationId ?? generateUUID(),
-        frontendChatId: conversationId ?? undefined,
+        id: chatId,
         matterId,
         intakeFacts: facts,
         answerPreference,
@@ -658,12 +489,6 @@ export function ImmigrationAIWorkspace() {
       role: "user",
       text: trimmed,
     };
-
-    const activeConversationId = conversationId ?? (await createConversation());
-    if (!activeConversationId) {
-      toast.error("Unable to create a new conversation.");
-      return;
-    }
 
     const nextMessages = [...messages, nextUserMessage];
     shouldAutoScrollRef.current = true;
@@ -707,12 +532,6 @@ export function ImmigrationAIWorkspace() {
 
   const handleSubmitDraftFacts = async () => {
     if (status !== "ready") {
-      return;
-    }
-
-    const activeConversationId = conversationId ?? (await createConversation());
-    if (!activeConversationId) {
-      toast.error("Unable to create a new conversation.");
       return;
     }
 
@@ -816,12 +635,6 @@ export function ImmigrationAIWorkspace() {
             </span>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-300">Conversation</span>
-            <span className="font-mono text-xs text-cyan-100">
-              {conversationId ? conversationId.slice(0, 8) : "loading"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
             <span className="text-slate-300">Matter</span>
             <span className="font-mono text-xs text-cyan-100">
               {matterId ? matterId.slice(0, 8) : "new"}
@@ -851,7 +664,7 @@ export function ImmigrationAIWorkspace() {
             {quickQuestions.map((question) => (
               <button
                 className="group w-full rounded-2xl border border-slate-200 bg-white p-3 text-left text-sm leading-6 text-slate-700 shadow-sm transition hover:border-[#002b5b]/30 hover:bg-[#001736] hover:text-white"
-                disabled={status !== "ready" || !conversationReady}
+                disabled={status !== "ready"}
                 key={question}
                 onClick={() => submitMessage(question)}
                 type="button"
@@ -1121,7 +934,7 @@ export function ImmigrationAIWorkspace() {
                 </p>
                 <Button
                   className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
-                  disabled={!input.trim() || status !== "ready" || !conversationReady}
+                  disabled={!input.trim() || status !== "ready"}
                   onClick={() => submitMessage(input)}
                   type="button"
                 >

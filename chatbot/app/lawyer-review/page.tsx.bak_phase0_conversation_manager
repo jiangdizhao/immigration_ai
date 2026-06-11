@@ -2,20 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ConversationQueueItem = {
+type QueueItem = {
+  id: string;
   matter_id: string;
-  session_id?: string | null;
-  frontend_chat_id?: string | null;
-  first_user_message?: string | null;
-  latest_user_message?: string | null;
-  latest_assistant_answer_preview?: string | null;
+  user_message?: string | null;
+  assistant_answer?: string | null;
   issue_type?: string | null;
   visa_type?: string | null;
-  risk_level?: string | null;
-  trace_count?: number;
-  reviewed_trace_count?: number;
-  unreviewed_trace_count?: number;
-  critical_review_count?: number;
+  operation_type?: string | null;
+  confidence?: string | null;
+  escalate?: boolean;
+  review_status?: string | null;
+  review_count?: number;
   created_at?: string | null;
 };
 
@@ -50,7 +48,7 @@ function preview(value: unknown, maxLength = 180) {
 export default function LawyerReviewPage() {
   const [token, setToken] = useState("");
   const [status, setStatus] = useState("unreviewed");
-  const [queue, setQueue] = useState<ConversationQueueItem[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [selectedMatterId, setSelectedMatterId] = useState<string | null>(null);
   const [matter, setMatter] = useState<MatterReview | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
@@ -96,7 +94,7 @@ export default function LawyerReviewPage() {
     setMessage(null);
     try {
       window.localStorage.setItem("lawyerReviewToken", token);
-      const data = await api(`?conversations=true&status=${encodeURIComponent(status)}&limit=80`);
+      const data = await api(`?status=${encodeURIComponent(status)}&limit=80`);
       setQueue(Array.isArray(data) ? data : []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to load queue");
@@ -174,7 +172,7 @@ export default function LawyerReviewPage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
             Immigration AI lawyer review
           </p>
-          <h1 className="mt-2 text-3xl font-bold">Conversation audit and turn-level feedback</h1>
+          <h1 className="mt-2 text-3xl font-bold">Answer audit and feedback queue</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             This page is a passive review surface. It reads stored answer traces and submits
             lawyer feedback. It does not alter chatbot inference, retrieval, or answer generation.
@@ -195,10 +193,9 @@ export default function LawyerReviewPage() {
               onChange={(event) => setStatus(event.target.value)}
               value={status}
             >
-              <option value="active">Active conversations</option>
-              <option value="all">All conversations</option>
-              <option value="open">Open matters</option>
-              <option value="closed">Closed matters</option>
+              <option value="unreviewed">Unreviewed</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="all">All</option>
             </select>
             <button
               className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -214,7 +211,7 @@ export default function LawyerReviewPage() {
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.35fr]">
           <section className="rounded-3xl border bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Conversation queue</h2>
+            <h2 className="text-lg font-semibold">Review queue</h2>
             <div className="mt-4 space-y-3">
               {queue.map((item) => (
                 <button
@@ -224,18 +221,18 @@ export default function LawyerReviewPage() {
                   type="button"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-semibold">{item.issue_type || "Unclassified conversation"}</span>
+                    <span className="font-semibold">{item.issue_type || "Unclassified"}</span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">
-                      {item.unreviewed_trace_count ?? 0} unreviewed
+                      {item.review_status || "unreviewed"}
                     </span>
                   </div>
-                  <p className="mt-2 text-slate-600">{preview(item.latest_user_message || item.first_user_message)}</p>
+                  <p className="mt-2 text-slate-600">{preview(item.user_message)}</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    matter {item.matter_id.slice(0, 8)} · traces {item.trace_count ?? 0} · reviewed {item.reviewed_trace_count ?? 0}
+                    matter {item.matter_id.slice(0, 8)} · {item.confidence || "no confidence"} · reviews {item.review_count ?? 0}
                   </p>
                 </button>
               ))}
-              {!queue.length ? <p className="text-sm text-slate-500">No conversations loaded.</p> : null}
+              {!queue.length ? <p className="text-sm text-slate-500">No traces loaded.</p> : null}
             </div>
           </section>
 

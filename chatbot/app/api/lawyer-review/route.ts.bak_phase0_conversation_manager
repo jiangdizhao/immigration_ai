@@ -46,16 +46,12 @@ export async function GET(request: Request) {
   }
   const url = new URL(request.url);
   const matterId = url.searchParams.get("matterId");
-  const conversations = url.searchParams.get("conversations");
   const status = url.searchParams.get("status") ?? "unreviewed";
   const limit = url.searchParams.get("limit") ?? "50";
   const offset = url.searchParams.get("offset") ?? "0";
 
   if (matterId) {
     return legalFetch(`/api/v1/review/matters/${encodeURIComponent(matterId)}`);
-  }
-  if (conversations === "true") {
-    return legalFetch(`/api/v1/review/conversations?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
   }
   return legalFetch(`/api/v1/review/queue?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
 }

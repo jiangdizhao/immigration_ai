@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS "ImmigrationConversation" (
+	"chatId" uuid PRIMARY KEY NOT NULL,
+	"legalMatterId" varchar(255),
+	"title" text,
+	"createdAt" timestamp NOT NULL,
+	"updatedAt" timestamp NOT NULL,
+	CONSTRAINT "ImmigrationConversation_chatId_Chat_id_fk" FOREIGN KEY ("chatId") REFERENCES "public"."Chat"("id") ON DELETE cascade ON UPDATE no action
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ix_immigration_conversation_legal_matter_id" ON "ImmigrationConversation" ("legalMatterId");

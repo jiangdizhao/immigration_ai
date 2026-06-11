@@ -22,6 +22,7 @@ import {
   type Chat,
   chat,
   type DBMessage,
+  immigrationConversation,
   document,
   message,
   type Suggestion,
@@ -77,6 +78,164 @@ export async function createGuestUser() {
       "Failed to create guest user"
     );
   }
+}
+
+export async function getOrCreateLocalImmigrationUserId() {
+  const email = "local-immigration-user@localhost";
+  const existing = await getUser(email);
+  if (existing[0]?.id) {
+    return existing[0].id;
+  }
+
+  const password = generateHashedPassword(generateUUID());
+  const [created] = await db
+    .insert(user)
+    .values({ email, password })
+    .returning({ id: user.id });
+
+  return created.id;
+}
+
+export async function createImmigrationConversation({
+  userId,
+  title = "New immigration conversation",
+}: {
+  userId: string;
+  title?: string;
+}) {
+  const id = generateUUID();
+  const now = new Date();
+
+  await db.insert(chat).values({
+    id,
+    createdAt: now,
+    userId,
+    title,
+    visibility: "private",
+  });
+
+  const [conversation] = await db
+    .insert(immigrationConversation)
+    .values({
+      chatId: id,
+      legalMatterId: null,
+      title,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  return conversation;
+}
+
+export async function listImmigrationConversations({
+  userId,
+  limit = 50,
+}: {
+  userId: string;
+  limit?: number;
+}) {
+  return await db
+    .select({
+      chatId: immigrationConversation.chatId,
+      legalMatterId: immigrationConversation.legalMatterId,
+      title: immigrationConversation.title,
+      chatTitle: chat.title,
+      createdAt: immigrationConversation.createdAt,
+      updatedAt: immigrationConversation.updatedAt,
+    })
+    .from(immigrationConversation)
+    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
+    .where(eq(chat.userId, userId))
+    .orderBy(desc(immigrationConversation.updatedAt))
+    .limit(Math.max(1, Math.min(limit, 100)));
+}
+
+export async function getImmigrationConversationByChatId({
+  chatId,
+  userId,
+}: {
+  chatId: string;
+  userId: string;
+}) {
+  const [conversation] = await db
+    .select({
+      chatId: immigrationConversation.chatId,
+      legalMatterId: immigrationConversation.legalMatterId,
+      title: immigrationConversation.title,
+      chatTitle: chat.title,
+      createdAt: immigrationConversation.createdAt,
+      updatedAt: immigrationConversation.updatedAt,
+      userId: chat.userId,
+    })
+    .from(immigrationConversation)
+    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
+    .where(
+      and(eq(immigrationConversation.chatId, chatId), eq(chat.userId, userId))
+    )
+    .limit(1);
+
+  return conversation ?? null;
+}
+
+export async function updateImmigrationConversation({
+  chatId,
+  userId,
+  legalMatterId,
+  title,
+}: {
+  chatId: string;
+  userId: string;
+  legalMatterId?: string | null;
+  title?: string | null;
+}) {
+  const conversation = await getImmigrationConversationByChatId({ chatId, userId });
+  if (!conversation) {
+    return null;
+  }
+
+  const updates: {
+    legalMatterId?: string | null;
+    title?: string | null;
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+
+  if (legalMatterId !== undefined) {
+    updates.legalMatterId = legalMatterId;
+  }
+  if (title !== undefined) {
+    updates.title = title;
+    await updateChatTitleById({ chatId, title: title || "Immigration conversation" });
+  }
+
+  const [updated] = await db
+    .update(immigrationConversation)
+    .set(updates)
+    .where(eq(immigrationConversation.chatId, chatId))
+    .returning();
+
+  return updated ?? null;
+}
+
+export async function touchImmigrationConversation({
+  chatId,
+  userId,
+}: {
+  chatId: string;
+  userId: string;
+}) {
+  const conversation = await getImmigrationConversationByChatId({ chatId, userId });
+  if (!conversation) {
+    return null;
+  }
+
+  const [updated] = await db
+    .update(immigrationConversation)
+    .set({ updatedAt: new Date() })
+    .where(eq(immigrationConversation.chatId, chatId))
+    .returning();
+
+  return updated ?? null;
 }
 
 export async function saveChat({

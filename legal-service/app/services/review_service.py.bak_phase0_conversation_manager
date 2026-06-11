@@ -12,7 +12,6 @@ from app.schemas.review import (
     AnswerReviewUpdate,
     AnswerTraceOut,
     MatterReviewOut,
-    ReviewConversationItem,
     ReviewQueueItem,
 )
 
@@ -23,72 +22,6 @@ class ReviewService:
     This service is intentionally passive. It never calls the chatbot inference
     pipeline, retrieval, Schedule reasoning, or LLM services.
     """
-
-    def list_review_conversations(
-        self,
-        db: Session,
-        *,
-        status: str | None = "active",
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[ReviewConversationItem]:
-        limit = max(1, min(int(limit or 50), 200))
-        offset = max(0, int(offset or 0))
-
-        query = db.query(Matter).order_by(
-            Matter.last_user_message_at.desc().nullslast(),
-            Matter.created_at.desc(),
-        )
-        if status and status != "all":
-            query = query.filter(Matter.status == status if status in {"open", "closed"} else Matter.status != "closed")
-
-        matters = query.offset(offset).limit(limit).all()
-        out: list[ReviewConversationItem] = []
-
-        for matter in matters:
-            traces = (
-                db.query(AnswerTrace)
-                .filter(AnswerTrace.matter_id == matter.id)
-                .order_by(AnswerTrace.created_at.asc())
-                .all()
-            )
-            trace_ids = [trace.id for trace in traces]
-            reviews = (
-                db.query(AnswerReview)
-                .filter(AnswerReview.answer_trace_id.in_(trace_ids))
-                .all()
-                if trace_ids
-                else []
-            )
-
-            first_trace = traces[0] if traces else None
-            latest_trace = traces[-1] if traces else None
-            reviewed_trace_ids = {review.answer_trace_id for review in reviews}
-
-            out.append(
-                ReviewConversationItem(
-                    matter_id=matter.id,
-                    session_id=matter.session_id,
-                    frontend_chat_id=getattr(matter, "frontend_chat_id", None),
-                    issue_summary=matter.issue_summary,
-                    issue_type=matter.issue_type,
-                    visa_type=matter.visa_type,
-                    risk_level=matter.risk_level,
-                    first_user_message=first_trace.user_message if first_trace else None,
-                    latest_user_message=latest_trace.user_message if latest_trace else None,
-                    latest_assistant_answer_preview=(
-                        (latest_trace.assistant_answer or "")[:260] if latest_trace else None
-                    ),
-                    trace_count=len(traces),
-                    reviewed_trace_count=sum(1 for trace in traces if trace.id in reviewed_trace_ids or trace.review_status == "reviewed"),
-                    unreviewed_trace_count=sum(1 for trace in traces if trace.id not in reviewed_trace_ids and trace.review_status != "reviewed"),
-                    critical_review_count=sum(1 for review in reviews if review.severity == "critical"),
-                    created_at=matter.created_at,
-                    last_trace_at=latest_trace.created_at if latest_trace else matter.last_user_message_at,
-                )
-            )
-
-        return out
 
     def list_review_queue(
         self,

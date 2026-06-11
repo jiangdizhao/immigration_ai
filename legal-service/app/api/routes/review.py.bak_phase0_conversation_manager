@@ -9,23 +9,12 @@ from app.schemas.review import (
     AnswerReviewUpdate,
     AnswerTraceOut,
     MatterReviewOut,
-    ReviewConversationItem,
     ReviewQueueItem,
 )
 from app.services.review_service import ReviewService
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 service = ReviewService()
-
-
-@router.get("/conversations", response_model=list[ReviewConversationItem])
-def list_review_conversations(
-    db: DBSession,
-    status_filter: str | None = Query(default="active", alias="status"),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[ReviewConversationItem]:
-    return service.list_review_conversations(db, status=status_filter, limit=limit, offset=offset)
 
 
 @router.get("/queue", response_model=list[ReviewQueueItem])

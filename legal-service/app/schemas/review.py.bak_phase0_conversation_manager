@@ -33,26 +33,6 @@ class AnswerTraceOut(AnswerTraceBase):
     updated_at: datetime | None = None
 
 
-class ReviewConversationItem(BaseSchema):
-    matter_id: str
-    session_id: str | None = None
-    frontend_chat_id: str | None = None
-    issue_summary: str | None = None
-    issue_type: str | None = None
-    visa_type: str | None = None
-    risk_level: str | None = None
-    first_user_message: str | None = None
-    latest_user_message: str | None = None
-    latest_assistant_answer_preview: str | None = None
-    trace_count: int = 0
-    reviewed_trace_count: int = 0
-    unreviewed_trace_count: int = 0
-    critical_review_count: int = 0
-    created_at: datetime | None = None
-    last_trace_at: datetime | None = None
-
-
-
 class ReviewQueueItem(AnswerTraceBase):
     id: str
     created_at: datetime | None = None

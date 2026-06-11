@@ -1,15 +1,7 @@
 import { ipAddress } from "@vercel/functions";
-import { auth } from "@/app/(auth)/auth";
 import { z } from "zod";
 import { allowedModelIds } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
-import {
-  getImmigrationConversationByChatId,
-  getOrCreateLocalImmigrationUserId,
-  saveMessages,
-  touchImmigrationConversation,
-  updateImmigrationConversation,
-} from "@/lib/db/queries";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 60;
@@ -36,7 +28,6 @@ const messageSchema = z.object({
 
 const widgetRequestBodySchema = z.object({
   id: z.string().uuid(),
-  frontendChatId: z.string().uuid().optional(),
   matterId: z.string().uuid().nullable().optional(),
   messages: z.array(messageSchema).min(1),
   selectedChatModel: z.string(),
@@ -536,7 +527,6 @@ export async function POST(request: Request) {
     const json = await request.json();
     const {
       id,
-      frontendChatId,
       matterId,
       messages,
       selectedChatModel,
@@ -550,24 +540,6 @@ export async function POST(request: Request) {
     }
 
     await checkIpRateLimit(ipAddress(request));
-
-    const session = await auth();
-    const frontendUserId =
-      session?.user?.id ?? (await getOrCreateLocalImmigrationUserId());
-    const activeFrontendChatId = frontendChatId ?? id;
-    const ownedConversation = frontendChatId
-      ? await getImmigrationConversationByChatId({
-          chatId: frontendChatId,
-          userId: frontendUserId,
-        })
-      : null;
-
-    if (frontendChatId && !ownedConversation) {
-      return Response.json(
-        { error: "Conversation not found" },
-        { status: 404 }
-      );
-    }
 
     const question = extractLatestUserText(messages);
     if (!question) {
@@ -601,10 +573,8 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         question,
         response_language: responseLanguage,
-        matter_id: matterId ?? ownedConversation?.legalMatterId ?? null,
+        matter_id: matterId ?? null,
         session_id: id,
-        frontend_chat_id: activeFrontendChatId,
-        frontend_user_id: frontendUserId,
         preferred_jurisdiction: jurisdiction,
         preferred_source_types: sourceTypes,
         intake_facts: intakeFacts ?? {},
@@ -629,47 +599,6 @@ export async function POST(request: Request) {
       data.response_language,
       responseLanguage
     );
-    const finalText = publicSafeText(data, finalResponseLanguage);
-
-    if (frontendChatId) {
-      try {
-        const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
-        const userMessageId = latestUserMessage?.id ?? crypto.randomUUID();
-        await saveMessages({
-          messages: [
-            {
-              chatId: frontendChatId,
-              id: userMessageId,
-              role: "user",
-              parts: [{ type: "text", text: question }],
-              attachments: [],
-              createdAt: new Date(),
-            },
-            {
-              chatId: frontendChatId,
-              id: crypto.randomUUID(),
-              role: "assistant",
-              parts: [{ type: "text", text: finalText }],
-              attachments: [],
-              createdAt: new Date(),
-            },
-          ],
-        });
-      } catch (error) {
-        console.warn("Failed to persist immigration workspace messages", error);
-      }
-
-      if (data.matter_id) {
-        await updateImmigrationConversation({
-          chatId: frontendChatId,
-          userId: frontendUserId,
-          legalMatterId: data.matter_id,
-          title: question.slice(0, 80) || "Immigration conversation",
-        });
-      } else {
-        await touchImmigrationConversation({ chatId: frontendChatId, userId: frontendUserId });
-      }
-    }
 
     logWidgetDebug({
       sessionId: id,
@@ -680,7 +609,7 @@ export async function POST(request: Request) {
     });
 
     return Response.json({
-      text: finalText,
+      text: publicSafeText(data, finalResponseLanguage),
       responseLanguage: finalResponseLanguage,
       citations: (data.citations ?? []).map((c) => ({
         source_id: c.source_id ?? null,

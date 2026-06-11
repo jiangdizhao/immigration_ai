@@ -14,8 +14,6 @@ class QueryRequest(BaseSchema):
     response_language: Literal["en", "zh"] | None = None
     matter_id: str | None = None
     session_id: str | None = None
-    frontend_chat_id: str | None = None
-    frontend_user_id: str | None = None
     #preferred_jurisdiction: str | None = Field(default="Cth")
     preferred_jurisdiction: str | None = Field(default=settings.canonical_jurisdiction)
     preferred_source_types: list[str] = Field(default_factory=list)

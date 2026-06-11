@@ -1045,18 +1045,6 @@ class QueryService:
         if payload.matter_id:
             matter = db.get(Matter, payload.matter_id)
             if matter is not None:
-                self._attach_frontend_identity(matter, payload)
-                return matter
-
-        if payload.frontend_chat_id:
-            matter = (
-                db.query(Matter)
-                .filter(Matter.frontend_chat_id == payload.frontend_chat_id)
-                .order_by(Matter.last_user_message_at.desc().nullslast(), Matter.created_at.desc())
-                .first()
-            )
-            if matter is not None:
-                self._attach_frontend_identity(matter, payload)
                 return matter
 
         if payload.session_id:
@@ -1067,13 +1055,10 @@ class QueryService:
                 .first()
             )
             if matter is not None:
-                self._attach_frontend_identity(matter, payload)
                 return matter
 
         matter = Matter(
             session_id=payload.session_id,
-            frontend_chat_id=payload.frontend_chat_id,
-            frontend_user_id=payload.frontend_user_id,
             issue_summary=self._build_issue_summary(payload.question),
             status="open",
             issue_type=None,
@@ -1083,8 +1068,6 @@ class QueryService:
             metadata_json={
                 "preferred_jurisdiction": payload.preferred_jurisdiction,
                 "preferred_source_types": payload.preferred_source_types or [],
-                "frontend_chat_id": payload.frontend_chat_id,
-                "frontend_user_id": payload.frontend_user_id,
                 "intake_facts": payload.intake_facts or {},
                 "carried_intake_facts": payload.intake_facts or {},
                 "initial_question": payload.question,
@@ -1095,25 +1078,6 @@ class QueryService:
         db.flush()
         return matter
 
-    def _attach_frontend_identity(self, matter: Matter, payload: QueryRequest) -> None:
-        if payload.session_id and not matter.session_id:
-            matter.session_id = payload.session_id
-        if payload.frontend_chat_id and not matter.frontend_chat_id:
-            matter.frontend_chat_id = payload.frontend_chat_id
-        if payload.frontend_user_id and not matter.frontend_user_id:
-            matter.frontend_user_id = payload.frontend_user_id
-
-        metadata = dict(matter.metadata_json or {})
-        changed = False
-        if payload.frontend_chat_id and metadata.get("frontend_chat_id") != payload.frontend_chat_id:
-            metadata["frontend_chat_id"] = payload.frontend_chat_id
-            changed = True
-        if payload.frontend_user_id and metadata.get("frontend_user_id") != payload.frontend_user_id:
-            metadata["frontend_user_id"] = payload.frontend_user_id
-            changed = True
-        if changed:
-            matter.metadata_json = metadata
-
     def _update_matter_from_state(
         self,
         *,
@@ -1123,8 +1087,6 @@ class QueryService:
         effective_question: str,
     ) -> None:
         matter.session_id = payload.session_id or matter.session_id
-        matter.frontend_chat_id = payload.frontend_chat_id or matter.frontend_chat_id
-        matter.frontend_user_id = payload.frontend_user_id or matter.frontend_user_id
         issue_summary_basis = effective_question if len(payload.question.strip()) < 24 else payload.question
         matter.issue_summary = self._build_issue_summary(issue_summary_basis)
         matter.last_user_message_at = self._now_utc()
@@ -1145,8 +1107,6 @@ class QueryService:
             {
                 "preferred_jurisdiction": payload.preferred_jurisdiction,
                 "preferred_source_types": payload.preferred_source_types or [],
-                "frontend_chat_id": payload.frontend_chat_id or existing_meta.get("frontend_chat_id"),
-                "frontend_user_id": payload.frontend_user_id or existing_meta.get("frontend_user_id"),
                 "intake_facts": payload.intake_facts or {},
                 "initial_question": existing_meta.get("initial_question") or payload.question,
             }

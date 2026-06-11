@@ -33,6 +33,21 @@ export const chat = pgTable("Chat", {
 
 export type Chat = InferSelectModel<typeof chat>;
 
+export const immigrationConversation = pgTable("ImmigrationConversation", {
+  chatId: uuid("chatId")
+    .primaryKey()
+    .notNull()
+    .references(() => chat.id, { onDelete: "cascade" }),
+  legalMatterId: varchar("legalMatterId", { length: 255 }),
+  title: text("title"),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export type ImmigrationConversation = InferSelectModel<
+  typeof immigrationConversation
+>;
+
 // DEPRECATED: The following schema is deprecated and will be removed in the future.
 // Read the migration guide at https://chatbot.dev/docs/migration-guides/message-parts
 export const messageDeprecated = pgTable("Message", {
