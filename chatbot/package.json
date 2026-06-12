@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "tsx lib/db/migrate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "ultracite check",
     "format": "ultracite fix",
@@ -15,7 +15,9 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
-    "test": "export PLAYWRIGHT=True && pnpm exec playwright test"
+    "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
+    "prod:prepare": "pnpm db:migrate && npx tsx scripts/apply-phase0-chatbot-schema.ts && pnpm build",
+    "prod:start": "next start -H 127.0.0.1 -p 3000"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",
