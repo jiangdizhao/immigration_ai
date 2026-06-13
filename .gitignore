@@ -40,3 +40,5 @@ doc/*.docx
 
 # Phase 1B local container env files
 .env.phase1b.*.local
+# Phase 1C generated dumps / exports
+artifacts/phase1c/

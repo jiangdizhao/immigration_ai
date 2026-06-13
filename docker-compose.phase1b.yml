@@ -1,6 +1,6 @@
 services:
   phase1b-postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg17
     container_name: immigration-phase1b-postgres
     environment:
       POSTGRES_USER: immigration_local
