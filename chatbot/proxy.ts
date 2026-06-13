@@ -24,10 +24,16 @@ export async function proxy(request: NextRequest) {
   });
 
   if (!token) {
-    const redirectUrl = encodeURIComponent(request.url);
+    const publicBaseUrl =
+      process.env.AUTH_URL || process.env.NEXTAUTH_URL || request.nextUrl.origin;
+    const redirectTarget = new URL(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      publicBaseUrl
+    );
+    const redirectUrl = encodeURIComponent(redirectTarget.toString());
 
     return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url)
+      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, publicBaseUrl)
     );
   }
 

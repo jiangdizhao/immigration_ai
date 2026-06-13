@@ -37,3 +37,6 @@ chatbot/my_test/
 
 # Local handoff docs, if not intended for repo
 doc/*.docx
+
+# Phase 1B local container env files
+.env.phase1b.*.local

@@ -1,0 +1,65 @@
+services:
+  phase1b-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: immigration-phase1b-postgres
+    environment:
+      POSTGRES_USER: immigration_local
+      POSTGRES_PASSWORD: local_phase1b_password
+      POSTGRES_DB: immigration_legal
+    ports:
+      - "5433:5432"
+    volumes:
+      - phase1b_postgres_data:/var/lib/postgresql/data
+      - ./scripts/docker/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/001-init-multiple-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U immigration_local -d immigration_legal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  phase1b-valkey:
+    image: valkey/valkey:8-alpine
+    container_name: immigration-phase1b-valkey
+    ports:
+      - "6380:6379"
+    volumes:
+      - phase1b_valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  phase1b-legal-service:
+    build:
+      context: .
+      dockerfile: legal-service/Dockerfile.local
+    container_name: immigration-phase1b-legal-service
+    env_file:
+      - ./.env.phase1b.legal-service.local
+    depends_on:
+      phase1b-postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  phase1b-chatbot:
+    build:
+      context: .
+      dockerfile: chatbot/Dockerfile.local
+    container_name: immigration-phase1b-chatbot
+    env_file:
+      - ./.env.phase1b.chatbot.local
+    depends_on:
+      phase1b-postgres:
+        condition: service_healthy
+      phase1b-valkey:
+        condition: service_healthy
+      phase1b-legal-service:
+        condition: service_started
+    ports:
+      - "3000:3000"
+
+volumes:
+  phase1b_postgres_data:
+  phase1b_valkey_data:

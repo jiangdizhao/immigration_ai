@@ -1,0 +1,24 @@
+# Phase 1B local production-simulation Dockerfile for the FastAPI legal service.
+# Build context must be the repository root.
+
+FROM python:3.11-slim AS app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY legal-service/pyproject.toml legal-service/README.md ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e .
+
+COPY legal-service/app ./app
+COPY legal-service/scripts ./scripts
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "python -m scripts.phase1b_init_legal_schema && python -m scripts.apply_phase0_schema && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -1,0 +1,26 @@
+# Generated for Phase 1B local container simulation.
+
+.git
+.gitignore
+
+**/node_modules
+**/.next
+**/out
+**/.vercel
+
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.venv
+**/venv
+
+**/.env
+**/.env.local
+.env.phase1b.*.local
+*.zip
+phase0_*_patch/
+phase1*_patch/
+.cleanup_trash/
+.patch_backups/
+cleanup_reports/
