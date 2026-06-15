@@ -843,8 +843,8 @@ export function ImmigrationAIWorkspace() {
         </div>
       </div>
 
-      <div className="grid overflow-hidden rounded-[36px] border border-white/15 bg-white/95 shadow-[0_32px_120px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl lg:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <aside className="hidden border-r border-slate-200 bg-slate-50/90 p-5 lg:block">
+      <div className="grid h-[calc(100vh-170px)] min-h-[680px] max-h-[860px] overflow-hidden rounded-[36px] border border-white/15 bg-white/95 shadow-[0_32px_120px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl lg:grid-cols-[280px_minmax(0,1fr)_320px]">
+        <aside className="hidden min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50/90 p-5 lg:block">
           <div className="mb-6 flex items-center gap-3">
             <div className="rounded-2xl bg-[#001736] p-2 text-white">
               <Bot className="size-5" />
@@ -969,7 +969,7 @@ export function ImmigrationAIWorkspace() {
           </div>
         </aside>
 
-        <div className="flex min-h-[760px] flex-col bg-white">
+        <div className="flex min-h-0 flex-col bg-white">
           <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <div>
@@ -999,7 +999,7 @@ export function ImmigrationAIWorkspace() {
           </div>
 
           <div
-            className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
@@ -1181,22 +1181,16 @@ export function ImmigrationAIWorkspace() {
           <div className="border-t border-slate-200 bg-white p-4 sm:p-5">
             <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3 shadow-sm">
               <Textarea
-                className="min-h-[76px] resize-none border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+                className="min-h-[96px] max-h-48 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
                 disabled={status !== "ready"}
                 onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    submitMessage(input);
-                  }
-                }}
-                placeholder="Ask about a visa pathway, refusal, review deadline, condition, or consultation preparation..."
+                placeholder="Type your question. Press Enter for a new paragraph; click Send to submit."
                 value={input}
               />
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-slate-500">
-                  The assistant provides general information and intake support,
-                  not legal advice.
+                  Press Enter for a new paragraph. Click Send to submit. General
+                  information only, not legal advice.
                 </p>
                 <Button
                   className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
@@ -1218,7 +1212,7 @@ export function ImmigrationAIWorkspace() {
           </div>
         </div>
 
-        <aside className="hidden border-l border-slate-200 bg-slate-50/90 p-5 xl:block">
+        <aside className="hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-slate-50/90 p-5 xl:block">
           <div className="space-y-5">
             <Card className="rounded-[28px] border-slate-200 bg-white shadow-sm">
               <CardContent className="p-5">

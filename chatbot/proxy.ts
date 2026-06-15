@@ -25,7 +25,9 @@ export async function proxy(request: NextRequest) {
 
   if (!token) {
     const publicBaseUrl =
-      process.env.AUTH_URL || process.env.NEXTAUTH_URL || request.nextUrl.origin;
+      process.env.AUTH_URL ||
+      process.env.NEXTAUTH_URL ||
+      request.nextUrl.origin;
     const redirectTarget = new URL(
       `${request.nextUrl.pathname}${request.nextUrl.search}`,
       publicBaseUrl
