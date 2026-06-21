@@ -48,6 +48,7 @@ class ReviewConversationItem(BaseSchema):
     reviewed_trace_count: int = 0
     unreviewed_trace_count: int = 0
     critical_review_count: int = 0
+    comment_status: str = "uncommented"
     created_at: datetime | None = None
     last_trace_at: datetime | None = None
 

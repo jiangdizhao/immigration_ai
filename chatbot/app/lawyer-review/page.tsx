@@ -16,6 +16,7 @@ type ConversationQueueItem = {
   reviewed_trace_count?: number;
   unreviewed_trace_count?: number;
   critical_review_count?: number;
+  comment_status?: string | null;
   created_at?: string | null;
 };
 
@@ -48,15 +49,65 @@ function preview(value: unknown, maxLength = 180) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
+function commentStatusForItem(item: ConversationQueueItem) {
+  if (item.comment_status) {
+    return item.comment_status;
+  }
+  const traceCount = item.trace_count ?? 0;
+  const reviewedCount = item.reviewed_trace_count ?? 0;
+  const unreviewedCount = item.unreviewed_trace_count ?? 0;
+  if (traceCount <= 0) {
+    return "not_reviewable";
+  }
+  if (reviewedCount <= 0) {
+    return "uncommented";
+  }
+  if (unreviewedCount <= 0) {
+    return "fully_commented";
+  }
+  return "partially_commented";
+}
+
+function commentStatusLabel(item: ConversationQueueItem) {
+  const status = commentStatusForItem(item);
+  if (status === "fully_commented") {
+    return "Commented";
+  }
+  if (status === "partially_commented") {
+    return `${item.unreviewed_trace_count ?? 0} left`;
+  }
+  if (status === "not_reviewable") {
+    return "No answer traces";
+  }
+  return "Uncommented";
+}
+
+function commentStatusClass(item: ConversationQueueItem) {
+  const status = commentStatusForItem(item);
+  if (status === "fully_commented") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+  if (status === "partially_commented") {
+    return "bg-sky-100 text-sky-800";
+  }
+  if (status === "not_reviewable") {
+    return "bg-slate-100 text-slate-500";
+  }
+  return "bg-amber-100 text-amber-800";
+}
+
 export default function LawyerReviewPage() {
   const [token, setToken] = useState("");
-  const [status, setStatus] = useState("unreviewed");
+  const [status, setStatus] = useState("uncommented");
   const [queue, setQueue] = useState<ConversationQueueItem[]>([]);
   const [selectedMatterId, setSelectedMatterId] = useState<string | null>(null);
   const [matter, setMatter] = useState<MatterReview | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"info" | "success" | "error">(
+    "info"
+  );
   const [reviewerName, setReviewerName] = useState("");
   const [rating, setRating] = useState("mostly_correct");
   const [severity, setSeverity] = useState("medium");
@@ -79,6 +130,22 @@ export default function LawyerReviewPage() {
     );
   }, [matter, selectedTraceId]);
 
+  function resetReviewForm() {
+    setRating("mostly_correct");
+    setSeverity("medium");
+    setCategories([]);
+    setComment("");
+    setCorrectedAnswer("");
+    setLessonCandidate("");
+  }
+
+  function selectAnswerTrace(traceId: string | null) {
+    setSelectedTraceId(traceId);
+    resetReviewForm();
+    setMessage(null);
+    setMessageTone("info");
+  }
+
   async function api(path: string, init: RequestInit = {}) {
     const response = await fetch(`/api/lawyer-review${path}`, {
       ...init,
@@ -98,6 +165,7 @@ export default function LawyerReviewPage() {
   async function loadQueue() {
     setLoading(true);
     setMessage(null);
+    setMessageTone("info");
     try {
       window.localStorage.setItem("lawyerReviewToken", token);
       const data = await api(
@@ -105,6 +173,7 @@ export default function LawyerReviewPage() {
       );
       setQueue(Array.isArray(data) ? data : []);
     } catch (error) {
+      setMessageTone("error");
       setMessage(
         error instanceof Error ? error.message : "Failed to load queue"
       );
@@ -117,12 +186,14 @@ export default function LawyerReviewPage() {
     setLoading(true);
     setSelectedMatterId(matterId);
     setMessage(null);
+    setMessageTone("info");
     try {
       const data = await api(`?matterId=${encodeURIComponent(matterId)}`);
       setMatter(data as MatterReview);
       const firstTrace = (data?.traces ?? [])[0];
-      setSelectedTraceId(firstTrace?.id ?? null);
+      selectAnswerTrace(firstTrace?.id ? String(firstTrace.id) : null);
     } catch (error) {
+      setMessageTone("error");
       setMessage(
         error instanceof Error ? error.message : "Failed to load matter"
       );
@@ -159,12 +230,17 @@ export default function LawyerReviewPage() {
           review_status: "submitted",
         }),
       });
-      setMessage("Review submitted.");
       if (selectedMatterId) {
         await loadMatter(selectedMatterId);
       }
       await loadQueue();
+      resetReviewForm();
+      setMessageTone("success");
+      setMessage(
+        "Review submitted successfully. This answer is now marked as commented."
+      );
     } catch (error) {
+      setMessageTone("error");
       setMessage(
         error instanceof Error ? error.message : "Failed to submit review"
       );
@@ -212,10 +288,9 @@ export default function LawyerReviewPage() {
               onChange={(event) => setStatus(event.target.value)}
               value={status}
             >
-              <option value="active">Active conversations</option>
-              <option value="all">All conversations</option>
-              <option value="open">Open matters</option>
-              <option value="closed">Closed matters</option>
+              <option value="uncommented">Uncommented conversations</option>
+              <option value="commented">Commented conversations</option>
+              <option value="all">All reviewable conversations</option>
             </select>
             <button
               className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -227,17 +302,34 @@ export default function LawyerReviewPage() {
             </button>
           </div>
           {message ? (
-            <p className="mt-3 text-sm text-amber-700">{message}</p>
+            <p
+              className={`mt-3 rounded-xl px-3 py-2 text-sm ${
+                messageTone === "success"
+                  ? "bg-emerald-50 text-emerald-800"
+                  : messageTone === "error"
+                    ? "bg-red-50 text-red-700"
+                    : "bg-amber-50 text-amber-700"
+              }`}
+            >
+              {message}
+            </p>
           ) : null}
         </section>
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.35fr]">
           <section className="rounded-3xl border bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold">Conversation queue</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Only conversations with reviewable answer traces are shown.
+            </p>
             <div className="mt-4 space-y-3">
               {queue.map((item) => (
                 <button
-                  className="w-full rounded-2xl border p-4 text-left text-sm hover:border-sky-400 hover:bg-sky-50"
+                  className={`w-full rounded-2xl border p-4 text-left text-sm hover:border-sky-400 hover:bg-sky-50 ${
+                    selectedMatterId === item.matter_id
+                      ? "border-sky-500 bg-sky-50"
+                      : "border-slate-200 bg-white"
+                  }`}
                   key={item.matter_id}
                   onClick={() => loadMatter(item.matter_id)}
                   type="button"
@@ -246,8 +338,10 @@ export default function LawyerReviewPage() {
                     <span className="font-semibold">
                       {item.issue_type || "Unclassified conversation"}
                     </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">
-                      {item.unreviewed_trace_count ?? 0} unreviewed
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-medium ${commentStatusClass(item)}`}
+                    >
+                      {commentStatusLabel(item)}
                     </span>
                   </div>
                   <p className="mt-2 text-slate-600">
@@ -258,13 +352,14 @@ export default function LawyerReviewPage() {
                   <p className="mt-1 text-xs text-slate-400">
                     matter {item.matter_id.slice(0, 8)} · traces{" "}
                     {item.trace_count ?? 0} · reviewed{" "}
-                    {item.reviewed_trace_count ?? 0}
+                    {item.reviewed_trace_count ?? 0} · unreviewed{" "}
+                    {item.unreviewed_trace_count ?? 0}
                   </p>
                 </button>
               ))}
               {queue.length ? null : (
                 <p className="text-sm text-slate-500">
-                  No conversations loaded.
+                  No reviewable conversations found for this filter.
                 </p>
               )}
             </div>
@@ -311,9 +406,16 @@ export default function LawyerReviewPage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       {(matter.traces ?? []).map((trace) => (
                         <button
-                          className={`rounded-full border px-3 py-1 text-xs ${selectedTraceId === trace.id ? "border-sky-500 bg-sky-50" : "bg-white"}`}
+                          className={`rounded-full border px-3 py-1 text-xs ${
+                            selectedTraceId === trace.id
+                              ? "border-sky-500 bg-sky-50 text-sky-800"
+                              : String(trace.review_status ?? "unreviewed") ===
+                                  "reviewed"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800"
+                          }`}
                           key={String(trace.id)}
-                          onClick={() => setSelectedTraceId(String(trace.id))}
+                          onClick={() => selectAnswerTrace(String(trace.id))}
                           type="button"
                         >
                           {String(trace.id).slice(0, 8)} ·{" "}
@@ -425,11 +527,11 @@ export default function LawyerReviewPage() {
                   />
                   <button
                     className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    disabled={loading}
+                    disabled={loading || !selectedTraceId}
                     onClick={submitReview}
                     type="button"
                   >
-                    Submit review
+                    {loading ? "Submitting..." : "Submit review"}
                   </button>
                 </div>
               </div>

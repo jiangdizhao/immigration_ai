@@ -35,12 +35,18 @@ class ReviewService:
         limit = max(1, min(int(limit or 50), 200))
         offset = max(0, int(offset or 0))
 
+        status_filter = (status or "uncommented").strip().lower()
         query = db.query(Matter).order_by(
             Matter.last_user_message_at.desc().nullslast(),
             Matter.created_at.desc(),
         )
-        if status and status != "all":
-            query = query.filter(Matter.status == status if status in {"open", "closed"} else Matter.status != "closed")
+
+        # Keep old matter-status filters available for compatibility, but the
+        # lawyer-review page now uses comment-status filters.
+        if status_filter in {"open", "closed"}:
+            query = query.filter(Matter.status == status_filter)
+        elif status_filter == "active":
+            query = query.filter(Matter.status != "closed")
 
         matters = query.offset(offset).limit(limit).all()
         out: list[ReviewConversationItem] = []
@@ -52,6 +58,12 @@ class ReviewService:
                 .order_by(AnswerTrace.created_at.asc())
                 .all()
             )
+            if not traces:
+                # Matters created before ENABLE_LAWYER_REVIEW_TRACE was enabled
+                # cannot be reviewed at turn level, so hide them from the lawyer
+                # queue instead of showing confusing "0 unreviewed" rows.
+                continue
+
             trace_ids = [trace.id for trace in traces]
             reviews = (
                 db.query(AnswerReview)
@@ -61,9 +73,34 @@ class ReviewService:
                 else []
             )
 
-            first_trace = traces[0] if traces else None
-            latest_trace = traces[-1] if traces else None
+            first_trace = traces[0]
+            latest_trace = traces[-1]
             reviewed_trace_ids = {review.answer_trace_id for review in reviews}
+            reviewed_trace_count = sum(
+                1
+                for trace in traces
+                if trace.id in reviewed_trace_ids or trace.review_status == "reviewed"
+            )
+            unreviewed_trace_count = sum(
+                1
+                for trace in traces
+                if trace.id not in reviewed_trace_ids and trace.review_status != "reviewed"
+            )
+            if reviewed_trace_count <= 0:
+                comment_status = "uncommented"
+            elif unreviewed_trace_count <= 0:
+                comment_status = "fully_commented"
+            else:
+                comment_status = "partially_commented"
+
+            if status_filter == "uncommented" and reviewed_trace_count > 0:
+                continue
+            if status_filter == "commented" and reviewed_trace_count <= 0:
+                continue
+            if status_filter in {"fully_commented", "reviewed"} and unreviewed_trace_count > 0:
+                continue
+            if status_filter == "partially_commented" and comment_status != "partially_commented":
+                continue
 
             out.append(
                 ReviewConversationItem(
@@ -74,17 +111,16 @@ class ReviewService:
                     issue_type=matter.issue_type,
                     visa_type=matter.visa_type,
                     risk_level=matter.risk_level,
-                    first_user_message=first_trace.user_message if first_trace else None,
-                    latest_user_message=latest_trace.user_message if latest_trace else None,
-                    latest_assistant_answer_preview=(
-                        (latest_trace.assistant_answer or "")[:260] if latest_trace else None
-                    ),
+                    first_user_message=first_trace.user_message,
+                    latest_user_message=latest_trace.user_message,
+                    latest_assistant_answer_preview=(latest_trace.assistant_answer or "")[:260],
                     trace_count=len(traces),
-                    reviewed_trace_count=sum(1 for trace in traces if trace.id in reviewed_trace_ids or trace.review_status == "reviewed"),
-                    unreviewed_trace_count=sum(1 for trace in traces if trace.id not in reviewed_trace_ids and trace.review_status != "reviewed"),
+                    reviewed_trace_count=reviewed_trace_count,
+                    unreviewed_trace_count=unreviewed_trace_count,
                     critical_review_count=sum(1 for review in reviews if review.severity == "critical"),
+                    comment_status=comment_status,
                     created_at=matter.created_at,
-                    last_trace_at=latest_trace.created_at if latest_trace else matter.last_user_message_at,
+                    last_trace_at=latest_trace.created_at,
                 )
             )
 
