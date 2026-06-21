@@ -20,12 +20,29 @@ type ConversationQueueItem = {
   created_at?: string | null;
 };
 
+type AnswerReview = {
+  id: string;
+  answer_trace_id: string;
+  matter_id?: string | null;
+  reviewer_name?: string | null;
+  reviewer_role?: string | null;
+  rating?: string | null;
+  severity?: string | null;
+  error_categories?: string[] | null;
+  lawyer_comment?: string | null;
+  corrected_answer?: string | null;
+  lesson_candidate?: string | null;
+  review_status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 type MatterReview = {
   matter_id: string;
   matter: Record<string, unknown>;
   conversation_history: Record<string, unknown>[];
   traces: Record<string, unknown>[];
-  reviews: Record<string, unknown>[];
+  reviews: AnswerReview[];
 };
 
 const ERROR_CATEGORIES = [
@@ -47,6 +64,17 @@ function preview(value: unknown, maxLength = 180) {
   const text =
     typeof value === "string" ? value : JSON.stringify(value ?? "", null, 2);
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function reviewDateLabel(value?: string | null) {
+  if (!value) {
+    return "time unknown";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString();
 }
 
 function commentStatusForItem(item: ConversationQueueItem) {
@@ -130,6 +158,15 @@ export default function LawyerReviewPage() {
     );
   }, [matter, selectedTraceId]);
 
+  const selectedTraceReviews = useMemo(() => {
+    if (!selectedTraceId) {
+      return [];
+    }
+    return (matter?.reviews ?? []).filter(
+      (review) => String(review.answer_trace_id ?? "") === selectedTraceId
+    );
+  }, [matter, selectedTraceId]);
+
   function resetReviewForm() {
     setRating("mostly_correct");
     setSeverity("medium");
@@ -182,7 +219,10 @@ export default function LawyerReviewPage() {
     }
   }
 
-  async function loadMatter(matterId: string) {
+  async function loadMatter(
+    matterId: string,
+    preferredTraceId?: string | null
+  ) {
     setLoading(true);
     setSelectedMatterId(matterId);
     setMessage(null);
@@ -191,7 +231,12 @@ export default function LawyerReviewPage() {
       const data = await api(`?matterId=${encodeURIComponent(matterId)}`);
       setMatter(data as MatterReview);
       const firstTrace = (data?.traces ?? [])[0];
-      selectAnswerTrace(firstTrace?.id ? String(firstTrace.id) : null);
+      const preferredTrace = (data?.traces ?? []).find(
+        (trace: Record<string, unknown>) =>
+          String(trace.id ?? "") === preferredTraceId
+      );
+      const targetTrace = preferredTrace ?? firstTrace;
+      selectAnswerTrace(targetTrace?.id ? String(targetTrace.id) : null);
     } catch (error) {
       setMessageTone("error");
       setMessage(
@@ -461,6 +506,87 @@ export default function LawyerReviewPage() {
                     </pre>
                   </details>
                 </div>
+
+                {selectedTraceReviews.length ? (
+                  <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="font-semibold text-emerald-950">
+                        Existing lawyer comments
+                      </h3>
+                      <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-emerald-800">
+                        {selectedTraceReviews.length} submitted
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-3">
+                      {selectedTraceReviews.map((review, index) => (
+                        <div
+                          className="rounded-2xl border border-emerald-200 bg-white p-4 text-sm"
+                          key={
+                            review.id || `${review.answer_trace_id}-${index}`
+                          }
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span className="font-semibold text-slate-700">
+                              {review.reviewer_name || "Lawyer review"}
+                            </span>
+                            <span>·</span>
+                            <span>{reviewDateLabel(review.created_at)}</span>
+                            <span>·</span>
+                            <span>rating: {review.rating || "-"}</span>
+                            <span>·</span>
+                            <span>severity: {review.severity || "-"}</span>
+                          </div>
+                          {review.error_categories?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {review.error_categories.map((category) => (
+                                <span
+                                  className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                  key={category}
+                                >
+                                  {category}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {review.lawyer_comment ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-semibold uppercase text-slate-500">
+                                Lawyer comment
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-800">
+                                {review.lawyer_comment}
+                              </p>
+                            </div>
+                          ) : null}
+                          {review.corrected_answer ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-semibold uppercase text-slate-500">
+                                Corrected answer
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-800">
+                                {review.corrected_answer}
+                              </p>
+                            </div>
+                          ) : null}
+                          {review.lesson_candidate ? (
+                            <div className="mt-3">
+                              <p className="text-xs font-semibold uppercase text-slate-500">
+                                Reusable lesson candidate
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-800">
+                                {review.lesson_candidate}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    No lawyer comment has been submitted for this answer yet.
+                  </div>
+                )}
 
                 <div className="mt-6 space-y-4 rounded-2xl bg-slate-50 p-4">
                   <h3 className="font-semibold">Lawyer review</h3>
