@@ -42,3 +42,17 @@ doc/*.docx
 .env.phase1b.*.local
 # Phase 1C generated dumps / exports
 artifacts/phase1c/
+
+# Local/manual backup files
+*.bak
+*.bak_*
+*.bak-*
+*.backup
+*.backup_*
+*.backup-*
+
+# Local generated Phase 1C artifacts
+artifacts/phase1c/
+*.dump
+*.sql.dump
+*.jsonl.tmp
