@@ -13,7 +13,6 @@ from app.services.v2.verified_answer_service import (
     Confidence,
     QueryServiceV2,
     V2ClaimVerdict,
-    V2ConditionVerdict,
     V2LegalClaim,
     V2LawyerLesson,
     V2RenderedAnswer,
@@ -23,13 +22,13 @@ from app.services.v2.verified_answer_service import (
 
 
 class QueryServiceV2Patch2(QueryServiceV2):
-    """V2 precision/latency patch.
+    """V2 LLM-verified legal answer path.
 
-    This patch avoids case-by-case shortcuts. The optional deterministic verifier
-    shortcut is evidence-driven: it uses the model's own claims, active lawyer
-    lessons, retrieved source text, source authority, and condition/risk state.
-    If generic evidence coverage is weak, it falls back to the existing verifier
-    LLM path.
+    This version deliberately removes the earlier deterministic verifier shortcut.
+    Retrieved local/live sources are evidence for the LLM verifier, not a
+    deterministic pass/fail authority. If verification finds a bad, incomplete,
+    or fallback-like draft, a controlled repair/finalization LLM writes the final
+    customer-facing answer before it is returned.
     """
 
     STOP_TERMS = {
@@ -41,12 +40,33 @@ class QueryServiceV2Patch2(QueryServiceV2):
         "australian", "must", "should", "can", "could", "would", "about",
     }
 
+    GENERIC_DRAFT_PATTERNS = [
+        r"i can help with australian immigration-law questions",
+        r"i can help with australian immigration law questions",
+        r"need to verify the key legal basis",
+        r"before giving a reliable answer",
+        r"无法生成可靠回复",
+        r"需要先核对关键法律依据",
+        r"不能给出可靠回答",
+    ]
+
+    INTERNAL_PUBLIC_PATTERNS = [
+        r"verification indicates",
+        r"add the missing decisive point",
+        r"missing decisive keyword",
+        r"source pack",
+        r"numbered sources",
+        r"answer contract",
+        r"verifier",
+        r"draft contract",
+        r"retrieved chunks",
+    ]
+
     def __init__(self) -> None:
         super().__init__()
-        self.deterministic_verifier_enabled = os.getenv(
-            "V2_DETERMINISTIC_VERIFIER_ENABLED", "true"
-        ).strip().lower() in {"1", "true", "yes"}
+        self.repair_model = os.getenv("V2_REPAIR_MODEL", self.verifier_model)
         self._active_lessons: list[V2LawyerLesson] = []
+        self._last_source_pack: list[dict[str, Any]] = []
 
     def _lessons(self, db: Session, question: str) -> list[V2LawyerLesson]:
         lessons = super()._lessons(db, question)
@@ -54,7 +74,6 @@ class QueryServiceV2Patch2(QueryServiceV2):
         return lessons
 
     def _verify(self, db: Session, payload: QueryRequest, contract):
-        lessons = getattr(self, "_active_lessons", []) or []
         chunks, local_debug = self._retrieve_chunks(db, payload, contract)
         live_chunks: list[LiveSourceChunk] = []
         live_debug: dict[str, Any] = {"used_live_fetch": False}
@@ -80,6 +99,7 @@ class QueryServiceV2Patch2(QueryServiceV2):
                 live_debug = {"used_live_fetch": False, "error": str(exc)[:500]}
 
         pack = self._source_pack(chunks, live_chunks)
+        self._last_source_pack = pack
         citations = self._citations(chunks, live_chunks)
         if not pack:
             result = V2VerificationResult(
@@ -89,7 +109,12 @@ class QueryServiceV2Patch2(QueryServiceV2):
                 ],
                 overall_verdict="cannot_verify",
                 final_confidence="low",
-                coverage_report={"source_pack_available": False, "verification_mode": "no_sources"},
+                coverage_report={
+                    "source_pack_available": False,
+                    "verification_mode": "no_sources",
+                    "deterministic_verifier_removed": True,
+                    "draft_quality": self._draft_quality(contract),
+                },
             )
             return result, citations, {
                 "local_retrieval": local_debug,
@@ -98,27 +123,11 @@ class QueryServiceV2Patch2(QueryServiceV2):
                 "verification_mode": "no_sources",
             }
 
-        deterministic = self._try_deterministic_verification(contract, lessons, pack, live_chunks)
-        if deterministic is not None:
-            deterministic.coverage_report.update(
-                {
-                    "local_chunk_count": len(chunks),
-                    "live_chunk_count": len(live_chunks),
-                    "online_enabled": self.online_enabled,
-                    "checked_claim_count": len(contract.legal_claims_to_verify),
-                    "verification_mode": "deterministic_local_evidence",
-                }
-            )
-            return deterministic, citations, {
-                "local_retrieval": local_debug,
-                "live_retrieval": live_debug,
-                "source_pack": pack,
-                "verification_mode": "deterministic_local_evidence",
-            }
-
         try:
             msg = {
                 "answer_contract": contract.model_dump(exclude={"raw_model_output"}),
+                "draft_quality": self._draft_quality(contract),
+                "relevant_lawyer_lessons": [lesson.model_dump() for lesson in getattr(self, "_active_lessons", [])],
                 "numbered_sources": pack,
             }
             res = self.client.responses.create(
@@ -142,6 +151,10 @@ class QueryServiceV2Patch2(QueryServiceV2):
                         verdict="partially_supported",
                         confidence="low",
                         supporting_sources=supports,
+                        required_correction=(
+                            "The answer must be rewritten from the available sources; "
+                            "do not display fallback or internal verification wording."
+                        ),
                     )
                     for c in contract.legal_claims_to_verify
                 ],
@@ -156,7 +169,9 @@ class QueryServiceV2Patch2(QueryServiceV2):
                 "live_chunk_count": len(live_chunks),
                 "online_enabled": self.online_enabled,
                 "checked_claim_count": len(contract.legal_claims_to_verify),
-                "verification_mode": result.coverage_report.get("verification_mode") or "llm_verifier",
+                "verification_mode": result.coverage_report.get("verification_mode") or "llm_verifier_mandatory",
+                "deterministic_verifier_removed": True,
+                "draft_quality": self._draft_quality(contract),
             }
         )
         return result, citations, {
@@ -165,6 +180,111 @@ class QueryServiceV2Patch2(QueryServiceV2):
             "source_pack": pack,
             "verification_mode": result.coverage_report.get("verification_mode"),
         }
+
+    def _verifier_prompt(self) -> str:
+        return (
+            "You are a strict legal verification layer for an Australian immigration-law website assistant. "
+            "You do not write the final public answer. Work only from the answer contract, relevant lawyer lessons, draft quality, and numbered sources. "
+            "Do not verify merely by keyword overlap. Decide whether the draft is legally complete enough for the user's exact question. "
+            "Schedule text can be fragmented or technical; if it is not enough to support a complete customer-facing answer, mark the claim partially_supported or not_found and require repair. "
+            "If the draft is generic, fallback-like, says it needs to verify first, or does not directly answer the user's question, mark overall_verdict='repair'. "
+            "If relevant lawyer lessons list must_include terms and the draft misses them, require repair. "
+            "If a personal yes/no conclusion lacks decisive facts, set overall_verdict='ask_decisive_question' or 'repair'. "
+            "If sources contradict the claim, mark contradicted. If sources are incomplete, do not overstate confidence. "
+            "Return ONLY JSON: {\"claim_verdicts\": [{\"claim_id\": string, \"verdict\": \"supported|partially_supported|contradicted|not_found\", \"confidence\": \"low|medium|high\", \"supporting_sources\": [{\"title\": string, \"authority\": string, \"source_type\": string, \"url\": string|null, \"section_ref\": string|null, \"quote_or_summary\": string|null, \"source_id\": string|null, \"chunk_id\": string|null}], \"required_correction\": string|null}], \"condition_verdicts\": [{\"condition_id\": string, \"blocks_general_rule_answer\": boolean, \"blocks_case_specific_conclusion\": boolean, \"required_next_question\": string|null, \"explanation\": string|null}], \"wrong_topic_or_frame_detected\": boolean, \"missing_decisive_keywords\": string[], \"overall_verdict\": \"pass|repair|ask_decisive_question|escalate|cannot_verify\", \"final_confidence\": \"low|medium|high\", \"coverage_report\": object}"
+        )
+
+    def _render(self, contract, verification: V2VerificationResult, guard) -> V2RenderedAnswer:
+        if self._needs_repair_finalization(contract, verification, guard):
+            repaired = self._repair_final_answer(contract, verification, guard)
+            if repaired:
+                return repaired
+        rendered = super()._render(contract, verification, guard)
+        rendered.answer = self._remove_internal_public_text(rendered.answer)
+        rendered.confidence = self._calibrate_confidence(contract, verification, guard)
+        return rendered
+
+    def _needs_repair_finalization(self, contract, verification: V2VerificationResult, guard) -> bool:
+        if guard.action in {"repair", "ask_decisive_question", "escalate"}:
+            return True
+        if verification.overall_verdict in {"repair", "ask_decisive_question", "escalate", "cannot_verify"}:
+            return True
+        if verification.missing_decisive_keywords:
+            return True
+        if self._draft_quality(contract)["is_generic_or_fallback"]:
+            return True
+        rendered_text = "\n".join([
+            contract.answer_draft.direct_answer or "",
+            contract.answer_draft.explanation or "",
+            contract.answer_draft.practical_meaning or "",
+            contract.answer_draft.caution or "",
+        ]).lower()
+        return any(re.search(pattern, rendered_text, flags=re.I) for pattern in self.INTERNAL_PUBLIC_PATTERNS)
+
+    def _repair_final_answer(self, contract, verification: V2VerificationResult, guard) -> V2RenderedAnswer | None:
+        lang = contract.response_language
+        q = guard.required_next_question or contract.answer_draft.one_next_question
+        try:
+            payload = {
+                "answer_contract": contract.model_dump(exclude={"raw_model_output"}),
+                "verification_result": verification.model_dump(exclude={"raw_model_output"}),
+                "condition_guard": guard.model_dump(),
+                "relevant_lawyer_lessons": [lesson.model_dump() for lesson in getattr(self, "_active_lessons", [])],
+                "numbered_sources": (getattr(self, "_last_source_pack", []) or [])[:6],
+                "public_output_language": lang,
+            }
+            res = self.client.responses.create(
+                model=self.repair_model,
+                input=[
+                    {"role": "system", "content": self._repair_prompt(lang)},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+            )
+            text = self._remove_internal_public_text((res.output_text or "").strip())
+            if not text:
+                return None
+            confidence = self._calibrate_confidence(contract, verification, guard)
+            next_action = "answer"
+            follow = []
+            missing = []
+            if guard.action == "ask_decisive_question":
+                next_action = "ask_followup"
+                if q:
+                    follow = [q]
+                    missing = [q]
+            if guard.action == "escalate" or contract.risk_flags.requires_lawyer_handoff:
+                next_action = "suggest_consultation"
+                confidence = "low"
+            return V2RenderedAnswer(
+                answer=text,
+                confidence=confidence,
+                next_action=next_action,
+                escalate=next_action == "suggest_consultation",
+                follow_up_questions=follow,
+                missing_facts=missing,
+                user_display_mode=(
+                    "ask_one_question"
+                    if next_action == "ask_followup"
+                    else ("escalate_with_brief_reason" if next_action == "suggest_consultation" else "direct_short")
+                ),
+                compact_sources=self._compact_sources(verification),
+            )
+        except Exception:
+            return None
+
+    def _repair_prompt(self, lang: str) -> str:
+        language_rule = "Write in Simplified Chinese." if lang == "zh" else "Write in English."
+        return (
+            "You write the final public answer for an Australian immigration-law website assistant. "
+            "Use the answer contract, verifier result, lawyer lessons, and numbered sources. "
+            "Your job is to produce the corrected customer-facing answer, not to discuss the internal verification process. "
+            "Start with the direct answer. Include any required correction naturally in the Short answer or Why section, not as an internal warning. "
+            "Never mention verification, missing keywords, source pack, numbered sources, answer contract, verifier, retrieved chunks, or draft. "
+            "If the facts are insufficient for a personal eligibility conclusion, explain the general rule first and ask only one decisive question. "
+            "If source coverage is incomplete, say this is general information and recommend lawyer review only when genuinely needed. "
+            "Use short Markdown sections: ### Short answer, ### Why, ### Practical meaning, and ### Important caution only if needed. "
+            + language_rule
+        )
 
     def _retrieve_chunks(self, db: Session, payload: QueryRequest, contract):
         by_id = {}
@@ -179,13 +299,7 @@ class QueryServiceV2Patch2(QueryServiceV2):
         for claim in claims[:4]:
             query = " ".join(
                 x
-                for x in [
-                    claim.claim,
-                    claim.topic or "",
-                    claim.subclass or "",
-                    claim.stream or "",
-                    payload.question,
-                ]
+                for x in [claim.claim, claim.topic or "", claim.subclass or "", claim.stream or "", payload.question]
                 if x
             )
             try:
@@ -202,7 +316,6 @@ class QueryServiceV2Patch2(QueryServiceV2):
                     by_id[chunk.id] = chunk
             except Exception as exc:
                 debug.append({"query": query, "error": str(exc)[:500]})
-
         ranked = self._rank_chunks(list(by_id.values()), payload, contract, getattr(self, "_active_lessons", []))
         return ranked[: self.max_chunks], {
             "queries": debug,
@@ -214,11 +327,6 @@ class QueryServiceV2Patch2(QueryServiceV2):
             return []
         positive_terms = self._query_terms(payload.question, contract, lessons)
         negative_terms = self._negative_terms(contract, lessons)
-        claim_text = " ".join([payload.question, *[c.claim for c in contract.legal_claims_to_verify]]).lower()
-        allow_schedule_9 = any(
-            term in claim_text
-            for term in ["schedule 9", "special entry", "clearance", "special entry and clearance"]
-        )
 
         def score(chunk) -> tuple[float, str]:
             source = chunk.source
@@ -226,9 +334,7 @@ class QueryServiceV2Patch2(QueryServiceV2):
             authority = (source.authority if source else "") or ""
             source_type = (source.source_type if source else "") or ""
             section = chunk.section_ref or ""
-            text = " ".join(
-                [title, authority, source_type, section, chunk.heading or "", chunk.text or ""]
-            ).lower()
+            text = " ".join([title, authority, source_type, section, chunk.heading or "", chunk.text or ""]).lower()
             matched = sum(1 for term in positive_terms if self._contains_phrase(text, term))
             negative = sum(1 for term in negative_terms if self._contains_phrase(text, term))
             value = matched * 3.0 - negative * 4.0
@@ -240,146 +346,12 @@ class QueryServiceV2Patch2(QueryServiceV2):
                 value += 1.5
             if source_type.lower() == "legislation":
                 value += 1.0
-            if "schedule 9" in title.lower() and not allow_schedule_9:
-                value -= 6.0
-            if "special entry and clearance" in title.lower() and not allow_schedule_9:
-                value -= 4.0
             return value, title
 
         return sorted(chunks, key=score, reverse=True)
 
-    def _try_deterministic_verification(
-        self,
-        contract,
-        lessons: list[V2LawyerLesson],
-        pack: list[dict[str, Any]],
-        live_chunks: list[LiveSourceChunk],
-    ) -> V2VerificationResult | None:
-        if not self.deterministic_verifier_enabled:
-            return None
-        if contract.risk_flags.any_high_risk() or contract.risk_flags.requires_lawyer_handoff:
-            return None
-        if contract.case_specific_yes_no_given and self._has_unknown_blocking_condition(contract):
-            return None
-        if not pack:
-            return None
-
-        answer_text = self._answer_text(contract)
-        source_text = self._pack_text(pack)
-        missing_terms = []
-        for term in self._lesson_must_include_terms(lessons):
-            if not self._contains_phrase(answer_text.lower(), term):
-                missing_terms.append(term)
-        if missing_terms:
-            return V2VerificationResult(
-                claim_verdicts=[
-                    V2ClaimVerdict(
-                        claim_id=c.claim_id,
-                        verdict="partially_supported",
-                        confidence="medium",
-                        supporting_sources=[self._support_from_pack(x) for x in pack[:3]],
-                        required_correction="Add the missing decisive point(s): "
-                        + ", ".join(missing_terms[:5]),
-                    )
-                    for c in contract.legal_claims_to_verify
-                ],
-                missing_decisive_keywords=missing_terms[:8],
-                overall_verdict="repair",
-                final_confidence="medium",
-                coverage_report={
-                    "deterministic_gate": "lesson_terms_missing_from_answer",
-                    "missing_terms": missing_terms[:8],
-                },
-            )
-
-        claim_verdicts = []
-        claim_debug = []
-        decisive_failures = 0
-        all_decisive_high = True
-        for claim in contract.legal_claims_to_verify or []:
-            claim_terms = self._claim_terms(claim)
-            source_coverage = self._term_coverage(claim_terms, source_text.lower())
-            authoritative = self._has_authoritative_source(pack)
-            enough = bool(claim_terms) and (
-                source_coverage["ratio"] >= 0.42
-                or source_coverage["matched_count"] >= min(3, max(1, len(claim_terms)))
-            )
-            if enough:
-                confidence: Confidence = "high" if authoritative and source_coverage["ratio"] >= 0.6 else "medium"
-                verdict = "supported"
-            else:
-                confidence = "low"
-                verdict = "not_found" if claim.importance == "decisive" else "partially_supported"
-                if claim.importance == "decisive":
-                    decisive_failures += 1
-            if confidence != "high" and claim.importance == "decisive":
-                all_decisive_high = False
-            claim_verdicts.append(
-                V2ClaimVerdict(
-                    claim_id=claim.claim_id,
-                    verdict=verdict,
-                    confidence=confidence,
-                    supporting_sources=[self._support_from_pack(x) for x in pack[:3]] if verdict != "not_found" else [],
-                )
-            )
-            claim_debug.append(
-                {
-                    "claim_id": claim.claim_id,
-                    "terms": sorted(claim_terms),
-                    "matched_terms": source_coverage["matched"],
-                    "missing_terms": source_coverage["missing"],
-                    "ratio": source_coverage["ratio"],
-                    "authoritative_source": authoritative,
-                    "verdict": verdict,
-                }
-            )
-        if not claim_verdicts or decisive_failures:
-            return None
-
-        condition_verdicts = [
-            V2ConditionVerdict(
-                condition_id=cond.condition_id,
-                blocks_general_rule_answer=False,
-                blocks_case_specific_conclusion=cond.known_status in {"unknown", "contradicted"}
-                and cond.required_for in {"case_specific_conclusion", "deadline_advice"},
-                required_next_question=self._condition_question(contract.response_language, cond.condition)
-                if cond.known_status in {"unknown", "contradicted"}
-                and cond.required_for in {"case_specific_conclusion", "deadline_advice"}
-                else None,
-                explanation=cond.effect_if_missing,
-            )
-            for cond in contract.decisive_conditions
-        ]
-        blocking = any(v.blocks_case_specific_conclusion for v in condition_verdicts)
-        final_confidence: Confidence = "high" if all_decisive_high and not blocking else "medium"
-        return V2VerificationResult(
-            claim_verdicts=claim_verdicts,
-            condition_verdicts=condition_verdicts,
-            wrong_topic_or_frame_detected=False,
-            missing_decisive_keywords=[],
-            overall_verdict="ask_decisive_question" if contract.case_specific_yes_no_given and blocking else "pass",
-            final_confidence=final_confidence,
-            coverage_report={
-                "deterministic_gate": "passed",
-                "claim_term_coverage": claim_debug,
-                "authoritative_source_present": self._has_authoritative_source(pack),
-                "source_count": len(pack),
-                "live_source_count": len(live_chunks),
-            },
-        )
-
-    def _render(self, contract, verification: V2VerificationResult, guard) -> V2RenderedAnswer:
-        rendered = super()._render(contract, verification, guard)
-        rendered.confidence = self._calibrate_confidence(contract, verification, guard)
-        if guard.action == "ask_decisive_question" and rendered.confidence == "high":
-            rendered.confidence = "medium"
-        if guard.action == "escalate" and rendered.confidence == "medium":
-            rendered.confidence = "low"
-        return rendered
-
-    # ----- generic term/source helpers -----
-    def _answer_text(self, contract) -> str:
-        return "\n".join(
+    def _draft_quality(self, contract) -> dict[str, Any]:
+        answer = "\n".join(
             part
             for part in [
                 contract.answer_draft.direct_answer,
@@ -389,12 +361,14 @@ class QueryServiceV2Patch2(QueryServiceV2):
             ]
             if part
         )
-
-    def _pack_text(self, pack: list[dict[str, Any]]) -> str:
-        return "\n".join(
-            " ".join(str(item.get(key) or "") for key in ["title", "authority", "source_type", "section_ref", "heading", "text"])
-            for item in pack
+        generic = contract.answer_scope == "cannot_answer" or any(
+            re.search(pattern, answer, flags=re.I) for pattern in self.GENERIC_DRAFT_PATTERNS
         )
+        return {
+            "is_generic_or_fallback": bool(generic),
+            "answer_scope": contract.answer_scope,
+            "direct_answer_chars": len(contract.answer_draft.direct_answer or ""),
+        }
 
     def _query_terms(self, question: str, contract, lessons: list[V2LawyerLesson]) -> set[str]:
         text = " ".join(
@@ -415,20 +389,6 @@ class QueryServiceV2Patch2(QueryServiceV2):
             terms.update(self._significant_terms(" ".join(lesson.must_not_include)))
         terms.update(self._significant_terms(" ".join(contract.topic_control.must_not_use_previous_topics)))
         return terms
-
-    def _claim_terms(self, claim) -> set[str]:
-        return self._significant_terms(" ".join([claim.claim, claim.topic or "", claim.subclass or "", claim.stream or ""]))
-
-    def _lesson_must_include_terms(self, lessons: list[V2LawyerLesson]) -> list[str]:
-        out = []
-        seen = set()
-        for lesson in lessons:
-            for item in lesson.must_include:
-                term = self._normalize_phrase(item)
-                if term and term not in seen:
-                    out.append(term)
-                    seen.add(term)
-        return out
 
     def _significant_terms(self, text: str) -> set[str]:
         normalized = self._normalize_phrase(text)
@@ -454,32 +414,12 @@ class QueryServiceV2Patch2(QueryServiceV2):
         phrase = self._normalize_phrase(phrase)
         return True if not phrase else phrase in self._normalize_phrase(text)
 
-    def _term_coverage(self, terms: set[str], text: str) -> dict[str, Any]:
-        if not terms:
-            return {"matched": [], "missing": [], "matched_count": 0, "total": 0, "ratio": 0.0}
-        matched = sorted(term for term in terms if self._contains_phrase(text, term))
-        missing = sorted(term for term in terms if term not in matched)
-        return {
-            "matched": matched,
-            "missing": missing,
-            "matched_count": len(matched),
-            "total": len(terms),
-            "ratio": round(len(matched) / max(len(terms), 1), 3),
-        }
-
-    def _has_authoritative_source(self, pack: list[dict[str, Any]]) -> bool:
-        for item in pack:
-            hay = " ".join(str(item.get(k) or "") for k in ["authority", "title", "url", "source_type"]).lower()
-            if any(term in hay for term in ["home affairs", "immi.homeaffairs", "legislation", "federal register"]):
-                return True
-        return False
-
-    def _has_unknown_blocking_condition(self, contract) -> bool:
-        return any(
-            cond.known_status in {"unknown", "contradicted"}
-            and cond.required_for in {"case_specific_conclusion", "deadline_advice"}
-            for cond in contract.decisive_conditions
-        )
+    def _remove_internal_public_text(self, text: str) -> str:
+        out = self._clean(text or "")
+        for pattern in self.INTERNAL_PUBLIC_PATTERNS:
+            out = re.sub(pattern, "", out, flags=re.I)
+        out = re.sub(r"\n{3,}", "\n\n", out).strip()
+        return out
 
     def _calibrate_confidence(self, contract, verification: V2VerificationResult, guard) -> Confidence:
         if guard.action == "escalate" or contract.risk_flags.any_high_risk():
