@@ -65,7 +65,8 @@ class StateMachine:
     - conversation-state transitions
     """
 
-    def __init__(self, max_history_turns: int = 12) -> None:
+    def __init__(self, max_history_turns: int | None = None) -> None:
+        # No artificial fixed turn limit; context budgeting happens per LLM call.
         self.max_history_turns = max_history_turns
 
     # ------------------------------------------------------------------
@@ -132,7 +133,7 @@ class StateMachine:
             last_contextualized_question=metadata.get("last_contextualized_question"),
             last_answer_type=metadata.get("last_answer_type"),
             next_action=metadata.get("next_action"),
-            conversation_history=history[-self.max_history_turns :],
+            conversation_history=history,
             case_hypothesis=case_hypothesis,
             fact_slot_states=fact_slot_states,
             interaction_plan=interaction_plan,
@@ -157,7 +158,7 @@ class StateMachine:
                 "last_contextualized_question": state.last_contextualized_question,
                 "last_answer_type": state.last_answer_type,
                 "next_action": state.next_action,
-                "conversation_history": [turn.model_dump() for turn in state.conversation_history[-self.max_history_turns :]],
+                "conversation_history": [turn.model_dump() for turn in state.conversation_history],
                 "case_hypothesis": state.case_hypothesis.model_dump(),
                 "fact_slot_states": [slot.model_dump() for slot in state.fact_slot_states],
                 "interaction_plan": state.interaction_plan.model_dump(),
@@ -467,7 +468,6 @@ class StateMachine:
                 ),
             ]
         )
-        state.conversation_history = state.conversation_history[-self.max_history_turns :]
         return state
 
     def merge_facts(self, *fact_dicts: dict[str, Any] | None) -> dict[str, Any]:
