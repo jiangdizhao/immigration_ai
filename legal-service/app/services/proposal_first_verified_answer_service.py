@@ -96,10 +96,7 @@ class ProposalFirstVerifiedAnswerService:
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
-            answer_text = self._answer_general_question_directly(
-                original_question or effective_question,
-                response_language,
-            )
+            answer_text = self._answer_general_question_directly(original_question or effective_question, response_language)
             return QueryResponse(
                 matter_id=matter_id,
                 answer=answer_text,
@@ -116,8 +113,7 @@ class ProposalFirstVerifiedAnswerService:
                 retrieval_debug={
                     "proposal_first_verified_answer": {
                         "used": True,
-                        "non_immigration_fast_path": True,
-                        "domain_source": "semantic_preflight_preferred",
+                        "non_immigration_general_fallback": True,
                         "proposal": proposal,
                     }
                 },
@@ -296,19 +292,19 @@ class ProposalFirstVerifiedAnswerService:
 
     def _answer_general_question_directly(self, question: str, response_language: str = "en") -> str:
         language_rule = (
-            "Write the answer in Simplified Chinese."
+            "Answer in Simplified Chinese."
             if response_language == "zh"
-            else "Write the answer in English."
+            else "Answer in English."
         )
         system_prompt = (
-            "You are a helpful general assistant. Answer the user's ordinary non-political general question directly and concisely. "
-            "Do not mention immigration-law retrieval, legal sources, citations, or internal routing. "
-            "Do not answer politically sensitive, election-voting, partisan, or political persuasion questions. "
-            f"{language_rule}"
+            "You are a helpful general assistant. "
+            "Answer the user's ordinary non-legal question directly and concisely. "
+            "Do not mention immigration-law retrieval, legal sources, or internal routing. "
+            + language_rule
         )
         try:
             response = self.client.responses.create(
-                model=self.final_model,
+                model=self.model,
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"User question:\n{question}\n"},
@@ -319,15 +315,8 @@ class ProposalFirstVerifiedAnswerService:
                 return text
         except Exception:
             pass
-        return (
-            "抱歉，我现在无法回答这个问题。"
-            if response_language == "zh"
-            else "I’m sorry, but I couldn’t answer that question right now."
-        )
+        return "我暂时无法回答这个普通问题。" if response_language == "zh" else "I couldn’t answer that general question right now."
 
-    # ------------------------------------------------------------------
-    # Stage 1: free proposal memo + structured search index
-    # ------------------------------------------------------------------
     def _build_free_proposal(
         self,
         *,

@@ -53,10 +53,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
-            answer_text = self._answer_general_question_directly(
-                original_question or effective_question,
-                response_language,
-            )
+            answer_text = self._answer_general_question_directly(original_question or effective_question, response_language)
             return QueryResponse(
                 matter_id=matter_id,
                 answer=answer_text,
@@ -73,8 +70,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 retrieval_debug={
                     "proposal_first_verification_depth": {
                         "used": True,
-                        "non_immigration_fast_path": True,
-                        "domain_source": "semantic_preflight_preferred",
+                        "non_immigration_general_fallback": True,
                         "proposal": proposal,
                     }
                 },

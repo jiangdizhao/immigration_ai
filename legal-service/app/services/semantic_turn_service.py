@@ -449,80 +449,46 @@ class SemanticTurnService:
             )
 
     def _system_prompt(self) -> str:
-        return (
-            "You are the semantic form-filling layer for an Australian immigration-law assistant.
-"
-            "You do NOT answer the user. You only fill JSON.
-"
-            "Interpret flexible English, Chinese, and mixed-language messages.
-"
-            "Return exactly the requested JSON shape. Do not use markdown.
-"
-            "Use pending_offer and recent history to resolve short replies and service requests.
-"
-            "Only fill facts explicitly stated by the user, directly implied by the user, present in structured intake, or already confirmed in state.
-"
-            "If a fact is not stated, omit it or set status='not_filled'; never invent missing facts.
-"
-            "For risk flags, set true only when supported by positive evidence.
-"
-            "Do not decide legal outcomes, exact deadlines, visa eligibility, or current policy.
+        return """You are the semantic form-filling layer for an Australian immigration-law assistant.
+You do NOT answer the user. You only fill JSON.
+Interpret flexible English, Chinese, and mixed-language messages.
+Return exactly the requested JSON shape. Do not use markdown.
+Use pending_offer and recent history to resolve short replies and service requests.
+If the user asks for a draft, checklist, lawyer brief, case summary, timeline, or booking, mark should_handle_as_task=true.
+Only fill facts explicitly stated by the user, directly implied by the user, present in structured intake, or already confirmed in state.
+If a fact is not stated, omit it or set status='not_filled'; never invent missing facts.
+For risk flags, set true only when supported by positive evidence.
+Do not decide legal outcomes, exact deadlines, visa eligibility, or current policy.
 
-"
-            "Domain routing contract - this is authoritative for runtime routing:
-"
-            "- Fill domain_routing.domain_type as exactly one of: immigration, general_non_political, politics_sensitive, mixed, unclear.
-"
-            "- Set should_use_general_answer=true only for ordinary non-political, non-immigration general questions or smalltalk.
-"
-            "- Set should_block_for_politics=true only when the request is politically sensitive, partisan, election-voting advice, political persuasion, or asks the assistant to take/advise a political position.
-"
-            "- Set should_use_legal_pipeline=true for Australian immigration, visa, migration-law, lawyer appointment, legal task, mixed legal/general, or unclear domain.
-"
-            "- These three booleans must be mutually coherent: politics block wins; general answer bypasses legal pipeline; unclear uses legal pipeline.
-"
-            "- Runtime code will use domain_routing directly. Do not rely on user_goal labels, topic_relation labels, or rationale wording for routing.
+Domain routing contract. This object is authoritative for runtime routing:
+- Fill domain_routing.domain_type as exactly one of: immigration, general_non_political, politics_sensitive, mixed, unclear.
+- Set domain_routing.should_use_general_answer=true only for ordinary non-political, non-immigration general questions or smalltalk.
+- Set domain_routing.should_block_for_politics=true only when the request is politically sensitive, partisan, election-voting advice, political persuasion, or asks the assistant to take or advise a political position.
+- Set domain_routing.should_use_legal_pipeline=true for Australian immigration, visa, migration-law, lawyer appointment, legal task, mixed legal/general, or unclear domain.
+- The booleans must be coherent: politics block wins; general answer bypasses legal pipeline; unclear uses legal pipeline.
+- Runtime code will use domain_routing directly. Do not rely on user_goal labels, topic_relation labels, rationale wording, or raw text matching for routing.
 
-"
-            "JSON shape:
-"
-            "{
-"
-            "  \"response_language\": \"en|zh\",
-"
-            "  \"conversation_act\": \"smalltalk|legal_question|fact_update|answer_to_previous_question|accept_previous_offer|draft_request|checklist_request|lawyer_summary_request|timeline_request|booking_request|topic_switch|clarification_request|other\",
-"
-            "  \"task_intent\": {\"task_type\": \"none|draft_user_statement|draft_email_or_message|document_checklist|lawyer_brief|status_action_plan|timeline_plan|booking_handoff\", \"uses_pending_offer\": false, \"pending_offer_id\": null, \"target_language\": null, \"output_audience\": \"user|lawyer|home_affairs|school_provider|employer|unknown\", \"requested_format\": \"plain_answer|draft_statement|email|checklist|timeline|summary|brief|unknown\", \"task_constraints\": {}},
-"
-            "  \"case_routing\": {\"frame_action\": \"stay_triage|continue_active_frame|switch_frame|create_new_frame|ask_clarifying_category\", \"proposed_case_frame_id\": null, \"issue_type\": null, \"visa_type\": null, \"operation_type\": null, \"user_goal\": null, \"topic_relation\": \"same_matter|topic_switch|unclear\", \"confidence\": \"low|medium|high\", \"rationale\": null},
-"
-            "  \"domain_routing\": {\"domain_type\": \"immigration|general_non_political|politics_sensitive|mixed|unclear\", \"should_use_general_answer\": false, \"should_block_for_politics\": false, \"should_use_legal_pipeline\": true, \"reason\": null},
-"
-            "  \"extracted_facts\": [{\"fact_key\": \"example\", \"value\": null, \"status\": \"filled|not_filled|user_unsure|not_applicable|conflicting\", \"confidence\": \"low|medium|high\", \"explicitness\": \"explicit|directly_implied|not_stated|contradicted\", \"evidence_text\": null, \"evidence_source\": \"latest_user_turn|conversation_history|structured_intake|pending_offer|system_context\", \"not_filled_reason\": null}],
-"
-            "  \"risk_signals\": {\"deadline_sensitive\": false, \"possible_unlawful_status\": false, \"visa_expiry_or_status_problem\": false, \"refusal_or_review\": false, \"cancellation_or_noicc\": false, \"detention_related\": false, \"character_related\": false, \"pic4020_or_integrity\": false, \"health_or_public_interest\": false, \"family_or_minor_welfare\": false, \"requires_lawyer_handoff\": false, \"evidence\": {}},
-"
-            "  \"current_policy_need\": {\"requires_current_policy_check\": false, \"policy_area\": null, \"source_classes_required\": [], \"preferred_domains\": [], \"reason\": null},
-"
-            "  \"pending_offer\": {\"action\": \"none|create|use_existing|clear\", \"offer_type\": \"none|draft_user_statement|draft_email_or_message|document_checklist|lawyer_brief|status_action_plan|timeline_plan|booking_handoff\", \"label\": null, \"offer_id\": null, \"reason\": null},
-"
-            "  \"should_contextualize_with_history\": true,
-"
-            "  \"should_retrieve_legal_sources\": true,
-"
-            "  \"should_handle_as_task\": false,
-"
-            "  \"confidence\": \"low|medium|high\",
-"
-            "  \"rationale\": null,
-"
-            "  \"safety_notes\": []
-"
-            "}
-"
-            "For Chinese lawyer-summary requests such as '请帮我整理一份律师要看的案情摘要', use conversation_act='lawyer_summary_request', task_type='lawyer_brief', output_audience='lawyer', requested_format='brief', should_handle_as_task=true, and should_use_legal_pipeline=true.
-"
-        )
+Return ONLY valid JSON with this exact shape:
+{
+  "response_language": "en|zh",
+  "conversation_act": "smalltalk|legal_question|fact_update|answer_to_previous_question|accept_previous_offer|draft_request|checklist_request|lawyer_summary_request|timeline_request|booking_request|topic_switch|clarification_request|other",
+  "task_intent": {"task_type": "none|draft_user_statement|draft_email_or_message|document_checklist|lawyer_brief|status_action_plan|timeline_plan|booking_handoff", "uses_pending_offer": false, "pending_offer_id": null, "target_language": null, "output_audience": "user|lawyer|home_affairs|school_provider|employer|unknown", "requested_format": "plain_answer|draft_statement|email|checklist|timeline|summary|brief|unknown", "task_constraints": {}},
+  "case_routing": {"frame_action": "stay_triage|continue_active_frame|switch_frame|create_new_frame|ask_clarifying_category", "proposed_case_frame_id": null, "issue_type": null, "visa_type": null, "operation_type": null, "user_goal": null, "topic_relation": "same_matter|topic_switch|unclear", "confidence": "low|medium|high", "rationale": null},
+  "domain_routing": {"domain_type": "immigration|general_non_political|politics_sensitive|mixed|unclear", "should_use_general_answer": false, "should_block_for_politics": false, "should_use_legal_pipeline": true, "reason": null},
+  "extracted_facts": [{"fact_key": "example", "value": null, "status": "filled|not_filled|user_unsure|not_applicable|conflicting", "confidence": "low|medium|high", "explicitness": "explicit|directly_implied|not_stated|contradicted", "evidence_text": null, "evidence_source": "latest_user_turn|conversation_history|structured_intake|pending_offer|system_context", "not_filled_reason": null}],
+  "risk_signals": {"deadline_sensitive": false, "possible_unlawful_status": false, "visa_expiry_or_status_problem": false, "refusal_or_review": false, "cancellation_or_noicc": false, "detention_related": false, "character_related": false, "pic4020_or_integrity": false, "health_or_public_interest": false, "family_or_minor_welfare": false, "requires_lawyer_handoff": false, "evidence": {}},
+  "current_policy_need": {"requires_current_policy_check": false, "policy_area": null, "source_classes_required": [], "preferred_domains": [], "reason": null},
+  "pending_offer": {"action": "none|create|use_existing|clear", "offer_type": "none|draft_user_statement|draft_email_or_message|document_checklist|lawyer_brief|status_action_plan|timeline_plan|booking_handoff", "label": null, "offer_id": null, "reason": null},
+  "should_contextualize_with_history": true,
+  "should_retrieve_legal_sources": true,
+  "should_handle_as_task": false,
+  "confidence": "low|medium|high",
+  "rationale": null,
+  "safety_notes": []
+}
+
+For Chinese lawyer-summary requests such as '请帮我整理一份律师要看的案情摘要', use conversation_act='lawyer_summary_request', task_type='lawyer_brief', output_audience='lawyer', requested_format='brief', should_handle_as_task=true, and should_use_legal_pipeline=true.
+"""
 
     def _normalize_model_output(
         self,
@@ -639,49 +605,39 @@ class SemanticTurnService:
 
 
     def _normalize_domain_routing(self, value: Any) -> dict[str, Any]:
-        value = dict(value) if isinstance(value, dict) else {}
+        domain = dict(value) if isinstance(value, dict) else {}
         allowed = {"immigration", "general_non_political", "politics_sensitive", "mixed", "unclear"}
-        domain_type = str(value.get("domain_type") or "unclear").strip()
+        domain_type = str(domain.get("domain_type") or "unclear").strip()
         if domain_type not in allowed:
             domain_type = "unclear"
 
-        if domain_type == "politics_sensitive":
-            default_block = True
-            default_general = False
-            default_legal = False
-        elif domain_type == "general_non_political":
-            default_block = False
-            default_general = True
-            default_legal = False
-        elif domain_type == "immigration":
-            default_block = False
-            default_general = False
-            default_legal = True
-        elif domain_type == "mixed":
-            default_block = False
-            default_general = False
-            default_legal = True
+        block = self._boolish(domain.get("should_block_for_politics"), False)
+        general = self._boolish(domain.get("should_use_general_answer"), False)
+        legal = self._boolish(domain.get("should_use_legal_pipeline"), True)
+
+        if block:
+            domain_type = "politics_sensitive"
+            general = False
+            legal = False
+        elif general:
+            if domain_type == "unclear":
+                domain_type = "general_non_political"
+            legal = False
+        elif legal:
+            if domain_type == "general_non_political":
+                domain_type = "unclear"
         else:
-            default_block = False
-            default_general = False
-            default_legal = True
-
-        should_block = self._boolish(value.get("should_block_for_politics"), default_block)
-        should_general = self._boolish(value.get("should_use_general_answer"), default_general)
-        should_legal = self._boolish(value.get("should_use_legal_pipeline"), default_legal)
-
-        if should_block:
-            should_general = False
-            should_legal = False
-        elif should_general:
-            should_legal = False
+            # Safe default: if the semantic model gives no usable route, keep the
+            # matter in the legal pipeline rather than silently answering outside scope.
+            domain_type = "unclear"
+            legal = True
 
         return {
             "domain_type": domain_type,
-            "should_use_general_answer": should_general,
-            "should_block_for_politics": should_block,
-            "should_use_legal_pipeline": should_legal,
-            "reason": self._str_or_none(value.get("reason")),
+            "should_use_general_answer": general,
+            "should_block_for_politics": block,
+            "should_use_legal_pipeline": legal,
+            "reason": self._str_or_none(domain.get("reason")),
         }
 
     def _normalize_facts(self, facts_value: Any, filled_slots: Any, case_routing: dict[str, Any]) -> list[dict[str, Any]]:

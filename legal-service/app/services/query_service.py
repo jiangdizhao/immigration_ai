@@ -309,6 +309,7 @@ class QueryService:
         semantic_turn: SemanticTurnAnalysis,
         raw_user_message: str,
     ) -> bool:
+        _ = raw_user_message  # Kept for call-site compatibility; never inspected.
         domain = getattr(semantic_turn, "domain_routing", None)
         if isinstance(domain, dict):
             return bool(domain.get("should_block_for_politics"))
