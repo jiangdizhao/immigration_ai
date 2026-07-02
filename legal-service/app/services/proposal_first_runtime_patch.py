@@ -26,7 +26,7 @@ _ORIGINAL_HANDLE_QUERY = None
 
 
 def _enabled() -> bool:
-    return os.getenv("PROPOSAL_FIRST_VERIFIED_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+    return os.getenv("PROPOSAL_FIRST_VERIFIED_ENABLED", "false").strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _service() -> ProposalFirstVerifiedAnswerService:

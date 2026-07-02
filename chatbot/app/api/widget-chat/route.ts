@@ -442,6 +442,7 @@ function logWidgetDebug(params: {
   responseLanguage: ResponseLanguage;
 }) {
   const dbg = params.response.retrieval_debug ?? {};
+  const unified = dbg.unified_context ?? dbg.proposal_first_exhaustive_discovery ?? null;
   console.log("\n=== widget-chat debug ===");
   console.log("sessionId:", params.sessionId);
   console.log("matterId(in):", params.matterId ?? null);
@@ -514,10 +515,10 @@ function logWidgetDebug(params: {
       (fact) => fact?.fact_key ?? null
     )
   );
-  console.log("conversationIdentity:", dbg.unified_context?.conversation_identity ?? null);
-  console.log("memoryPacket:", dbg.unified_context?.memory_packet ?? null);
-  console.log("reasoningTier:", dbg.unified_context?.reasoning_depth ?? null);
-  console.log("schedule2Exhaustive:", dbg.unified_context?.schedule2_exhaustive_discovery ?? null);
+  console.log("conversationIdentity:", unified?.conversation_identity ?? null);
+  console.log("memoryPacket:", unified?.memory_packet ?? null);
+  console.log("reasoningTier:", unified?.reasoning_depth ?? null);
+  console.log("schedule2Exhaustive:", unified?.schedule2_exhaustive_discovery ?? null);
   console.log("compactSources:", params.response.compact_sources ?? []);
   console.log("userDisplayMode:", params.response.user_display_mode ?? null);
   console.log("confidence:", params.response.confidence ?? null);

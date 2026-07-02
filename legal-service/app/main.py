@@ -9,17 +9,11 @@ from app.core.logging import configure_logging
 from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db.session import engine, ensure_vector_extension
+# Unified context + tiered discovery must be the final QueryService controller.
+# The legacy proposal_first_runtime_patch is intentionally NOT imported here,
+# because it also monkey-patches QueryService.handle_query and otherwise
+# intercepts broad immigration questions before the tier router can run.
 from app.services import unified_context_runtime_patch  # noqa: F401
-
-# Optional proposal-first / verification-after answer path.
-# Importing this module applies a runtime patch when
-# PROPOSAL_FIRST_VERIFIED_ENABLED is not false.
-try:
-    from app.services import proposal_first_runtime_patch  # noqa: F401
-except Exception:
-    # Do not block service startup if the optional patch fails; the original
-    # QueryService path remains available.
-    pass
 
 settings = get_settings()
 
