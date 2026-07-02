@@ -9,6 +9,7 @@ from app.core.logging import configure_logging
 from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db.session import engine, ensure_vector_extension
+from app.schedule.schedule_index_health import validate_schedule_index_ready
 # Unified context + tiered discovery must be the final QueryService controller.
 # The legacy proposal_first_runtime_patch is intentionally NOT imported here,
 # because it also monkey-patches QueryService.handle_query and otherwise
@@ -21,6 +22,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     configure_logging()
+    validate_schedule_index_ready()
     if settings.auto_create_schema:
         ensure_vector_extension()
         Base.metadata.create_all(bind=engine)

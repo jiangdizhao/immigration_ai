@@ -21,4 +21,4 @@ COPY legal-service/scripts ./scripts
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m scripts.phase1b_init_legal_schema && python -m scripts.apply_phase0_schema && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python -m scripts.phase1b_init_legal_schema && python -m scripts.apply_phase0_schema && SCHEDULE_INDEX_BUILD_STRICT=true python -m scripts.build_schedule_index_from_db && python -m scripts.check_schedule_index && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]

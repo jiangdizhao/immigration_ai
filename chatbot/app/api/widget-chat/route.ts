@@ -557,6 +557,112 @@ function emptyWidgetResponse(
   });
 }
 
+type LegalServiceJsonResult =
+  | { ok: true; data: LegalServiceResponse }
+  | { ok: false; response: Response };
+
+function legalServiceFallbackText(responseLanguage: ResponseLanguage): string {
+  return responseLanguage === "zh"
+    ? "抱歉，法律服务暂时不可用。请稍后再试，或联系律师人工确认。"
+    : "Sorry, the legal service is temporarily unavailable. Please try again shortly, or contact the lawyer for manual confirmation.";
+}
+
+function previewResponseBody(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
+async function fetchLegalServiceJson(params: {
+  url: string;
+  apiKey?: string;
+  payload: Record<string, unknown>;
+  responseLanguage: ResponseLanguage;
+  matterId: string | null;
+}): Promise<LegalServiceJsonResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55_000);
+
+  let response: Response;
+  try {
+    response = await fetch(params.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(params.apiKey ? { "X-API-Key": params.apiKey } : {}),
+      },
+      body: JSON.stringify(params.payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    console.error("legal-service fetch failed:", error);
+    return {
+      ok: false,
+      response: emptyWidgetResponse(
+        legalServiceFallbackText(params.responseLanguage),
+        params.matterId,
+        params.responseLanguage
+      ),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const bodyText = await response.text();
+
+  if (!response.ok) {
+    console.error(
+      "legal-service error:",
+      response.status,
+      response.statusText,
+      previewResponseBody(bodyText)
+    );
+    return {
+      ok: false,
+      response: emptyWidgetResponse(
+        legalServiceFallbackText(params.responseLanguage),
+        params.matterId,
+        params.responseLanguage
+      ),
+    };
+  }
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    console.error(
+      "legal-service returned non-JSON response:",
+      contentType,
+      previewResponseBody(bodyText)
+    );
+    return {
+      ok: false,
+      response: emptyWidgetResponse(
+        legalServiceFallbackText(params.responseLanguage),
+        params.matterId,
+        params.responseLanguage
+      ),
+    };
+  }
+
+  try {
+    return { ok: true, data: JSON.parse(bodyText) as LegalServiceResponse };
+  } catch (error) {
+    console.error(
+      "legal-service JSON parse failed:",
+      error,
+      previewResponseBody(bodyText)
+    );
+    return {
+      ok: false,
+      response: emptyWidgetResponse(
+        legalServiceFallbackText(params.responseLanguage),
+        params.matterId,
+        params.responseLanguage
+      ),
+    };
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const json = await request.json();
@@ -618,13 +724,12 @@ export async function POST(request: Request) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const legalResponse = await fetch(`${legalServiceUrl}/api/v1/query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { "X-API-Key": apiKey } : {}),
-      },
-      body: JSON.stringify({
+    const legalServiceResult = await fetchLegalServiceJson({
+      url: `${legalServiceUrl}/api/v1/query`,
+      apiKey,
+      responseLanguage,
+      matterId: matterId ?? null,
+      payload: {
         question,
         response_language: responseLanguage,
         matter_id: matterId ?? ownedConversation?.legalMatterId ?? null,
@@ -637,21 +742,14 @@ export async function POST(request: Request) {
         top_k: 8,
         answer_preference: answerPreference,
         frontend_messages: serializeFrontendMessages(messages),
-      }),
-      cache: "no-store",
+      },
     });
 
-    if (!legalResponse.ok) {
-      const errorText = await legalResponse.text();
-      console.error("legal-service error:", legalResponse.status, errorText);
-      const fallback =
-        responseLanguage === "zh"
-          ? "抱歉，法律服务暂时不可用。"
-          : "Sorry, the legal service is unavailable right now.";
-      return emptyWidgetResponse(fallback, matterId ?? null, responseLanguage);
+    if (!legalServiceResult.ok) {
+      return legalServiceResult.response;
     }
 
-    const data = (await legalResponse.json()) as LegalServiceResponse;
+    const data = legalServiceResult.data;
     const finalResponseLanguage = normalizeResponseLanguage(
       data.response_language,
       responseLanguage

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from sqlalchemy import select
@@ -62,7 +63,10 @@ def main() -> None:
     print(f"  schedule2_subclass_sample={subclasses}")
 
     if not schedule2:
-        print("WARNING: no Schedule 2 clauses were parsed. Check legal_sources titles/metadata and source chunk text.")
+        message = "no Schedule 2 clauses were parsed. Check legal_sources titles/metadata and source chunk text."
+        if os.getenv("SCHEDULE_INDEX_BUILD_STRICT", "").strip().lower() in {"1", "true", "yes", "on"}:
+            raise SystemExit(f"ERROR: {message}")
+        print(f"WARNING: {message}")
 
 
 if __name__ == "__main__":

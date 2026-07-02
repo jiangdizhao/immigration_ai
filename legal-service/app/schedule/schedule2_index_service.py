@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 from collections import defaultdict
 from functools import lru_cache
@@ -9,11 +11,45 @@ from typing import Any, Iterable, Mapping
 
 from app.schedule.schemas import ScheduleClause
 
+logger = logging.getLogger(__name__)
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 RAW_LEGISLATION_DIR = ROOT_DIR / "data" / "raw" / "legislation"
 PROCESSED_INDEX_DIR = ROOT_DIR / "data" / "processed" / "schedule_index"
 SCHEDULE2_INDEX_PATH = PROCESSED_INDEX_DIR / "schedule2_clauses.jsonl"
 SCHEDULE1_INDEX_PATH = PROCESSED_INDEX_DIR / "schedule1_clauses.jsonl"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_path(name: str) -> Path | None:
+    raw = os.getenv(name)
+    if not raw or not raw.strip():
+        return None
+    return Path(raw.strip()).expanduser()
+
+
+def _resolved_index_path(*, schedule_no: str, default_path: Path) -> Path:
+    explicit = _env_path(f"SCHEDULE{schedule_no}_INDEX_PATH")
+    if explicit:
+        return explicit
+    index_dir = _env_path("SCHEDULE_INDEX_DIR")
+    if index_dir:
+        return index_dir / f"schedule{schedule_no}_clauses.jsonl"
+    return default_path
+
+
+def _min_schedule2_clauses() -> int:
+    raw = os.getenv("SCHEDULE2_MIN_CLAUSES", "1000")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 1000
 
 SUBCLASS_RE = re.compile(r"(?:^|\n)\s*Subclass\s+([0-9A-Z]{3,4})\s*[-–—]{1,2}\s*([^\n]+)", re.I)
 SCHEDULE1_ITEM_RE = re.compile(r"(?:^|\n)\s*([0-9]{4}[A-Z]{0,3})\s+([^\n]{2,160})")
@@ -327,29 +363,85 @@ def read_index(path: Path) -> list[ScheduleClause]:
 class ScheduleIndexService:
     """Load or lazily build Schedule 1 / Schedule 2 clause indexes.
 
-    Runtime code reads the processed JSONL files. Build those files from the DB
+    Runtime code reads processed JSONL files first. Build those files from the DB
     with scripts/build_schedule_index_from_db.py. If no processed index exists,
     this service falls back to local raw JSON files so the package remains useful
     in offline/dev environments.
+
+    Deployment guard note:
+    - SCHEDULE_INDEX_DIR may point at a directory containing schedule1_clauses.jsonl
+      and schedule2_clauses.jsonl.
+    - SCHEDULE1_INDEX_PATH and SCHEDULE2_INDEX_PATH may point at explicit files.
+    - SCHEDULE_INDEX_STRICT=1 makes missing Schedule 2 data fail immediately.
     """
 
     def __init__(self, *, schedule2_path: Path | None = None, schedule1_path: Path | None = None) -> None:
-        self.schedule2_path = schedule2_path or SCHEDULE2_INDEX_PATH
-        self.schedule1_path = schedule1_path or SCHEDULE1_INDEX_PATH
+        self.schedule2_path = schedule2_path or _resolved_index_path(schedule_no="2", default_path=SCHEDULE2_INDEX_PATH)
+        self.schedule1_path = schedule1_path or _resolved_index_path(schedule_no="1", default_path=SCHEDULE1_INDEX_PATH)
+        self._diagnostics: dict[str, Any] = {
+            "schedule2_path": str(self.schedule2_path),
+            "schedule1_path": str(self.schedule1_path),
+            "raw_legislation_dir": str(RAW_LEGISLATION_DIR),
+            "processed_index_dir": str(PROCESSED_INDEX_DIR),
+            "schedule_index_dir_env": os.getenv("SCHEDULE_INDEX_DIR"),
+            "schedule2_index_path_env": os.getenv("SCHEDULE2_INDEX_PATH"),
+            "schedule1_index_path_env": os.getenv("SCHEDULE1_INDEX_PATH"),
+            "schedule2_read_from": None,
+            "schedule1_read_from": None,
+            "schedule2_count": None,
+            "schedule1_count": None,
+        }
+
+    def diagnostics(self) -> dict[str, Any]:
+        return dict(self._diagnostics)
 
     @lru_cache(maxsize=1)
     def schedule2_clauses(self) -> tuple[ScheduleClause, ...]:
         clauses = read_index(self.schedule2_path)
+        self._diagnostics["schedule2_read_from"] = str(self.schedule2_path) if clauses else None
         if not clauses:
             clauses = build_index_from_raw("2")
+            if clauses:
+                self._diagnostics["schedule2_read_from"] = str(RAW_LEGISLATION_DIR)
+        self._diagnostics["schedule2_count"] = len(clauses)
+        if not clauses:
+            message = (
+                "ScheduleIndexService loaded 0 Schedule 2 clauses. "
+                f"schedule2_path={self.schedule2_path}; raw_dir={RAW_LEGISLATION_DIR}; "
+                f"SCHEDULE_INDEX_DIR={os.getenv('SCHEDULE_INDEX_DIR')!r}"
+            )
+            if _env_bool("SCHEDULE_INDEX_STRICT", False):
+                raise RuntimeError(message)
+            logger.warning(message)
         return tuple(clauses)
 
     @lru_cache(maxsize=1)
     def schedule1_clauses(self) -> tuple[ScheduleClause, ...]:
         clauses = read_index(self.schedule1_path)
+        self._diagnostics["schedule1_read_from"] = str(self.schedule1_path) if clauses else None
         if not clauses:
             clauses = build_index_from_raw("1")
+            if clauses:
+                self._diagnostics["schedule1_read_from"] = str(RAW_LEGISLATION_DIR)
+        self._diagnostics["schedule1_count"] = len(clauses)
+        if not clauses:
+            logger.warning(
+                "ScheduleIndexService loaded 0 Schedule 1 clauses. schedule1_path=%s; raw_dir=%s",
+                self.schedule1_path,
+                RAW_LEGISLATION_DIR,
+            )
         return tuple(clauses)
+
+    def assert_ready(self, *, min_schedule2_clauses: int | None = None) -> None:
+        min_schedule2_clauses = min_schedule2_clauses or _min_schedule2_clauses()
+        schedule2 = self.schedule2_clauses()
+        schedule1 = self.schedule1_clauses()
+        if len(schedule2) < min_schedule2_clauses:
+            raise RuntimeError(
+                "Schedule index self-test failed: "
+                f"schedule2_clauses={len(schedule2)} < {min_schedule2_clauses}; "
+                f"schedule1_clauses={len(schedule1)}; diagnostics={self.diagnostics()}"
+            )
 
     def clauses_for_subclass(self, subclass: str, *, schedule_no: str = "2") -> list[ScheduleClause]:
         subclass = str(subclass or "").strip().upper()
