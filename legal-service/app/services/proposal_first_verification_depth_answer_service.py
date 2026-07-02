@@ -53,15 +53,13 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
+            answer_text = self._out_of_domain_scope_answer(response_language)
             return QueryResponse(
                 matter_id=matter_id,
-                answer=str(
-                    proposal.get("non_immigration_response")
-                    or "I can help with Australian immigration and visa questions. Please ask an immigration-related question."
-                ),
+                answer=answer_text,
                 response_language="zh" if response_language == "zh" else "en",
-                confidence="medium",
-                issue_type=None,
+                confidence="high",
+                issue_type="out_of_domain",
                 missing_facts=[],
                 follow_up_questions=[],
                 citations=[],
@@ -73,6 +71,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                     "proposal_first_verification_depth": {
                         "used": True,
                         "out_of_domain": True,
+                        "deterministic_public_scope_message": True,
                         "proposal": proposal,
                     }
                 },
@@ -222,6 +221,14 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             retrieval_debug=debug,
         )
 
+
+    def _out_of_domain_scope_answer(self, response_language: str) -> str:
+        return (
+            "我主要用于回答澳洲移民、签证和预约律师咨询相关问题。请提出与签证或移民相关的问题。"
+            if response_language == "zh"
+            else "I’m designed to help with Australian immigration, visa, and lawyer appointment questions. Please ask an immigration-related question."
+        )
+
     def _build_free_proposal_with_verification_plan(
         self,
         *,
@@ -262,6 +269,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             "targeted_rag = a specific legal issue or single known visa/subclass/condition requires targeted local or official source checking.\n"
             "exhaustive_schedule2 = visa options, pathway recommendation, subclass comparison, or broad eligibility discovery where multiple visa subclasses may be relevant.\n"
             "high_risk_handoff = refusal, review deadline, cancellation, NOICC, unlawful status, detention, PIC 4020, character, family violence, child welfare, or other sensitive/urgent matter.\n\n"
+            "Out-of-domain handling:\n"
+            "- If the latest user request is not about Australian immigration, visas, migration law, or booking a lawyer appointment, set is_immigration_related=false.\n"
+            "- Do not answer the general non-immigration question.\n"
+            "- Do not expose internal classification text such as 'the user is asking...' in non_immigration_response.\n"
+            "- Set non_immigration_response to a short public scope message only; the backend may replace it with a deterministic scope message.\n\n"
             "Return ONLY valid JSON. Do not include markdown outside JSON. Required shape:\n"
             "{\n"
             '  "is_immigration_related": boolean,\n'

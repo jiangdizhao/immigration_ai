@@ -236,6 +236,157 @@ class QueryService:
         return self.handle_query(db, payload)
 
 
+
+    def _out_of_domain_scope_answer(self, response_language: str) -> str:
+        return (
+            "我主要用于回答澳洲移民、签证和预约律师咨询相关问题。请提出与签证或移民相关的问题。"
+            if response_language == "zh"
+            else "I’m designed to help with Australian immigration, visa, and lawyer appointment questions. Please ask an immigration-related question."
+        )
+
+    def _is_out_of_domain_semantic_turn(
+        self,
+        *,
+        semantic_turn: SemanticTurnAnalysis,
+        pending_offer: dict[str, Any] | None,
+    ) -> bool:
+        """Return True only for clearly non-immigration turns.
+
+        SemanticTurnService is the authority here. This guard intentionally avoids
+        raw keyword routing. It simply enforces an early exit when the semantic
+        contract already says the turn is unrelated to immigration and does not
+        require legal-source retrieval.
+        """
+        if pending_offer:
+            return False
+        if semantic_turn.should_handle_as_task or semantic_turn.task_intent.uses_pending_offer:
+            return False
+        if semantic_turn.should_retrieve_legal_sources:
+            return False
+        if semantic_turn.current_policy_need.requires_current_policy_check:
+            return False
+
+        routing = semantic_turn.case_routing
+        issue_type = str(routing.issue_type or "").strip()
+        visa_type = str(routing.visa_type or "").strip()
+        operation_type = str(routing.operation_type or "").strip()
+        proposed_frame = str(routing.proposed_case_frame_id or "").strip()
+        user_goal = str(routing.user_goal or "").strip().lower()
+        topic_relation = str(routing.topic_relation or "").strip().lower()
+        rationale = str(semantic_turn.rationale or "").strip().lower()
+
+        explicit_out_of_domain_goals = {
+            "general_science_question",
+            "general_knowledge_question",
+            "non_immigration_question",
+            "out_of_domain",
+            "unrelated_question",
+        }
+        if user_goal in explicit_out_of_domain_goals:
+            return True
+        if topic_relation in {"out_of_domain", "non_immigration", "unrelated"}:
+            return True
+        if (
+            not issue_type
+            and not visa_type
+            and not operation_type
+            and not proposed_frame
+            and ("unrelated to immigration" in rationale or "non-immigration" in rationale)
+        ):
+            return True
+        return False
+
+    def _handle_out_of_domain_fast_path(
+        self,
+        *,
+        db: Session,
+        matter: Matter,
+        payload: QueryRequest,
+        original_question: str,
+        current_state: MatterState,
+        response_language: str,
+        semantic_turn: SemanticTurnAnalysis,
+        timing: _QueryStageTimer,
+    ) -> QueryResponse:
+        timing.mark(
+            "out_of_domain_fast_path_selected",
+            authorized_by="semantic_turn_llm",
+            user_goal=semantic_turn.case_routing.user_goal,
+        )
+        answer = self._out_of_domain_scope_answer(response_language)
+        response = QueryResponse(
+            matter_id=matter.id,
+            answer=answer,
+            response_language="zh" if response_language == "zh" else "en",
+            confidence="high",
+            issue_type="out_of_domain",
+            missing_facts=[],
+            follow_up_questions=[],
+            citations=[],
+            compact_sources=[],
+            escalate=False,
+            next_action="answer",
+            user_display_mode="direct_short",
+            retrieval_debug={
+                "out_of_domain_fast_path": {
+                    "used": True,
+                    "reason": semantic_turn.rationale,
+                    "user_goal": semantic_turn.case_routing.user_goal,
+                    "topic_relation": semantic_turn.case_routing.topic_relation,
+                },
+                "original_question": original_question,
+                "effective_question": payload.question,
+                "semantic_turn_analysis": semantic_turn.model_dump(),
+            },
+        )
+
+        fast_state = current_state.model_copy(deep=True)
+        fast_state.latest_question = payload.question
+        fast_state.last_contextualized_question = payload.question
+        fast_state.issue_type = "out_of_domain"
+        fast_state.operation_type = "out_of_domain"
+        fast_state.next_action = response.next_action
+        fast_state.last_answer_type = "general_guidance"
+        fast_state.conversation_state = "ANSWERED_GENERAL"
+        fast_state = self.state_machine.append_turn_pair(
+            state=fast_state,
+            user_question=payload.question,
+            effective_question=payload.question,
+            assistant_answer=response.answer,
+            next_action=response.next_action,
+            confidence=response.confidence,
+        )
+        response.conversation_state = fast_state.conversation_state
+        response.case_hypothesis = fast_state.case_hypothesis
+        response.fact_slot_states = fast_state.fact_slot_states
+        response.interaction_plan = fast_state.interaction_plan
+
+        timing.mark("out_of_domain_fast_path_finalize")
+        response.retrieval_debug = {
+            **(response.retrieval_debug or {}),
+            "stage_timing": timing.to_debug_dict(),
+        }
+        self._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=fast_state,
+            effective_question=payload.question,
+        )
+        db.commit()
+        db.refresh(matter)
+        self._record_review_trace(
+            matter=matter,
+            payload=payload,
+            response=response,
+            state=fast_state,
+            semantic_turn=semantic_turn,
+            timing=timing,
+            original_question=original_question,
+            effective_question=payload.question,
+            extra_debug={"trace_path": "out_of_domain_fast_path"},
+        )
+        return response
+
     def _should_use_llm_triage_fast_path(
         self,
         *,
@@ -293,6 +444,102 @@ class QueryService:
             if fact.fact_key not in generic_fact_keys:
                 return False
         return True
+
+    def _public_out_of_domain_answer(self, response_language: str) -> str:
+        if response_language == "zh":
+            return (
+                "我主要用于回答澳洲移民、签证和预约律师咨询相关问题。"
+                "请提出与签证、移民或预约律师相关的问题。"
+            )
+        return (
+            "I’m designed to help with Australian immigration, visa, and lawyer appointment questions. "
+            "Please ask an immigration-related question."
+        )
+
+    def _should_use_out_of_domain_fast_path(self, *, semantic_turn: SemanticTurnAnalysis) -> bool:
+        """Return a deterministic scope response for clearly non-immigration turns.
+
+        This uses the LLM semantic contract, not raw text regex. It prevents
+        obviously out-of-domain questions from entering the expensive legal
+        reasoning pipeline and prevents internal classifier text from leaking as
+        a public answer.
+        """
+
+        if semantic_turn.should_handle_as_task:
+            return False
+        task = semantic_turn.task_intent
+        if task.uses_pending_offer or task.task_type != "none":
+            return False
+        if semantic_turn.should_retrieve_legal_sources:
+            return False
+        if semantic_turn.current_policy_need.requires_current_policy_check:
+            return False
+
+        risk = semantic_turn.risk_signals
+        if any([
+            risk.deadline_sensitive,
+            risk.possible_unlawful_status,
+            risk.visa_expiry_or_status_problem,
+            risk.refusal_or_review,
+            risk.cancellation_or_noicc,
+            risk.detention_related,
+            risk.character_related,
+            risk.pic4020_or_integrity,
+            risk.health_or_public_interest,
+            risk.family_or_minor_welfare,
+            risk.requires_lawyer_handoff,
+        ]):
+            return False
+
+        routing = semantic_turn.case_routing
+        if str(semantic_turn.conversation_act or "").strip() != "topic_switch":
+            return False
+        if str(routing.topic_relation or "").strip() != "topic_switch":
+            return False
+        if any([routing.issue_type, routing.visa_type, routing.operation_type, routing.proposed_case_frame_id]):
+            return False
+        return str(semantic_turn.confidence or "").strip().lower() in {"medium", "high"}
+
+    def _handle_out_of_domain_fast_path(
+        self,
+        *,
+        matter: Matter,
+        payload: QueryRequest,
+        original_question: str,
+        response_language: str,
+        semantic_turn: SemanticTurnAnalysis,
+        timing: _QueryStageTimer,
+    ) -> QueryResponse:
+        timing.mark("out_of_domain_fast_path_selected", authorized_by="semantic_turn_llm")
+        response = QueryResponse(
+            matter_id=matter.id,
+            answer=self._public_out_of_domain_answer(response_language),
+            response_language="zh" if response_language == "zh" else "en",
+            confidence="high",
+            issue_type=None,
+            missing_facts=[],
+            follow_up_questions=[],
+            citations=[],
+            compact_sources=[],
+            escalate=False,
+            next_action="answer",
+            user_display_mode="direct_short",
+            retrieval_debug={
+                "fast_path": {
+                    "used": True,
+                    "type": "llm_authorized_out_of_domain_scope_guard",
+                    "reason": semantic_turn.rationale,
+                },
+                "semantic_turn_analysis": semantic_turn.model_dump(),
+                "original_question": original_question,
+                "effective_question": payload.question,
+            },
+        )
+        response.retrieval_debug = {
+            **(response.retrieval_debug or {}),
+            "stage_timing": timing.to_debug_dict(),
+        }
+        return response
 
     def _handle_llm_triage_fast_path(
         self,
@@ -432,6 +679,16 @@ class QueryService:
             response_language=language_context.response_language,
         )
         timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
+
+        if self._should_use_out_of_domain_fast_path(semantic_turn=semantic_turn):
+            return self._handle_out_of_domain_fast_path(
+                matter=matter,
+                payload=payload,
+                original_question=original_question,
+                response_language=language_context.response_language,
+                semantic_turn=semantic_turn,
+                timing=timing,
+            )
 
         continuation_response = self.continuation_contract_service.try_fulfill(
             raw_user_message=original_question,

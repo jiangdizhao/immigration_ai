@@ -92,6 +92,25 @@ def apply_patch() -> None:
             )
             db.commit()
             db.refresh(matter)
+            try:
+                self.review_trace_service.safe_record_answer_trace(
+                    matter=matter,
+                    payload=payload,
+                    response=response,
+                    state=state,
+                    original_question=original_question,
+                    effective_question=effective_payload.question,
+                    stage_timing={
+                        "engine": "proposal_first_verification_depth",
+                        "workflow": "proposal_first_then_verification_depth",
+                    },
+                    extra_debug={
+                        "runtime_patch": "unified_context_runtime_patch",
+                        "answer_trace_source": "proposal_first_verification_depth",
+                    },
+                )
+            except Exception:  # pragma: no cover - ReviewTraceService should already be defensive.
+                logger.exception("Proposal-first answer trace recording failed; public response is unchanged.")
             return response
         except Exception as exc:  # pragma: no cover - production safety fallback
             logger.exception("Proposal-first verification-depth path failed; falling back to original handler: %s", exc)
