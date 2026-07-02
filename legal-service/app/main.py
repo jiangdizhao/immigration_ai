@@ -10,6 +10,16 @@ from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db.session import engine, ensure_vector_extension
 
+# Optional proposal-first / verification-after answer path.
+# Importing this module applies a runtime patch when
+# PROPOSAL_FIRST_VERIFIED_ENABLED is not false.
+try:
+    from app.services import proposal_first_runtime_patch  # noqa: F401
+except Exception:
+    # Do not block service startup if the optional patch fails; the original
+    # QueryService path remains available.
+    pass
+
 settings = get_settings()
 
 
