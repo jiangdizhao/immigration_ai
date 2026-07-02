@@ -234,12 +234,108 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
 
-    def _out_of_domain_scope_answer(self, response_language: str) -> str:
-        return (
-            "我主要用于回答澳洲移民、签证和预约律师咨询相关问题。请提出与签证或移民相关的问题。"
-            if response_language == "zh"
-            else "I’m designed to help with Australian immigration, visa, and lawyer appointment questions. Please ask an immigration-related question."
+
+    def _is_politics_sensitive_text(self, *parts: Any) -> bool:
+        text = " ".join(str(part or "") for part in parts).lower()
+        semantic_markers = (
+            "politics_sensitive",
+            "political_sensitive",
+            "political_persuasion",
+            "election_persuasion",
+            "election_voting_advice",
+            "partisan_persuasion",
         )
+        if any(marker in text for marker in semantic_markers):
+            return True
+        persuasion_phrases = (
+            "who should i vote",
+            "which party should i vote",
+            "which candidate should i vote",
+            "tell me who to vote",
+            "convince me to vote",
+            "persuade me to vote",
+            "should i vote for",
+            "vote for trump",
+            "vote for biden",
+            "vote for albanese",
+            "vote for dutton",
+        )
+        if any(phrase in text for phrase in persuasion_phrases):
+            return True
+        political_terms = (
+            " election",
+            " elections",
+            " voting",
+            " political party",
+            " candidate",
+            " campaign",
+            " president",
+            " prime minister",
+            " parliament",
+            " labor party",
+            " liberal party",
+            " the greens",
+            " republican",
+            " democrat",
+            " trump",
+            " biden",
+            " albanese",
+            " dutton",
+        )
+        opinion_or_action_terms = (
+            "should",
+            "better",
+            "worse",
+            "support",
+            "oppose",
+            "vote",
+            "trust",
+            "prefer",
+            "best",
+            "worst",
+            "recommend",
+            "persuade",
+            "convince",
+        )
+        return any(term in text for term in political_terms) and any(
+            term in text for term in opinion_or_action_terms
+        )
+
+    def _politics_sensitive_general_answer(self, response_language: str) -> str:
+        if response_language == "zh":
+            return "我不能协助政治敏感、选举投票建议、党派立场或政治说服类问题。你可以继续询问普通非政治问题，或澳洲移民、签证和预约律师相关问题。"
+        return (
+            "I can’t help with politically sensitive, election-voting, partisan, "
+            "or political persuasion topics. You can ask an ordinary non-political "
+            "general question, or an Australian immigration, visa, or lawyer appointment question."
+        )
+
+    def _answer_general_question_directly(self, question: str, response_language: str = "en") -> str:
+        language_rule = (
+            "Answer in Simplified Chinese."
+            if response_language == "zh"
+            else "Answer in English."
+        )
+        system_prompt = (
+            "You are a concise, helpful general assistant. "
+            "Answer ordinary non-political general questions directly. "
+            "Do not mention immigration law, legal retrieval, citations, or internal routing. "
+            + language_rule
+        )
+        try:
+            response = self.client.responses.create(
+                model=os.getenv("GENERAL_QA_MODEL", getattr(self, "model", "gpt-5.4-mini")),
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "User question:\n" + str(question or "")},
+                ],
+            )
+            text = (response.output_text or "").strip()
+            if text:
+                return text
+        except Exception:
+            pass
+        return "我暂时无法回答这个普通问题。" if response_language == "zh" else "I couldn’t answer that general question right now."
 
     def _build_free_proposal_with_verification_plan(
         self,
@@ -283,9 +379,9 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             "high_risk_handoff = refusal, review deadline, cancellation, NOICC, unlawful status, detention, PIC 4020, character, family violence, child welfare, or other sensitive/urgent matter.\n\n"
             "Out-of-domain handling:\n"
             "- If the latest user request is not about Australian immigration, visas, migration law, or booking a lawyer appointment, set is_immigration_related=false.\n"
-            "- Do not answer the general non-immigration question.\n"
-            "- Do not expose internal classification text such as 'the user is asking...' in non_immigration_response.\n"
-            "- Set non_immigration_response to a short public scope message only; the backend may replace it with a deterministic scope message.\n\n"
+            "- Ordinary non-immigration general questions are allowed; the backend may answer them through a fast general-answer path.\n"
+            "- If the request asks for election-voting advice, partisan persuasion, or political persuasion, flag it using risk_flags or lawyer_review_notes with 'politics_sensitive'.\n"
+            "- Do not expose internal classification text such as 'the user is asking...' in non_immigration_response.\n\n"
             "Return ONLY valid JSON. Do not include markdown outside JSON. Required shape:\n"
             "{\n"
             '  "is_immigration_related": boolean,\n'

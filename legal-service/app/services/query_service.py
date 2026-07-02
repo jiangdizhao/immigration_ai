@@ -313,8 +313,8 @@ class QueryService:
 
         Ordinary non-immigration questions must be allowed through the general
         fast answer path. This guard primarily trusts the SemanticTurnService
-        contract and uses a small deterministic backstop only for the political
-        safety filter.
+        contract and uses a narrow deterministic backstop only for political
+        persuasion/election advice.
         """
 
         routing = semantic_turn.case_routing
@@ -332,14 +332,12 @@ class QueryService:
             "political_sensitive",
             "political_persuasion",
             "election_persuasion",
-            "election_related",
-            "partisan",
+            "election_voting_advice",
+            "partisan_persuasion",
         )
         if any(marker in text for marker in semantic_markers):
             return True
 
-        # Deterministic backstop for the one category the product owner wants
-        # filtered. Keep this narrow: do not use it for ordinary general topics.
         persuasion_phrases = (
             "who should i vote",
             "which party should i vote",
@@ -589,7 +587,6 @@ class QueryService:
         db.commit()
         db.refresh(matter)
         return response
-
 
     def _handle_llm_triage_fast_path(
         self,

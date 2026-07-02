@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from app.schemas.query import QueryRequest
@@ -8,7 +9,7 @@ from app.services.conversation_memory_service import ConversationMemoryService
 from app.services.proposal_first_verification_depth_answer_service import (
     ProposalFirstVerificationDepthAnswerService,
 )
-from app.services.query_service import QueryService
+from app.services.query_service import QueryService, _QueryStageTimer
 
 logger = logging.getLogger(__name__)
 _PATCHED = False
@@ -43,6 +44,50 @@ def apply_patch() -> None:
         try:
             matter = self._get_or_create_matter(db, effective_payload)
             current_state = self.state_machine.hydrate_state(matter.metadata_json)
+            timing = _QueryStageTimer(request_id=f"unified-preflight-{int(time.time() * 1000)}")
+            timing.matter_id = matter.id
+            timing.mark("language_context", response_language=language_context.response_language)
+            timing.mark("state_load")
+
+            pending_offer = (current_state.carried_intake_facts or {}).get("pending_offer")
+            semantic_turn = self._analyze_semantic_turn(
+                original_question=original_question,
+                payload=effective_payload,
+                current_state=current_state,
+                pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
+                response_language=language_context.response_language,
+            )
+            timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
+
+            if self._is_politics_sensitive_general_turn(
+                semantic_turn=semantic_turn,
+                raw_user_message=original_question,
+            ):
+                logger.info("Unified runtime selected politics-sensitive fast path before PFVD")
+                return self._handle_politics_sensitive_fast_path(
+                    db=db,
+                    matter=matter,
+                    payload=effective_payload,
+                    original_question=original_question,
+                    current_state=current_state,
+                    response_language=language_context.response_language,
+                    semantic_turn=semantic_turn,
+                    timing=timing,
+                )
+
+            if self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
+                logger.info("Unified runtime selected general-topic fast path before PFVD")
+                return self._handle_general_topic_fast_path(
+                    db=db,
+                    matter=matter,
+                    payload=effective_payload,
+                    original_question=original_question,
+                    current_state=current_state,
+                    response_language=language_context.response_language,
+                    semantic_turn=semantic_turn,
+                    timing=timing,
+                )
+
             memory_service = getattr(self, "unified_conversation_memory_service", None) or ConversationMemoryService()
             self.unified_conversation_memory_service = memory_service
             memory_packet = memory_service.build(

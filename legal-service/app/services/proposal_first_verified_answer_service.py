@@ -355,7 +355,7 @@ class ProposalFirstVerifiedAnswerService:
             "Generate a rich, original-ChatGPT-style legal exploration memo first.\n"
             "The memo should include likely options, alternative options, weak/excluded options, edge cases, practical warnings, and decisive facts.\n"
             "Then provide a structured index used only for search and verification.\n"
-            "Do not pretend the proposal is final legal advice. Mark it as a proposal needing verification.\n"
+            "Do not pretend the proposal is final legal advice. Mark it as a proposal needing verification.\nIf the user request is not about Australian immigration, visas, migration law, or booking a lawyer appointment, set is_immigration_related=false. Ordinary non-immigration general questions are allowed through backend fast answering. For election-voting advice, partisan persuasion, or political persuasion, include 'politics_sensitive' in risk_flags.\n"
             "Return ONLY valid JSON with this exact top-level shape:\n"
             "{\n"
             '  "is_immigration_related": boolean,\n'
