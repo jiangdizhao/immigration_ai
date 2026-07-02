@@ -12,7 +12,7 @@ import {
 import { ChatbotError } from "@/lib/errors";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 
@@ -579,7 +579,7 @@ async function fetchLegalServiceJson(params: {
   matterId: string | null;
 }): Promise<LegalServiceJsonResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55_000);
+  const timeout = setTimeout(() => controller.abort(), 150_000);
 
   let response: Response;
   try {
