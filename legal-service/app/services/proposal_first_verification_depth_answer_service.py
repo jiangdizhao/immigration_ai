@@ -53,13 +53,25 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
-            answer_text = self._out_of_domain_scope_answer(response_language)
+            politics_sensitive = self._is_politics_sensitive_text(
+                original_question,
+                effective_question,
+                proposal.get("user_goal"),
+                proposal.get("proposal_summary"),
+                " ".join(self._string_list(proposal.get("risk_flags"))),
+                " ".join(self._string_list(proposal.get("lawyer_review_notes"))),
+            )
+            answer_text = (
+                self._politics_sensitive_general_answer(response_language)
+                if politics_sensitive
+                else self._answer_general_question_directly(original_question or effective_question, response_language)
+            )
             return QueryResponse(
                 matter_id=matter_id,
                 answer=answer_text,
                 response_language="zh" if response_language == "zh" else "en",
-                confidence="high",
-                issue_type="out_of_domain",
+                confidence="high" if politics_sensitive else "medium",
+                issue_type="politics_sensitive_topic" if politics_sensitive else "general_topic",
                 missing_facts=[],
                 follow_up_questions=[],
                 citations=[],
@@ -70,8 +82,8 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 retrieval_debug={
                     "proposal_first_verification_depth": {
                         "used": True,
-                        "out_of_domain": True,
-                        "deterministic_public_scope_message": True,
+                        "non_immigration_fast_path": True,
+                        "politics_sensitive": politics_sensitive,
                         "proposal": proposal,
                     }
                 },

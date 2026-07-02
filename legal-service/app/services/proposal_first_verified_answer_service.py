@@ -96,12 +96,24 @@ class ProposalFirstVerifiedAnswerService:
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
+            politics_sensitive = self._is_politics_sensitive_text(
+                original_question,
+                effective_question,
+                proposal.get("user_goal"),
+                proposal.get("proposal_summary"),
+                " ".join(self._string_list(proposal.get("risk_flags"))),
+            )
+            answer_text = (
+                self._politics_sensitive_general_answer(response_language)
+                if politics_sensitive
+                else self._answer_general_question_directly(original_question or effective_question, response_language)
+            )
             return QueryResponse(
                 matter_id=matter_id,
-                answer=str(proposal.get("non_immigration_response") or "I can help with Australian immigration and visa questions. Please ask an immigration-related question."),
+                answer=answer_text,
                 response_language="zh" if response_language == "zh" else "en",
-                confidence="medium",
-                issue_type=None,
+                confidence="high" if politics_sensitive else "medium",
+                issue_type="politics_sensitive_topic" if politics_sensitive else "general_topic",
                 missing_facts=[],
                 follow_up_questions=[],
                 citations=[],
@@ -109,7 +121,14 @@ class ProposalFirstVerifiedAnswerService:
                 escalate=False,
                 next_action="answer",
                 user_display_mode="direct_short",
-                retrieval_debug={"proposal_first_verified_answer": {"used": True, "out_of_domain": True, "proposal": proposal}},
+                retrieval_debug={
+                    "proposal_first_verified_answer": {
+                        "used": True,
+                        "non_immigration_fast_path": True,
+                        "politics_sensitive": politics_sensitive,
+                        "proposal": proposal,
+                    }
+                },
             )
 
         evidence = self._collect_evidence(
@@ -196,6 +215,122 @@ class ProposalFirstVerifiedAnswerService:
             escalate=bool(final.get("escalate", False)),
             next_action=next_action,
             retrieval_debug=debug,
+        )
+
+
+
+    def _is_politics_sensitive_text(self, *parts: object) -> bool:
+        text = " ".join(str(part or "") for part in parts).lower()
+        semantic_markers = (
+            "politics_sensitive",
+            "political_sensitive",
+            "political_persuasion",
+            "election_persuasion",
+            "election_related",
+            "partisan",
+        )
+        if any(marker in text for marker in semantic_markers):
+            return True
+
+        persuasion_phrases = (
+            "who should i vote",
+            "which party should i vote",
+            "which candidate should i vote",
+            "tell me who to vote",
+            "convince me to vote",
+            "persuade me to vote",
+            "should i vote for",
+            "vote for trump",
+            "vote for biden",
+            "vote for albanese",
+            "vote for dutton",
+            "support labor party",
+            "support liberal party",
+            "support the greens",
+        )
+        if any(phrase in text for phrase in persuasion_phrases):
+            return True
+
+        political_terms = (
+            " election",
+            " elections",
+            " voting",
+            " political party",
+            " candidate",
+            " campaign",
+            " president",
+            " prime minister",
+            " parliament",
+            " labor party",
+            " liberal party",
+            " the greens",
+            " republican",
+            " democrat",
+            " trump",
+            " biden",
+            " albanese",
+            " dutton",
+        )
+        opinion_or_action_terms = (
+            "should",
+            "better",
+            "worse",
+            "support",
+            "oppose",
+            "vote",
+            "trust",
+            "prefer",
+            "best",
+            "worst",
+            "recommend",
+            "persuade",
+            "convince",
+        )
+        return any(term in text for term in political_terms) and any(
+            term in text for term in opinion_or_action_terms
+        )
+
+    def _politics_sensitive_general_answer(self, response_language: str) -> str:
+        if response_language == "zh":
+            return (
+                "我不能协助政治敏感、选举投票建议、党派立场或政治说服类问题。"
+                "你可以继续询问普通非政治问题，或澳洲移民、签证和预约律师相关问题。"
+            )
+        return (
+            "I can’t help with politically sensitive, election-voting, partisan, "
+            "or political persuasion topics. You can ask an ordinary non-political "
+            "general question, or an Australian immigration, visa, or lawyer appointment question."
+        )
+
+    def _answer_general_question_directly(self, question: str, response_language: str = "en") -> str:
+        language_rule = (
+            "Write the answer in Simplified Chinese."
+            if response_language == "zh"
+            else "Write the answer in English."
+        )
+        system_prompt = (
+            "You are a helpful general assistant. Answer the user's ordinary non-political general question directly and concisely. "
+            "Do not mention immigration-law retrieval, legal sources, citations, or internal routing. "
+            "Do not answer politically sensitive, election-voting, partisan, or political persuasion questions. "
+            f"{language_rule}"
+        )
+        try:
+            response = self.client.responses.create(
+                model=self.final_model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"User question:\n{question}\n"},
+                ],
+            )
+            text = (response.output_text or "").strip()
+            if text:
+                return text
+        except Exception:
+            pass
+        return (
+            "抱歉，我现在无法回答这个问题。"
+            if response_language == "zh"
+            else "I’m sorry, but I couldn’t answer that question right now."
         )
 
     # ------------------------------------------------------------------
