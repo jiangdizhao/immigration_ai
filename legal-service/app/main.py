@@ -9,6 +9,7 @@ from app.core.logging import configure_logging
 from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db.session import engine, ensure_vector_extension
+from app.services import unified_context_runtime_patch  # noqa: F401
 
 # Optional proposal-first / verification-after answer path.
 # Importing this module applies a runtime patch when

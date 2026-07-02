@@ -22,6 +22,8 @@ class QueryRequest(BaseSchema):
     intake_facts: dict[str, Any] = Field(default_factory=dict)
     top_k: int | None = Field(default=None, ge=1, le=20)
     answer_preference: Literal["auto", "answer_first", "continue_intake", "final_recommendation"] = "answer_first"
+    # Optional full frontend-visible message history.
+    frontend_messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class QueryResponse(BaseSchema):
