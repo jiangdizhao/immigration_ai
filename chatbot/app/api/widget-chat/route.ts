@@ -122,16 +122,16 @@ type LegalServiceResponse = {
   retrieval_debug?: Record<string, any>;
 };
 
-function serializeFrontendMessages(
-  messages: z.infer<typeof messageSchema>[]
-) {
+function serializeFrontendMessages(messages: z.infer<typeof messageSchema>[]) {
   return messages.map((message, index) => ({
     id: message.id,
     role: message.role,
     index,
     text: message.parts
       .filter((part): part is { type: "text"; text: string } => {
-        return typeof part === "object" && part !== null && part.type === "text";
+        return (
+          typeof part === "object" && part !== null && part.type === "text"
+        );
       })
       .map((part) => part.text)
       .join("\n")
@@ -442,7 +442,8 @@ function logWidgetDebug(params: {
   responseLanguage: ResponseLanguage;
 }) {
   const dbg = params.response.retrieval_debug ?? {};
-  const unified = dbg.unified_context ?? dbg.proposal_first_exhaustive_discovery ?? null;
+  const unified =
+    dbg.unified_context ?? dbg.proposal_first_exhaustive_discovery ?? null;
   console.log("\n=== widget-chat debug ===");
   console.log("sessionId:", params.sessionId);
   console.log("matterId(in):", params.matterId ?? null);
@@ -518,7 +519,10 @@ function logWidgetDebug(params: {
   console.log("conversationIdentity:", unified?.conversation_identity ?? null);
   console.log("memoryPacket:", unified?.memory_packet ?? null);
   console.log("reasoningTier:", unified?.reasoning_depth ?? null);
-  console.log("schedule2Exhaustive:", unified?.schedule2_exhaustive_discovery ?? null);
+  console.log(
+    "schedule2Exhaustive:",
+    unified?.schedule2_exhaustive_discovery ?? null
+  );
   console.log("compactSources:", params.response.compact_sources ?? []);
   console.log("userDisplayMode:", params.response.user_display_mode ?? null);
   console.log("confidence:", params.response.confidence ?? null);
@@ -653,6 +657,27 @@ export async function POST(request: Request) {
       responseLanguage
     );
     const finalText = publicSafeText(data, finalResponseLanguage);
+    const normalizedCitations = (data.citations ?? []).map((c) => ({
+      source_id: c.source_id ?? null,
+      title: c.title ?? "",
+      authority: c.authority ?? null,
+      url: c.url ?? null,
+      quote: c.quote_text ?? null,
+      source_type: c.source_type ?? null,
+      used_for: c.used_for ?? null,
+    }));
+    const compactSources = normalizeCompactSources(data);
+    const persistedAssistantMetadata = {
+      type: "metadata",
+      compactSources,
+      citations: normalizedCitations,
+      confidence: data.confidence ?? null,
+      followUpQuestions: data.follow_up_questions ?? [],
+      matterId: data.matter_id ?? matterId ?? null,
+      retrievalDebug: SHOW_WIDGET_DEBUG
+        ? normalizeRetrievalDebug(data.retrieval_debug)
+        : null,
+    };
 
     if (frontendChatId) {
       try {
@@ -660,6 +685,8 @@ export async function POST(request: Request) {
           .reverse()
           .find((message) => message.role === "user");
         const userMessageId = latestUserMessage?.id ?? crypto.randomUUID();
+        const userCreatedAt = new Date();
+        const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1);
         await saveMessages({
           messages: [
             {
@@ -668,15 +695,18 @@ export async function POST(request: Request) {
               role: "user",
               parts: [{ type: "text", text: question }],
               attachments: [],
-              createdAt: new Date(),
+              createdAt: userCreatedAt,
             },
             {
               chatId: frontendChatId,
               id: crypto.randomUUID(),
               role: "assistant",
-              parts: [{ type: "text", text: finalText }],
+              parts: [
+                { type: "text", text: finalText },
+                persistedAssistantMetadata,
+              ],
               attachments: [],
-              createdAt: new Date(),
+              createdAt: assistantCreatedAt,
             },
           ],
         });
@@ -710,16 +740,8 @@ export async function POST(request: Request) {
     return Response.json({
       text: finalText,
       responseLanguage: finalResponseLanguage,
-      citations: (data.citations ?? []).map((c) => ({
-        source_id: c.source_id ?? null,
-        title: c.title ?? "",
-        authority: c.authority ?? null,
-        url: c.url ?? null,
-        quote: c.quote_text ?? null,
-        source_type: c.source_type ?? null,
-        used_for: c.used_for ?? null,
-      })),
-      compactSources: normalizeCompactSources(data),
+      citations: normalizedCitations,
+      compactSources,
       userDisplayMode:
         data.user_display_mode ?? data.interaction_plan?.answer_mode ?? null,
       followUpQuestions: data.follow_up_questions ?? [],

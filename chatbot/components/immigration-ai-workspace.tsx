@@ -274,6 +274,12 @@ type ImmigrationStoredMessage = {
   role: "user" | "assistant" | "system";
   text: string;
   createdAt?: string | null;
+  citations?: WidgetAssistantMessage["citations"];
+  compactSources?: string[];
+  confidence?: WidgetAssistantMessage["confidence"];
+  followUpQuestions?: string[];
+  matterId?: string | null;
+  retrievalDebug?: WidgetAssistantMessage["retrievalDebug"];
 };
 
 type ImmigrationConversationDetail = ImmigrationConversationSummary & {
@@ -289,21 +295,21 @@ function assistantFromStoredMessage(
     text: message.text,
     isStreaming: false,
     responseLanguage: looksChineseText(message.text) ? "zh" : "en",
-    citations: [],
-    compactSources: [],
+    citations: message.citations ?? [],
+    compactSources: message.compactSources ?? [],
     userDisplayMode: null,
-    followUpQuestions: [],
+    followUpQuestions: message.followUpQuestions ?? [],
     missingFacts: [],
     evidenceGaps: [],
-    confidence: null,
+    confidence: message.confidence ?? null,
     escalate: false,
     nextAction: null,
-    matterId: null,
+    matterId: message.matterId ?? null,
     conversationState: null,
     caseHypothesis: null,
     factSlotStates: [],
     interactionPlan: null,
-    retrievalDebug: null,
+    retrievalDebug: message.retrievalDebug ?? null,
   };
 }
 

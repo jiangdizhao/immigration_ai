@@ -43,6 +43,45 @@ function extractTextFromParts(parts: unknown): string {
     .join("\n");
 }
 
+function extractMetadataFromParts(parts: unknown) {
+  if (!Array.isArray(parts)) {
+    return {};
+  }
+
+  const metadata = parts.find(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      "type" in part &&
+      (part as { type?: unknown }).type === "metadata"
+  );
+
+  if (!metadata || typeof metadata !== "object") {
+    return {};
+  }
+
+  const value = metadata as Record<string, unknown>;
+  return {
+    compactSources: Array.isArray(value.compactSources)
+      ? value.compactSources.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : [],
+    citations: Array.isArray(value.citations) ? value.citations : [],
+    confidence: typeof value.confidence === "string" ? value.confidence : null,
+    followUpQuestions: Array.isArray(value.followUpQuestions)
+      ? value.followUpQuestions.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : [],
+    matterId: typeof value.matterId === "string" ? value.matterId : null,
+    retrievalDebug:
+      value.retrievalDebug && typeof value.retrievalDebug === "object"
+        ? value.retrievalDebug
+        : null,
+  };
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const userId = await currentConversationUserId();
   const chatId = await getChatId(context);
@@ -71,6 +110,7 @@ export async function GET(_request: Request, context: RouteContext) {
       role: message.role,
       text: extractTextFromParts(message.parts),
       createdAt: message.createdAt,
+      ...extractMetadataFromParts(message.parts),
     })),
   });
 }
