@@ -96,24 +96,16 @@ class ProposalFirstVerifiedAnswerService:
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
-            politics_sensitive = self._is_politics_sensitive_text(
-                original_question,
-                effective_question,
-                proposal.get("user_goal"),
-                proposal.get("proposal_summary"),
-                " ".join(self._string_list(proposal.get("risk_flags"))),
-            )
-            answer_text = (
-                self._politics_sensitive_general_answer(response_language)
-                if politics_sensitive
-                else self._answer_general_question_directly(original_question or effective_question, response_language)
+            answer_text = self._answer_general_question_directly(
+                original_question or effective_question,
+                response_language,
             )
             return QueryResponse(
                 matter_id=matter_id,
                 answer=answer_text,
                 response_language="zh" if response_language == "zh" else "en",
-                confidence="high" if politics_sensitive else "medium",
-                issue_type="politics_sensitive_topic" if politics_sensitive else "general_topic",
+                confidence="medium",
+                issue_type="general_topic",
                 missing_facts=[],
                 follow_up_questions=[],
                 citations=[],
@@ -125,7 +117,7 @@ class ProposalFirstVerifiedAnswerService:
                     "proposal_first_verified_answer": {
                         "used": True,
                         "non_immigration_fast_path": True,
-                        "politics_sensitive": politics_sensitive,
+                        "domain_source": "semantic_preflight_preferred",
                         "proposal": proposal,
                     }
                 },
@@ -360,6 +352,7 @@ class ProposalFirstVerifiedAnswerService:
             "{\n"
             '  "is_immigration_related": boolean,\n'
             '  "non_immigration_response": string | null,\n'
+            '  "domain_routing": {"domain_type": "immigration" | "general_non_political" | "politics_sensitive" | "mixed" | "unclear", "should_use_general_answer": boolean, "should_block_for_politics": boolean, "should_use_legal_pipeline": boolean, "reason": string | null},\n'
             '  "proposal_memo_markdown": string,\n'
             '  "proposal_summary": string,\n'
             '  "candidate_index": [\n'
@@ -393,6 +386,7 @@ class ProposalFirstVerifiedAnswerService:
                 "risk_flags": ["proposal_json_parse_failed"],
             }
         parsed["proposal_memo_markdown"] = str(parsed.get("proposal_memo_markdown") or "")[: self.MAX_PROPOSAL_CHARS]
+        parsed["domain_routing"] = self._domain_routing_from_proposal(parsed)
         parsed["candidate_index"] = self._normalize_candidate_index(parsed.get("candidate_index"))
         parsed["search_plan"] = self._string_list(parsed.get("search_plan"))
         parsed["missing_decisive_facts"] = self._string_list(parsed.get("missing_decisive_facts"))
@@ -814,6 +808,93 @@ class ProposalFirstVerifiedAnswerService:
             if content:
                 rows.append(f"{role}: {content[:900]}")
         return "\n".join(rows)
+
+    def _domain_routing_from_proposal(self, proposal: dict[str, Any]) -> dict[str, Any]:
+        routing = proposal.get("domain_routing")
+        routing = dict(routing) if isinstance(routing, dict) else {}
+        allowed = {"immigration", "general_non_political", "politics_sensitive", "mixed", "unclear"}
+        domain_type = str(routing.get("domain_type") or "unclear").strip()
+        if domain_type not in allowed:
+            domain_type = "unclear"
+
+        if domain_type == "politics_sensitive":
+            should_block = True
+            should_general = False
+            should_legal = False
+        elif domain_type == "general_non_political":
+            should_block = False
+            should_general = True
+            should_legal = False
+        elif domain_type == "immigration":
+            should_block = False
+            should_general = False
+            should_legal = True
+        elif domain_type == "mixed":
+            should_block = False
+            should_general = False
+            should_legal = True
+        else:
+            should_block = False
+            should_general = False
+            should_legal = True
+
+        def bool_or(value: Any, default: bool) -> bool:
+            if isinstance(value, bool):
+                return value
+            return default
+
+        should_block = bool_or(routing.get("should_block_for_politics"), should_block)
+        should_general = bool_or(routing.get("should_use_general_answer"), should_general)
+        should_legal = bool_or(routing.get("should_use_legal_pipeline"), should_legal)
+        if should_block:
+            should_general = False
+            should_legal = False
+        elif should_general:
+            should_legal = False
+        out = {
+            "domain_type": domain_type,
+            "should_use_general_answer": should_general,
+            "should_block_for_politics": should_block,
+            "should_use_legal_pipeline": should_legal,
+            "reason": routing.get("reason") if isinstance(routing.get("reason"), str) else None,
+        }
+        proposal["domain_routing"] = out
+        return out
+
+    def _answer_general_question_directly(self, question: str, response_language: str = "en") -> str:
+        system_prompt = (
+            "You are a helpful general assistant. Answer the user's ordinary non-political general question directly. "
+            "Do not mention immigration, legal retrieval, legal sources, or internal routing. Keep the answer concise."
+        )
+        if response_language == "zh":
+            system_prompt += " Write the final answer in Simplified Chinese."
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"User question:\n{question}\n"},
+                ],
+            )
+            text = (response.output_text or "").strip()
+            if text:
+                return text
+        except Exception:
+            pass
+        return (
+            "抱歉，我现在无法回答这个普通问题。"
+            if response_language == "zh"
+            else "I couldn’t answer that general question right now."
+        )
+
+    def _politics_sensitive_general_answer(self, response_language: str = "en") -> str:
+        if response_language == "zh":
+            return "我不能协助政治敏感、选举投票建议、党派立场或政治说服类问题。你可以继续询问普通非政治问题，或澳洲移民、签证和预约律师相关问题。"
+        return (
+            "I can’t help with politically sensitive, election-voting, partisan, "
+            "or political persuasion topics. You can ask an ordinary non-political "
+            "general question, or an Australian immigration, visa, or lawyer appointment question."
+        )
 
     def _fallback_answer_from_verification(self, *, proposal: dict[str, Any], verification: dict[str, Any], response_language: str) -> str:
         memo = str(proposal.get("proposal_memo_markdown") or "").strip()

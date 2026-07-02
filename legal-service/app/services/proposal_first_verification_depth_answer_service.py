@@ -53,25 +53,16 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
-            politics_sensitive = self._is_politics_sensitive_text(
-                original_question,
-                effective_question,
-                proposal.get("user_goal"),
-                proposal.get("proposal_summary"),
-                " ".join(self._string_list(proposal.get("risk_flags"))),
-                " ".join(self._string_list(proposal.get("lawyer_review_notes"))),
-            )
-            answer_text = (
-                self._politics_sensitive_general_answer(response_language)
-                if politics_sensitive
-                else self._answer_general_question_directly(original_question or effective_question, response_language)
+            answer_text = self._answer_general_question_directly(
+                original_question or effective_question,
+                response_language,
             )
             return QueryResponse(
                 matter_id=matter_id,
                 answer=answer_text,
                 response_language="zh" if response_language == "zh" else "en",
-                confidence="high" if politics_sensitive else "medium",
-                issue_type="politics_sensitive_topic" if politics_sensitive else "general_topic",
+                confidence="medium",
+                issue_type="general_topic",
                 missing_facts=[],
                 follow_up_questions=[],
                 citations=[],
@@ -83,7 +74,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                     "proposal_first_verification_depth": {
                         "used": True,
                         "non_immigration_fast_path": True,
-                        "politics_sensitive": politics_sensitive,
+                        "domain_source": "semantic_preflight_preferred",
                         "proposal": proposal,
                     }
                 },
@@ -386,6 +377,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             "{\n"
             '  "is_immigration_related": boolean,\n'
             '  "non_immigration_response": string | null,\n'
+            '  "domain_routing": {"domain_type": "immigration" | "general_non_political" | "politics_sensitive" | "mixed" | "unclear", "should_use_general_answer": boolean, "should_block_for_politics": boolean, "should_use_legal_pipeline": boolean, "reason": string | null},\n'
             '  "response_language": "en" | "zh",\n'
             '  "user_goal": string,\n'
             '  "known_facts": [{"fact": string, "source": "latest_user_turn" | "conversation_history" | "inferred", "confidence": "high" | "medium" | "low"}],\n'
@@ -442,6 +434,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "lawyer_review_notes": [],
             }
         parsed["proposal_memo_markdown"] = str(parsed.get("proposal_memo_markdown") or "")[: self.MAX_PROPOSAL_CHARS]
+        parsed["domain_routing"] = self._domain_routing_from_proposal(parsed)
         parsed["candidate_index"] = self._normalize_candidate_index(parsed.get("candidate_index"))
         parsed["search_plan"] = self._string_list(parsed.get("search_plan"))
         parsed["missing_decisive_facts"] = self._string_list(parsed.get("missing_decisive_facts"))

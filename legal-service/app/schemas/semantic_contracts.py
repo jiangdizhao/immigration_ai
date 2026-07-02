@@ -67,6 +67,43 @@ TopicRelation = Literal[
 ]
 
 
+DomainType = Literal[
+    "immigration",
+    "general_non_political",
+    "politics_sensitive",
+    "mixed",
+    "unclear",
+]
+
+
+class DomainRouting(BaseSchema):
+    """First-class domain and safety routing contract.
+
+    Runtime routing must rely on these explicit booleans instead of matching
+    user text, free-form user_goal labels, rationale phrases, candidate names,
+    political names, or topic-specific keyword lists.
+    """
+
+    domain_type: DomainType = "unclear"
+    should_use_general_answer: bool = False
+    should_block_for_politics: bool = False
+    should_use_legal_pipeline: bool = True
+    reason: str | None = None
+
+
+class SemanticDomainRouting(BaseSchema):
+    """First-class domain routing decision filled by the backend LLM.
+
+    Runtime routing must use this object, not raw user text, keyword lists,
+    free-form user_goal labels, topic_relation labels, or rationale phrases.
+    """
+
+    domain_type: DomainType = "unclear"
+    should_use_general_answer: bool = False
+    should_block_for_politics: bool = False
+    should_use_legal_pipeline: bool = True
+    reason: str | None = None
+
 class SemanticFactValue(BaseSchema):
     """A fact filled from flexible user language.
 
@@ -202,6 +239,8 @@ class SemanticTurnAnalysis(BaseSchema):
     conversation_act: ConversationAct = "legal_question"
     task_intent: SemanticTaskIntent = Field(default_factory=SemanticTaskIntent)
     case_routing: SemanticCaseRouting = Field(default_factory=SemanticCaseRouting)
+    domain_routing: SemanticDomainRouting = Field(default_factory=SemanticDomainRouting)
+    domain_routing: DomainRouting = Field(default_factory=DomainRouting)
 
     extracted_facts: list[SemanticFactValue] = Field(default_factory=list)
 

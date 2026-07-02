@@ -309,92 +309,10 @@ class QueryService:
         semantic_turn: SemanticTurnAnalysis,
         raw_user_message: str,
     ) -> bool:
-        """Block only politically sensitive general topics.
-
-        Ordinary non-immigration questions must be allowed through the general
-        fast answer path. This guard primarily trusts the SemanticTurnService
-        contract and uses a narrow deterministic backstop only for political
-        persuasion/election advice.
-        """
-
-        routing = semantic_turn.case_routing
-        parts = [
-            raw_user_message,
-            str(routing.user_goal or ""),
-            str(routing.rationale or ""),
-            str(semantic_turn.rationale or ""),
-            " ".join(str(item) for item in (semantic_turn.safety_notes or [])),
-        ]
-        text = " ".join(part for part in parts if part).lower()
-
-        semantic_markers = (
-            "politics_sensitive",
-            "political_sensitive",
-            "political_persuasion",
-            "election_persuasion",
-            "election_voting_advice",
-            "partisan_persuasion",
-        )
-        if any(marker in text for marker in semantic_markers):
-            return True
-
-        persuasion_phrases = (
-            "who should i vote",
-            "which party should i vote",
-            "which candidate should i vote",
-            "tell me who to vote",
-            "convince me to vote",
-            "persuade me to vote",
-            "should i vote for",
-            "vote for trump",
-            "vote for biden",
-            "vote for albanese",
-            "vote for dutton",
-            "support labor party",
-            "support liberal party",
-            "support the greens",
-        )
-        if any(phrase in text for phrase in persuasion_phrases):
-            return True
-
-        political_terms = (
-            " election",
-            " elections",
-            " voting",
-            " political party",
-            " candidate",
-            " campaign",
-            " president",
-            " prime minister",
-            " parliament",
-            " labor party",
-            " liberal party",
-            " the greens",
-            " republican",
-            " democrat",
-            " trump",
-            " biden",
-            " albanese",
-            " dutton",
-        )
-        opinion_or_action_terms = (
-            "should",
-            "better",
-            "worse",
-            "support",
-            "oppose",
-            "vote",
-            "trust",
-            "prefer",
-            "best",
-            "worst",
-            "recommend",
-            "persuade",
-            "convince",
-        )
-        return any(term in text for term in political_terms) and any(
-            term in text for term in opinion_or_action_terms
-        )
+        domain = getattr(semantic_turn, "domain_routing", None)
+        if isinstance(domain, dict):
+            return bool(domain.get("should_block_for_politics"))
+        return bool(getattr(domain, "should_block_for_politics", False))
 
     def _politics_sensitive_answer(self, response_language: str) -> str:
         if response_language == "zh":
@@ -406,57 +324,12 @@ class QueryService:
         )
 
     def _should_use_general_topic_fast_path(self, *, semantic_turn: SemanticTurnAnalysis) -> bool:
-        """Allow ordinary non-immigration questions to bypass legal/RAG workflow."""
-
-        if semantic_turn.should_handle_as_task:
-            return False
-        task = semantic_turn.task_intent
-        if task.uses_pending_offer or task.task_type != "none":
-            return False
-        if semantic_turn.should_retrieve_legal_sources:
-            return False
-        if semantic_turn.current_policy_need.requires_current_policy_check:
-            return False
-
-        risk = semantic_turn.risk_signals
-        if any([
-            risk.deadline_sensitive,
-            risk.possible_unlawful_status,
-            risk.visa_expiry_or_status_problem,
-            risk.refusal_or_review,
-            risk.cancellation_or_noicc,
-            risk.detention_related,
-            risk.character_related,
-            risk.pic4020_or_integrity,
-            risk.health_or_public_interest,
-            risk.family_or_minor_welfare,
-            risk.requires_lawyer_handoff,
-        ]):
-            return False
-
-        routing = semantic_turn.case_routing
-        if any([routing.issue_type, routing.visa_type, routing.operation_type, routing.proposed_case_frame_id]):
-            return False
-
-        user_goal = str(routing.user_goal or "").strip().lower()
-        topic_relation = str(routing.topic_relation or "").strip().lower()
-        rationale = f"{routing.rationale or ''} {semantic_turn.rationale or ''}".lower()
-
-        general_goals = {
-            "general_topic",
-            "general_question",
-            "general_science_question",
-            "general_knowledge_question",
-            "smalltalk",
-            "non_immigration_question",
-            "out_of_domain",
-            "unrelated_question",
-        }
-        if user_goal in general_goals:
-            return True
-        if topic_relation == "topic_switch" and str(semantic_turn.confidence or "").lower() in {"medium", "high"}:
-            return True
-        return "non-immigration" in rationale or "unrelated to immigration" in rationale
+        domain = getattr(semantic_turn, "domain_routing", None)
+        if isinstance(domain, dict):
+            return bool(domain.get("should_use_general_answer")) and not bool(domain.get("should_block_for_politics"))
+        return bool(getattr(domain, "should_use_general_answer", False)) and not bool(
+            getattr(domain, "should_block_for_politics", False)
+        )
 
     def _handle_politics_sensitive_fast_path(
         self,
