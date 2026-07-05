@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Proposal-first, verification-after legal answer service.
 
 This service deliberately keeps the original GPT-style proposal memo intact and
@@ -7,6 +5,8 @@ uses JSON only as a machine index for search and verification. It is designed to
 avoid the old failure mode where routing/fact gates suppress the LLM before it
 can generate a useful legal map.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
+from app.services.customer_answer_plan_service import CustomerAnswerPlanService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.retrieval_service import RetrievalService
 from app.schedule.schedule2_candidate_service import Schedule2CandidateSearchService
@@ -62,6 +63,7 @@ class ProposalFirstVerifiedAnswerService:
         self.live_retrieval_service = live_retrieval_service or LiveRetrievalService()
         self.schedule_candidate_service = schedule_candidate_service or Schedule2CandidateSearchService()
         self.schedule_index_service = schedule_index_service or ScheduleIndexService()
+        self.customer_answer_plan_service = CustomerAnswerPlanService()
         self._client: OpenAI | None = None
 
     @property
@@ -138,6 +140,18 @@ class ProposalFirstVerifiedAnswerService:
             response_language=response_language,
         )
 
+        customer_answer_plan = self.customer_answer_plan_service.build(
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=known_facts,
+            proposal=proposal,
+            verification=verification,
+            evidence=evidence,
+            verification_plan={"verification_depth": "targeted_rag"},
+            response_language=response_language,
+        )
+        customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
+
         final = self._draft_verified_answer(
             original_question=original_question,
             effective_question=effective_question,
@@ -146,6 +160,7 @@ class ProposalFirstVerifiedAnswerService:
             verification=verification,
             evidence_text=evidence_text,
             response_language=response_language,
+            customer_answer_plan=customer_answer_plan.model_dump(),
         )
 
         answer_text = str(final.get("answer") or "").strip()
@@ -172,8 +187,10 @@ class ProposalFirstVerifiedAnswerService:
                 },
                 "retrieval_runs": evidence.retrieval_runs,
                 "live_debug": evidence.live_debug,
+                **customer_answer_trace,
                 "final_json": final,
             },
+            "customer_answer_quality": customer_answer_trace,
             "reasoning_model": self.model,
             "reasoning_mode": "proposal_first_verified_answer",
             "original_question": original_question,
@@ -202,6 +219,7 @@ class ProposalFirstVerifiedAnswerService:
             compact_sources=compact_sources,
             escalate=bool(final.get("escalate", False)),
             next_action=next_action,
+            legal_reasoning_trace=customer_answer_trace,
             retrieval_debug=debug,
         )
 
@@ -528,6 +546,7 @@ class ProposalFirstVerifiedAnswerService:
         verification: dict[str, Any],
         evidence_text: str,
         response_language: str,
+        customer_answer_plan: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         system_prompt = (
             "You are drafting the final customer-facing answer for an Australian immigration service.\n"
@@ -548,6 +567,9 @@ class ProposalFirstVerifiedAnswerService:
             '  "next_action": "answer" | "ask_followup" | "suggest_consultation"\n'
             "}\n"
         )
+        system_prompt += self.customer_answer_plan_service.final_answer_prompt_rules(
+            customer_answer_plan
+        )
         system_prompt += self._language_rule(response_language)
         user_prompt = (
             f"Original question:\n{original_question}\n\n"
@@ -555,6 +577,7 @@ class ProposalFirstVerifiedAnswerService:
             f"Known facts JSON:\n{json.dumps(known_facts, ensure_ascii=False)}\n\n"
             f"Original rich proposal JSON:\n{json.dumps(proposal, ensure_ascii=False)}\n\n"
             f"Verification JSON:\n{json.dumps(verification, ensure_ascii=False)}\n\n"
+            f"CustomerAnswerPlan JSON:\n{json.dumps(customer_answer_plan or {}, ensure_ascii=False)}\n\n"
             f"Evidence package:\n{evidence_text}\n"
         )
         return self._call_json(model=self.final_model, system_prompt=system_prompt, user_prompt=user_prompt) or {}

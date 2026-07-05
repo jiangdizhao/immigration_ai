@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -129,6 +130,18 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             response_language=response_language,
         )
 
+        customer_answer_plan = self.customer_answer_plan_service.build(
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=known_facts,
+            proposal=proposal,
+            verification=verification,
+            evidence=evidence,
+            verification_plan=verification_plan,
+            response_language=response_language,
+        )
+        customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
+
         final = self._draft_verified_answer(
             original_question=original_question,
             effective_question=effective_question,
@@ -137,6 +150,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             verification=verification,
             evidence_text=evidence_text,
             response_language=response_language,
+            customer_answer_plan=customer_answer_plan.model_dump(),
         )
 
         answer_text = str(final.get("answer") or "").strip()
@@ -183,8 +197,10 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "retrieval_runs": evidence.retrieval_runs,
                 "live_debug": evidence.live_debug,
                 "schedule2_exhaustive_discovery": schedule2_exhaustive_debug,
+                **customer_answer_trace,
                 "final_json": final,
             },
+            "customer_answer_quality": customer_answer_trace,
             "unified_context": {
                 "enabled": True,
                 "workflow": "proposal_first_then_verification_depth",
@@ -217,6 +233,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             compact_sources=compact_sources[:6],
             escalate=bool(final.get("escalate", depth == "high_risk_handoff")),
             next_action=next_action,
+            legal_reasoning_trace=customer_answer_trace,
             retrieval_debug=debug,
         )
 

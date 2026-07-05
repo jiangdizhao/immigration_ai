@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 checks = {
     "unified preflight gate": ROOT / "app/services/unified_context_runtime_patch.py",
     "query general fast path": ROOT / "app/services/query_service.py",
