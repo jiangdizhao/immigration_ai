@@ -55,7 +55,7 @@ artifacts/phase1c/
 *.backup-*
 
 # Local generated Phase 1C artifacts
-artifacts/phase1c/
+artifacts/
 *.dump
 *.sql.dump
 *.jsonl.tmp
