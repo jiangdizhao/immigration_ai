@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import html
 import io
 import json
+import os
+import time
 import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -41,7 +46,7 @@ class _FetchedDocument:
 
 class LiveRetrievalService:
     USER_AGENT = "ImmigrationAI/0.3 (+official-source-policy-retrieval)"
-    DEFAULT_TIMEOUT = 22
+    DEFAULT_TIMEOUT = int(os.getenv("LIVE_RETRIEVAL_PER_URL_TIMEOUT_SECONDS", "8"))
     DEFAULT_MAX_URLS = 8
     DEFAULT_MAX_CHUNKS = 12
     MAX_CHARS_PER_CHUNK = 2400
@@ -51,6 +56,12 @@ class LiveRetrievalService:
     def __init__(self, registry: OfficialSourceRegistry | None = None) -> None:
         self.registry = registry or OfficialSourceRegistry()
         self.ALLOWLIST = self.registry.allowlist
+        self.cache_dir = Path(os.getenv("LIVE_RETRIEVAL_CACHE_DIR", "/tmp/immigration_ai_live_cache"))
+        self.cache_ttl_seconds = int(os.getenv("LIVE_RETRIEVAL_CACHE_TTL_SECONDS", "86400"))
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
 
     def retrieve(
         self,
@@ -85,36 +96,40 @@ class LiveRetrievalService:
         fetched_debug: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
 
-        for url in candidates:
-            try:
-                doc = self._fetch_and_extract(url, focused_issue=focused_issue)
-                fetched_urls.append(url)
-                doc_chunks = self._chunk_document(doc, focused_issue=focused_issue)
-                doc_is_substantive = self._is_substantive_doc(doc)
-                fetched_debug.append({
-                    "url": url,
-                    "title": doc.title,
-                    "content_type": doc.content_type,
-                    "text_chars": len(doc.text or ""),
-                    "word_count": self._word_count(doc.text),
-                    "policy_block_count": len(doc.policy_blocks),
-                    "policy_blocks": [
-                        {"heading": block.heading, "score": block.relevance_score, "matched_terms": block.matched_terms}
-                        for block in doc.policy_blocks[:5]
-                    ],
-                    "substantive": doc_is_substantive,
-                    "chunk_count": len(doc_chunks),
-                })
-
-                if doc_is_substantive:
-                    chunks.extend(doc_chunks)
-                else:
-                    thin_chunks.extend(doc_chunks)
-                if len(chunks) >= max_chunks:
-                    chunks = chunks[:max_chunks]
-                    break
-            except Exception as exc:
-                errors.append({"url": url, "error": str(exc)[:300]})
+        started = time.perf_counter()
+        worker_count = max(1, min(int(os.getenv("LIVE_RETRIEVAL_MAX_WORKERS", "4")), len(candidates) or 1))
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            future_to_url = {pool.submit(self._fetch_and_extract, url, focused_issue=focused_issue): url for url in candidates}
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    doc = future.result()
+                    fetched_urls.append(url)
+                    doc_chunks = self._chunk_document(doc, focused_issue=focused_issue)
+                    doc_is_substantive = self._is_substantive_doc(doc)
+                    fetched_debug.append({
+                        "url": url,
+                        "title": doc.title,
+                        "content_type": doc.content_type,
+                        "text_chars": len(doc.text or ""),
+                        "word_count": self._word_count(doc.text),
+                        "policy_block_count": len(doc.policy_blocks),
+                        "policy_blocks": [
+                            {"heading": block.heading, "score": block.relevance_score, "matched_terms": block.matched_terms}
+                            for block in doc.policy_blocks[:5]
+                        ],
+                        "substantive": doc_is_substantive,
+                        "chunk_count": len(doc_chunks),
+                    })
+                    if doc_is_substantive:
+                        chunks.extend(doc_chunks)
+                    else:
+                        thin_chunks.extend(doc_chunks)
+                    if len(chunks) >= max_chunks:
+                        chunks = chunks[:max_chunks]
+                        break
+                except Exception as exc:
+                    errors.append({"url": url, "error": str(exc)[:300]})
 
         used_thin_fallback = False
         if not chunks and thin_chunks:
@@ -135,6 +150,9 @@ class LiveRetrievalService:
                 "focused_policy_issue": focused_issue,
                 "fetched_documents": fetched_debug,
                 "used_thin_fallback": used_thin_fallback,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "worker_count": worker_count,
+                "cache_dir": str(self.cache_dir),
                 "errors": errors,
             },
         )
@@ -196,6 +214,10 @@ class LiveRetrievalService:
         if source is None:
             raise ValueError(f"No official source registered for: {url}")
 
+        cached = self._read_cached_document(url=url, focused_issue=focused_issue)
+        if cached is not None:
+            return cached
+
         req = Request(url, headers={"User-Agent": self.USER_AGENT})
         with urlopen(req, timeout=self.DEFAULT_TIMEOUT) as resp:
             raw = resp.read()
@@ -208,7 +230,7 @@ class LiveRetrievalService:
         else:
             text, title, blocks = self._extract_html_text(raw, url, focused_issue=focused_issue)
 
-        return _FetchedDocument(
+        doc = _FetchedDocument(
             url=url,
             authority=source.authority,
             source_type=source.source_type,
@@ -219,6 +241,66 @@ class LiveRetrievalService:
             text=text,
             policy_blocks=blocks,
         )
+        self._write_cached_document(doc=doc, focused_issue=focused_issue)
+        return doc
+
+    def _cache_key(self, *, url: str, focused_issue: dict[str, Any] | None) -> str:
+        focus = json.dumps(focused_issue or {}, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha256(f"{url}\n{focus}".encode("utf-8")).hexdigest()
+
+    def _read_cached_document(self, *, url: str, focused_issue: dict[str, Any] | None) -> _FetchedDocument | None:
+        try:
+            path = self.cache_dir / (self._cache_key(url=url, focused_issue=focused_issue) + ".json")
+            if not path.exists() or time.time() - path.stat().st_mtime > self.cache_ttl_seconds:
+                return None
+            data = json.loads(path.read_text(encoding="utf-8"))
+            blocks = [
+                _PolicyBlock(
+                    heading=str(item.get("heading") or ""),
+                    text=str(item.get("text") or ""),
+                    relevance_score=float(item.get("relevance_score") or 0),
+                    matched_terms=[str(x) for x in item.get("matched_terms") or []],
+                )
+                for item in data.get("policy_blocks") or []
+                if isinstance(item, dict)
+            ]
+            return _FetchedDocument(
+                url=str(data.get("url") or url),
+                authority=str(data.get("authority") or "Official source"),
+                source_type=str(data.get("source_type") or "guidance"),
+                bucket="live_official_cache",
+                sub_type="live_official_cache",
+                title=str(data.get("title") or self._title_from_url(url)),
+                content_type=str(data.get("content_type") or ""),
+                text=str(data.get("text") or ""),
+                policy_blocks=blocks,
+            )
+        except Exception:
+            return None
+
+    def _write_cached_document(self, *, doc: _FetchedDocument, focused_issue: dict[str, Any] | None) -> None:
+        try:
+            path = self.cache_dir / (self._cache_key(url=doc.url, focused_issue=focused_issue) + ".json")
+            data = {
+                "url": doc.url,
+                "authority": doc.authority,
+                "source_type": doc.source_type,
+                "title": doc.title,
+                "content_type": doc.content_type,
+                "text": doc.text,
+                "policy_blocks": [
+                    {
+                        "heading": block.heading,
+                        "text": block.text,
+                        "relevance_score": block.relevance_score,
+                        "matched_terms": block.matched_terms,
+                    }
+                    for block in doc.policy_blocks[:20]
+                ],
+            }
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            return
 
     def _extract_html_text(self, raw: bytes, url: str, *, focused_issue: dict[str, Any] | None) -> tuple[str, str, list[_PolicyBlock]]:
         html_text = raw.decode("utf-8", errors="ignore")

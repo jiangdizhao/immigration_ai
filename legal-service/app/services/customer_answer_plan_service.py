@@ -84,6 +84,17 @@ class CustomerAnswerPlanService:
     ) -> CustomerAnswerPlan:
         verification_plan = verification_plan or {}
         ranked_candidate_map = self._ranked_candidate_map(ranked_candidate_map)
+        answer_scope_contract = self._answer_scope_contract(
+            original_question=original_question,
+            effective_question=effective_question,
+            proposal=proposal,
+        )
+        coverage_audit = self._coverage_audit(verification)
+        public_option_coverage_map = self._public_option_coverage_map(
+            answer_scope_contract=answer_scope_contract,
+            coverage_audit=coverage_audit,
+            ranked_candidate_map=ranked_candidate_map,
+        )
         verified_candidates = self._dict_list(verification.get("verified_candidates"))
         candidate_index = self._dict_list(proposal.get("candidate_index"))
         answer_style = self._answer_style(
@@ -170,6 +181,9 @@ class CustomerAnswerPlanService:
             customer_visible_source_refs=self._customer_visible_source_refs(ranked_candidate_map),
             debug_hidden_source_refs=self._debug_hidden_source_refs(ranked_candidate_map),
             one_decisive_question=one_question,
+            answer_scope_contract=answer_scope_contract,
+            coverage_audit=coverage_audit,
+            public_option_coverage_map=public_option_coverage_map,
         )
 
     def final_answer_prompt_rules(self, plan: dict[str, Any] | CustomerAnswerPlan | None) -> str:
@@ -195,6 +209,12 @@ class CustomerAnswerPlanService:
             "If CustomerAnswerPlan.ranked_candidate_map is present, follow ranked_candidate_map.ranked_candidates order exactly. Do not promote a lower-ranked candidate above a higher-ranked candidate.\n"
             "Use CustomerAnswerPlan.answer_composition_plan for the answer shape, opening style, decision boundary, and table permission.\n"
             "If answer_composition_plan.table_allowed is true and answer_composition_plan.answer_shape is ranked_options_with_boundary, include a short practical comparison table before the ranked explanation. The table must use only ranked_candidate_map candidates and the primary decision boundary.\n"
+            "If answer_scope_contract.user_requested_scope is all_possible_options, do not collapse the response into only the most likely option. Include all customer-visible buckets from public_option_coverage_map, while keeping 400/primary candidates first.
+"
+            "Do not introduce additional visa subclasses as numbered/ranked options unless they appear in ranked_candidate_map.ranked_candidates, public_option_coverage_map, or the verifier coverage_audit.required_additions.
+"
+            "Do not state duration thresholds such as 3 months, 6 months, salary thresholds, fees, or dates unless they appear in supported_customer_facts, verified_candidates.supported_points, or coverage_audit.
+"
             "Do not mention internal JSON, proposal memo, retrieval debug, Schedule 2 discovery, verification depth, or source classes.\n"
             "You may include the short customer checking note only if verification_value_summary.customer_visible_summary is not null.\n"
             "Ask at most one decisive follow-up question, using one_decisive_question when it is present.\n"
@@ -217,6 +237,9 @@ class CustomerAnswerPlanService:
                 "blocked": plan_dict.get("blocked_checklist_items", []),
             },
             "answer_composition_plan": plan_dict.get("answer_composition_plan"),
+            "answer_scope_contract": plan_dict.get("answer_scope_contract", {}),
+            "coverage_audit": plan_dict.get("coverage_audit", {}),
+            "public_option_coverage_map": plan_dict.get("public_option_coverage_map", []),
             "customer_visible_source_refs": plan_dict.get("customer_visible_source_refs", []),
             "debug_hidden_source_refs": plan_dict.get("debug_hidden_source_refs", []),
         }
@@ -251,6 +274,134 @@ class CustomerAnswerPlanService:
             if any(self._citation_mentions_subclass(blob, subclass) for subclass in subclasses):
                 visible.append(citation)
         return visible
+
+
+    def _answer_scope_contract(
+        self,
+        *,
+        original_question: str,
+        effective_question: str,
+        proposal: dict[str, Any],
+    ) -> dict[str, Any]:
+        value = proposal.get("answer_scope_contract")
+        if isinstance(value, dict) and value:
+            out = dict(value)
+        else:
+            text = self._combined_text(original_question, effective_question, proposal.get("user_goal"), proposal.get("proposal_summary")).lower()
+            broad_markers = (
+                "all possible option",
+                "all possible visa",
+                "all option",
+                "all pathway",
+                "all the possible",
+                "provide all",
+                "possible options on how",
+            )
+            most_likely_markers = ("most likely", "best option", "which visa", "what visa to suggest", "recommend")
+            if any(marker in text for marker in broad_markers):
+                scope = "all_possible_options"
+                breadth = "broad"
+            elif any(marker in text for marker in most_likely_markers):
+                scope = "most_likely_options"
+                breadth = "medium"
+            else:
+                scope = "answer_question"
+                breadth = "medium"
+            out = {
+                "user_requested_scope": scope,
+                "breadth_required": breadth,
+                "must_include_buckets": [],
+                "may_include_buckets": [],
+                "must_not_include_buckets": [],
+                "completeness_standard": "Answer the requested scope without listing unrelated visa families.",
+                "compactness_standard": "Use a tiered option map when breadth is broad.",
+            }
+        out.setdefault("user_requested_scope", "answer_question")
+        out.setdefault("breadth_required", "medium")
+        out.setdefault("must_include_buckets", [])
+        out.setdefault("may_include_buckets", [])
+        out.setdefault("must_not_include_buckets", [])
+        out.setdefault("completeness_standard", "Answer the user's requested scope.")
+        out.setdefault("compactness_standard", "Be compact but do not omit required option buckets.")
+        return out
+
+    def _coverage_audit(self, verification: dict[str, Any]) -> dict[str, Any]:
+        value = verification.get("coverage_audit")
+        if isinstance(value, dict):
+            out = dict(value)
+        else:
+            out = {}
+        out.setdefault("answer_scope_satisfied", None)
+        out.setdefault("missing_required_buckets", [])
+        out.setdefault("missing_relevant_options", [])
+        out.setdefault("over_included_unrelated_options", [])
+        out.setdefault("required_additions", [])
+        out.setdefault("required_removals", [])
+        return out
+
+    def _public_option_coverage_map(
+        self,
+        *,
+        answer_scope_contract: dict[str, Any],
+        coverage_audit: dict[str, Any],
+        ranked_candidate_map: RankedCandidateMap | None,
+    ) -> list[dict[str, Any]]:
+        scope = str(answer_scope_contract.get("user_requested_scope") or "").strip()
+        breadth = str(answer_scope_contract.get("breadth_required") or "").strip()
+        out: list[dict[str, Any]] = []
+
+        def add(bucket: str, subclasses: list[str], label: str, when_relevant: str, priority: int) -> None:
+            key = (bucket, tuple(subclasses))
+            for item in out:
+                if (item.get("bucket"), tuple(item.get("subclasses") or [])) == key:
+                    return
+            out.append(
+                {
+                    "bucket": bucket,
+                    "subclasses": subclasses,
+                    "label": label,
+                    "when_relevant": when_relevant,
+                    "priority": priority,
+                    "show_to_customer": True,
+                }
+            )
+
+        if ranked_candidate_map is not None:
+            for candidate in ranked_candidate_map.ranked_candidates[:4]:
+                bucket = "primary" if candidate.rank == 1 else "ranked_alternative"
+                add(
+                    bucket,
+                    [candidate.subclass],
+                    f"Subclass {candidate.subclass}" + (f" — {candidate.title}" if candidate.title else ""),
+                    "; ".join(candidate.why_likely_or_possible[:2]) or "Ranked by Schedule 2 skeleton screening.",
+                    candidate.rank,
+                )
+
+        # Coverage floor for broad temporary-work option-map questions. This is not
+        # an eligibility decision; it tells the final answer which conditional
+        # categories must be discussed when the user asks for all possible options.
+        intent = ranked_candidate_map.legal_intent if ranked_candidate_map is not None else None
+        broad_temporary_work = (
+            scope == "all_possible_options"
+            or breadth == "broad"
+        ) and (
+            intent is None
+            or intent.activity_type in {None, "temporary_work", "business_meetings", "training"}
+        )
+        if broad_temporary_work:
+            add("primary_short_term_specialist", ["400"], "Subclass 400 — Temporary Work (Short Stay Specialist)", "Fixed short-term specialist task that is not an ongoing sponsored role.", 10)
+            add("employer_sponsored_alternative", ["482"], "Subclass 482 — Skills in Demand", "Ongoing sponsored skilled job role, sponsor/nomination/occupation facts needed.", 20)
+            add("training_alternative", ["407"], "Subclass 407 — Training", "Structured workplace-based occupational training, not ordinary productive work.", 30)
+            add("temporary_activity_alternative", ["408"], "Subclass 408 — Temporary Activity", "Specific temporary activity such as research, sport, entertainment, religious work, invited event, or other activity stream.", 40)
+            add("international_relations_alternative", ["403"], "Subclass 403 — Temporary Work (International Relations)", "Government agreement, foreign government, international relations, PALM, or similar special context.", 50)
+            add("business_visitor_no_work", ["600", "601", "651"], "Visitor / ETA / eVisitor business visitor pathways", "Meetings, negotiations, site inspection, or conference only; not actual work or service delivery.", 60)
+            add("independent_work_rights_if_eligible", ["417", "462"], "Working Holiday / Work and Holiday", "Only if the worker is independently eligible by nationality, age, and conditions; not an employer-sponsored specialist pathway.", 70)
+            add("longer_term_employer_sponsored_not_short_term", ["186", "494"], "Longer-term employer-sponsored options", "Strategic longer-term pathways if the employer wants an ongoing/permanent or regional sponsored role, not the usual short-term answer.", 80)
+
+        for option in self._string_list(coverage_audit.get("missing_relevant_options")):
+            add("verifier_required_addition", [option], f"Additional option: {option}", "Required by verifier coverage audit.", 90)
+
+        return sorted(out, key=lambda item: int(item.get("priority") or 999))[:16]
 
     def _answer_style(
         self,

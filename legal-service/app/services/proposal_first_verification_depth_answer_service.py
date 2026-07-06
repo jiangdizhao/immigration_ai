@@ -469,6 +469,22 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "proposal_summary": effective_question,
                 "candidate_index": [],
                 "excluded_or_low_relevance_options": [],
+                "answer_scope_contract": {
+                    "user_requested_scope": "answer_question",
+                    "breadth_required": "medium",
+                    "must_include_buckets": [],
+                    "may_include_buckets": [],
+                    "must_not_include_buckets": [],
+                    "completeness_standard": "Answer the user question safely.",
+                    "compactness_standard": "Be compact.",
+                },
+                "live_retrieval_plan": {
+                    "needed": True,
+                    "source_target_subclasses": [],
+                    "source_targets": ["Home Affairs guidance", "Schedule 2 if relevant"],
+                    "max_pages": 4,
+                    "must_find": [],
+                },
                 "verification_plan": {
                     "verification_depth": "targeted_rag",
                     "requires_full_context": True,
@@ -495,11 +511,54 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         parsed["missing_decisive_facts"] = self._string_list(parsed.get("missing_decisive_facts"))
         parsed["risk_flags"] = self._string_list(parsed.get("risk_flags"))
         parsed["lawyer_review_notes"] = self._string_list(parsed.get("lawyer_review_notes"))
+        parsed["answer_scope_contract"] = self._normalize_answer_scope_contract(parsed.get("answer_scope_contract"), original_question=original_question, effective_question=effective_question)
+        parsed["live_retrieval_plan"] = self._normalize_live_retrieval_plan(parsed.get("live_retrieval_plan"), proposal=parsed)
         parsed["verification_plan"] = self._normalize_verification_plan(parsed.get("verification_plan"))
         return parsed
 
     def _known_facts_from_memory(self, memory_packet: Any) -> dict[str, Any]:
         facts: dict[str, Any] = {}
+    def _normalize_answer_scope_contract(self, value: Any, *, original_question: str, effective_question: str) -> dict[str, Any]:
+        out = dict(value) if isinstance(value, dict) else {}
+        text = f"{original_question}
+{effective_question}".lower()
+        if not out:
+            if any(marker in text for marker in ("all possible", "all option", "all pathway", "provide all")):
+                out["user_requested_scope"] = "all_possible_options"
+                out["breadth_required"] = "broad"
+            elif any(marker in text for marker in ("most likely", "best option", "what visa", "which visa", "suggest")):
+                out["user_requested_scope"] = "most_likely_options"
+                out["breadth_required"] = "medium"
+        out.setdefault("user_requested_scope", "answer_question")
+        out.setdefault("breadth_required", "medium")
+        out.setdefault("must_include_buckets", [])
+        out.setdefault("may_include_buckets", [])
+        out.setdefault("must_not_include_buckets", [])
+        out.setdefault("completeness_standard", "Satisfy the user's requested answer scope.")
+        out.setdefault("compactness_standard", "Use a compact answer shape without omitting required buckets.")
+        return out
+
+    def _normalize_live_retrieval_plan(self, value: Any, *, proposal: dict[str, Any]) -> dict[str, Any]:
+        out = dict(value) if isinstance(value, dict) else {}
+        subclasses: list[str] = []
+        for item in self._dict_list(proposal.get("candidate_index")):
+            subclass = str(item.get("subclass") or "").strip()
+            if subclass and subclass not in subclasses:
+                subclasses.append(subclass)
+        for subclass in self._subclass_list(out.get("source_target_subclasses")):
+            if subclass not in subclasses:
+                subclasses.append(subclass)
+        out.setdefault("needed", True)
+        out["source_target_subclasses"] = subclasses[:12]
+        out.setdefault("source_targets", ["Home Affairs guidance", "Schedule 2"])
+        try:
+            out["max_pages"] = int(out.get("max_pages") or 6)
+        except Exception:
+            out["max_pages"] = 6
+        out["max_pages"] = max(1, min(out["max_pages"], 8))
+        out.setdefault("must_find", [])
+        return out
+
         for name in ("stable_facts", "carried_intake_facts", "active_focus"):
             value = getattr(memory_packet, name, None)
             if isinstance(value, dict):

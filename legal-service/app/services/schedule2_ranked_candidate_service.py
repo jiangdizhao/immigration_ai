@@ -68,7 +68,9 @@ class Schedule2RankedCandidateService:
                 )
             if result.status == "excluded" and subclass not in legal_intent.explicitly_mentioned_subclasses:
                 continue
-            ranked_candidates.append(self._ranked_candidate_from_screening(result))
+            if result.family == "bridging_status" and not legal_intent.bridging_or_status_issue and subclass not in legal_intent.explicitly_mentioned_subclasses:
+                continue
+            ranked_candidates.append(self._ranked_candidate_from_screening(result, legal_intent=legal_intent))
 
         ranked_candidates = sorted(
             ranked_candidates,
@@ -138,10 +140,7 @@ class Schedule2RankedCandidateService:
         study_issue = self._has_any(text, ("student", "study", "course", "coe", "education provider", "500"))
         protection_issue = self._has_any(text, ("protection", "refugee", "asylum", "humanitarian"))
         refusal_issue = self._has_any(text, ("refusal", "refused", "review", "appeal", "tribunal", "art"))
-        bridging_issue = self._has_any(
-            text,
-            ("bridging", "bva", "bvb", "current visa", "pending application", "visa status"),
-        ) or refusal_issue
+        bridging_issue = self._has_bridging_or_status_issue(text=text, refusal_issue=refusal_issue)
         meetings_only = self._has_any(
             text,
             ("meetings only", "only attending meetings", "attending meetings", "negotiations only"),
@@ -264,7 +263,7 @@ class Schedule2RankedCandidateService:
             candidates.extend(self._explicit_subclasses(str(item.get("candidate_label") or ""), {}))
         return self._unique(candidates)
 
-    def _ranked_candidate_from_screening(self, result: SkeletonScreeningResult) -> RankedCandidate:
+    def _ranked_candidate_from_screening(self, result: SkeletonScreeningResult, *, legal_intent: LegalIntent | None = None) -> RankedCandidate:
         if result.status == "activated":
             fit = "likely" if result.score >= 75 else "possible"
         elif result.status == "adjacent":
@@ -280,6 +279,18 @@ class Schedule2RankedCandidateService:
             confidence = "medium"
         else:
             confidence = "low"
+
+        if legal_intent is not None and result.family == "employer_sponsored_skilled":
+            # Employer-sponsored pathways can be important alternatives, but they
+            # should not be labelled "likely" merely because employer facts are
+            # present. If ongoing-role/sponsor/nomination facts are still missing,
+            # cap public fit at possible.
+            missing_blob = " ".join(result.missing_decisive_facts).lower()
+            if legal_intent.ongoing_role is None or "sponsor" in missing_blob or "nomination" in missing_blob:
+                if fit == "likely":
+                    fit = "possible"
+                if confidence == "high":
+                    confidence = "medium"
 
         return RankedCandidate(
             subclass=result.subclass,
@@ -368,6 +379,13 @@ class Schedule2RankedCandidateService:
 
         parts: list[str] = [original_question, effective_question]
         for item in self._dict_list(proposal.get("known_facts")):
+            # Only user-sourced facts may shape LegalIntent. Inferred or missing
+            # facts from the proposal are useful for verification, but treating
+            # them as user facts can activate unrelated pathways such as bridging
+            # status merely because the proposal says "visa status unknown".
+            source = str(item.get("source") or "").strip().lower()
+            if source not in {"latest_user_turn", "conversation_history", "user", "user_fact", "provided_by_user"}:
+                continue
             fact = str(item.get("fact") or "").strip()
             if fact:
                 parts.append(fact)
@@ -461,6 +479,35 @@ class Schedule2RankedCandidateService:
 
     def _has_any(self, text: str, terms: tuple[str, ...]) -> bool:
         return any(term in text for term in terms)
+
+    def _has_bridging_or_status_issue(self, *, text: str, refusal_issue: bool) -> bool:
+        if refusal_issue:
+            return True
+        # Use concrete bridging/status-problem markers only. Broad phrases such as
+        # "visa status" or "current visa" are often generated as unknown/missing
+        # facts and should not activate bridging subclasses.
+        concrete_terms = (
+            "bridging visa",
+            "bridging a",
+            "bridging b",
+            "bridging c",
+            "bridging e",
+            "bva",
+            "bvb",
+            "bvc",
+            "bve",
+            "pending application",
+            "pending visa application",
+            "current visa expiring",
+            "current visa expires",
+            "visa expired",
+            "unlawful",
+            "no current visa",
+            "substantive visa expired",
+            "review application",
+            "tribunal review",
+        )
+        return self._has_any(text, concrete_terms)
 
     def _dict_list(self, value: Any) -> list[dict[str, Any]]:
         if not isinstance(value, list):

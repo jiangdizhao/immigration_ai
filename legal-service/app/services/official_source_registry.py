@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
+import re
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 
@@ -170,6 +175,10 @@ class OfficialSourceRegistry:
         if isinstance(focused, dict):
             add_many(focused.get("preferred_urls") or [])
 
+        source_target_subclasses = self._subclasses_from_parts(q, op, facts)
+        if source_target_subclasses:
+            add_many(self.seed_urls_for_subclasses(source_target_subclasses))
+
         if "485" in q or "temporary graduate" in q or op.startswith("485_") or str(facts.get("visa_subclass") or "") == "485":
             source = self.sources["immi.homeaffairs.gov.au"]
             if any(x in q for x in ["age", "years old", "still apply", "eligible", "july", "change", "current policy", "new rule"]):
@@ -200,7 +209,74 @@ class OfficialSourceRegistry:
                 "https://immi.homeaffairs.gov.au/help-support/meeting-our-requirements/health/adequate-health-insurance/visas-subject-condition-8501",
             ])
 
+
         if not urls:
             for domain in self.normalize_domains(None):
                 add_many(self.sources[domain].seed_urls)
         return [url for url in urls if self.is_allowed_url(url)]
+
+    def _seed_map_path(self) -> Path:
+        configured = os.getenv("OFFICIAL_VISA_SOURCE_SEED_MAP_PATH")
+        if configured:
+            return Path(configured)
+        return Path(__file__).resolve().parents[2] / "data" / "generated" / "official_visa_source_seed_map_v0_1.json"
+
+    def _seed_map_entries(self) -> dict[str, dict[str, Any]]:
+        if hasattr(self, "_official_visa_seed_map_cache"):
+            return getattr(self, "_official_visa_seed_map_cache")
+        path = self._seed_map_path()
+        entries: dict[str, dict[str, Any]] = {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            for item in data.get("entries") or []:
+                if isinstance(item, dict) and str(item.get("subclass") or "").strip():
+                    entries[str(item["subclass"]).strip().upper()] = item
+        except Exception:
+            entries = {}
+        setattr(self, "_official_visa_seed_map_cache", entries)
+        return entries
+
+    def seed_urls_for_subclasses(self, subclasses: list[str]) -> list[str]:
+        entries = self._seed_map_entries()
+        urls: list[str] = []
+        for subclass in subclasses:
+            entry = entries.get(str(subclass or "").strip().upper())
+            if not entry:
+                continue
+            for candidate in entry.get("direct_url_candidates") or []:
+                if not isinstance(candidate, dict):
+                    continue
+                if candidate.get("enabled_by_default") is False:
+                    continue
+                url = str(candidate.get("url") or "").strip()
+                if url and self.is_allowed_url(url) and url not in urls:
+                    urls.append(url)
+        return urls
+
+    def _subclasses_from_parts(self, question: str, operation_type: str, facts: dict[str, Any]) -> list[str]:
+        out: list[str] = []
+
+        def add(value: Any) -> None:
+            if value is None:
+                return
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    add(item)
+                return
+            text = str(value or "")
+            for match in re.finditer(r"\b(?:subclass\s*)?([0-9]{3,4})\b", text, re.I):
+                sub = match.group(1).upper()
+                if sub not in out:
+                    out.append(sub)
+
+        add(question)
+        add(operation_type)
+        for key in (
+            "visa_subclass",
+            "target_visa_subclass",
+            "source_target_subclasses",
+            "candidate_subclasses_to_verify",
+            "candidate_subclasses",
+        ):
+            add(facts.get(key))
+        return out[:16]

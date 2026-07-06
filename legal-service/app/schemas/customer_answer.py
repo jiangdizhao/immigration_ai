@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -104,3 +104,6 @@ class CustomerAnswerPlan(BaseSchema):
     customer_visible_source_refs: list[str] = Field(default_factory=list)
     debug_hidden_source_refs: list[str] = Field(default_factory=list)
     one_decisive_question: str | None = None
+    answer_scope_contract: dict[str, Any] = Field(default_factory=dict)
+    coverage_audit: dict[str, Any] = Field(default_factory=dict)
+    public_option_coverage_map: list[dict[str, Any]] = Field(default_factory=list)

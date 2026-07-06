@@ -45,8 +45,8 @@ class ProposalFirstVerifiedAnswerService:
     MAX_PROPOSAL_CHARS = 7000
     MAX_EVIDENCE_CHUNKS = 18
     MAX_SCHEDULE_CLAUSES = 28
-    MAX_SEARCH_QUERIES = 10
-    MAX_LIVE_QUERIES = 4
+    MAX_SEARCH_QUERIES = int(os.getenv("PROPOSAL_FIRST_MAX_SEARCH_QUERIES", "4"))
+    MAX_LIVE_QUERIES = int(os.getenv("PROPOSAL_FIRST_MAX_LIVE_QUERIES", "1"))
 
     def __init__(
         self,
@@ -478,25 +478,41 @@ class ProposalFirstVerifiedAnswerService:
             if len(bundle.schedule_clauses) >= self.MAX_SCHEDULE_CLAUSES:
                 break
 
-        # 4. Controlled official-source live retrieval. This verifies current guidance,
-        # but the proposal memo is already preserved above.
-        for query in queries[: self.MAX_LIVE_QUERIES]:
-            try:
-                live = self.live_retrieval_service.retrieve(
-                    question=query,
-                    preferred_domains=["immi.homeaffairs.gov.au", "www.homeaffairs.gov.au", "legislation.gov.au", "art.gov.au"],
-                    issue_type="visa_options_or_legal_discovery",
-                    operation_type="legal_discovery",
-                    known_facts=known_facts,
-                    max_urls=5,
-                    max_chunks=6,
-                )
-                bundle.live_debug.append({"query": query, "debug": live.debug, "used_live_fetch": live.used_live_fetch})
-                self._extend_unique_chunks(bundle.live_chunks, self._live_chunks_to_shims(live.chunks), limit=10)
-            except Exception as exc:
-                bundle.live_debug.append({"query": query, "error": str(exc)[:300]})
+        # 4. Controlled official-source live retrieval. Use one deduped retrieval
+        # batch rather than several broad sequential live queries. The proposal LLM
+        # may emit live_retrieval_plan.source_target_subclasses; the official source
+        # registry then uses the all-subclass seed map and cache.
+        live_plan = proposal.get("live_retrieval_plan") if isinstance(proposal.get("live_retrieval_plan"), dict) else {}
+        live_query = self._live_query_from_plan(effective_question=effective_question, proposal=proposal, queries=queries)
+        live_known_facts = dict(known_facts)
+        target_subclasses = self._subclass_list(live_plan.get("source_target_subclasses"))
+        if target_subclasses:
+            live_known_facts["source_target_subclasses"] = target_subclasses
+        max_pages = int(live_plan.get("max_pages") or 6) if live_plan else 6
+        try:
+            live = self.live_retrieval_service.retrieve(
+                question=live_query,
+                preferred_domains=["immi.homeaffairs.gov.au", "www.homeaffairs.gov.au", "legislation.gov.au", "art.gov.au"],
+                issue_type="visa_options_or_legal_discovery",
+                operation_type="legal_discovery",
+                known_facts=live_known_facts,
+                max_urls=max(2, min(max_pages, 8)),
+                max_chunks=8,
+            )
+            bundle.live_debug.append({"query": live_query, "debug": live.debug, "used_live_fetch": live.used_live_fetch})
+            self._extend_unique_chunks(bundle.live_chunks, self._live_chunks_to_shims(live.chunks), limit=10)
+        except Exception as exc:
+            bundle.live_debug.append({"query": live_query, "error": str(exc)[:300]})
 
         return bundle
+
+    def _live_query_from_plan(self, *, effective_question: str, proposal: dict[str, Any], queries: list[str]) -> str:
+        plan = proposal.get("live_retrieval_plan") if isinstance(proposal.get("live_retrieval_plan"), dict) else {}
+        subclasses = " ".join(self._subclass_list(plan.get("source_target_subclasses")))
+        must_find = " ".join(self._string_list(plan.get("must_find")))
+        top_queries = " ".join(queries[:3])
+        return "
+".join(part for part in [effective_question, subclasses, must_find, top_queries] if str(part or "").strip())[:2400]
 
     # ------------------------------------------------------------------
     # Stage 3: verify proposal against gathered evidence
@@ -524,6 +540,7 @@ class ProposalFirstVerifiedAnswerService:
             '  "verified_candidates": [{"candidate_label": string, "status": "supported" | "partially_supported" | "contradicted" | "not_found" | "needs_lawyer_check", "fit": "likely" | "possible" | "weak" | "excluded", "supported_points": string[], "corrections": string[], "missing_verification": string[], "evidence_numbers": number[]}],\n'
             '  "unsupported_or_contradicted_claims": string[],\n'
             '  "must_remove_or_qualify": string[],\n'
+            '  "coverage_audit": {"answer_scope_satisfied": boolean | null, "missing_required_buckets": string[], "missing_relevant_options": string[], "over_included_unrelated_options": string[], "required_additions": string[], "required_removals": string[]},\n'
             '  "final_answer_allowed": boolean,\n'
             '  "one_decisive_question": string | null\n'
             "}\n"
@@ -545,6 +562,14 @@ class ProposalFirstVerifiedAnswerService:
                 "verified_candidates": [],
                 "unsupported_or_contradicted_claims": [],
                 "must_remove_or_qualify": ["verification_json_parse_failed"],
+                "coverage_audit": {
+                    "answer_scope_satisfied": None,
+                    "missing_required_buckets": [],
+                    "missing_relevant_options": [],
+                    "over_included_unrelated_options": [],
+                    "required_additions": [],
+                    "required_removals": [],
+                },
                 "final_answer_allowed": True,
                 "one_decisive_question": proposal.get("one_decisive_question"),
             }
