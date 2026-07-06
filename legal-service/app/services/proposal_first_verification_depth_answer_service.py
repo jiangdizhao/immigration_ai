@@ -524,13 +524,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 facts.update(value)
         return facts
 
-    def _normalize_answer_scope_contract(
-        self,
-        value: Any,
-        *,
-        original_question: str,
-        effective_question: str,
-    ) -> dict[str, Any]:
+    def _normalize_answer_scope_contract(self, value: Any, *, original_question: str, effective_question: str) -> dict[str, Any]:
         out = dict(value) if isinstance(value, dict) else {}
         text = f"{original_question}\n{effective_question}".lower()
         if not out:

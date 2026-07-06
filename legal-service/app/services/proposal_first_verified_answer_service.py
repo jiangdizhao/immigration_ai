@@ -511,8 +511,7 @@ class ProposalFirstVerifiedAnswerService:
         subclasses = " ".join(self._subclass_list(plan.get("source_target_subclasses")))
         must_find = " ".join(self._string_list(plan.get("must_find")))
         top_queries = " ".join(queries[:3])
-        return "
-".join(part for part in [effective_question, subclasses, must_find, top_queries] if str(part or "").strip())[:2400]
+        return "\n".join(part for part in [effective_question, subclasses, must_find, top_queries] if str(part or "").strip())[:2400]
 
     # ------------------------------------------------------------------
     # Stage 3: verify proposal against gathered evidence
