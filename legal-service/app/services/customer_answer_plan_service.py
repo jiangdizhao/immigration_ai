@@ -209,12 +209,9 @@ class CustomerAnswerPlanService:
             "If CustomerAnswerPlan.ranked_candidate_map is present, follow ranked_candidate_map.ranked_candidates order exactly. Do not promote a lower-ranked candidate above a higher-ranked candidate.\n"
             "Use CustomerAnswerPlan.answer_composition_plan for the answer shape, opening style, decision boundary, and table permission.\n"
             "If answer_composition_plan.table_allowed is true and answer_composition_plan.answer_shape is ranked_options_with_boundary, include a short practical comparison table before the ranked explanation. The table must use only ranked_candidate_map candidates and the primary decision boundary.\n"
-            "If answer_scope_contract.user_requested_scope is all_possible_options, do not collapse the response into only the most likely option. Include all customer-visible buckets from public_option_coverage_map, while keeping 400/primary candidates first.
-"
-            "Do not introduce additional visa subclasses as numbered/ranked options unless they appear in ranked_candidate_map.ranked_candidates, public_option_coverage_map, or the verifier coverage_audit.required_additions.
-"
-            "Do not state duration thresholds such as 3 months, 6 months, salary thresholds, fees, or dates unless they appear in supported_customer_facts, verified_candidates.supported_points, or coverage_audit.
-"
+            "If answer_scope_contract.user_requested_scope is all_possible_options, do not collapse the response into only the most likely option. Include all customer-visible buckets from public_option_coverage_map, while keeping 400/primary candidates first.\n"
+            "Do not introduce additional visa subclasses as numbered/ranked options unless they appear in ranked_candidate_map.ranked_candidates, public_option_coverage_map, or the verifier coverage_audit.required_additions.\n"
+            "Do not state duration thresholds such as 3 months, 6 months, salary thresholds, fees, or dates unless they appear in supported_customer_facts, verified_candidates.supported_points, or coverage_audit.\n"
             "Do not mention internal JSON, proposal memo, retrieval debug, Schedule 2 discovery, verification depth, or source classes.\n"
             "You may include the short customer checking note only if verification_value_summary.customer_visible_summary is not null.\n"
             "Ask at most one decisive follow-up question, using one_decisive_question when it is present.\n"
