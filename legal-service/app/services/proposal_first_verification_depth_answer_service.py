@@ -518,10 +518,21 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
 
     def _known_facts_from_memory(self, memory_packet: Any) -> dict[str, Any]:
         facts: dict[str, Any] = {}
-    def _normalize_answer_scope_contract(self, value: Any, *, original_question: str, effective_question: str) -> dict[str, Any]:
+        for name in ("stable_facts", "carried_intake_facts", "active_focus"):
+            value = getattr(memory_packet, name, None)
+            if isinstance(value, dict):
+                facts.update(value)
+        return facts
+
+    def _normalize_answer_scope_contract(
+        self,
+        value: Any,
+        *,
+        original_question: str,
+        effective_question: str,
+    ) -> dict[str, Any]:
         out = dict(value) if isinstance(value, dict) else {}
-        text = f"{original_question}
-{effective_question}".lower()
+        text = f"{original_question}\n{effective_question}".lower()
         if not out:
             if any(marker in text for marker in ("all possible", "all option", "all pathway", "provide all")):
                 out["user_requested_scope"] = "all_possible_options"
@@ -558,12 +569,6 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         out["max_pages"] = max(1, min(out["max_pages"], 8))
         out.setdefault("must_find", [])
         return out
-
-        for name in ("stable_facts", "carried_intake_facts", "active_focus"):
-            value = getattr(memory_packet, name, None)
-            if isinstance(value, dict):
-                facts.update(value)
-        return facts
 
     def _normalize_verification_plan(self, value: Any) -> dict[str, Any]:
         plan = value if isinstance(value, dict) else {}
