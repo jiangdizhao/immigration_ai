@@ -55,7 +55,7 @@ assert "ongoing sponsored job role" in plan.one_decisive_question
 
 prompt_rules = service.final_answer_prompt_rules(plan)
 assert "ranked_candidate_map.ranked_candidates order exactly" in prompt_rules
-assert "answer_composition_plan.table_allowed is true" in prompt_rules
+assert "include a short practical comparison table" in prompt_rules
 
 citations = [
     SimpleNamespace(

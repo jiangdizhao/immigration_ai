@@ -116,7 +116,10 @@ class Schedule2RankedCandidateService:
             known_facts=known_facts,
             proposal=proposal,
         )
-        explicitly_mentioned = self._explicit_subclasses(text, proposal)
+        # Explicit subclasses should come from the user's text and known facts only.
+        # GPT proposal candidates are added later as candidate inclusions, but they
+        # must not become factual intent evidence.
+        explicitly_mentioned = self._explicit_subclasses(text, None)
 
         family_issue = self._has_any(
             text,
@@ -354,15 +357,20 @@ class Schedule2RankedCandidateService:
         known_facts: dict[str, Any],
         proposal: dict[str, Any],
     ) -> str:
+        """Build factual text for LegalIntent extraction.
+
+        Important: do not use proposal_memo_markdown, candidate_index.why_possible,
+        or other GPT alternative-pathway discussion here. Those fields are useful
+        for candidate inclusion and verification, but they are not user facts. If
+        they are treated as factual intent, alternatives such as training or
+        visitor activity can contaminate the primary decision boundary.
+        """
+
         parts: list[str] = [original_question, effective_question]
-        parts.append(str(proposal.get("user_goal") or ""))
-        parts.append(str(proposal.get("proposal_summary") or ""))
-        parts.append(str(proposal.get("proposal_memo_markdown") or "")[:1600])
         for item in self._dict_list(proposal.get("known_facts")):
-            parts.append(str(item.get("fact") or ""))
-        for item in self._dict_list(proposal.get("candidate_index")):
-            parts.extend(str(item.get(key) or "") for key in ("candidate_label", "subclass", "stream_or_activity"))
-            parts.extend(str(value) for value in item.get("why_possible") or [])
+            fact = str(item.get("fact") or "").strip()
+            if fact:
+                parts.append(fact)
         for key, value in known_facts.items():
             parts.append(f"{key}: {value}")
         return " ".join(parts).lower()

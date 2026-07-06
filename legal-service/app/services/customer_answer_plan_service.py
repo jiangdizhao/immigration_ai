@@ -30,7 +30,7 @@ class CustomerAnswerPlanService:
         "non-ongoing": "a temporary task that will finish",
         "grant criteria": "rules for approval",
         "productive work": "actually doing work or providing services",
-        "subclass": "visa number / visa type",
+        "subclass": "use standard labels such as 'Subclass 400'; briefly explain once that a subclass is a visa type/number if needed",
     }
 
     CURRENT_DETAIL_TERMS = (
@@ -154,7 +154,9 @@ class CustomerAnswerPlanService:
                 allowed_checklist_items=allowed_checklist_items,
                 ranked_candidate_map=ranked_candidate_map,
             ),
-            customer_terms_to_avoid=list(self.PLAIN_LANGUAGE_REPLACEMENTS.keys()),
+            customer_terms_to_avoid=[
+                term for term in self.PLAIN_LANGUAGE_REPLACEMENTS.keys() if term != "subclass"
+            ],
             required_plain_language_replacements=dict(self.PLAIN_LANGUAGE_REPLACEMENTS),
             supported_customer_facts=supported_facts,
             unsupported_or_do_not_say=unsupported,
@@ -184,6 +186,7 @@ class CustomerAnswerPlanService:
             "Use the CustomerAnswerPlan to decide which answer modules fit. Do not force every module into every answer.\n"
             "Put the practical bottom line first when the user asks for options, recommendation, eligibility, or next steps.\n"
             "Use plain English. Avoid legal terminology unless needed; if needed, briefly explain it in ordinary language.\n"
+            "Use standard immigration labels such as \"Subclass 400\" and \"Subclass 482\". Do not repeatedly write awkward phrases like \"visa number 400\"; explain once, if useful, that a subclass is a visa type/number.\n"
             "Do not invent examples, document checklists, thresholds, dates, fees, salary figures, visa conditions, processing times, deadlines, or practical warnings.\n"
             "Use examples only from CustomerAnswerPlan.allowed_examples. If allowed_examples is empty, do not include examples.\n"
             "Use checklist items only from CustomerAnswerPlan.allowed_checklist_items. If allowed_checklist_items is empty, do not include a document checklist.\n"
@@ -191,7 +194,7 @@ class CustomerAnswerPlanService:
             "When the verified candidate map supports it, separate the most likely option, possible option, and usually unsuitable option.\n"
             "If CustomerAnswerPlan.ranked_candidate_map is present, follow ranked_candidate_map.ranked_candidates order exactly. Do not promote a lower-ranked candidate above a higher-ranked candidate.\n"
             "Use CustomerAnswerPlan.answer_composition_plan for the answer shape, opening style, decision boundary, and table permission.\n"
-            "Use a short decision table only when answer_composition_plan.table_allowed is true.\n"
+            "If answer_composition_plan.table_allowed is true and answer_composition_plan.answer_shape is ranked_options_with_boundary, include a short practical comparison table before the ranked explanation. The table must use only ranked_candidate_map candidates and the primary decision boundary.\n"
             "Do not mention internal JSON, proposal memo, retrieval debug, Schedule 2 discovery, verification depth, or source classes.\n"
             "You may include the short customer checking note only if verification_value_summary.customer_visible_summary is not null.\n"
             "Ask at most one decisive follow-up question, using one_decisive_question when it is present.\n"

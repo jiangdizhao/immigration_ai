@@ -53,7 +53,10 @@ for marker in required_prompt_markers:
     assert marker in prompt_rules, f"final-answer prompt rules missing marker: {marker}"
 
 for term, replacement in service.PLAIN_LANGUAGE_REPLACEMENTS.items():
-    assert term in plan.customer_terms_to_avoid
+    if term == "subclass":
+        assert term not in plan.customer_terms_to_avoid
+    else:
+        assert term in plan.customer_terms_to_avoid
     assert plan.required_plain_language_replacements[term] == replacement
     assert replacement
 

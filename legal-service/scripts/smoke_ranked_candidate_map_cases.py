@@ -37,6 +37,20 @@ assert {ref.split("-")[2] for candidate in short_term.ranked_candidates for ref 
     "482",
 }
 
+
+exact_user_question = ranked(
+    "Please advise on and provide all the possible options on how a specialised overseas worker "
+    "can come to Australia to do some short term work for an Australian employer."
+)
+assert subclasses(exact_user_question)[:2] == ["400", "482"]
+assert exact_user_question.confidence_floor != "high"
+assert exact_user_question.primary_decision_boundary
+assert "fixed short-term specialist task" in exact_user_question.primary_decision_boundary
+assert "ongoing sponsored skilled job role" in exact_user_question.primary_decision_boundary
+assert "structured occupational training" not in exact_user_question.primary_decision_boundary
+excluded_by_status = {item.subclass for item in exact_user_question.excluded_candidates}
+assert {"103", "143", "485", "500"}.issubset(excluded_by_status)
+
 ongoing = ranked(
     "Australian employer wants to sponsor an overseas skilled worker for an ongoing "
     "job role with nomination and nominated occupation."

@@ -29,7 +29,17 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
 
     def __init__(self) -> None:
         super().__init__()
-        self.exhaustive_discovery = Schedule2ExhaustiveDiscoveryService()
+        self.legacy_exhaustive_debug_enabled = (
+            os.getenv("ENABLE_LEGACY_SCHEDULE2_EXHAUSTIVE_DEBUG", "")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on"}
+        )
+        self.exhaustive_discovery = (
+            Schedule2ExhaustiveDiscoveryService()
+            if self.legacy_exhaustive_debug_enabled
+            else None
+        )
 
     def answer(
         self,
@@ -87,7 +97,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         proposal = self._ensure_plan_candidates_in_proposal(proposal, verification_plan)
 
         evidence = EvidenceBundle()
-        schedule2_exhaustive_debug: dict[str, Any] | None = None
+        legacy_schedule2_exhaustive_debug: dict[str, Any] | None = None
         depth = verification_plan.get("verification_depth") or "targeted_rag"
 
         if depth in {"targeted_rag", "exhaustive_schedule2", "high_risk_handoff"}:
@@ -99,7 +109,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 proposal=proposal,
             )
 
-        if depth == "exhaustive_schedule2":
+        if (
+            depth == "exhaustive_schedule2"
+            and self.legacy_exhaustive_debug_enabled
+            and self.exhaustive_discovery is not None
+        ):
             try:
                 discovery = self.exhaustive_discovery.discover(
                     question="\n".join(
@@ -113,10 +127,19 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                     memory_packet=memory_packet,
                     limit=20,
                 )
-                schedule2_exhaustive_debug = discovery.model_dump()
+                legacy_schedule2_exhaustive_debug = discovery.model_dump()
             except Exception as exc:  # pragma: no cover - defensive runtime guard
-                schedule2_exhaustive_debug = {"enabled": False, "error": str(exc)[:400]}
-
+                legacy_schedule2_exhaustive_debug = {"enabled": False, "error": str(exc)[:400]}
+        elif depth == "exhaustive_schedule2":
+            legacy_schedule2_exhaustive_debug = {
+                "enabled": False,
+                "skipped": True,
+                "reason": (
+                    "Legacy all-clause Schedule 2 exhaustive discovery is disabled by default; "
+                    "coverage-first skeleton screening and RankedCandidateMap now control candidate ranking. "
+                    "Set ENABLE_LEGACY_SCHEDULE2_EXHAUSTIVE_DEBUG=true only for legacy diagnostics."
+                ),
+            }
         evidence_text = self._format_evidence_for_llm(evidence)
         if depth == "light" and not evidence_text:
             evidence_text = "No external evidence package was required by the GPT verification plan for this light general explanation."
@@ -178,16 +201,20 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             citations=visible_citations,
             evidence=evidence,
             verification_plan=verification_plan,
-            schedule2_exhaustive_debug=schedule2_exhaustive_debug,
+            legacy_schedule2_exhaustive_debug=legacy_schedule2_exhaustive_debug,
         )
 
         missing_facts = self._string_list(final.get("missing_facts")) or self._string_list(
             proposal.get("missing_decisive_facts")
         )[:6]
-        follow_ups = self._one_question(
-            self._string_list(final.get("follow_up_questions"))
-            or [str(proposal.get("one_decisive_question") or "")]
-        )
+        planned_follow_up = str(customer_answer_plan.one_decisive_question or "").strip()
+        if planned_follow_up:
+            follow_ups = [planned_follow_up]
+        else:
+            follow_ups = self._one_question(
+                self._string_list(final.get("follow_up_questions"))
+                or [str(proposal.get("one_decisive_question") or "")]
+            )
         next_action = "ask_followup" if follow_ups else self._normalize_next_action(final.get("next_action"))
         confidence = self._normalize_confidence(final.get("confidence") or verification.get("confidence"))
         if ranked_candidate_map.confidence_floor != "high" and confidence == "high":
@@ -210,7 +237,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 },
                 "retrieval_runs": evidence.retrieval_runs,
                 "live_debug": evidence.live_debug,
-                "schedule2_exhaustive_discovery": schedule2_exhaustive_debug,
+                "legacy_schedule2_exhaustive_discovery": legacy_schedule2_exhaustive_debug,
                 "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
                 "final_json": final,
@@ -227,7 +254,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                     "backend_history_turn_count": len(getattr(memory_packet, "full_conversation_history", []) or []),
                     "frontend_message_count": len(getattr(memory_packet, "frontend_messages", []) or []),
                 },
-                "schedule2_exhaustive_discovery": schedule2_exhaustive_debug,
+                "legacy_schedule2_exhaustive_discovery": legacy_schedule2_exhaustive_debug,
             },
             "reasoning_model": self.model,
             "reasoning_mode": "proposal_first_verification_depth",
@@ -601,7 +628,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         citations: list[CitationOut],
         evidence: EvidenceBundle,
         verification_plan: dict[str, Any],
-        schedule2_exhaustive_debug: dict[str, Any] | None,
+        legacy_schedule2_exhaustive_debug: dict[str, Any] | None,
     ) -> list[str]:
         out: list[str] = []
         def add(value: str | None) -> None:

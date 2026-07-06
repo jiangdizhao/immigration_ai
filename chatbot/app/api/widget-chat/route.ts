@@ -442,6 +442,8 @@ function logWidgetDebug(params: {
   responseLanguage: ResponseLanguage;
 }) {
   const dbg = params.response.retrieval_debug ?? {};
+  const pfvd = dbg.proposal_first_verification_depth ?? null;
+  const customerQuality = dbg.customer_answer_quality ?? null;
   const unified =
     dbg.unified_context ?? dbg.proposal_first_exhaustive_discovery ?? null;
   console.log("\n=== widget-chat debug ===");
@@ -520,8 +522,34 @@ function logWidgetDebug(params: {
   console.log("memoryPacket:", unified?.memory_packet ?? null);
   console.log("reasoningTier:", unified?.reasoning_depth ?? null);
   console.log(
-    "schedule2Exhaustive:",
-    unified?.schedule2_exhaustive_discovery ?? null
+    "rankedCandidateMap:",
+    pfvd?.ranked_candidate_map ??
+      customerQuality?.customer_answer_plan?.ranked_candidate_map ??
+      null
+  );
+  console.log(
+    "answerCompositionPlan:",
+    pfvd?.answer_composition_plan ??
+      customerQuality?.answer_composition_plan ??
+      customerQuality?.customer_answer_plan?.answer_composition_plan ??
+      null
+  );
+  console.log(
+    "customerVisibleSourceRefs:",
+    pfvd?.customer_visible_source_refs ??
+      customerQuality?.customer_visible_source_refs ??
+      []
+  );
+  console.log(
+    "debugHiddenSourceRefs:",
+    pfvd?.debug_hidden_source_refs ?? customerQuality?.debug_hidden_source_refs ?? []
+  );
+  console.log(
+    "legacySchedule2Exhaustive:",
+    pfvd?.legacy_schedule2_exhaustive_discovery ??
+      unified?.legacy_schedule2_exhaustive_discovery ??
+      unified?.schedule2_exhaustive_discovery ??
+      null
   );
   console.log("compactSources:", params.response.compact_sources ?? []);
   console.log("userDisplayMode:", params.response.user_display_mode ?? null);
