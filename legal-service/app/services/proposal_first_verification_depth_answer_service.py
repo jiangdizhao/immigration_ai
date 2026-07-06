@@ -130,6 +130,13 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             response_language=response_language,
         )
 
+        ranked_candidate_map = self.schedule2_ranked_candidate_service.build(
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=known_facts,
+            proposal=proposal,
+            verification=verification,
+        )
         customer_answer_plan = self.customer_answer_plan_service.build(
             original_question=original_question,
             effective_question=effective_question,
@@ -139,6 +146,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             evidence=evidence,
             verification_plan=verification_plan,
             response_language=response_language,
+            ranked_candidate_map=ranked_candidate_map,
         )
         customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
 
@@ -162,8 +170,12 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             )
 
         citations = self._build_citations_with_schedule(evidence=evidence, verification_plan=verification_plan)
+        visible_citations = self.customer_answer_plan_service.filter_customer_visible_citations(
+            citations,
+            customer_answer_plan,
+        )
         compact_sources = self._compact_sources(
-            citations=citations,
+            citations=visible_citations,
             evidence=evidence,
             verification_plan=verification_plan,
             schedule2_exhaustive_debug=schedule2_exhaustive_debug,
@@ -178,6 +190,8 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
         next_action = "ask_followup" if follow_ups else self._normalize_next_action(final.get("next_action"))
         confidence = self._normalize_confidence(final.get("confidence") or verification.get("confidence"))
+        if ranked_candidate_map.confidence_floor != "high" and confidence == "high":
+            confidence = ranked_candidate_map.confidence_floor
 
         debug = {
             "proposal_first_verification_depth": {
@@ -197,6 +211,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "retrieval_runs": evidence.retrieval_runs,
                 "live_debug": evidence.live_debug,
                 "schedule2_exhaustive_discovery": schedule2_exhaustive_debug,
+                "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
                 "final_json": final,
             },
@@ -229,7 +244,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             issue_type=str(final.get("issue_type") or verification.get("issue_type") or "visa_options_or_legal_discovery"),
             missing_facts=missing_facts,
             follow_up_questions=follow_ups,
-            citations=citations[:12],
+            citations=visible_citations[:12],
             compact_sources=compact_sources[:6],
             escalate=bool(final.get("escalate", depth == "high_risk_handoff")),
             next_action=next_action,

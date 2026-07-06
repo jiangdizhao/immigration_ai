@@ -23,6 +23,7 @@ from app.schemas.source import CitationOut
 from app.services.customer_answer_plan_service import CustomerAnswerPlanService
 from app.services.live_retrieval_service import LiveRetrievalService
 from app.services.retrieval_service import RetrievalService
+from app.services.schedule2_ranked_candidate_service import Schedule2RankedCandidateService
 from app.schedule.schedule2_candidate_service import Schedule2CandidateSearchService
 from app.schedule.schedule2_index_service import ScheduleIndexService
 
@@ -64,6 +65,7 @@ class ProposalFirstVerifiedAnswerService:
         self.schedule_candidate_service = schedule_candidate_service or Schedule2CandidateSearchService()
         self.schedule_index_service = schedule_index_service or ScheduleIndexService()
         self.customer_answer_plan_service = CustomerAnswerPlanService()
+        self.schedule2_ranked_candidate_service = Schedule2RankedCandidateService()
         self._client: OpenAI | None = None
 
     @property
@@ -140,6 +142,13 @@ class ProposalFirstVerifiedAnswerService:
             response_language=response_language,
         )
 
+        ranked_candidate_map = self.schedule2_ranked_candidate_service.build(
+            original_question=original_question,
+            effective_question=effective_question,
+            known_facts=known_facts,
+            proposal=proposal,
+            verification=verification,
+        )
         customer_answer_plan = self.customer_answer_plan_service.build(
             original_question=original_question,
             effective_question=effective_question,
@@ -149,6 +158,7 @@ class ProposalFirstVerifiedAnswerService:
             evidence=evidence,
             verification_plan={"verification_depth": "targeted_rag"},
             response_language=response_language,
+            ranked_candidate_map=ranked_candidate_map,
         )
         customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
 
@@ -171,6 +181,8 @@ class ProposalFirstVerifiedAnswerService:
         follow_ups = self._one_question(self._string_list(final.get("follow_up_questions")) or [str(proposal.get("one_decisive_question") or "")])
         next_action = "ask_followup" if follow_ups else self._normalize_next_action(final.get("next_action"))
         confidence = self._normalize_confidence(final.get("confidence") or verification.get("confidence"))
+        if ranked_candidate_map.confidence_floor != "high" and confidence == "high":
+            confidence = ranked_candidate_map.confidence_floor
 
         debug = {
             "proposal_first_verified_answer": {
@@ -187,6 +199,7 @@ class ProposalFirstVerifiedAnswerService:
                 },
                 "retrieval_runs": evidence.retrieval_runs,
                 "live_debug": evidence.live_debug,
+                "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
                 "final_json": final,
             },
@@ -199,7 +212,11 @@ class ProposalFirstVerifiedAnswerService:
 
         compact_sources = []
         seen_titles: set[str] = set()
-        for citation in citations:
+        visible_citations = self.customer_answer_plan_service.filter_customer_visible_citations(
+            citations,
+            customer_answer_plan,
+        )
+        for citation in visible_citations:
             if citation.title and citation.title not in seen_titles:
                 seen_titles.add(citation.title)
                 compact_sources.append(citation.title)
@@ -215,7 +232,7 @@ class ProposalFirstVerifiedAnswerService:
             issue_type=str(final.get("issue_type") or verification.get("issue_type") or "visa_options_or_legal_discovery"),
             missing_facts=missing_facts,
             follow_up_questions=follow_ups,
-            citations=citations[:10],
+            citations=visible_citations[:10],
             compact_sources=compact_sources,
             escalate=bool(final.get("escalate", False)),
             next_action=next_action,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from app.schemas.customer_answer import (
@@ -10,6 +11,7 @@ from app.schemas.customer_answer import (
     SupportedFact,
     VerificationValueSummary,
 )
+from app.schemas.ranked_candidates import AnswerCompositionPlan, RankedCandidateMap
 
 
 class CustomerAnswerPlanService:
@@ -78,8 +80,10 @@ class CustomerAnswerPlanService:
         evidence: Any,
         verification_plan: dict[str, Any] | None = None,
         response_language: str = "en",
+        ranked_candidate_map: RankedCandidateMap | dict[str, Any] | None = None,
     ) -> CustomerAnswerPlan:
         verification_plan = verification_plan or {}
+        ranked_candidate_map = self._ranked_candidate_map(ranked_candidate_map)
         verified_candidates = self._dict_list(verification.get("verified_candidates"))
         candidate_index = self._dict_list(proposal.get("candidate_index"))
         answer_style = self._answer_style(
@@ -89,8 +93,13 @@ class CustomerAnswerPlanService:
             verification_plan=verification_plan,
             verified_candidates=verified_candidates,
             candidate_index=candidate_index,
+            ranked_candidate_map=ranked_candidate_map,
         )
-        one_question = self._one_decisive_question(proposal=proposal, verification=verification)
+        one_question = self._one_decisive_question(
+            proposal=proposal,
+            verification=verification,
+            ranked_candidate_map=ranked_candidate_map,
+        )
         unsupported = self._unsupported_claims(verification)
         supported_facts = self._supported_facts(
             known_facts=known_facts,
@@ -119,6 +128,14 @@ class CustomerAnswerPlanService:
             unsupported=unsupported,
             one_question=one_question,
         )
+        answer_composition_plan = self._answer_composition_plan(
+            answer_style=answer_style,
+            proposal=proposal,
+            ranked_candidate_map=ranked_candidate_map,
+            one_question=one_question,
+            allowed_examples=allowed_examples,
+            allowed_checklist_items=allowed_checklist_items,
+        )
 
         return CustomerAnswerPlan(
             answer_style=answer_style,
@@ -126,6 +143,7 @@ class CustomerAnswerPlanService:
                 verified_candidates=verified_candidates,
                 proposal=proposal,
                 answer_style=answer_style,
+                ranked_candidate_map=ranked_candidate_map,
             ),
             recommended_modules=self._recommended_modules(
                 answer_style=answer_style,
@@ -134,6 +152,7 @@ class CustomerAnswerPlanService:
                 one_question=one_question,
                 allowed_examples=allowed_examples,
                 allowed_checklist_items=allowed_checklist_items,
+                ranked_candidate_map=ranked_candidate_map,
             ),
             customer_terms_to_avoid=list(self.PLAIN_LANGUAGE_REPLACEMENTS.keys()),
             required_plain_language_replacements=dict(self.PLAIN_LANGUAGE_REPLACEMENTS),
@@ -144,6 +163,10 @@ class CustomerAnswerPlanService:
             allowed_checklist_items=allowed_checklist_items,
             blocked_checklist_items=blocked_checklist_items,
             verification_value_summary=verification_value_summary,
+            ranked_candidate_map=ranked_candidate_map,
+            answer_composition_plan=answer_composition_plan,
+            customer_visible_source_refs=self._customer_visible_source_refs(ranked_candidate_map),
+            debug_hidden_source_refs=self._debug_hidden_source_refs(ranked_candidate_map),
             one_decisive_question=one_question,
         )
 
@@ -166,6 +189,9 @@ class CustomerAnswerPlanService:
             "Use checklist items only from CustomerAnswerPlan.allowed_checklist_items. If allowed_checklist_items is empty, do not include a document checklist.\n"
             "Do not state anything listed in unsupported_or_do_not_say except to say it remains unverified or should be checked by a lawyer.\n"
             "When the verified candidate map supports it, separate the most likely option, possible option, and usually unsuitable option.\n"
+            "If CustomerAnswerPlan.ranked_candidate_map is present, follow ranked_candidate_map.ranked_candidates order exactly. Do not promote a lower-ranked candidate above a higher-ranked candidate.\n"
+            "Use CustomerAnswerPlan.answer_composition_plan for the answer shape, opening style, decision boundary, and table permission.\n"
+            "Use a short decision table only when answer_composition_plan.table_allowed is true.\n"
             "Do not mention internal JSON, proposal memo, retrieval debug, Schedule 2 discovery, verification depth, or source classes.\n"
             "You may include the short customer checking note only if verification_value_summary.customer_visible_summary is not null.\n"
             "Ask at most one decisive follow-up question, using one_decisive_question when it is present.\n"
@@ -187,7 +213,41 @@ class CustomerAnswerPlanService:
                 "allowed": plan_dict.get("allowed_checklist_items", []),
                 "blocked": plan_dict.get("blocked_checklist_items", []),
             },
+            "answer_composition_plan": plan_dict.get("answer_composition_plan"),
+            "customer_visible_source_refs": plan_dict.get("customer_visible_source_refs", []),
+            "debug_hidden_source_refs": plan_dict.get("debug_hidden_source_refs", []),
         }
+
+    def filter_customer_visible_citations(
+        self,
+        citations: list[Any],
+        plan: CustomerAnswerPlan | dict[str, Any] | None,
+    ) -> list[Any]:
+        plan_dict = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan or {})
+        ranked_map = plan_dict.get("ranked_candidate_map") or {}
+        ranked_candidates = ranked_map.get("ranked_candidates") or []
+        subclasses = [
+            str(item.get("subclass") or "").strip()
+            for item in ranked_candidates
+            if isinstance(item, dict) and str(item.get("subclass") or "").strip()
+        ]
+        if not subclasses:
+            return citations
+
+        visible: list[Any] = []
+        for citation in citations:
+            blob = " ".join(
+                [
+                    str(getattr(citation, "source_id", "") or ""),
+                    str(getattr(citation, "title", "") or ""),
+                    str(getattr(citation, "section_ref", "") or ""),
+                    str(getattr(citation, "citation_text", "") or ""),
+                    str(getattr(citation, "quote_text", "") or "")[:500],
+                ]
+            ).lower()
+            if any(self._citation_mentions_subclass(blob, subclass) for subclass in subclasses):
+                visible.append(citation)
+        return visible
 
     def _answer_style(
         self,
@@ -198,7 +258,15 @@ class CustomerAnswerPlanService:
         verification_plan: dict[str, Any],
         verified_candidates: list[dict[str, Any]],
         candidate_index: list[dict[str, Any]],
+        ranked_candidate_map: RankedCandidateMap | None,
     ) -> str:
+        if ranked_candidate_map:
+            if ranked_candidate_map.confidence_floor == "low":
+                return "risk_warning"
+            if len(ranked_candidate_map.ranked_candidates) >= 2:
+                return "ranked_options"
+            if ranked_candidate_map.ranked_candidates:
+                return "eligibility_explanation"
         text = self._combined_text(original_question, effective_question, proposal.get("risk_flags"))
         depth = str(verification_plan.get("verification_depth") or "").strip()
         if depth == "high_risk_handoff" or self._contains_any(text, self.HIGH_RISK_TERMS):
@@ -220,13 +288,27 @@ class CustomerAnswerPlanService:
         one_question: str | None,
         allowed_examples: list[SupportedExample],
         allowed_checklist_items: list[SupportedChecklistItem],
+        ranked_candidate_map: RankedCandidateMap | None,
     ) -> list[str]:
         modules: list[str] = ["bottom_line"]
-        if answer_style == "ranked_options" or len(verified_candidates) >= 2 or len(candidate_index) >= 2:
+        if (
+            answer_style == "ranked_options"
+            or len(verified_candidates) >= 2
+            or len(candidate_index) >= 2
+            or (ranked_candidate_map is not None and len(ranked_candidate_map.ranked_candidates) >= 2)
+        ):
             modules.append("ranked_option_map")
-        if verified_candidates or candidate_index or one_question:
+        if (
+            verified_candidates
+            or candidate_index
+            or one_question
+            or (ranked_candidate_map is not None and ranked_candidate_map.primary_decision_boundary)
+        ):
             modules.append("decision_boundary")
-        if any(str(item.get("fit") or "").strip() in {"weak", "excluded"} for item in verified_candidates):
+        if any(str(item.get("fit") or "").strip() in {"weak", "excluded"} for item in verified_candidates) or (
+            ranked_candidate_map is not None
+            and any(candidate.fit in {"weak", "excluded"} for candidate in ranked_candidate_map.ranked_candidates)
+        ):
             modules.append("unsuitable_option_warning")
         if allowed_examples:
             modules.append("verified_examples")
@@ -244,7 +326,13 @@ class CustomerAnswerPlanService:
         verified_candidates: list[dict[str, Any]],
         proposal: dict[str, Any],
         answer_style: str,
+        ranked_candidate_map: RankedCandidateMap | None,
     ) -> str | None:
+        if ranked_candidate_map and ranked_candidate_map.ranked_candidates:
+            top = ranked_candidate_map.ranked_candidates[0]
+            if top.fit == "likely":
+                return f"Lead with the first pathway to check: Subclass {top.subclass} {top.title or ''}.".strip()
+            return f"Lead with Subclass {top.subclass} {top.title or ''} as the first candidate to check.".strip()
         likely = [
             str(item.get("candidate_label") or "").strip()
             for item in verified_candidates
@@ -437,12 +525,132 @@ class CustomerAnswerPlanService:
         *,
         proposal: dict[str, Any],
         verification: dict[str, Any],
+        ranked_candidate_map: RankedCandidateMap | None,
     ) -> str | None:
+        if ranked_candidate_map and ranked_candidate_map.primary_decision_boundary:
+            boundary = ranked_candidate_map.primary_decision_boundary
+            if "fixed short-term specialist task" in boundary:
+                return "Is this a fixed short-term specialist task with a clear end date, or is the employer trying to fill an ongoing sponsored job role?"
+            if "only attend meetings" in boundary:
+                return "Will the person only attend meetings or negotiations, or will they actually perform work in Australia?"
+            if "structured occupational training" in boundary:
+                return "Is the main purpose structured occupational training, or ordinary productive work?"
         for value in (verification.get("one_decisive_question"), proposal.get("one_decisive_question")):
             text = str(value or "").strip()
             if text:
                 return text
         return None
+
+    def _answer_composition_plan(
+        self,
+        *,
+        answer_style: str,
+        proposal: dict[str, Any],
+        ranked_candidate_map: RankedCandidateMap | None,
+        one_question: str | None,
+        allowed_examples: list[SupportedExample],
+        allowed_checklist_items: list[SupportedChecklistItem],
+    ) -> AnswerCompositionPlan:
+        required_sections = ["bottom_line"]
+        optional_sections: list[str] = []
+        forbidden_sections = ["unsupported_examples", "unsupported_document_checklist"]
+        table_allowed = False
+        table_purpose = None
+        practical_bottom_line = self._summary_text(proposal)
+        boundary = None
+        if ranked_candidate_map:
+            boundary = ranked_candidate_map.primary_decision_boundary
+            if ranked_candidate_map.ranked_candidates:
+                top = ranked_candidate_map.ranked_candidates[0]
+                practical_bottom_line = (
+                    f"The first pathway to check is Subclass {top.subclass}"
+                    + (f" ({top.title})" if top.title else "")
+                    + "."
+                )
+            if len(ranked_candidate_map.ranked_candidates) >= 2:
+                required_sections.append("ranked_option_map")
+                table_allowed = True
+                table_purpose = "separate the first pathway, alternatives, and decision boundary"
+            if boundary:
+                required_sections.append("decision_boundary")
+        if one_question:
+            required_sections.append("one_decisive_question")
+        if allowed_examples:
+            optional_sections.append("verified_examples")
+        if allowed_checklist_items:
+            optional_sections.append("verified_checklist")
+
+        return AnswerCompositionPlan(
+            answer_shape="ranked_options_with_boundary"
+            if table_allowed
+            else ("risk_handoff" if answer_style == "lawyer_handoff" else "eligibility_explanation"),
+            opening_style="risk_first" if answer_style == "lawyer_handoff" else "bottom_line_first",
+            customer_goal_summary=self._summary_text(proposal),
+            practical_bottom_line=practical_bottom_line,
+            primary_decision_boundary=boundary,
+            required_sections=self._unique_strings(required_sections),
+            optional_sections=self._unique_strings(optional_sections),
+            forbidden_sections=forbidden_sections,
+            table_allowed=table_allowed,
+            table_purpose=table_purpose,
+            examples_allowed=bool(allowed_examples),
+            checklist_allowed=bool(allowed_checklist_items),
+            tone_rules=[
+                "professional, practical, and consultation-style",
+                "plain English first, legal labels only when useful",
+                "do not overstate confidence when decisive facts are missing",
+            ],
+            length_target="medium",
+        )
+
+    def _customer_visible_source_refs(self, ranked_candidate_map: RankedCandidateMap | None) -> list[str]:
+        if not ranked_candidate_map:
+            return []
+        refs: list[str] = []
+        for candidate in ranked_candidate_map.ranked_candidates:
+            refs.extend(candidate.source_refs)
+        return self._unique_strings(refs)
+
+    def _debug_hidden_source_refs(self, ranked_candidate_map: RankedCandidateMap | None) -> list[str]:
+        if not ranked_candidate_map:
+            return []
+        refs: list[str] = []
+        visible = set(self._customer_visible_source_refs(ranked_candidate_map))
+        for item in [
+            *ranked_candidate_map.excluded_candidates,
+            *ranked_candidate_map.noisy_or_rejected_candidates,
+        ]:
+            ref = f"schedule-2-{item.subclass}"
+            if ref not in visible:
+                refs.append(ref)
+        return self._unique_strings(refs)[:50]
+
+    def _ranked_candidate_map(
+        self,
+        value: RankedCandidateMap | dict[str, Any] | None,
+    ) -> RankedCandidateMap | None:
+        if value is None:
+            return None
+        if isinstance(value, RankedCandidateMap):
+            return value
+        if isinstance(value, dict):
+            return RankedCandidateMap.model_validate(value)
+        return None
+
+    def _citation_mentions_subclass(self, blob: str, subclass: str) -> bool:
+        sub = str(subclass or "").strip().lower()
+        if not sub:
+            return False
+        return (
+            f"subclass {sub}" in blob
+            or f"schedule-2-{sub}" in blob
+            or f"schedule 2 {sub}" in blob
+            or bool(re.search(rf"\b{re.escape(sub)}\.", blob))
+        )
+
+    def _summary_text(self, proposal: dict[str, Any]) -> str | None:
+        text = str(proposal.get("proposal_summary") or proposal.get("user_goal") or "").strip()
+        return text[:500] if text else None
 
     def _checked_source_count(self, evidence: Any) -> int:
         keys: set[str] = set()

@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field
 
 from app.schemas.common import BaseSchema
+from app.schemas.ranked_candidates import AnswerCompositionPlan, RankedCandidateMap
 
 
 AnswerStyle = Literal[
@@ -98,4 +99,8 @@ class CustomerAnswerPlan(BaseSchema):
     verification_value_summary: VerificationValueSummary = Field(
         default_factory=VerificationValueSummary
     )
+    ranked_candidate_map: RankedCandidateMap | None = None
+    answer_composition_plan: AnswerCompositionPlan = Field(default_factory=AnswerCompositionPlan)
+    customer_visible_source_refs: list[str] = Field(default_factory=list)
+    debug_hidden_source_refs: list[str] = Field(default_factory=list)
     one_decisive_question: str | None = None
