@@ -546,13 +546,22 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
     def _normalize_live_retrieval_plan(self, value: Any, *, proposal: dict[str, Any]) -> dict[str, Any]:
         out = dict(value) if isinstance(value, dict) else {}
         subclasses: list[str] = []
-        for item in self._dict_list(proposal.get("candidate_index")):
+
+        # Candidate index is LLM JSON. Consume it defensively; never let a
+        # malformed candidate list crash PFVD after the expensive proposal call.
+        raw_candidates = proposal.get("candidate_index")
+        candidate_items = raw_candidates if isinstance(raw_candidates, list) else []
+        for item in candidate_items:
+            if not isinstance(item, dict):
+                continue
             subclass = str(item.get("subclass") or "").strip()
             if subclass and subclass not in subclasses:
                 subclasses.append(subclass)
+
         for subclass in self._subclass_list(out.get("source_target_subclasses")):
             if subclass not in subclasses:
                 subclasses.append(subclass)
+
         out.setdefault("needed", True)
         out["source_target_subclasses"] = subclasses[:12]
         out.setdefault("source_targets", ["Home Affairs guidance", "Schedule 2"])

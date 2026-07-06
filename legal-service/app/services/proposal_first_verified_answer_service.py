@@ -981,6 +981,19 @@ class ProposalFirstVerifiedAnswerService:
             return [value.strip()]
         return []
 
+
+    def _dict_list(self, value: Any) -> list[dict[str, Any]]:
+        """Return only dict items from a list-like JSON value.
+
+        PFVD proposal normalization uses this to consume LLM JSON safely.
+        Keeping it in the base proposal-first service avoids subclass-only
+        helper drift and prevents runtime fallback after an expensive proposal
+        call.
+        """
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
+
     def _one_question(self, questions: list[str]) -> list[str]:
         for question in questions:
             q = str(question or "").strip()

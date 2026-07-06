@@ -158,12 +158,24 @@ def apply_patch() -> None:
                 logger.exception("Proposal-first answer trace recording failed; public response is unchanged.")
             return response
         except Exception as exc:  # pragma: no cover - production safety fallback
+            fallback_started = time.perf_counter()
             logger.exception("Proposal-first verification-depth path failed; falling back to original handler: %s", exc)
             response = original_handle_query(self, db, payload)
+            fallback_ms = round((time.perf_counter() - fallback_started) * 1000, 2)
             debug = dict(response.retrieval_debug or {})
             debug.setdefault("proposal_first_verification_depth", {})
             debug["proposal_first_verification_depth"].update(
-                {"used": False, "fallback_to_original_handler": True, "error": str(exc)[:500]}
+                {
+                    "used": False,
+                    "fallback_to_original_handler": True,
+                    "error": str(exc)[:500],
+                    "error_type": exc.__class__.__name__,
+                    "fallback_original_handler_ms": fallback_ms,
+                    "warning": (
+                        "PFVD crashed before completion. The public answer came from the original "
+                        "handler and must not be used to evaluate the scope/live-retrieval patch."
+                    ),
+                }
             )
             response.retrieval_debug = debug
             return response
