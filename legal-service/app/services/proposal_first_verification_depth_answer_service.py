@@ -1091,6 +1091,12 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 add(c.title)
                 if len(out) >= 3:
                     break
+        # Prefer live official source titles before generic Schedule names.
+        for chunk in evidence.live_chunks[:4]:
+            source = getattr(chunk, "source", None)
+            add(getattr(source, "title", None) if source is not None else None)
+            if len(out) >= 4:
+                break
         if verification_plan.get("requires_exhaustive_schedule2") or evidence.schedule_clauses:
             add("MIGRATION REGULATIONS 1994 - SCHEDULE 2 Provisions with respect to the grant of Subclasses of visas")
         if verification_plan.get("requires_schedule1_check"):
