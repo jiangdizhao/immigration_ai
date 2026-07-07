@@ -282,16 +282,21 @@ class Schedule2RankedCandidateService:
         return self._unique(candidates)
 
     def _subclasses_requested_for_removal(self, verification: dict[str, Any] | None) -> set[str]:
-        """Return subclass codes the verifier explicitly told us not to show.
+        """Return subclass codes the verifier structurally told us not to show.
 
-        The verifier's coverage audit is a structural constraint, not just prose.
-        If it says "remove Subclass 188", that subclass must not survive into the
-        ranked public candidate map unless the user explicitly asked about it.
+        Important design rule: coverage_audit.required_removals and
+        coverage_audit.over_included_unrelated_options are already verifier
+        removal/over-inclusion channels. Do not require each individual string to
+        repeat words such as "remove". For example, both of these must bind:
+
+        - "Subclass 485 as a relevant option"
+        - "Permanent skilled visas such as 189/190/186"
         """
         verification = verification or {}
         coverage = verification.get("coverage_audit") if isinstance(verification, dict) else {}
         if not isinstance(coverage, dict):
             coverage = {}
+
         fields: list[Any] = []
         for key in (
             "required_removals",
@@ -302,35 +307,45 @@ class Schedule2RankedCandidateService:
                 fields.extend(value)
             elif isinstance(value, str):
                 fields.append(value)
-        for key in ("must_remove_or_qualify", "unsupported_or_contradicted_claims"):
+
+        for key in (
+            "must_remove_or_qualify",
+            "unsupported_or_contradicted_claims",
+        ):
             value = verification.get(key)
             if isinstance(value, list):
                 fields.extend(value)
             elif isinstance(value, str):
                 fields.append(value)
+
         out: set[str] = set()
         for item in fields:
-            text = str(item or "")
+            text = str(item or "").strip()
             if not text:
                 continue
             lower = text.lower()
-            removal_context = any(
-                marker in lower
-                for marker in (
-                    "remove",
-                    "unrelated",
-                    "unsupported",
-                    "not relevant",
-                    "irrelevant",
-                    "over-included",
-                    "over included",
-                    "must not",
-                )
-            )
-            if not removal_context:
-                continue
+
+            # These fields are already removal-oriented. Extract explicit subclass
+            # codes even when the individual item is terse, e.g. "Subclass 485 as a
+            # relevant option" or "189/190/186".
             for code in self._explicit_subclasses(text, {}):
                 out.add(code)
+
+            # Conservative family aliases for common verifier wording that names a
+            # visa family without writing every subclass code. Keep this narrow to
+            # avoid deleting legitimate options from other matters.
+            if "temporary graduate" in lower:
+                out.add("485")
+            if "business innovation" in lower or "business investment" in lower:
+                out.update({"188", "888"})
+            if "skilled independent" in lower:
+                out.add("189")
+            if "skilled nominated" in lower:
+                out.add("190")
+            if "skilled independent permanent" in lower or "permanent skilled" in lower:
+                out.update({"189", "190"})
+            if "student visa" in lower or "subclass 500" in lower:
+                out.add("500")
         return out
 
     def _should_hide_ranked_candidate(
