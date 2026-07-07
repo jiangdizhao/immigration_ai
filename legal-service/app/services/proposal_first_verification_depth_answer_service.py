@@ -55,6 +55,16 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
     ) -> QueryResponse:
         conversation_history = list(getattr(memory_packet, "full_conversation_history", []) or [])
         known_facts = self._known_facts_from_memory(memory_packet)
+        pfvd_started_at = time.perf_counter()
+        last_stage_at = pfvd_started_at
+        stage_timing: dict[str, float] = {}
+
+        def mark_stage(name: str) -> None:
+            nonlocal last_stage_at
+            now = time.perf_counter()
+            stage_timing[name] = round((now - last_stage_at) * 1000, 1)
+            stage_timing["total_ms"] = round((now - pfvd_started_at) * 1000, 1)
+            last_stage_at = now
         pfvd_started = time.perf_counter()
         pfvd_last_mark = pfvd_started
         pfvd_stage_timings: list[dict[str, Any]] = []
@@ -130,6 +140,8 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 known_facts=known_facts,
                 proposal=proposal,
             )
+
+        mark_stage("collect_evidence")
 
         if (
             depth == "exhaustive_schedule2"
@@ -209,6 +221,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             table_allowed=customer_answer_plan.answer_composition_plan.table_allowed,
         )
         customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
+        mark_stage("customer_answer_plan")
 
         final = self._draft_verified_answer(
             original_question=original_question,
@@ -287,6 +300,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "legacy_schedule2_exhaustive_discovery": legacy_schedule2_exhaustive_debug,
                 "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
+                "stage_timing": dict(stage_timing),
                 "final_json": final,
                 "stage_timing": {
                     "total_ms": round((time.perf_counter() - pfvd_started) * 1000, 2),

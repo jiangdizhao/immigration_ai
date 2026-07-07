@@ -828,7 +828,7 @@ export function ImmigrationAssistantWidget() {
                       <motion.div
                         animate={{ opacity: 1, y: 0 }}
                         className={cn(
-                          "max-w-[92%] whitespace-pre-wrap break-words rounded-3xl px-4 py-3 text-[15px] leading-7 shadow-sm sm:text-base",
+                          "min-w-0 max-w-[92%] overflow-hidden break-words rounded-3xl px-4 py-3 text-[15px] leading-7 shadow-sm sm:text-base",
                           isUser
                             ? "ml-auto bg-slate-900 text-white"
                             : "border border-slate-200 bg-white text-slate-800"
@@ -837,7 +837,7 @@ export function ImmigrationAssistantWidget() {
                         key={message.id}
                         transition={{ duration: 0.2 }}
                       >
-                        <div>
+                        <div className="min-w-0 max-w-full">
                           {isAssistant ? (
                             <AssistantRichMarkdown text={message.text} />
                           ) : (

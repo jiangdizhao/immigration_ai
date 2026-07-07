@@ -124,8 +124,11 @@ function MarkdownTable({ header, rows }: { header: string[]; rows: string[][] })
   const normalizedRows = normalizeTableRows(rows, columnCount);
 
   return (
-    <div className="my-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-[680px] border-collapse text-left text-sm leading-6 text-slate-700">
+    <div
+      className="my-3 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm"
+      data-rich-markdown-table="true"
+    >
+      <table className="w-max min-w-[760px] border-collapse text-left text-sm leading-6 text-slate-700">
         <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             {normalizedHeader.map((cell, index) => (
@@ -260,5 +263,5 @@ export function AssistantRichMarkdown({ text }: { text: string }) {
     index += 1;
   }
 
-  return <div className="space-y-2">{blocks}</div>;
+  return <div className="min-w-0 max-w-full space-y-2 whitespace-normal">{blocks}</div>;
 }

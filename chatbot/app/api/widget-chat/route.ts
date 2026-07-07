@@ -400,6 +400,9 @@ function normalizeRetrievalDebug(
   retrievalDebug: LegalServiceResponse["retrieval_debug"]
 ) {
   const dbg = retrievalDebug ?? {};
+  const pfvd = dbg.proposal_first_verification_depth ?? {};
+  const customerQuality = dbg.customer_answer_quality ?? {};
+  const customerPlan = customerQuality.customer_answer_plan ?? {};
   return {
     effective_question:
       (typeof dbg.effective_question === "string" && dbg.effective_question) ||
@@ -410,7 +413,24 @@ function normalizeRetrievalDebug(
     need_live_fetch: dbg.sufficiency_gate?.need_live_fetch ?? null,
     live_fetch_used: dbg.live_fetch_used ?? null,
     top_titles: Array.isArray(dbg.top_titles) ? dbg.top_titles : [],
-    stageTiming: dbg.stage_timing ?? null,
+    stageTiming: dbg.stage_timing ?? pfvd.stage_timing ?? null,
+    pfvdStageTiming: pfvd.stage_timing ?? null,
+    pfvdEvidenceSummary: pfvd.evidence_summary ?? null,
+    answerScopeContract:
+      pfvd.answer_scope_contract ??
+      customerQuality.answer_scope_contract ??
+      customerPlan.answer_scope_contract ??
+      null,
+    coverageAudit:
+      pfvd.coverage_audit ??
+      customerQuality.coverage_audit ??
+      customerPlan.coverage_audit ??
+      null,
+    publicOptionCoverageMap:
+      pfvd.public_option_coverage_map ??
+      customerQuality.public_option_coverage_map ??
+      customerPlan.public_option_coverage_map ??
+      [],
   };
 }
 
@@ -521,6 +541,29 @@ function logWidgetDebug(params: {
   console.log("conversationIdentity:", unified?.conversation_identity ?? null);
   console.log("memoryPacket:", unified?.memory_packet ?? null);
   console.log("reasoningTier:", unified?.reasoning_depth ?? null);
+  console.log("pfvdStageTiming:", pfvd?.stage_timing ?? null);
+  console.log("pfvdEvidenceSummary:", pfvd?.evidence_summary ?? null);
+  console.log(
+    "answerScopeContract:",
+    pfvd?.answer_scope_contract ??
+      customerQuality?.answer_scope_contract ??
+      customerQuality?.customer_answer_plan?.answer_scope_contract ??
+      null
+  );
+  console.log(
+    "coverageAudit:",
+    pfvd?.coverage_audit ??
+      customerQuality?.coverage_audit ??
+      customerQuality?.customer_answer_plan?.coverage_audit ??
+      null
+  );
+  console.log(
+    "publicOptionCoverageMap:",
+    pfvd?.public_option_coverage_map ??
+      customerQuality?.public_option_coverage_map ??
+      customerQuality?.customer_answer_plan?.public_option_coverage_map ??
+      []
+  );
   console.log(
     "rankedCandidateMap:",
     pfvd?.ranked_candidate_map ??

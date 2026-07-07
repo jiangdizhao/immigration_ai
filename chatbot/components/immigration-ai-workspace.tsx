@@ -850,7 +850,7 @@ export function ImmigrationAIWorkspace() {
         </div>
       </div>
 
-      <div className="grid h-[calc(100vh-170px)] min-h-[680px] max-h-[860px] overflow-hidden rounded-[36px] border border-white/15 bg-white/95 shadow-[0_32px_120px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl lg:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <div className="grid min-w-0 h-[calc(100vh-170px)] min-h-[680px] max-h-[860px] overflow-hidden rounded-[36px] border border-white/15 bg-white/95 shadow-[0_32px_120px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl lg:grid-cols-[280px_minmax(0,1fr)_320px]">
         <aside className="hidden min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50/90 p-5 lg:block">
           <div className="mb-6 flex items-center gap-3">
             <div className="rounded-2xl bg-[#001736] p-2 text-white">
@@ -976,7 +976,7 @@ export function ImmigrationAIWorkspace() {
           </div>
         </aside>
 
-        <div className="flex min-h-0 flex-col bg-white">
+        <div className="flex min-h-0 min-w-0 flex-col bg-white">
           <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <div>
@@ -1006,7 +1006,7 @@ export function ImmigrationAIWorkspace() {
           </div>
 
           <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
@@ -1043,7 +1043,7 @@ export function ImmigrationAIWorkspace() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-5 pb-4">
+              <div className="min-w-0 space-y-5 pb-4">
                 {messages.map((message) => {
                   const isAssistant = message.role === "assistant";
                   const isLatestAssistant =
@@ -1051,7 +1051,7 @@ export function ImmigrationAIWorkspace() {
                   return (
                     <div
                       className={cn(
-                        "flex gap-3",
+                        "flex min-w-0 gap-3",
                         isAssistant ? "items-start" : "justify-end"
                       )}
                       key={message.id}
@@ -1064,15 +1064,15 @@ export function ImmigrationAIWorkspace() {
 
                       <div
                         className={cn(
-                          "space-y-3",
+                          "min-w-0 space-y-3",
                           isAssistant
-                            ? "w-full max-w-[min(96%,900px)]"
+                            ? "min-w-0 w-full max-w-full"
                             : "max-w-[86%] flex flex-col items-end"
                         )}
                       >
                         <div
                           className={cn(
-                            "rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm",
+                            "min-w-0 max-w-full overflow-hidden rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm",
                             isAssistant
                               ? "border border-slate-200 bg-white text-slate-700"
                               : "bg-[#001736] text-white"
