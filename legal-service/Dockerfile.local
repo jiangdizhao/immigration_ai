@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY legal-service/app ./app
 COPY legal-service/scripts ./scripts
+# PFVD candidate ranking needs generated Schedule 2 skeleton metadata at runtime.
+COPY legal-service/data/generated ./data/generated
 
 EXPOSE 8000
 
