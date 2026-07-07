@@ -184,23 +184,14 @@ function fallbackText(
 }
 
 const FORBIDDEN_PUBLIC_ANSWER_PATTERNS = [
-  /retrieved material/i,
-  /retrieved source/i,
-  /source material/i,
-  /provided sources?/i,
-  /does not provide/i,
-  /does not support/i,
-  /not supported by/i,
-  /not specifically supported/i,
-  /fully grounded answer/i,
-  /operation answerability/i,
-  /source classes?/i,
-  /evidence package/i,
-  /context insufficient/i,
-  /unsupported specificity/i,
-  /local corpus/i,
-  /legal corpus/i,
-  /retrieval/i,
+  /retrieval_debug/i,
+  /proposal_first_verification_depth/i,
+  /CustomerAnswerPlan JSON/i,
+  /Original rich proposal JSON/i,
+  /Verification JSON:/i,
+  /raw_model_output/i,
+  /internal JSON/i,
+  /```json/i,
 ];
 
 function hasForbiddenPublicAnswerText(text: string): boolean {

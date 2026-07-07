@@ -347,6 +347,21 @@ class CustomerAnswerPlanService:
         out.setdefault("over_included_unrelated_options", [])
         out.setdefault("required_additions", [])
         out.setdefault("required_removals", [])
+
+        # Do not pass internal verifier diagnostics such as "the evidence package
+        # does not fully verify..." to the final customer-answer prompt as if they
+        # were public option buckets. Keep only public-looking option labels here.
+        cleaned_missing: list[str] = []
+        for item in self._string_list(out.get("missing_relevant_options")):
+            text = str(item or "").strip()
+            if not text:
+                continue
+            lower = text.lower()
+            if any(marker in lower for marker in ("evidence package", "does not fully verify", "source class", "retrieval")):
+                continue
+            if self._extract_subclass_codes(text) or any(word in lower for word in ("visitor", "training", "temporary activity", "working holiday")):
+                cleaned_missing.append(text)
+        out["missing_relevant_options"] = cleaned_missing
         return out
 
     def _public_option_coverage_map(
@@ -360,7 +375,18 @@ class CustomerAnswerPlanService:
         breadth = str(answer_scope_contract.get("breadth_required") or "").strip()
         out: list[dict[str, Any]] = []
 
+        def clean_subclasses(values: list[str]) -> list[str]:
+            cleaned: list[str] = []
+            for value in values or []:
+                code = str(value or "").strip().upper()
+                if re.fullmatch(r"[0-9]{3,4}[A-Z]?", code) and code not in cleaned:
+                    cleaned.append(code)
+            return cleaned
+
         def add(bucket: str, subclasses: list[str], label: str, when_relevant: str, priority: int) -> None:
+            subclasses = clean_subclasses(subclasses)
+            if not subclasses:
+                return
             key = (bucket, tuple(subclasses))
             for item in out:
                 if (item.get("bucket"), tuple(item.get("subclasses") or [])) == key:
@@ -408,8 +434,8 @@ class CustomerAnswerPlanService:
             add("independent_work_rights_if_eligible", ["417", "462"], "Working Holiday / Work and Holiday", "Only if the worker is independently eligible by nationality, age, and conditions; not an employer-sponsored specialist pathway.", 70)
             add("longer_term_employer_sponsored_not_short_term", ["186", "494"], "Longer-term employer-sponsored options", "Strategic longer-term pathways if the employer wants an ongoing/permanent or regional sponsored role, not the usual short-term answer.", 80)
 
-        for option in self._string_list(coverage_audit.get("missing_relevant_options")):
-            add("verifier_required_addition", [option], f"Additional option: {option}", "Required by verifier coverage audit.", 90)
+        # Do NOT convert coverage_audit.missing_relevant_options into public options.
+        # That field may contain internal verifier diagnostics, not subclass codes.
 
         if broad_temporary_work:
             filtered: list[dict[str, Any]] = []
@@ -423,6 +449,14 @@ class CustomerAnswerPlanService:
                 filtered.append(item)
             out = filtered
         return sorted(out, key=lambda item: int(item.get("priority") or 999))[:16]
+
+    def _extract_subclass_codes(self, text: str) -> list[str]:
+        codes: list[str] = []
+        for match in re.findall(r"\b(?:subclass\s*)?([0-9]{3,4}[A-Z]?)\b", str(text or ""), flags=re.I):
+            code = match.upper()
+            if code not in codes:
+                codes.append(code)
+        return codes
 
     def _answer_style(
         self,

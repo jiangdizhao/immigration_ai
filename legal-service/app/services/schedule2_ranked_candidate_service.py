@@ -76,7 +76,17 @@ class Schedule2RankedCandidateService:
             ranked_candidates,
             key=lambda item: (item.legal_fit_score, self._fit_weight(item.fit)),
             reverse=True,
-        )[:8]
+        )
+        # visibility_policy_applied_v1: verifier removal constraints are binding.
+        ranked_candidates = [
+            candidate
+            for candidate in ranked_candidates
+            if not self._should_hide_ranked_candidate(
+                candidate=candidate,
+                legal_intent=legal_intent,
+                verification=verification,
+            )
+        ][:8]
         for index, candidate in enumerate(ranked_candidates, start=1):
             candidate.rank = index
 
@@ -261,7 +271,97 @@ class Schedule2RankedCandidateService:
                 candidates.append(subclass)
         for item in self._dict_list(verification.get("verified_candidates")):
             candidates.extend(self._explicit_subclasses(str(item.get("candidate_label") or ""), {}))
+
+        removal_subclasses = self._subclasses_requested_for_removal(verification)
+        explicit = set(legal_intent.explicitly_mentioned_subclasses or [])
+        if removal_subclasses:
+            candidates = [
+                subclass for subclass in candidates
+                if subclass not in removal_subclasses or subclass in explicit
+            ]
         return self._unique(candidates)
+
+    def _subclasses_requested_for_removal(self, verification: dict[str, Any] | None) -> set[str]:
+        """Return subclass codes the verifier explicitly told us not to show.
+
+        The verifier's coverage audit is a structural constraint, not just prose.
+        If it says "remove Subclass 188", that subclass must not survive into the
+        ranked public candidate map unless the user explicitly asked about it.
+        """
+        verification = verification or {}
+        coverage = verification.get("coverage_audit") if isinstance(verification, dict) else {}
+        if not isinstance(coverage, dict):
+            coverage = {}
+        fields: list[Any] = []
+        for key in (
+            "required_removals",
+            "over_included_unrelated_options",
+        ):
+            value = coverage.get(key)
+            if isinstance(value, list):
+                fields.extend(value)
+            elif isinstance(value, str):
+                fields.append(value)
+        for key in ("must_remove_or_qualify", "unsupported_or_contradicted_claims"):
+            value = verification.get(key)
+            if isinstance(value, list):
+                fields.extend(value)
+            elif isinstance(value, str):
+                fields.append(value)
+        out: set[str] = set()
+        for item in fields:
+            text = str(item or "")
+            if not text:
+                continue
+            lower = text.lower()
+            removal_context = any(
+                marker in lower
+                for marker in (
+                    "remove",
+                    "unrelated",
+                    "unsupported",
+                    "not relevant",
+                    "irrelevant",
+                    "over-included",
+                    "over included",
+                    "must not",
+                )
+            )
+            if not removal_context:
+                continue
+            for code in self._explicit_subclasses(text, {}):
+                out.add(code)
+        return out
+
+    def _should_hide_ranked_candidate(
+        self,
+        *,
+        candidate: RankedCandidate,
+        legal_intent: LegalIntent,
+        verification: dict[str, Any] | None,
+    ) -> bool:
+        subclass = str(candidate.subclass or "").strip()
+        if not subclass:
+            return True
+        explicit = set(legal_intent.explicitly_mentioned_subclasses or [])
+        if subclass in explicit:
+            return False
+        if subclass in self._subclasses_requested_for_removal(verification):
+            return True
+
+        # For a short-term specialist-work question, keep long-term/permanent
+        # pathways out of the ranked "best fit" table. They may still be shown by
+        # CustomerAnswerPlan as a clearly labelled longer-term boundary bucket.
+        short_term_work = (
+            legal_intent.activity_type == "temporary_work"
+            and legal_intent.duration_intent in {"short_term", "temporary", None}
+            and not legal_intent.permanent_residence_intent
+        )
+        if short_term_work and subclass in {
+            "186", "187", "188", "189", "190", "191", "491", "494", "858", "888"
+        }:
+            return True
+        return False
 
     def _ranked_candidate_from_screening(self, result: SkeletonScreeningResult, *, legal_intent: LegalIntent | None = None) -> RankedCandidate:
         if result.status == "activated":
