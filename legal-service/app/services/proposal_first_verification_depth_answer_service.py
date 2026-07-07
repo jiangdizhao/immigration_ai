@@ -273,6 +273,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             response_language=response_language,
         )
 
+        answer_text = self._ensure_public_option_coverage_in_answer(
+            answer_text=answer_text,
+            customer_answer_plan=customer_answer_plan,
+            response_language=response_language,
+        )
         citations = self._build_citations_with_schedule(evidence=evidence, verification_plan=verification_plan)
         visible_citations = self.customer_answer_plan_service.filter_customer_visible_citations(
             citations,
@@ -823,6 +828,108 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         proposal["candidate_index"] = candidate_index
         return proposal
 
+    def _ensure_public_option_coverage_in_answer(
+        self,
+        *,
+        answer_text: str,
+        customer_answer_plan: Any,
+        response_language: str,
+    ) -> str:
+        """Deterministically preserve public option buckets for broad option-map answers.
+
+        The final-answer LLM can still omit lower-probability buckets even when the
+        planner has correctly built public_option_coverage_map. For broad customer
+        questions such as "all possible options", this postprocessor appends only
+        missing, planner-approved customer-visible buckets. It does not invent new
+        subclasses and it does not change the ranking of the primary answer.
+        """
+        plan = customer_answer_plan.model_dump() if hasattr(customer_answer_plan, "model_dump") else dict(customer_answer_plan or {})
+        scope = str((plan.get("answer_scope_contract") or {}).get("user_requested_scope") or "").strip()
+        if scope != "all_possible_options":
+            return answer_text
+        if "Additional options to check for completeness" in answer_text:
+            return answer_text
+
+        coverage_map = [item for item in plan.get("public_option_coverage_map") or [] if isinstance(item, dict)]
+        if not coverage_map:
+            return answer_text
+
+        answer_lower = answer_text.lower()
+        rows: list[tuple[str, str]] = []
+        seen_labels: set[str] = set()
+        for item in coverage_map:
+            if item.get("show_to_customer") is False:
+                continue
+            label = str(item.get("label") or item.get("bucket") or "").strip()
+            when_relevant = str(item.get("when_relevant") or "Conditional option to check if the facts fit.").strip()
+            subclasses = [str(value).strip() for value in (item.get("subclasses") or []) if str(value).strip()]
+            bucket = str(item.get("bucket") or "").strip()
+            if not label or label.lower() in seen_labels:
+                continue
+            # A bucket is already covered if the answer names any subclass in that
+            # bucket or clearly names the non-numbered visitor / working-holiday label.
+            has_subclass = any(re.search(rf"\\b{subclass}\\b", answer_lower) for subclass in subclasses)
+            label_terms = [label.lower()]
+            if "visitor" in label.lower():
+                label_terms.extend(["visitor", "eta", "evisitor"])
+            if "working holiday" in label.lower() or "work and holiday" in label.lower():
+                label_terms.extend(["working holiday", "work and holiday"])
+            if "training" in label.lower():
+                label_terms.append("training")
+            if "temporary activity" in label.lower():
+                label_terms.append("temporary activity")
+            label_present = any(term and term in answer_lower for term in label_terms)
+            if has_subclass or label_present:
+                seen_labels.add(label.lower())
+                continue
+            # Avoid appending duplicate primary/ranked buckets whose subclass has
+            # already been discussed through another bucket label.
+            if bucket in {"primary", "ranked_alternative"} and subclasses:
+                continue
+            rows.append((label, when_relevant))
+            seen_labels.add(label.lower())
+
+        if not rows:
+            return answer_text
+
+        if response_language == "zh":
+            heading = "补充：为了覆盖你问到的所有可能选项，还应检查以下类别："
+            col1 = "选项类别"
+            col2 = "什么时候可能相关"
+        else:
+            heading = "Additional options to check for completeness:"
+            col1 = "Option bucket"
+            col2 = "When it may matter"
+
+        table_lines = ["", heading, "", f"| {col1} | {col2} |", "|---|---|"]
+        for label, when_relevant in rows[:10]:
+            safe_label = label.replace("|", "/")
+            safe_when = when_relevant.replace("|", "/")
+            table_lines.append(f"| {safe_label} | {safe_when} |")
+        addition = "\n".join(table_lines).strip()
+
+        decisive_patterns = [
+            r"\n+(One decisive question\s*:)",
+            r"\n+(One key question\s*:)",
+            r"\n+(一个关键问题[：:])",
+            r"\n+(一个决定性问题[：:])",
+        ]
+        for pattern in decisive_patterns:
+            match = re.search(pattern, answer_text, flags=re.IGNORECASE)
+            if match:
+                return answer_text[: match.start()] .rstrip() + "\n\n" + addition + "\n\n" + answer_text[match.start():].lstrip()
+        return answer_text.rstrip() + "\n\n" + addition
+
+    def _safe_live_source_title(self, chunk: Any) -> str | None:
+        source = getattr(chunk, "source", None)
+        title = str(getattr(source, "title", "") or "").strip()
+        authority = str(getattr(source, "authority", "") or "").strip()
+        if not title:
+            return None
+        if authority and authority.lower() not in title.lower():
+            return f"{authority} — {title}"
+        return title
+
     def _dict_list(self, value: Any) -> list[dict[str, Any]]:
         if not isinstance(value, list):
             return []
@@ -974,6 +1081,10 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             text = (value or "").strip()
             if text and text not in out:
                 out.append(text)
+        for chunk in evidence.live_chunks[:4]:
+            add(self._safe_live_source_title(chunk))
+            if len(out) >= 6:
+                break
         for c in citations:
             authority_blob = f"{c.title} {c.authority} {c.url}".lower()
             if "homeaffairs.gov.au" in authority_blob or "department of home affairs" in authority_blob:

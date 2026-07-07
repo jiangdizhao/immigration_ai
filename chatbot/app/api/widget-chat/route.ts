@@ -282,6 +282,26 @@ function pfvdLiveChunkCount(debug: Record<string, any>) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function pfvdEvidenceSummaryFromDebug(dbg: Record<string, any>) {
+  return dbg.proposal_first_verification_depth?.evidence_summary ?? null;
+}
+
+function pfvdLiveChunkCountFromDebug(dbg: Record<string, any>) {
+  const count = pfvdEvidenceSummaryFromDebug(dbg)?.live_chunk_count;
+  return typeof count === "number" && Number.isFinite(count) ? count : 0;
+}
+
+function normalizedLiveFetchUsedFromDebug(dbg: Record<string, any>) {
+  return Boolean(dbg.live_fetch_used) || pfvdLiveChunkCountFromDebug(dbg) > 0;
+}
+
+function normalizedLiveResultCountFromDebug(dbg: Record<string, any>) {
+  if (typeof dbg.live_result_count === "number" && Number.isFinite(dbg.live_result_count)) {
+    return dbg.live_result_count;
+  }
+  return pfvdLiveChunkCountFromDebug(dbg);
+}
+
 function normalizeCompactSources(data: LegalServiceResponse) {
   const fromBackend = uniqueStrings(
     (data.compact_sources ?? []).filter(
