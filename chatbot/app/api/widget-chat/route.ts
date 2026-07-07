@@ -427,7 +427,6 @@ function normalizeRetrievalDebug(
 ) {
   const dbg = retrievalDebug ?? {};
   const pfvd = dbg.proposal_first_verification_depth ?? {};
-  const pfvdLiveCount = pfvdLiveChunkCount(dbg);
   const customerQuality = dbg.customer_answer_quality ?? {};
   const customerPlan = customerQuality.customer_answer_plan ?? {};
   return {
@@ -438,8 +437,8 @@ function normalizeRetrievalDebug(
       null,
     local_sufficient: dbg.sufficiency_gate?.local_sufficient ?? null,
     need_live_fetch: dbg.sufficiency_gate?.need_live_fetch ?? null,
-    live_fetch_used: dbg.live_fetch_used ?? (pfvdLiveCount > 0 ? true : null),
-    live_result_count: dbg.live_result_count ?? pfvdLiveCount,
+    live_fetch_used: normalizedLiveFetchUsedFromDebug(dbg),
+    live_result_count: normalizedLiveResultCountFromDebug(dbg),
     top_titles: Array.isArray(dbg.top_titles) ? dbg.top_titles : [],
     stageTiming: dbg.stage_timing ?? pfvd.stage_timing ?? null,
     pfvdStageTiming: pfvd.stage_timing ?? null,
@@ -491,7 +490,6 @@ function logWidgetDebug(params: {
 }) {
   const dbg = params.response.retrieval_debug ?? {};
   const pfvd = dbg.proposal_first_verification_depth ?? null;
-  const pfvdLiveCountForLog = pfvdLiveChunkCount(dbg);
   const customerQuality = dbg.customer_answer_quality ?? null;
   const unified =
     dbg.unified_context ?? dbg.proposal_first_exhaustive_discovery ?? null;
@@ -523,9 +521,9 @@ function logWidgetDebug(params: {
     "initialSufficiencyReason:",
     dbg.initial_sufficiency_gate?.reason ?? null
   );
-  console.log("liveFetchUsed:", dbg.live_fetch_used ?? pfvdLiveCountForLog > 0);
+  console.log("liveFetchUsed:", normalizedLiveFetchUsedFromDebug(dbg));
   console.log("liveDomainsUsed:", dbg.live_domains_used ?? []);
-  console.log("liveResultCount:", dbg.live_result_count ?? pfvdLiveCountForLog);
+  console.log("liveResultCount:",normalizedLiveResultCountFromDebug(dbg));
   console.log("topTitles:", dbg.top_titles ?? []);
   console.log("sourceTypeCounts:", dbg.source_type_counts ?? {});
   console.log("authorityCounts:", dbg.authority_counts ?? {});
