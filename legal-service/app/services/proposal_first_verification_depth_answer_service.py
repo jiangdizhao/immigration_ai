@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -54,6 +55,22 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
     ) -> QueryResponse:
         conversation_history = list(getattr(memory_packet, "full_conversation_history", []) or [])
         known_facts = self._known_facts_from_memory(memory_packet)
+        pfvd_started = time.perf_counter()
+        pfvd_last_mark = pfvd_started
+        pfvd_stage_timings: list[dict[str, Any]] = []
+
+        def mark_pfvd_stage(stage: str, **metadata: Any) -> None:
+            nonlocal pfvd_last_mark
+            now = time.perf_counter()
+            item: dict[str, Any] = {
+                "stage": stage,
+                "duration_ms": round((now - pfvd_last_mark) * 1000, 2),
+                "total_ms": round((now - pfvd_started) * 1000, 2),
+            }
+            if metadata:
+                item["metadata"] = metadata
+            pfvd_stage_timings.append(item)
+            pfvd_last_mark = now
 
         proposal = self._build_free_proposal_with_verification_plan(
             original_question=original_question,
@@ -61,6 +78,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             conversation_history=conversation_history,
             known_facts=known_facts,
             response_language=response_language,
+        )
+        mark_pfvd_stage(
+            "proposal",
+            candidate_count=len(self._dict_list(proposal.get("candidate_index"))),
+            scope=str((proposal.get("answer_scope_contract") or {}).get("user_requested_scope") or ""),
         )
 
         if not bool(proposal.get("is_immigration_related", True)):
@@ -152,6 +174,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             evidence_text=evidence_text,
             response_language=response_language,
         )
+        mark_pfvd_stage(
+            "verify_proposal",
+            confidence=str(verification.get("confidence") or ""),
+            coverage_satisfied=str((verification.get("coverage_audit") or {}).get("answer_scope_satisfied")),
+        )
 
         ranked_candidate_map = self.schedule2_ranked_candidate_service.build(
             original_question=original_question,
@@ -159,6 +186,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             known_facts=known_facts,
             proposal=proposal,
             verification=verification,
+        )
+        mark_pfvd_stage(
+            "ranked_candidate_map",
+            ranked_count=len(ranked_candidate_map.ranked_candidates),
+            screened_count=ranked_candidate_map.screened_subclass_count,
         )
         customer_answer_plan = self.customer_answer_plan_service.build(
             original_question=original_question,
@@ -171,6 +203,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             response_language=response_language,
             ranked_candidate_map=ranked_candidate_map,
         )
+        mark_pfvd_stage(
+            "customer_answer_plan",
+            coverage_bucket_count=len(customer_answer_plan.public_option_coverage_map),
+            table_allowed=customer_answer_plan.answer_composition_plan.table_allowed,
+        )
         customer_answer_trace = self.customer_answer_plan_service.trace_fields(customer_answer_plan)
 
         final = self._draft_verified_answer(
@@ -182,6 +219,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             evidence_text=evidence_text,
             response_language=response_language,
             customer_answer_plan=customer_answer_plan.model_dump(),
+        )
+        mark_pfvd_stage(
+            "final_answer",
+            final_confidence=str(final.get("confidence") or ""),
+            final_next_action=str(final.get("next_action") or ""),
         )
 
         answer_text = str(final.get("answer") or "").strip()
@@ -202,6 +244,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             evidence=evidence,
             verification_plan=verification_plan,
             legacy_schedule2_exhaustive_debug=legacy_schedule2_exhaustive_debug,
+        )
+        mark_pfvd_stage(
+            "citation_packaging",
+            visible_citation_count=len(visible_citations),
+            compact_source_count=len(compact_sources),
         )
 
         missing_facts = self._string_list(final.get("missing_facts")) or self._string_list(
@@ -241,6 +288,10 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
                 "final_json": final,
+                "stage_timing": {
+                    "total_ms": round((time.perf_counter() - pfvd_started) * 1000, 2),
+                    "stages": pfvd_stage_timings,
+                },
             },
             "customer_answer_quality": customer_answer_trace,
             "unified_context": {
@@ -638,6 +689,11 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         proposal = dict(proposal)
         proposal["candidate_index"] = candidate_index
         return proposal
+
+    def _dict_list(self, value: Any) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
 
     def _subclass_list(self, value: Any) -> list[str]:
         if isinstance(value, str):

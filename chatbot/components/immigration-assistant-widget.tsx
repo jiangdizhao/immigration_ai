@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { AssistantRichMarkdown } from "./assistant-rich-markdown";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
   IntakeFacts,
@@ -838,7 +839,7 @@ export function ImmigrationAssistantWidget() {
                       >
                         <div>
                           {isAssistant ? (
-                            <AssistantFormattedText text={message.text} />
+                            <AssistantRichMarkdown text={message.text} />
                           ) : (
                             message.text
                           )}

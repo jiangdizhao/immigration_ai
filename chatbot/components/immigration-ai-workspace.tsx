@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { AssistantRichMarkdown } from "./assistant-rich-markdown";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
   AnswerPreference,
@@ -1063,8 +1064,10 @@ export function ImmigrationAIWorkspace() {
 
                       <div
                         className={cn(
-                          "max-w-[86%] space-y-3",
-                          !isAssistant && "flex flex-col items-end"
+                          "space-y-3",
+                          isAssistant
+                            ? "w-full max-w-[min(96%,900px)]"
+                            : "max-w-[86%] flex flex-col items-end"
                         )}
                       >
                         <div
@@ -1075,9 +1078,13 @@ export function ImmigrationAIWorkspace() {
                               : "bg-[#001736] text-white"
                           )}
                         >
-                          <div className="whitespace-pre-wrap">
-                            {message.text}
-                          </div>
+                          {isAssistant ? (
+                            <AssistantRichMarkdown text={message.text} />
+                          ) : (
+                            <div className="whitespace-pre-wrap">
+                              {message.text}
+                            </div>
+                          )}
                           {isAssistant && message.isStreaming ? (
                             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                               <Loader2 className="size-3.5 animate-spin" />

@@ -249,20 +249,33 @@ class CustomerAnswerPlanService:
         plan_dict = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan or {})
         ranked_map = plan_dict.get("ranked_candidate_map") or {}
         ranked_candidates = ranked_map.get("ranked_candidates") or []
-        subclasses = [
-            str(item.get("subclass") or "").strip()
-            for item in ranked_candidates
-            if isinstance(item, dict) and str(item.get("subclass") or "").strip()
-        ]
+        subclasses: list[str] = []
+        for item in ranked_candidates:
+            if not isinstance(item, dict):
+                continue
+            subclass = str(item.get("subclass") or "").strip()
+            if subclass and subclass not in subclasses:
+                subclasses.append(subclass)
+        for item in plan_dict.get("public_option_coverage_map") or []:
+            if not isinstance(item, dict):
+                continue
+            for subclass in item.get("subclasses") or []:
+                code = str(subclass or "").strip()
+                if code and code not in subclasses:
+                    subclasses.append(code)
         if not subclasses:
             return citations
 
         visible: list[Any] = []
         for citation in citations:
+            title = str(getattr(citation, "title", "") or "")
+            title_codes = re.findall(r"\b(?:subclass\s*)?([0-9]{3,4})\b", title, flags=re.I)
+            if title_codes and not any(code in subclasses for code in title_codes):
+                continue
             blob = " ".join(
                 [
                     str(getattr(citation, "source_id", "") or ""),
-                    str(getattr(citation, "title", "") or ""),
+                    title,
                     str(getattr(citation, "section_ref", "") or ""),
                     str(getattr(citation, "citation_text", "") or ""),
                     str(getattr(citation, "quote_text", "") or "")[:500],
@@ -398,6 +411,17 @@ class CustomerAnswerPlanService:
         for option in self._string_list(coverage_audit.get("missing_relevant_options")):
             add("verifier_required_addition", [option], f"Additional option: {option}", "Required by verifier coverage audit.", 90)
 
+        if broad_temporary_work:
+            filtered: list[dict[str, Any]] = []
+            for item in out:
+                bucket = str(item.get("bucket") or "")
+                subclasses = {str(code or "").strip() for code in item.get("subclasses") or []}
+                # In broad option-map answers, keep 186/494 in the longer-term bucket
+                # rather than letting early ranking make them look like short-term options.
+                if bucket == "ranked_alternative" and subclasses.intersection({"186", "494"}):
+                    continue
+                filtered.append(item)
+            out = filtered
         return sorted(out, key=lambda item: int(item.get("priority") or 999))[:16]
 
     def _answer_style(
