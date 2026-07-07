@@ -141,6 +141,15 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 proposal=proposal,
             )
 
+        mark_pfvd_stage(
+            "collect_evidence",
+            local_chunk_count=len(evidence.local_chunks),
+            live_chunk_count=len(evidence.live_chunks),
+            schedule_clause_count=len(evidence.schedule_clauses),
+            schedule_candidate_count=len(evidence.schedule_candidates),
+            retrieval_run_count=len(evidence.retrieval_runs),
+            verification_depth=str(depth),
+        )
         mark_stage("collect_evidence")
 
         if (
@@ -246,6 +255,23 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 verification=verification,
                 response_language=response_language,
             )
+        answer_text, deterministic_coverage_additions = self._ensure_public_option_coverage_text(
+            answer_text,
+            customer_answer_plan,
+            response_language=response_language,
+        )
+        if deterministic_coverage_additions:
+            final["answer"] = answer_text
+        mark_pfvd_stage(
+            "coverage_postprocess",
+            deterministic_addition_count=deterministic_coverage_additions,
+        )
+
+        answer_text = self._enforce_public_option_coverage(
+            answer_text=answer_text,
+            customer_answer_plan=customer_answer_plan.model_dump(),
+            response_language=response_language,
+        )
 
         citations = self._build_citations_with_schedule(evidence=evidence, verification_plan=verification_plan)
         visible_citations = self.customer_answer_plan_service.filter_customer_visible_citations(
@@ -300,7 +326,6 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 "legacy_schedule2_exhaustive_discovery": legacy_schedule2_exhaustive_debug,
                 "ranked_candidate_map": ranked_candidate_map.model_dump(),
                 **customer_answer_trace,
-                "stage_timing": dict(stage_timing),
                 "final_json": final,
                 "stage_timing": {
                     "total_ms": round((time.perf_counter() - pfvd_started) * 1000, 2),
@@ -345,6 +370,100 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         )
 
 
+
+    def _ensure_public_option_coverage_text(
+        self,
+        answer_text: str,
+        customer_answer_plan: Any,
+        *,
+        response_language: str,
+    ) -> tuple[str, int]:
+        """Deterministically preserve broad public option coverage.
+
+        The final-answer LLM sometimes follows the ranked candidates but drops
+        conditional buckets from public_option_coverage_map. For broad
+        all-options questions, append missing customer-visible buckets so the
+        answer cannot collapse back into a narrow likely-options response.
+        """
+        plan = customer_answer_plan.model_dump() if hasattr(customer_answer_plan, "model_dump") else dict(customer_answer_plan or {})
+        scope = str((plan.get("answer_scope_contract") or {}).get("user_requested_scope") or "").strip()
+        if scope != "all_possible_options":
+            return answer_text, 0
+
+        coverage = [
+            item
+            for item in (plan.get("public_option_coverage_map") or [])
+            if isinstance(item, dict) and item.get("show_to_customer", True) is not False
+        ]
+        if not coverage:
+            return answer_text, 0
+
+        answer_lower = answer_text.lower()
+        missing: list[dict[str, Any]] = []
+        seen: set[tuple[str, tuple[str, ...], str]] = set()
+        for item in coverage:
+            subclasses = tuple(str(value).strip() for value in (item.get("subclasses") or []) if str(value).strip())
+            label = str(item.get("label") or "").strip()
+            bucket = str(item.get("bucket") or "").strip()
+            key = (bucket, subclasses, label.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            if self._coverage_item_already_visible(answer_lower, label=label, subclasses=list(subclasses)):
+                continue
+            missing.append(item)
+
+        if not missing:
+            return answer_text, 0
+
+        is_zh = str(response_language or "").lower().startswith("zh")
+        if is_zh:
+            lines = [
+                "### 还需要保留在选项地图里的条件性路径",
+                "下面这些并不一定适合本案，但在用户要求“所有可能选项”时，不能完全省略：",
+            ]
+        else:
+            lines = [
+                "### Other conditional options to keep on the map",
+                "These are not all equally suitable, but they should still be checked when the question asks for all possible options:",
+            ]
+        for item in missing[:10]:
+            label = str(item.get("label") or "").strip() or "Additional pathway"
+            when_relevant = str(item.get("when_relevant") or "").strip()
+            if when_relevant:
+                lines.append(f"- **{label}**: {when_relevant}")
+            else:
+                lines.append(f"- **{label}**")
+
+        addition = "\n".join(lines).strip()
+        if not addition:
+            return answer_text, 0
+        return self._insert_before_decisive_question(answer_text, addition), len(missing)
+
+    def _coverage_item_already_visible(self, answer_lower: str, *, label: str, subclasses: list[str]) -> bool:
+        if subclasses:
+            for subclass in subclasses:
+                number = "".join(ch for ch in str(subclass) if ch.isdigit())
+                if not number:
+                    continue
+                if not re.search(rf"(?:subclass\s*)?\b{re.escape(number)}\b", answer_lower):
+                    return False
+            return True
+        label_text = " ".join(label.lower().split())
+        return bool(label_text and label_text in answer_lower)
+
+    def _insert_before_decisive_question(self, answer_text: str, addition: str) -> str:
+        markers = (
+            "\nOne decisive question:",
+            "\nOne quick question:",
+            "\nA simple question:",
+            "\n一个关键问题：",
+            "\n一个简单问题：",
+        )
+        for marker in markers:
+            if marker in answer_text:
+                return answer_text.replace(marker, f"\n\n{addition}{marker}", 1)
+        return f"{answer_text.rstrip()}\n\n{addition}"
 
     def _is_politics_sensitive_text(self, *parts: Any) -> bool:
         text = " ".join(str(part or "") for part in parts).lower()
@@ -725,6 +844,89 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
                 out.append(digits)
         return out[:20]
 
+
+    def _enforce_public_option_coverage(
+        self,
+        *,
+        answer_text: str,
+        customer_answer_plan: dict[str, Any],
+        response_language: str,
+    ) -> str:
+        """Guarantee broad option-map answers do not drop required public buckets."""
+        plan = customer_answer_plan or {}
+        scope = str((plan.get("answer_scope_contract") or {}).get("user_requested_scope") or "").strip()
+        if scope != "all_possible_options":
+            return answer_text
+        coverage = [
+            item
+            for item in self._dict_list(plan.get("public_option_coverage_map"))
+            if item.get("show_to_customer", True)
+        ]
+        if not coverage:
+            return answer_text
+        lower_answer = answer_text.lower()
+        missing: list[dict[str, Any]] = []
+        for item in coverage:
+            if not self._coverage_item_present(lower_answer, item):
+                missing.append(item)
+        if not missing:
+            return answer_text
+        if "additional conditional options to keep in mind" in lower_answer:
+            return answer_text
+        heading = (
+            "\n\nAdditional conditional options to keep in mind:\n"
+            if response_language != "zh"
+            else "\n\n还需要同时保留的有条件选项：\n"
+        )
+        lines: list[str] = []
+        for item in missing:
+            label = str(item.get("label") or "").strip()
+            when_relevant = str(item.get("when_relevant") or "").strip()
+            subclasses = "/".join(self._subclass_list(item.get("subclasses")))
+            if not label and subclasses:
+                label = f"Subclass {subclasses}"
+            if not label:
+                continue
+            suffix = f" — {when_relevant}" if when_relevant else ""
+            lines.append(f"- **{label}**{suffix}")
+        if not lines:
+            return answer_text
+        addition = heading + "\n".join(lines)
+        return self._insert_before_decisive_question(answer_text, addition)
+
+    def _coverage_item_present(self, lower_answer: str, item: dict[str, Any]) -> bool:
+        subclasses = self._subclass_list(item.get("subclasses"))
+        label = str(item.get("label") or "").lower()
+        bucket = str(item.get("bucket") or "").lower()
+        if subclasses and all(self._answer_mentions_subclass(lower_answer, subclass) for subclass in subclasses):
+            return True
+        if bucket == "business_visitor_no_work":
+            return "visitor" in lower_answer and ("eta" in lower_answer or "evisitor" in lower_answer or "business visitor" in lower_answer)
+        if bucket == "independent_work_rights_if_eligible":
+            return "working holiday" in lower_answer or "work and holiday" in lower_answer or "417" in lower_answer or "462" in lower_answer
+        label_terms = [part.strip() for part in re.split(r"[—/(),]", label) if len(part.strip()) >= 4]
+        return any(term in lower_answer for term in label_terms[:3])
+
+    def _answer_mentions_subclass(self, lower_answer: str, subclass: str) -> bool:
+        s = re.escape(str(subclass).strip())
+        if not s:
+            return False
+        return bool(re.search(rf"\bsubclass\s+{s}\b|\b{s}\b", lower_answer, flags=re.I))
+
+    def _insert_before_decisive_question(self, answer_text: str, addition: str) -> str:
+        markers = [
+            "\n\nOne decisive question:",
+            "\n\nOne quick question:",
+            "\n\nA useful question:",
+            "\n\n一个关键问题：",
+            "\n\n一个简单问题：",
+        ]
+        for marker in markers:
+            idx = answer_text.find(marker)
+            if idx >= 0:
+                return answer_text[:idx].rstrip() + addition + answer_text[idx:]
+        return answer_text.rstrip() + addition
+
     def _build_citations_with_schedule(self, *, evidence: EvidenceBundle, verification_plan: dict[str, Any]) -> list[CitationOut]:
         citations = list(self._build_citations(evidence))
         seen = {c.title + "|" + (c.section_ref or "") for c in citations}
@@ -772,10 +974,26 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             text = (value or "").strip()
             if text and text not in out:
                 out.append(text)
+        for c in citations:
+            authority_blob = f"{c.title} {c.authority} {c.url}".lower()
+            if "homeaffairs.gov.au" in authority_blob or "department of home affairs" in authority_blob:
+                add(c.title)
+                if len(out) >= 3:
+                    break
         if verification_plan.get("requires_exhaustive_schedule2") or evidence.schedule_clauses:
             add("MIGRATION REGULATIONS 1994 - SCHEDULE 2 Provisions with respect to the grant of Subclasses of visas")
         if verification_plan.get("requires_schedule1_check"):
             add("MIGRATION REGULATIONS 1994 - SCHEDULE 1 Classes of visa")
+        for chunk in evidence.live_chunks[:8]:
+            source = getattr(chunk, "source", None)
+            title = str(getattr(source, "title", "") or getattr(chunk, "title", "") or "").strip()
+            authority = str(getattr(source, "authority", "") or getattr(chunk, "authority", "") or "").strip()
+            url = str(getattr(source, "url", "") or getattr(chunk, "url", "") or "").strip()
+            official_blob = f"{title} {authority} {url}".lower()
+            if title and ("home affairs" in official_blob or "homeaffairs.gov.au" in official_blob):
+                add(title)
+            if len(out) >= 6:
+                break
         for c in citations:
             add(c.title)
             if len(out) >= 6:
