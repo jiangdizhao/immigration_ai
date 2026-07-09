@@ -19,18 +19,25 @@ def main() -> None:
     assert "premium_direct_gpt55_high" in query_schema
     assert "default_legal_pipeline" in query_schema
 
-    politics_index = runtime_patch.index("_is_politics_sensitive_general_turn")
-    premium_index = runtime_patch.index('assistant_mode == "premium_direct_gpt55_high"')
-    general_index = runtime_patch.index("_should_use_general_topic_fast_path")
-    assert politics_index < premium_index < general_index, (
-        "premium direct mode must run after politics filter and before the other legal/general pipelines"
+    premium_gate_index = runtime_patch.index('payload.assistant_mode == "premium_direct_gpt55_high"')
+    semantic_index = runtime_patch.index("_analyze_semantic_turn")
+    assert premium_gate_index < semantic_index, (
+        "premium direct mode must be intercepted before the full semantic-turn router"
     )
 
     assert "PremiumDirectAnswerService" in runtime_patch
     assert "fallback_to_slow_legal_pipeline" in runtime_patch
+    assert "semantic_turn_router_skipped" in runtime_patch
+    assert '"frontend_messages": []' not in runtime_patch
+
     assert "reasoning={\"effort\": self.reasoning_effort}" in direct_service
     assert "source_verified" in direct_service
     assert "PREMIUM_DIRECT_MODEL" in direct_service
+    assert "POLITICS_SENSITIVE_TERMS" in direct_service
+    assert "_history_text" in direct_service
+    assert "lightweight_history_plus_latest_user_question" in direct_service
+    assert "system_prompt_sent_to_answer_model" in direct_service
+    assert "frontend_history_sent_to_answer_model" in direct_service
 
     print("OK: premium direct backend mode contract is installed")
 
