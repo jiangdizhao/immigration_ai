@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any
 
 from openai import OpenAI
@@ -60,6 +61,17 @@ HIGH_RISK_TERMS = (
     "ministerial intervention",
 )
 
+REFERENCE_HEADING_MARKERS = (
+    "reference",
+    "references",
+    "source",
+    "sources",
+    "sources to verify",
+    "参考",
+    "来源",
+    "核对来源",
+)
+
 
 class PremiumDirectAnswerService:
     """Direct model-only lane for the UI's direct LLM option.
@@ -72,8 +84,8 @@ class PremiumDirectAnswerService:
     - the answer-model input is compact history plus the latest user question;
     - try GPT-5.5 High first, then silently fall back to GPT-5.4-mini;
     - upstream OpenAI failures fail fast so the frontend does not wait for minutes;
-    - direct answers include a lightweight references-to-verify section;
-    - direct answers show transparent reference status, not invented legal citations.
+    - direct answers include all references the direct LLM lists, without a cap;
+    - direct references are model-provided verification references, not live-checked legal citations.
     """
 
     def __init__(self) -> None:
@@ -157,6 +169,7 @@ class PremiumDirectAnswerService:
                 else "Sorry, I could not generate a quick answer. Please use the default legal-check mode or ask the lawyer to confirm manually."
             )
 
+        compact_sources = self._extract_reference_lines(answer_text)
         answer_text = self._with_model_only_notice(answer_text, is_zh=is_zh)
 
         return QueryResponse(
@@ -169,7 +182,7 @@ class PremiumDirectAnswerService:
             missing_facts=[],
             follow_up_questions=[],
             citations=[],
-            compact_sources=self._reference_status_sources(is_zh=is_zh),
+            compact_sources=compact_sources,
             escalate=high_risk,
             next_action="suggest_consultation" if high_risk else "answer",
             retrieval_debug={
@@ -179,11 +192,13 @@ class PremiumDirectAnswerService:
                 "premium_direct_answer": {
                     "used": True,
                     "source_verified": False,
-                    "reference_status_shown": True,
+                    "references_are_model_provided": True,
+                    "reference_extraction": "from_direct_llm_answer_body_without_cap",
+                    "reference_count": len(compact_sources),
                     "model_prompt_includes_references_section": True,
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
-                    "answer_model_input": "lightweight_history_plus_latest_user_question_with_references_instruction",
+                    "answer_model_input": "lightweight_history_plus_latest_user_question_with_all_references_instruction",
                     "answer_model_input_char_count": len(model_input),
                     "latest_question_char_count": len(question_for_model),
                     "history_char_count": len(history_text),
@@ -334,8 +349,10 @@ class PremiumDirectAnswerService:
     def _model_input(self, *, history_text: str, latest_question: str, is_zh: bool) -> str:
         if is_zh:
             reference_instruction = (
-                "请直接回答。最后添加一个简短的“参考 / 核对来源”小节，列出 1-3 个用户可以核对的可靠来源名称或来源类型。"
-                "不要编造具体链接，不要声称已经实时查询；如果是法律或移民问题，请说明正式来源应以默认法律核对模式核对。"
+                "请直接回答。最后添加一个标题为“参考 / 核对来源”的小节。"
+                "在该小节中列出你用于回答或建议用户核对的全部可靠来源名称、文件标题、机构名称或法规名称；不要人为限制数量。"
+                "不要把多个具体来源压缩成笼统的来源类型；如果知道具体来源名称，就逐条列出。"
+                "不要编造具体链接，不要声称已经实时打开或查询网页。"
             )
             if history_text:
                 return (
@@ -348,8 +365,10 @@ class PremiumDirectAnswerService:
             return f"{latest_question}\n\n{reference_instruction}"
 
         reference_instruction = (
-            "Answer directly. End with a short 'References / sources to verify' section listing 1-3 reputable source names or source types the user can check. "
-            "Do not invent exact URLs and do not claim live lookup. For legal or immigration questions, say formal sources should be checked through Default legal check."
+            "Answer directly. End with a section titled 'References / sources to verify'. "
+            "In that section, list every reliable source name, document title, institution name, statute/regulation name, or other reference you used or would tell the user to verify against; do not impose an artificial limit. "
+            "Do not compress several specific sources into a vague source type when specific source names are known. "
+            "Do not invent exact URLs and do not claim that you opened or live-checked web pages."
         )
         if history_text:
             return (
@@ -361,6 +380,32 @@ class PremiumDirectAnswerService:
             )
         return f"{latest_question}\n\n{reference_instruction}"
 
+    def _extract_reference_lines(self, answer_text: str) -> list[str]:
+        lines = answer_text.splitlines()
+        start_index: int | None = None
+        for idx, line in enumerate(lines):
+            normalized = line.strip().lower().strip("#*:： ")
+            if any(marker in normalized for marker in REFERENCE_HEADING_MARKERS):
+                start_index = idx + 1
+        if start_index is None:
+            return []
+
+        references: list[str] = []
+        for line in lines[start_index:]:
+            stripped = line.strip()
+            if not stripped:
+                if references:
+                    break
+                continue
+            normalized = stripped.lower().strip("#*:： ")
+            if references and any(marker in normalized for marker in REFERENCE_HEADING_MARKERS):
+                continue
+            cleaned = re.sub(r"^[-*•\u2022\s]+", "", stripped)
+            cleaned = re.sub(r"^\d+[.)、]\s*", "", cleaned).strip()
+            if cleaned:
+                references.append(cleaned)
+        return references
+
     def _is_politics_sensitive(self, text: str) -> bool:
         lowered = text.lower()
         return any(term in lowered for term in POLITICS_SENSITIVE_TERMS)
@@ -368,15 +413,6 @@ class PremiumDirectAnswerService:
     def _looks_high_risk(self, text: str) -> bool:
         lowered = text.lower()
         return any(term in lowered for term in HIGH_RISK_TERMS)
-
-    def _reference_status_sources(self, *, is_zh: bool) -> list[str]:
-        if is_zh:
-            return [
-                "直接 LLM 快速答复 — 答复正文会列出可核对来源；但未进行 Schedule 2、本地法规库或官方来源实时核对。"
-            ]
-        return [
-            "Direct LLM quick answer — the answer body lists sources to verify, but it was not live-checked against Schedule 2, the local legal database, or official sources."
-        ]
 
     def _politics_block_response(
         self,
