@@ -72,7 +72,7 @@ export function PremiumAnswerModeWorkspace() {
           });
         } catch (error) {
           console.warn(
-            "Unable to route premium direct request; using default route",
+            "Unable to route direct LLM request; using default route",
             error
           );
         }
@@ -99,9 +99,9 @@ export function PremiumAnswerModeWorkspace() {
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
               Default legal check uses the current Schedule/RAG verification
-              pipeline. GPT-5.5 High quick answer keeps the politics-sensitive
-              filter, then skips the slower legal-source helper chain for a
-              model-only answer.
+              pipeline. Direct LLM quick answer keeps lightweight recent chat
+              history and the politics-sensitive filter, then skips the slower
+              legal-source helper chain for a model-only answer.
             </p>
           </div>
 
@@ -124,7 +124,7 @@ export function PremiumAnswerModeWorkspace() {
                 Default legal check
               </option>
               <option value="premium_direct_gpt55_high">
-                GPT-5.5 High quick answer
+                Direct LLM quick answer
               </option>
             </select>
             {assistantMode === "premium_direct_gpt55_high" ? (
