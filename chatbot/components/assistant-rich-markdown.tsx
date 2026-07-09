@@ -260,7 +260,10 @@ function renderLine(line: string, key: string): ReactNode {
   }
   if (/^\d+[.)）]\s+/.test(trimmed)) {
     return (
-      <p className="pl-1 text-[15px] leading-7 text-slate-800" key={`num-${key}`}>
+      <p
+        className="pl-1 text-[15px] leading-7 text-slate-800"
+        key={`num-${key}`}
+      >
         <InlineRichText text={trimmed} />
       </p>
     );
