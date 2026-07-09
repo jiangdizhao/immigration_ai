@@ -65,9 +65,9 @@ class PremiumDirectAnswerService:
     Contract for this lane:
     - no Schedule/PFVD/RAG/helper prompt chain;
     - no full semantic-turn router;
-    - no frontend history in the answer-model prompt;
+    - lightweight recent chat history is kept for continuity;
     - local politics-sensitive gate before the model call;
-    - the answer-model input is only the latest user question.
+    - the answer-model input is compact history plus the latest user question.
     """
 
     def __init__(self) -> None:
@@ -77,6 +77,13 @@ class PremiumDirectAnswerService:
         self.timeout_seconds = float(os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "90"))
         self.max_retries = int(
             os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", os.getenv("OPENAI_MAX_RETRIES", "1"))
+        )
+        self.max_history_turns = int(os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TURNS", "6"))
+        self.max_history_chars_per_turn = int(
+            os.getenv("PREMIUM_DIRECT_MAX_HISTORY_CHARS_PER_TURN", "700")
+        )
+        self.max_history_total_chars = int(
+            os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TOTAL_CHARS", "3000")
         )
         self._client: OpenAI | None = None
 
@@ -104,6 +111,12 @@ class PremiumDirectAnswerService:
     ) -> QueryResponse:
         is_zh = response_language == "zh"
         question_for_model = original_question.strip() or effective_question.strip()
+        history_text = self._history_text(getattr(payload, "frontend_messages", []) or [])
+        model_input = self._model_input(
+            history_text=history_text,
+            latest_question=question_for_model,
+            is_zh=is_zh,
+        )
         high_risk = self._looks_high_risk(original_question) or self._looks_high_risk(effective_question)
 
         if self._is_politics_sensitive(question_for_model):
@@ -121,13 +134,13 @@ class PremiumDirectAnswerService:
             response = self.client.responses.create(
                 model=self.model,
                 reasoning={"effort": self.reasoning_effort},
-                input=question_for_model,
+                input=model_input,
             )
         except TypeError:
             # Compatibility fallback for older SDK signatures.
             response = self.client.responses.create(
                 model=self.model,
-                input=question_for_model,
+                input=model_input,
             )
 
         answer_text = (getattr(response, "output_text", "") or "").strip()
@@ -166,10 +179,15 @@ class PremiumDirectAnswerService:
                     "source_verified": False,
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
-                    "answer_model_input": "latest_user_question_only",
-                    "answer_model_input_char_count": len(question_for_model),
-                    "frontend_history_sent_to_answer_model": False,
+                    "answer_model_input": "lightweight_history_plus_latest_user_question",
+                    "answer_model_input_char_count": len(model_input),
+                    "latest_question_char_count": len(question_for_model),
+                    "history_char_count": len(history_text),
+                    "frontend_history_sent_to_answer_model": bool(history_text),
                     "system_prompt_sent_to_answer_model": False,
+                    "max_history_turns": self.max_history_turns,
+                    "max_history_chars_per_turn": self.max_history_chars_per_turn,
+                    "max_history_total_chars": self.max_history_total_chars,
                     "high_risk_detected": high_risk,
                     "skipped_pipeline": [
                         "semantic_turn_router",
@@ -183,6 +201,51 @@ class PremiumDirectAnswerService:
                 },
             },
         )
+
+    def _history_text(self, frontend_messages: list[dict[str, Any]]) -> str:
+        rows: list[str] = []
+        total_chars = 0
+        for item in frontend_messages[-self.max_history_turns :]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "user").strip().lower()
+            if role not in {"user", "assistant"}:
+                continue
+            text = str(item.get("text") or "").strip()
+            if not text:
+                parts = item.get("parts")
+                if isinstance(parts, list):
+                    text = "\n".join(
+                        str(part.get("text") or "").strip()
+                        for part in parts
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    ).strip()
+            if not text:
+                continue
+            clipped = text[: self.max_history_chars_per_turn]
+            row = f"{role}: {clipped}"
+            if total_chars + len(row) > self.max_history_total_chars:
+                break
+            rows.append(row)
+            total_chars += len(row)
+        return "\n".join(rows)
+
+    def _model_input(self, *, history_text: str, latest_question: str, is_zh: bool) -> str:
+        if history_text:
+            if is_zh:
+                return (
+                    "以下是最近对话，只用于理解上下文，不要逐字复述：\n"
+                    f"{history_text}\n\n"
+                    "用户最新问题：\n"
+                    f"{latest_question}"
+                )
+            return (
+                "Recent chat history for context only, do not repeat it verbatim:\n"
+                f"{history_text}\n\n"
+                "Latest user question:\n"
+                f"{latest_question}"
+            )
+        return latest_question
 
     def _is_politics_sensitive(self, text: str) -> bool:
         lowered = text.lower()
