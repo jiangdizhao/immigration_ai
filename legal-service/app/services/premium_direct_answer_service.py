@@ -62,7 +62,7 @@ HIGH_RISK_TERMS = (
 
 
 class PremiumDirectAnswerService:
-    """Direct model-only lane for the UI's GPT-5.5 option.
+    """Direct model-only lane for the UI's direct LLM option.
 
     Contract for this lane:
     - no Schedule/PFVD/RAG/helper prompt chain;
@@ -70,14 +70,36 @@ class PremiumDirectAnswerService:
     - lightweight recent chat history is kept for continuity;
     - local politics-sensitive gate before the model call;
     - the answer-model input is compact history plus the latest user question;
+    - try GPT-5.5 High first, then silently fall back to GPT-5.4-mini;
     - upstream OpenAI failures fail fast so the frontend does not wait for minutes.
     """
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.model = os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.5")
-        self.reasoning_effort = os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "medium")
-        self.timeout_seconds = float(os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "55"))
+        # Backward-compatible env names are kept: PREMIUM_DIRECT_MODEL and
+        # PREMIUM_DIRECT_REASONING_EFFORT now mean the primary direct model.
+        self.primary_model = os.getenv(
+            "PREMIUM_DIRECT_PRIMARY_MODEL",
+            os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.5"),
+        )
+        self.primary_reasoning_effort = os.getenv(
+            "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT",
+            os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "high"),
+        )
+        self.primary_timeout_seconds = float(
+            os.getenv(
+                "PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS",
+                os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "45"),
+            )
+        )
+        self.fallback_model = os.getenv("PREMIUM_DIRECT_FALLBACK_MODEL", "gpt-5.4-mini")
+        self.fallback_reasoning_effort = os.getenv(
+            "PREMIUM_DIRECT_FALLBACK_REASONING_EFFORT",
+            "",
+        ).strip()
+        self.fallback_timeout_seconds = float(
+            os.getenv("PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS", "55")
+        )
         # Do not inherit OPENAI_MAX_RETRIES here. A retryable 520 may wait 60 seconds
         # before retrying, which can exceed the frontend route timeout and cause AbortError.
         self.max_retries = int(os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", "0"))
@@ -88,19 +110,15 @@ class PremiumDirectAnswerService:
         self.max_history_total_chars = int(
             os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TOTAL_CHARS", "3000")
         )
-        self._client: OpenAI | None = None
 
-    @property
-    def client(self) -> OpenAI:
-        if self._client is None:
-            if not self.settings.openai_api_key:
-                raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
-            self._client = OpenAI(
-                api_key=self.settings.openai_api_key,
-                max_retries=self.max_retries,
-                timeout=self.timeout_seconds,
-            )
-        return self._client
+    def _client(self, *, timeout_seconds: float) -> OpenAI:
+        if not self.settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
+        return OpenAI(
+            api_key=self.settings.openai_api_key,
+            max_retries=self.max_retries,
+            timeout=timeout_seconds,
+        )
 
     def answer(
         self,
@@ -133,30 +151,7 @@ class PremiumDirectAnswerService:
         if not question_for_model:
             return self._empty_question_response(is_zh=is_zh, matter_id=matter_id)
 
-        logger.info(
-            "premium_direct_openai_request model=%s reasoning_effort=%s timeout_seconds=%s max_retries=%s history_chars=%s input_chars=%s",
-            self.model,
-            self.reasoning_effort,
-            self.timeout_seconds,
-            self.max_retries,
-            len(history_text),
-            len(model_input),
-        )
-
-        try:
-            response = self.client.responses.create(
-                model=self.model,
-                reasoning={"effort": self.reasoning_effort},
-                input=model_input,
-            )
-        except TypeError:
-            # Compatibility fallback for older SDK signatures.
-            response = self.client.responses.create(
-                model=self.model,
-                input=model_input,
-            )
-
-        answer_text = (getattr(response, "output_text", "") or "").strip()
+        answer_text, model_debug = self._answer_with_silent_fallback(model_input=model_input)
         if not answer_text:
             answer_text = (
                 "抱歉，我现在无法生成快速答复。建议改用默认法律核对模式，或请律师人工确认。"
@@ -185,10 +180,6 @@ class PremiumDirectAnswerService:
                 "semantic_turn_analysis": semantic_turn_debug or {},
                 "premium_direct_answer": {
                     "used": True,
-                    "model": self.model,
-                    "reasoning_effort": self.reasoning_effort,
-                    "timeout_seconds": self.timeout_seconds,
-                    "max_retries": self.max_retries,
                     "source_verified": False,
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
@@ -202,6 +193,7 @@ class PremiumDirectAnswerService:
                     "max_history_chars_per_turn": self.max_history_chars_per_turn,
                     "max_history_total_chars": self.max_history_total_chars,
                     "high_risk_detected": high_risk,
+                    **model_debug,
                     "skipped_pipeline": [
                         "semantic_turn_router",
                         "proposal_first_verification_depth",
@@ -214,6 +206,103 @@ class PremiumDirectAnswerService:
                 },
             },
         )
+
+    def _answer_with_silent_fallback(self, *, model_input: str) -> tuple[str, dict[str, Any]]:
+        primary_debug = {
+            "primary_model": self.primary_model,
+            "primary_reasoning_effort": self.primary_reasoning_effort,
+            "primary_timeout_seconds": self.primary_timeout_seconds,
+            "fallback_model": self.fallback_model,
+            "fallback_reasoning_effort": self.fallback_reasoning_effort or None,
+            "fallback_timeout_seconds": self.fallback_timeout_seconds,
+            "max_retries": self.max_retries,
+        }
+
+        logger.info(
+            "premium_direct_primary_request model=%s reasoning_effort=%s timeout_seconds=%s max_retries=%s input_chars=%s fallback_model=%s",
+            self.primary_model,
+            self.primary_reasoning_effort,
+            self.primary_timeout_seconds,
+            self.max_retries,
+            len(model_input),
+            self.fallback_model,
+        )
+
+        try:
+            primary_text = self._call_model(
+                model=self.primary_model,
+                reasoning_effort=self.primary_reasoning_effort,
+                timeout_seconds=self.primary_timeout_seconds,
+                model_input=model_input,
+            )
+            if primary_text:
+                return primary_text, {
+                    **primary_debug,
+                    "serving_model": self.primary_model,
+                    "used_fallback_model": False,
+                    "primary_failed": False,
+                }
+            raise RuntimeError("primary model returned empty output_text")
+        except Exception as exc:
+            logger.warning(
+                "premium_direct_primary_failed; silently trying fallback model=%s error_type=%s error=%s",
+                self.fallback_model,
+                exc.__class__.__name__,
+                str(exc)[:300],
+            )
+            primary_error_debug = {
+                "primary_failed": True,
+                "primary_error_type": exc.__class__.__name__,
+                "primary_error": str(exc)[:500],
+            }
+
+        logger.info(
+            "premium_direct_fallback_request model=%s reasoning_effort=%s timeout_seconds=%s max_retries=%s input_chars=%s",
+            self.fallback_model,
+            self.fallback_reasoning_effort or None,
+            self.fallback_timeout_seconds,
+            self.max_retries,
+            len(model_input),
+        )
+        fallback_text = self._call_model(
+            model=self.fallback_model,
+            reasoning_effort=self.fallback_reasoning_effort,
+            timeout_seconds=self.fallback_timeout_seconds,
+            model_input=model_input,
+        )
+        return fallback_text, {
+            **primary_debug,
+            **primary_error_debug,
+            "serving_model": self.fallback_model,
+            "used_fallback_model": True,
+        }
+
+    def _call_model(
+        self,
+        *,
+        model: str,
+        reasoning_effort: str,
+        timeout_seconds: float,
+        model_input: str,
+    ) -> str:
+        client = self._client(timeout_seconds=timeout_seconds)
+        effort = (reasoning_effort or "").strip()
+        if effort and effort.lower() not in {"none", "off", "false", "0"}:
+            try:
+                response = client.responses.create(
+                    model=model,
+                    reasoning={"effort": effort},
+                    input=model_input,
+                )
+                return (getattr(response, "output_text", "") or "").strip()
+            except TypeError:
+                # Compatibility fallback for models/SDK signatures that do not accept reasoning.
+                pass
+        response = client.responses.create(
+            model=model,
+            input=model_input,
+        )
+        return (getattr(response, "output_text", "") or "").strip()
 
     def _history_text(self, frontend_messages: list[dict[str, Any]]) -> str:
         rows: list[str] = []
@@ -333,9 +422,9 @@ class PremiumDirectAnswerService:
 
     def _with_model_only_notice(self, answer_text: str, *, is_zh: bool) -> str:
         if is_zh:
-            notice = "提示：这是 GPT-5.5 快速答复，未经过本地法规库、Schedule 2 或官方来源核对；请作为一般信息，并由律师确认后再用于个案决策。"
+            notice = "提示：这是 AI 快速答复，未经过本地法规库、Schedule 2 或官方来源核对；请作为一般信息，并由律师确认后再用于个案决策。"
         else:
-            notice = "Note: this is a GPT-5.5 quick answer. It has not been checked against the local legal database, Schedule 2, or official sources. Treat it as general information and have the lawyer confirm it before using it for case-specific decisions."
+            notice = "Note: this is an AI quick answer. It has not been checked against the local legal database, Schedule 2, or official sources. Treat it as general information and have the lawyer confirm it before using it for case-specific decisions."
         if answer_text.startswith(notice):
             return answer_text
         return f"{notice}\n\n{answer_text}"
