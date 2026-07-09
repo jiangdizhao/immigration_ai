@@ -56,7 +56,7 @@ def apply_patch() -> None:
                     "error_type": error.__class__.__name__,
                     "fallback_to_slow_legal_pipeline": False,
                     "semantic_turn_router_skipped": True,
-                    "answer_model_input": "latest_user_question_only",
+                    "answer_model_input": "lightweight_history_plus_latest_user_question",
                 },
             },
         )
@@ -72,7 +72,6 @@ def apply_patch() -> None:
                 **payload.model_dump(),
                 "question": original_question,
                 "response_language": response_language,
-                "frontend_messages": [],
             }
         )
         matter_id: str | None = getattr(payload, "matter_id", None)
@@ -94,7 +93,7 @@ def apply_patch() -> None:
                 matter_id=matter.id,
                 semantic_turn_debug={
                     "skipped_full_semantic_turn_router": True,
-                    "reason": "premium_direct_mode_uses_only_politics_filter_then_latest_question",
+                    "reason": "premium_direct_mode_uses_local_politics_filter_lightweight_history_and_latest_question",
                 },
             )
             response.matter_id = matter.id
@@ -135,7 +134,7 @@ def apply_patch() -> None:
                     effective_question=original_question,
                     stage_timing={
                         "engine": "premium_direct_gpt55_high",
-                        "workflow": "local_politics_filter_then_latest_question_only",
+                        "workflow": "local_politics_filter_lightweight_history_latest_question",
                     },
                     extra_debug={
                         "runtime_patch": "unified_context_runtime_patch",
@@ -163,7 +162,7 @@ def apply_patch() -> None:
     def unified_handle_query(self: QueryService, db: Any, payload: QueryRequest):
         if payload.assistant_mode == "premium_direct_gpt55_high":
             logger.info(
-                "Unified runtime selected premium direct path before semantic router; only local politics filter is retained"
+                "Unified runtime selected premium direct path before semantic router; local politics filter and lightweight history are retained"
             )
             return handle_premium_direct_query(self, db, payload)
 
