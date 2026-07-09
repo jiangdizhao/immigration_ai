@@ -20,6 +20,33 @@ function keyedTextParts(parts: string[]) {
   });
 }
 
+function keyedTableCells(cells: string[], keyPrefix: string) {
+  const counts = new Map<string, number>();
+  return cells.map((cell) => {
+    const signature = cell || "<blank-cell>";
+    const count = counts.get(signature) ?? 0;
+    counts.set(signature, count + 1);
+    return {
+      key: `${keyPrefix}-${stableTextKey(signature)}-${count}`,
+      value: cell,
+    };
+  });
+}
+
+function keyedTableRows(rows: string[][]) {
+  const counts = new Map<string, number>();
+  return rows.map((row) => {
+    const signature = row.join("|") || "<blank-row>";
+    const count = counts.get(signature) ?? 0;
+    counts.set(signature, count + 1);
+    const rowKey = `row-${stableTextKey(signature)}-${count}`;
+    return {
+      cells: keyedTableCells(row, `${rowKey}-cell`),
+      key: rowKey,
+    };
+  });
+}
+
 function stripOuterPipes(line: string) {
   let trimmed = line.trim();
   if (trimmed.startsWith("|")) {
@@ -122,6 +149,8 @@ function MarkdownTable({ header, rows }: { header: string[]; rows: string[][] })
   const columnCount = Math.max(header.length, ...rows.map((row) => row.length), 1);
   const normalizedHeader = normalizeTableRows([header], columnCount)[0] ?? [];
   const normalizedRows = normalizeTableRows(rows, columnCount);
+  const keyedHeader = keyedTableCells(normalizedHeader, "header");
+  const keyedRows = keyedTableRows(normalizedRows);
 
   return (
     <div
@@ -131,29 +160,26 @@ function MarkdownTable({ header, rows }: { header: string[]; rows: string[][] })
       <table className="w-max min-w-[760px] border-collapse text-left text-sm leading-6 text-slate-700">
         <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
-            {normalizedHeader.map((cell, index) => (
+            {keyedHeader.map(({ key, value }) => (
               <th
                 className="border-b border-slate-200 px-3 py-2 align-top"
-                key={`${stableTextKey(cell || "header")}-${index}`}
+                key={key}
                 scope="col"
               >
-                <InlineRichText text={cell || "—"} />
+                <InlineRichText text={value || "—"} />
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {normalizedRows.map((row, rowIndex) => (
-            <tr
-              className="odd:bg-white even:bg-slate-50/70"
-              key={`${rowIndex}-${stableTextKey(row.join("|"))}`}
-            >
-              {row.map((cell, cellIndex) => (
+          {keyedRows.map(({ cells, key }) => (
+            <tr className="odd:bg-white even:bg-slate-50/70" key={key}>
+              {cells.map(({ key: cellKey, value }) => (
                 <td
                   className="border-b border-slate-100 px-3 py-2 align-top last:border-b-0"
-                  key={`${rowIndex}-${cellIndex}-${stableTextKey(cell || "cell")}`}
+                  key={cellKey}
                 >
-                  <InlineRichText text={cell || "—"} />
+                  <InlineRichText text={value || "—"} />
                 </td>
               ))}
             </tr>
