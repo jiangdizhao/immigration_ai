@@ -72,6 +72,7 @@ class PremiumDirectAnswerService:
     - the answer-model input is compact history plus the latest user question;
     - try GPT-5.5 High first, then silently fall back to GPT-5.4-mini;
     - upstream OpenAI failures fail fast so the frontend does not wait for minutes;
+    - direct answers include a lightweight references-to-verify section;
     - direct answers show transparent reference status, not invented legal citations.
     """
 
@@ -179,9 +180,10 @@ class PremiumDirectAnswerService:
                     "used": True,
                     "source_verified": False,
                     "reference_status_shown": True,
+                    "model_prompt_includes_references_section": True,
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
-                    "answer_model_input": "lightweight_history_plus_latest_user_question",
+                    "answer_model_input": "lightweight_history_plus_latest_user_question_with_references_instruction",
                     "answer_model_input_char_count": len(model_input),
                     "latest_question_char_count": len(question_for_model),
                     "history_char_count": len(history_text),
@@ -330,21 +332,34 @@ class PremiumDirectAnswerService:
         return "\n".join(rows)
 
     def _model_input(self, *, history_text: str, latest_question: str, is_zh: bool) -> str:
-        if history_text:
-            if is_zh:
+        if is_zh:
+            reference_instruction = (
+                "请直接回答。最后添加一个简短的“参考 / 核对来源”小节，列出 1-3 个用户可以核对的可靠来源名称或来源类型。"
+                "不要编造具体链接，不要声称已经实时查询；如果是法律或移民问题，请说明正式来源应以默认法律核对模式核对。"
+            )
+            if history_text:
                 return (
                     "以下是最近对话，只用于理解上下文，不要逐字复述：\n"
                     f"{history_text}\n\n"
                     "用户最新问题：\n"
-                    f"{latest_question}"
+                    f"{latest_question}\n\n"
+                    f"{reference_instruction}"
                 )
+            return f"{latest_question}\n\n{reference_instruction}"
+
+        reference_instruction = (
+            "Answer directly. End with a short 'References / sources to verify' section listing 1-3 reputable source names or source types the user can check. "
+            "Do not invent exact URLs and do not claim live lookup. For legal or immigration questions, say formal sources should be checked through Default legal check."
+        )
+        if history_text:
             return (
                 "Recent chat history for context only, do not repeat it verbatim:\n"
                 f"{history_text}\n\n"
                 "Latest user question:\n"
-                f"{latest_question}"
+                f"{latest_question}\n\n"
+                f"{reference_instruction}"
             )
-        return latest_question
+        return f"{latest_question}\n\n{reference_instruction}"
 
     def _is_politics_sensitive(self, text: str) -> bool:
         lowered = text.lower()
@@ -357,10 +372,10 @@ class PremiumDirectAnswerService:
     def _reference_status_sources(self, *, is_zh: bool) -> list[str]:
         if is_zh:
             return [
-                "直接 LLM 快速答复 — 未进行 Schedule 2、本地法规库或官方来源核对；如需正式来源引用，请切换到默认法律核对模式。"
+                "直接 LLM 快速答复 — 答复正文会列出可核对来源；但未进行 Schedule 2、本地法规库或官方来源实时核对。"
             ]
         return [
-            "Direct LLM quick answer — not checked against Schedule 2, the local legal database, or official sources. Use Default legal check for formal source references."
+            "Direct LLM quick answer — the answer body lists sources to verify, but it was not live-checked against Schedule 2, the local legal database, or official sources."
         ]
 
     def _politics_block_response(
