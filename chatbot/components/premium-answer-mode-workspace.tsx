@@ -8,7 +8,9 @@ type AssistantMode = "default_legal_pipeline" | "premium_direct_gpt55_high";
 const ASSISTANT_MODE_STORAGE_KEY = "immigration-assistant-mode";
 
 function isAssistantMode(value: string | null): value is AssistantMode {
-  return value === "default_legal_pipeline" || value === "premium_direct_gpt55_high";
+  return (
+    value === "default_legal_pipeline" || value === "premium_direct_gpt55_high"
+  );
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -49,7 +51,8 @@ export function PremiumAnswerModeWorkspace() {
 
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
-      const isPremium = assistantModeRef.current === "premium_direct_gpt55_high";
+      const isPremium =
+        assistantModeRef.current === "premium_direct_gpt55_high";
       const method = String(init?.method ?? "GET").toUpperCase();
 
       if (
@@ -68,7 +71,10 @@ export function PremiumAnswerModeWorkspace() {
             }),
           });
         } catch (error) {
-          console.warn("Unable to route premium direct request; using default route", error);
+          console.warn(
+            "Unable to route premium direct request; using default route",
+            error
+          );
         }
       }
 
@@ -92,26 +98,39 @@ export function PremiumAnswerModeWorkspace() {
               Choose speed or verification before sending the next question
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Default legal check uses the current Schedule/RAG verification pipeline. GPT-5.5 High quick answer keeps the politics-sensitive filter, then skips the slower legal-source helper chain for a model-only answer.
+              Default legal check uses the current Schedule/RAG verification
+              pipeline. GPT-5.5 High quick answer keeps the politics-sensitive
+              filter, then skips the slower legal-source helper chain for a
+              model-only answer.
             </p>
           </div>
 
           <div className="mt-4 min-w-[280px] sm:mt-0">
-            <label className="block text-xs font-medium text-slate-500" htmlFor="assistant-mode-select">
+            <label
+              className="block text-xs font-medium text-slate-500"
+              htmlFor="assistant-mode-select"
+            >
               Processing mode
             </label>
             <select
               className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
               id="assistant-mode-select"
-              onChange={(event) => setAssistantMode(event.target.value as AssistantMode)}
+              onChange={(event) =>
+                setAssistantMode(event.target.value as AssistantMode)
+              }
               value={assistantMode}
             >
-              <option value="default_legal_pipeline">Default legal check</option>
-              <option value="premium_direct_gpt55_high">GPT-5.5 High quick answer</option>
+              <option value="default_legal_pipeline">
+                Default legal check
+              </option>
+              <option value="premium_direct_gpt55_high">
+                GPT-5.5 High quick answer
+              </option>
             </select>
             {assistantMode === "premium_direct_gpt55_high" ? (
               <p className="mt-2 text-xs leading-5 text-amber-700">
-                Fast mode is not source-verified. Use it for customer-friendly first views, not final case advice.
+                Fast mode is not source-verified. Use it for customer-friendly
+                first views, not final case advice.
               </p>
             ) : (
               <p className="mt-2 text-xs leading-5 text-slate-500">

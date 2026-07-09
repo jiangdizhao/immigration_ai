@@ -267,7 +267,7 @@ function uniqueStrings(values: string[]) {
   );
 }
 
-function pfvdLiveChunkCount(debug: Record<string, any>) {
+function _pfvdLiveChunkCount(debug: Record<string, any>) {
   const value =
     debug.proposal_first_verification_depth?.evidence_summary?.live_chunk_count;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -287,7 +287,10 @@ function normalizedLiveFetchUsedFromDebug(dbg: Record<string, any>) {
 }
 
 function normalizedLiveResultCountFromDebug(dbg: Record<string, any>) {
-  if (typeof dbg.live_result_count === "number" && Number.isFinite(dbg.live_result_count)) {
+  if (
+    typeof dbg.live_result_count === "number" &&
+    Number.isFinite(dbg.live_result_count)
+  ) {
     return dbg.live_result_count;
   }
   return pfvdLiveChunkCountFromDebug(dbg);
@@ -514,7 +517,7 @@ function logWidgetDebug(params: {
   );
   console.log("liveFetchUsed:", normalizedLiveFetchUsedFromDebug(dbg));
   console.log("liveDomainsUsed:", dbg.live_domains_used ?? []);
-  console.log("liveResultCount:",normalizedLiveResultCountFromDebug(dbg));
+  console.log("liveResultCount:", normalizedLiveResultCountFromDebug(dbg));
   console.log("topTitles:", dbg.top_titles ?? []);
   console.log("sourceTypeCounts:", dbg.source_type_counts ?? {});
   console.log("authorityCounts:", dbg.authority_counts ?? {});
@@ -603,7 +606,9 @@ function logWidgetDebug(params: {
   );
   console.log(
     "debugHiddenSourceRefs:",
-    pfvd?.debug_hidden_source_refs ?? customerQuality?.debug_hidden_source_refs ?? []
+    pfvd?.debug_hidden_source_refs ??
+      customerQuality?.debug_hidden_source_refs ??
+      []
   );
   console.log(
     "legacySchedule2Exhaustive:",

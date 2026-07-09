@@ -53,7 +53,7 @@ type ResponseLanguage = "en" | "zh";
 type LegalServiceResponse = {
   answer?: string;
   response_language?: string | null;
-  citations?: Array<Record<string, any>>;
+  citations?: Record<string, any>[];
   compact_sources?: string[];
   user_display_mode?: string | null;
   follow_up_questions?: string[];
@@ -64,7 +64,7 @@ type LegalServiceResponse = {
   matter_id?: string | null;
   conversation_state?: string | null;
   case_hypothesis?: Record<string, any> | null;
-  fact_slot_states?: Array<Record<string, any>> | null;
+  fact_slot_states?: Record<string, any>[] | null;
   interaction_plan?: Record<string, any> | null;
   retrieval_debug?: Record<string, any>;
 };
@@ -246,7 +246,10 @@ async function fetchLegalServiceDirect(params: {
   }
 
   try {
-    return { ok: true as const, data: JSON.parse(bodyText) as LegalServiceResponse };
+    return {
+      ok: true as const,
+      data: JSON.parse(bodyText) as LegalServiceResponse,
+    };
   } catch (error) {
     console.error(
       "premium direct legal-service JSON parse failed:",
@@ -291,7 +294,10 @@ export async function POST(request: Request) {
       : null;
 
     if (frontendChatId && !ownedConversation) {
-      return Response.json({ error: "Conversation not found" }, { status: 404 });
+      return Response.json(
+        { error: "Conversation not found" },
+        { status: 404 }
+      );
     }
 
     const question = extractLatestUserText(messages);
@@ -342,9 +348,10 @@ export async function POST(request: Request) {
       data.response_language,
       responseLanguage
     );
-    const finalText = data.answer?.trim() || legalServiceFallbackText(finalResponseLanguage);
+    const finalText =
+      data.answer?.trim() || legalServiceFallbackText(finalResponseLanguage);
     const compactSources = data.compact_sources ?? [];
-    const normalizedCitations: Array<Record<string, any>> = [];
+    const normalizedCitations: Record<string, any>[] = [];
     const persistedAssistantMetadata = {
       type: "metadata",
       compactSources,
@@ -389,7 +396,10 @@ export async function POST(request: Request) {
           ],
         });
       } catch (error) {
-        console.warn("Failed to persist premium direct workspace messages", error);
+        console.warn(
+          "Failed to persist premium direct workspace messages",
+          error
+        );
       }
 
       if (data.matter_id) {
@@ -408,7 +418,10 @@ export async function POST(request: Request) {
     }
 
     if (SHOW_WIDGET_DEBUG) {
-      console.log("premiumDirectAnswer:", data.retrieval_debug?.premium_direct_answer ?? null);
+      console.log(
+        "premiumDirectAnswer:",
+        data.retrieval_debug?.premium_direct_answer ?? null
+      );
       console.log("premiumDirectAnswerPreview:", finalText.slice(0, 300));
     }
 

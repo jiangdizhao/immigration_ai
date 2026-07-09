@@ -188,7 +188,7 @@ function InlineRichText({ text }: { text: string }) {
   );
 }
 
-function AssistantFormattedText({ text }: { text: string }) {
+function _AssistantFormattedText({ text }: { text: string }) {
   const lines = keyedTextLines(text);
 
   return (
