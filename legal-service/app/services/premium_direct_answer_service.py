@@ -71,13 +71,12 @@ class PremiumDirectAnswerService:
     - local politics-sensitive gate before the model call;
     - the answer-model input is compact history plus the latest user question;
     - try GPT-5.5 High first, then silently fall back to GPT-5.4-mini;
-    - upstream OpenAI failures fail fast so the frontend does not wait for minutes.
+    - upstream OpenAI failures fail fast so the frontend does not wait for minutes;
+    - direct answers show transparent reference status, not invented legal citations.
     """
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        # Backward-compatible env names are kept: PREMIUM_DIRECT_MODEL and
-        # PREMIUM_DIRECT_REASONING_EFFORT now mean the primary direct model.
         self.primary_model = os.getenv(
             "PREMIUM_DIRECT_PRIMARY_MODEL",
             os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.5"),
@@ -100,8 +99,6 @@ class PremiumDirectAnswerService:
         self.fallback_timeout_seconds = float(
             os.getenv("PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS", "55")
         )
-        # Do not inherit OPENAI_MAX_RETRIES here. A retryable 520 may wait 60 seconds
-        # before retrying, which can exceed the frontend route timeout and cause AbortError.
         self.max_retries = int(os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", "0"))
         self.max_history_turns = int(os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TURNS", "6"))
         self.max_history_chars_per_turn = int(
@@ -171,7 +168,7 @@ class PremiumDirectAnswerService:
             missing_facts=[],
             follow_up_questions=[],
             citations=[],
-            compact_sources=[],
+            compact_sources=self._reference_status_sources(is_zh=is_zh),
             escalate=high_risk,
             next_action="suggest_consultation" if high_risk else "answer",
             retrieval_debug={
@@ -181,6 +178,7 @@ class PremiumDirectAnswerService:
                 "premium_direct_answer": {
                     "used": True,
                     "source_verified": False,
+                    "reference_status_shown": True,
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
                     "answer_model_input": "lightweight_history_plus_latest_user_question",
@@ -296,7 +294,6 @@ class PremiumDirectAnswerService:
                 )
                 return (getattr(response, "output_text", "") or "").strip()
             except TypeError:
-                # Compatibility fallback for models/SDK signatures that do not accept reasoning.
                 pass
         response = client.responses.create(
             model=model,
@@ -357,6 +354,15 @@ class PremiumDirectAnswerService:
         lowered = text.lower()
         return any(term in lowered for term in HIGH_RISK_TERMS)
 
+    def _reference_status_sources(self, *, is_zh: bool) -> list[str]:
+        if is_zh:
+            return [
+                "直接 LLM 快速答复 — 未进行 Schedule 2、本地法规库或官方来源核对；如需正式来源引用，请切换到默认法律核对模式。"
+            ]
+        return [
+            "Direct LLM quick answer — not checked against Schedule 2, the local legal database, or official sources. Use Default legal check for formal source references."
+        ]
+
     def _politics_block_response(
         self,
         *,
@@ -380,7 +386,9 @@ class PremiumDirectAnswerService:
             missing_facts=[],
             follow_up_questions=[],
             citations=[],
-            compact_sources=[],
+            compact_sources=[
+                "Local politics-sensitive safety filter — no answer model was called."
+            ],
             escalate=False,
             next_action="answer",
             retrieval_debug={
@@ -392,6 +400,7 @@ class PremiumDirectAnswerService:
                     "politics_filter_type": "local_lightweight_gate",
                     "answer_model_called": False,
                     "answer_model_input": None,
+                    "reference_status_shown": True,
                 },
             },
         )
