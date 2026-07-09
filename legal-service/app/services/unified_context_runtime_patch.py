@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from app.schemas.query import QueryRequest
+from app.schemas.query import QueryRequest, QueryResponse
 from app.services.conversation_memory_service import ConversationMemoryService
 from app.services.premium_direct_answer_service import PremiumDirectAnswerService
 from app.services.proposal_first_verification_depth_answer_service import (
@@ -222,6 +222,37 @@ def apply_patch() -> None:
                 logger.exception("Proposal-first answer trace recording failed; public response is unchanged.")
             return response
         except Exception as exc:  # pragma: no cover - production safety fallback
+            if getattr(payload, "assistant_mode", "default_legal_pipeline") == "premium_direct_gpt55_high":
+                logger.exception("Premium direct path failed; returning direct-lane fallback without slow legal pipeline: %s", exc)
+                return QueryResponse(
+                    matter_id=getattr(payload, "matter_id", None),
+                    answer=(
+                        "抱歉，GPT-5.5 High 快速答复暂时不可用。请切换到默认法律核对模式，或联系律师人工确认。"
+                        if language_context.response_language == "zh"
+                        else "Sorry, the GPT-5.5 High quick answer is temporarily unavailable. Please switch to the default legal-check mode, or contact the lawyer for manual confirmation."
+                    ),
+                    response_language=language_context.response_language,
+                    confidence="low",
+                    user_display_mode="general_with_warning",
+                    issue_type="premium_direct_answer",
+                    missing_facts=[],
+                    follow_up_questions=[],
+                    citations=[],
+                    compact_sources=[],
+                    escalate=True,
+                    next_action="suggest_consultation",
+                    retrieval_debug={
+                        "original_question": original_question,
+                        "effective_question": getattr(effective_payload, "question", original_question),
+                        "premium_direct_answer": {
+                            "used": False,
+                            "error": str(exc)[:500],
+                            "error_type": exc.__class__.__name__,
+                            "fallback_to_slow_legal_pipeline": False,
+                        },
+                    },
+                )
+
             fallback_started = time.perf_counter()
             logger.exception("Proposal-first verification-depth path failed; falling back to original handler: %s", exc)
             response = original_handle_query(self, db, payload)
