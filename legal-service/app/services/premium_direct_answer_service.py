@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -8,6 +9,7 @@ from openai import OpenAI
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 
+logger = logging.getLogger(__name__)
 
 POLITICS_SENSITIVE_TERMS = (
     "election",
@@ -67,17 +69,18 @@ class PremiumDirectAnswerService:
     - no full semantic-turn router;
     - lightweight recent chat history is kept for continuity;
     - local politics-sensitive gate before the model call;
-    - the answer-model input is compact history plus the latest user question.
+    - the answer-model input is compact history plus the latest user question;
+    - upstream OpenAI failures fail fast so the frontend does not wait for minutes.
     """
 
     def __init__(self) -> None:
         self.settings = get_settings()
         self.model = os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.5")
-        self.reasoning_effort = os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "high")
-        self.timeout_seconds = float(os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "90"))
-        self.max_retries = int(
-            os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", os.getenv("OPENAI_MAX_RETRIES", "1"))
-        )
+        self.reasoning_effort = os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "medium")
+        self.timeout_seconds = float(os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "55"))
+        # Do not inherit OPENAI_MAX_RETRIES here. A retryable 520 may wait 60 seconds
+        # before retrying, which can exceed the frontend route timeout and cause AbortError.
+        self.max_retries = int(os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", "0"))
         self.max_history_turns = int(os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TURNS", "6"))
         self.max_history_chars_per_turn = int(
             os.getenv("PREMIUM_DIRECT_MAX_HISTORY_CHARS_PER_TURN", "700")
@@ -129,6 +132,16 @@ class PremiumDirectAnswerService:
 
         if not question_for_model:
             return self._empty_question_response(is_zh=is_zh, matter_id=matter_id)
+
+        logger.info(
+            "premium_direct_openai_request model=%s reasoning_effort=%s timeout_seconds=%s max_retries=%s history_chars=%s input_chars=%s",
+            self.model,
+            self.reasoning_effort,
+            self.timeout_seconds,
+            self.max_retries,
+            len(history_text),
+            len(model_input),
+        )
 
         try:
             response = self.client.responses.create(
