@@ -14,6 +14,7 @@ import { checkIpRateLimit } from "@/lib/ratelimit";
 export const maxDuration = 180;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
+const LEGAL_SERVICE_DIRECT_TIMEOUT_MS = 170_000;
 
 const textPartSchema = z.object({
   type: z.literal("text"),
@@ -179,8 +180,8 @@ function emptyWidgetResponse(
 
 function legalServiceFallbackText(responseLanguage: ResponseLanguage): string {
   return responseLanguage === "zh"
-    ? "抱歉，GPT-5.5 High 快速答复暂时不可用。请切换到默认法律核对模式，或联系律师人工确认。"
-    : "Sorry, the GPT-5.5 High quick answer is temporarily unavailable. Please switch to the default legal-check mode, or contact the lawyer for manual confirmation.";
+    ? "抱歉，GPT-5.5 快速答复暂时不可用。请切换到默认法律核对模式，或联系律师人工确认。"
+    : "Sorry, the GPT-5.5 quick answer is temporarily unavailable. Please switch to the default legal-check mode, or contact the lawyer for manual confirmation.";
 }
 
 function previewResponseBody(value: string): string {
@@ -195,7 +196,10 @@ async function fetchLegalServiceDirect(params: {
   matterId: string | null;
 }) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    LEGAL_SERVICE_DIRECT_TIMEOUT_MS
+  );
 
   let response: Response;
   try {
@@ -454,7 +458,7 @@ export async function POST(request: Request) {
 
     return Response.json(
       {
-        text: "Sorry, I could not generate a GPT-5.5 High quick answer right now.",
+        text: "Sorry, I could not generate a GPT-5.5 quick answer right now.",
         responseLanguage: "en",
         citations: [],
         compactSources: [],
