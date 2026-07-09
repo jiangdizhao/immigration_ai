@@ -30,14 +30,23 @@ def main() -> None:
     assert "semantic_turn_router_skipped" in runtime_patch
     assert '"frontend_messages": []' not in runtime_patch
 
-    assert "reasoning={\"effort\": self.reasoning_effort}" in direct_service
     assert "source_verified" in direct_service
-    assert "PREMIUM_DIRECT_MODEL" in direct_service
     assert "POLITICS_SENSITIVE_TERMS" in direct_service
     assert "_history_text" in direct_service
     assert "lightweight_history_plus_latest_user_question" in direct_service
     assert "system_prompt_sent_to_answer_model" in direct_service
     assert "frontend_history_sent_to_answer_model" in direct_service
+
+    assert "PREMIUM_DIRECT_PRIMARY_MODEL" in direct_service
+    assert "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT" in direct_service
+    assert "PREMIUM_DIRECT_FALLBACK_MODEL" in direct_service
+    assert '"gpt-5.5"' in direct_service
+    assert '"gpt-5.4-mini"' in direct_service
+    assert "_answer_with_silent_fallback" in direct_service
+    assert "used_fallback_model" in direct_service
+    assert "serving_model" in direct_service
+    assert "AI quick answer" in direct_service
+    assert "GPT-5.5 quick answer" not in direct_service
 
     print("OK: premium direct backend mode contract is installed")
 
