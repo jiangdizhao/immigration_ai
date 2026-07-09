@@ -6,6 +6,7 @@ from typing import Any
 
 from app.schemas.query import QueryRequest
 from app.services.conversation_memory_service import ConversationMemoryService
+from app.services.premium_direct_answer_service import PremiumDirectAnswerService
 from app.services.proposal_first_verification_depth_answer_service import (
     ProposalFirstVerificationDepthAnswerService,
 )
@@ -74,6 +75,69 @@ def apply_patch() -> None:
                     semantic_turn=semantic_turn,
                     timing=timing,
                 )
+
+            if effective_payload.assistant_mode == "premium_direct_gpt55_high":
+                logger.info("Unified runtime selected premium direct GPT-5.5 High path after politics filter")
+                premium_service = getattr(self, "premium_direct_answer_service", None) or PremiumDirectAnswerService()
+                self.premium_direct_answer_service = premium_service
+                semantic_turn_debug = (
+                    semantic_turn.model_dump() if hasattr(semantic_turn, "model_dump") else {}
+                )
+                response = premium_service.answer(
+                    payload=QueryRequest(**{**effective_payload.model_dump(), "matter_id": matter.id}),
+                    original_question=original_question,
+                    effective_question=effective_payload.question,
+                    response_language=language_context.response_language,
+                    matter_id=matter.id,
+                    semantic_turn_debug=semantic_turn_debug,
+                )
+                response.matter_id = matter.id
+
+                state = current_state.model_copy(deep=True)
+                state.latest_question = effective_payload.question
+                state.last_contextualized_question = effective_payload.question
+                state.issue_type = response.issue_type
+                state.operation_type = "premium_direct_gpt55_high"
+                state.next_action = response.next_action
+                state.last_answer_type = "premium_direct_model_only"
+                state.carried_intake_facts = dict(state.carried_intake_facts or {})
+                state.carried_intake_facts["last_assistant_mode"] = "premium_direct_gpt55_high"
+                state = self.state_machine.append_turn_pair(
+                    state=state,
+                    user_question=effective_payload.question,
+                    effective_question=effective_payload.question,
+                    assistant_answer=response.answer,
+                    next_action=response.next_action,
+                    confidence=response.confidence,
+                )
+                self._update_matter_from_state(
+                    matter=matter,
+                    payload=effective_payload,
+                    state=state,
+                    effective_question=effective_payload.question,
+                )
+                db.commit()
+                db.refresh(matter)
+                try:
+                    self.review_trace_service.safe_record_answer_trace(
+                        matter=matter,
+                        payload=payload,
+                        response=response,
+                        state=state,
+                        original_question=original_question,
+                        effective_question=effective_payload.question,
+                        stage_timing={
+                            "engine": "premium_direct_gpt55_high",
+                            "workflow": "politics_filter_then_direct_model_answer",
+                        },
+                        extra_debug={
+                            "runtime_patch": "unified_context_runtime_patch",
+                            "answer_trace_source": "premium_direct_gpt55_high",
+                        },
+                    )
+                except Exception:  # pragma: no cover - ReviewTraceService should already be defensive.
+                    logger.exception("Premium direct answer trace recording failed; public response is unchanged.")
+                return response
 
             if self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
                 logger.info("Unified runtime selected general-topic fast path before PFVD")
