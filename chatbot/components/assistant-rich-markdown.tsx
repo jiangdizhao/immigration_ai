@@ -109,7 +109,11 @@ function InlineRichText({ text }: { text: string }) {
         if (!value) {
           return null;
         }
-        if (value.startsWith("**") && value.endsWith("**") && value.length > 4) {
+        if (
+          value.startsWith("**") &&
+          value.endsWith("**") &&
+          value.length > 4
+        ) {
           return <strong key={key}>{value.slice(2, -2)}</strong>;
         }
         if (value.startsWith("`") && value.endsWith("`") && value.length > 2) {
@@ -145,8 +149,18 @@ function InlineRichText({ text }: { text: string }) {
   );
 }
 
-function MarkdownTable({ header, rows }: { header: string[]; rows: string[][] }) {
-  const columnCount = Math.max(header.length, ...rows.map((row) => row.length), 1);
+function MarkdownTable({
+  header,
+  rows,
+}: {
+  header: string[];
+  rows: string[][];
+}) {
+  const columnCount = Math.max(
+    header.length,
+    ...rows.map((row) => row.length),
+    1
+  );
   const normalizedHeader = normalizeTableRows([header], columnCount)[0] ?? [];
   const normalizedRows = normalizeTableRows(rows, columnCount);
   const keyedHeader = keyedTableCells(normalizedHeader, "header");
@@ -197,32 +211,46 @@ function renderLine(line: string, key: string): ReactNode {
     return <div className="h-1" key={`blank-${key}`} />;
   }
   if (trimmed === "---") {
-    return <div className="my-3 border-t border-slate-200" key={`rule-${key}`} />;
+    return (
+      <div className="my-3 border-t border-slate-200" key={`rule-${key}`} />
+    );
   }
   if (trimmed.startsWith("### ")) {
     return (
-      <h4 className="pt-2 text-sm font-semibold leading-6 text-slate-900" key={`h3-${key}`}>
+      <h4
+        className="pt-2 text-sm font-semibold leading-6 text-slate-900"
+        key={`h3-${key}`}
+      >
         <InlineRichText text={trimmed.replace(/^###\s+/, "")} />
       </h4>
     );
   }
   if (trimmed.startsWith("## ")) {
     return (
-      <h3 className="pt-2 text-base font-semibold leading-7 text-slate-950" key={`h2-${key}`}>
+      <h3
+        className="pt-2 text-base font-semibold leading-7 text-slate-950"
+        key={`h2-${key}`}
+      >
         <InlineRichText text={trimmed.replace(/^##\s+/, "")} />
       </h3>
     );
   }
   if (trimmed.startsWith("# ")) {
     return (
-      <h2 className="pt-2 text-lg font-semibold leading-8 text-slate-950" key={`h1-${key}`}>
+      <h2
+        className="pt-2 text-lg font-semibold leading-8 text-slate-950"
+        key={`h1-${key}`}
+      >
         <InlineRichText text={trimmed.replace(/^#\s+/, "")} />
       </h2>
     );
   }
   if (/^[-*]\s+/.test(trimmed)) {
     return (
-      <div className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800" key={`li-${key}`}>
+      <div
+        className="flex gap-2 pl-1 text-[15px] leading-7 text-slate-800"
+        key={`li-${key}`}
+      >
         <span className="mt-[0.65rem] size-1.5 shrink-0 rounded-full bg-slate-400" />
         <span>
           <InlineRichText text={trimmed.replace(/^[-*]\s+/, "")} />
@@ -267,7 +295,10 @@ export function AssistantRichMarkdown({ text }: { text: string }) {
       const header = splitMarkdownTableRow(line);
       index += 2;
       const rows: string[][] = [];
-      while (index < lines.length && isPotentialMarkdownTableRow(lines[index] ?? "")) {
+      while (
+        index < lines.length &&
+        isPotentialMarkdownTableRow(lines[index] ?? "")
+      ) {
         rows.push(splitMarkdownTableRow(lines[index] ?? ""));
         index += 1;
       }
@@ -289,5 +320,9 @@ export function AssistantRichMarkdown({ text }: { text: string }) {
     index += 1;
   }
 
-  return <div className="min-w-0 max-w-full space-y-2 whitespace-normal">{blocks}</div>;
+  return (
+    <div className="min-w-0 max-w-full space-y-2 whitespace-normal">
+      {blocks}
+    </div>
+  );
 }
