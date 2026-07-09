@@ -34,8 +34,13 @@ def main() -> None:
     assert "POLITICS_SENSITIVE_TERMS" in direct_service
     assert "_history_text" in direct_service
     assert "lightweight_history_plus_latest_user_question" in direct_service
+    assert "lightweight_history_plus_latest_user_question_with_references_instruction" in direct_service
     assert "system_prompt_sent_to_answer_model" in direct_service
     assert "frontend_history_sent_to_answer_model" in direct_service
+    assert "References / sources to verify" in direct_service
+    assert "参考 / 核对来源" in direct_service
+    assert "Do not invent exact URLs" in direct_service
+    assert "model_prompt_includes_references_section" in direct_service
 
     assert "PREMIUM_DIRECT_PRIMARY_MODEL" in direct_service
     assert "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT" in direct_service
