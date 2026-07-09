@@ -1,4 +1,4 @@
-import { ImmigrationAIWorkspace } from "@/components/immigration-ai-workspace";
+import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -39,7 +39,7 @@ export default function AIWorkspacePage() {
           </div>
         </section>
 
-        <ImmigrationAIWorkspace />
+        <PremiumAnswerModeWorkspace />
       </main>
       <SiteFooter />
     </div>
