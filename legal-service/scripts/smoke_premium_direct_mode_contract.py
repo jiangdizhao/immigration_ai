@@ -15,11 +15,14 @@ def main() -> None:
     runtime_patch = _read("app/services/unified_context_runtime_patch.py")
     direct_service = _read("app/services/premium_direct_answer_service.py")
 
+    # Existing frontend/backend mode contract remains backward-compatible.
     assert "assistant_mode" in query_schema
     assert "premium_direct_gpt55_high" in query_schema
     assert "default_legal_pipeline" in query_schema
 
-    premium_gate_index = runtime_patch.index('payload.assistant_mode == "premium_direct_gpt55_high"')
+    premium_gate_index = runtime_patch.index(
+        'payload.assistant_mode == "premium_direct_gpt55_high"'
+    )
     semantic_index = runtime_patch.index("_analyze_semantic_turn")
     assert premium_gate_index < semantic_index, (
         "premium direct mode must be intercepted before the full semantic-turn router"
@@ -30,35 +33,53 @@ def main() -> None:
     assert "semantic_turn_router_skipped" in runtime_patch
     assert '"frontend_messages": []' not in runtime_patch
 
-    assert "source_verified" in direct_service
+    # Direct-lane safety and conversation continuity.
     assert "POLITICS_SENSITIVE_TERMS" in direct_service
     assert "_history_text" in direct_service
-    assert "lightweight_history_plus_latest_user_question" in direct_service
-    assert "lightweight_history_plus_latest_user_question_with_all_references_instruction" in direct_service
-    assert "system_prompt_sent_to_answer_model" in direct_service
     assert "frontend_history_sent_to_answer_model" in direct_service
-    assert "References / sources to verify" in direct_service
-    assert "参考 / 核对来源" in direct_service
-    assert "Do not invent exact URLs" in direct_service
-    assert "do not impose an artificial limit" in direct_service
-    assert "不要人为限制数量" in direct_service
-    assert "_extract_reference_lines" in direct_service
-    assert "from_direct_llm_answer_body_without_cap" in direct_service
-    assert "references_are_model_provided" in direct_service
-    assert "reference_count" in direct_service
+    assert "system_prompt_sent_to_answer_model" in direct_service
+    assert "'the second'" in direct_service
+    assert "Schedule 3" in direct_service
 
+    # Terra primary, Luna fallback and explicit serving-model diagnostics.
     assert "PREMIUM_DIRECT_PRIMARY_MODEL" in direct_service
     assert "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT" in direct_service
+    assert "PREMIUM_DIRECT_PRIMARY_MAX_RETRIES" in direct_service
     assert "PREMIUM_DIRECT_FALLBACK_MODEL" in direct_service
-    assert '"gpt-5.5"' in direct_service
-    assert '"gpt-5.4-mini"' in direct_service
-    assert "_answer_with_silent_fallback" in direct_service
+    assert "PREMIUM_DIRECT_FALLBACK_REASONING_EFFORT" in direct_service
+    assert "PREMIUM_DIRECT_FALLBACK_MAX_RETRIES" in direct_service
+    assert '"gpt-5.6-terra"' in direct_service
+    assert '"gpt-5.6-luna"' in direct_service
+    assert "_answer_with_fallback" in direct_service
     assert "used_fallback_model" in direct_service
     assert "serving_model" in direct_service
-    assert "AI quick answer" in direct_service
-    assert "GPT-5.5 quick answer" not in direct_service
 
-    print("OK: premium direct backend mode contract is installed")
+    # Genuine Responses API agentic web search and actual-source extraction.
+    assert "PREMIUM_DIRECT_WEB_SEARCH_ENABLED" in direct_service
+    assert "PREMIUM_DIRECT_WEB_SEARCH_REQUIRED" in direct_service
+    assert "PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE" in direct_service
+    assert '"type": "web_search"' in direct_service
+    assert '"type": "web_search_preview"' in direct_service
+    assert '"tool_choice": "required" if self.web_search_required else "auto"' in direct_service
+    assert '"include": ["web_search_call.action.sources"]' in direct_service
+    assert "_extract_web_sources" in direct_service
+    assert "_append_actual_web_sources" in direct_service
+    assert "Actual web-search sources" in direct_service
+    assert "实际网页搜索来源" in direct_service
+    assert "web_search_source_count" in direct_service
+    assert "web_search_returned_sources" in direct_service
+    assert "references_are_model_provided" in direct_service
+    assert "actual_web_search_sources" in direct_service
+    assert "source_verified" in direct_service
+
+    # The old closed-book model defaults must no longer be the direct-lane defaults.
+    assert '"gpt-5.5"' not in direct_service
+    assert '"gpt-5.4-mini"' not in direct_service
+    assert "AI quick research answer used live web search" in direct_service
+
+    print(
+        "OK: premium direct Terra/Luna agentic web-search contract is installed"
+    )
 
 
 if __name__ == "__main__":
