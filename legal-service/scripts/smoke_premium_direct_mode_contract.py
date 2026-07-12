@@ -68,8 +68,9 @@ def main() -> None:
     assert "实际网页搜索来源" in direct_service
     assert "web_search_source_count" in direct_service
     assert "web_search_returned_sources" in direct_service
+    assert "live_web_search_used" in direct_service
+    assert "openai_responses_web_search_sources_without_cap" in direct_service
     assert "references_are_model_provided" in direct_service
-    assert "actual_web_search_sources" in direct_service
     assert "source_verified" in direct_service
 
     # The old closed-book model defaults must no longer be the direct-lane defaults.
