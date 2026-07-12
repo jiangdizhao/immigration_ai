@@ -414,7 +414,7 @@ class PremiumDirectAnswerService:
                             "search_context_size": self.web_search_context_size,
                         }
                     ],
-                    "tool_choice": "auto",
+                    "tool_choice": "required" if self.web_search_required else "auto",
                     "include": ["web_search_call.action.sources"],
                 }
             )
