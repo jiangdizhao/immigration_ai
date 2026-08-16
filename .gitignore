@@ -35,6 +35,7 @@ cleanup_reports/
 
 # Local test files
 chatbot/my_test/
+chatbot/test-results/
 
 # Local handoff docs, if not intended for repo
 doc/*.docx
