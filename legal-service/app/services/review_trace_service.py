@@ -10,6 +10,8 @@ from app.db.models import AnswerTrace, Matter
 from app.db.session import SessionLocal
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.state import MatterState
+from app.schemas.agent import AgentExecutionMetrics
+from app.services.agent_observability_service import AgentObservabilityService
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class ReviewTraceService:
         legal_decision: Any | None = None,
         communication_plan: Any | None = None,
         extra_debug: dict[str, Any] | None = None,
+        execution_metrics: AgentExecutionMetrics | dict[str, Any] | None = None,
     ) -> str | None:
         if not getattr(self.settings, "enable_lawyer_review_trace", False):
             return None
@@ -47,6 +50,10 @@ class ReviewTraceService:
         try:
             state_dump = self._safe_json(state)
             response_dump = self._safe_json(response)
+            active_observability = AgentObservabilityService().trace_payload()
+            metrics_dump = self._safe_json(execution_metrics)
+            if metrics_dump is None and active_observability is not None:
+                metrics_dump = active_observability.get("execution_metrics")
             trace_payload = {
                 "request": self._safe_json(payload),
                 "response": response_dump,
@@ -64,6 +71,13 @@ class ReviewTraceService:
                 "stage_timing": self._safe_json(stage_timing or {}),
                 "extra_debug": self._safe_json(extra_debug or {}),
                 "git_commit_sha": self.git_commit_sha,
+                "architecture_version": (
+                    active_observability.get("architecture_version")
+                    if active_observability is not None
+                    else getattr(response, "architecture_version", None)
+                ),
+                "agent_observability": self._safe_json(active_observability),
+                "execution_metrics": metrics_dump,
             }
 
             operation_type = None

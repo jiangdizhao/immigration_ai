@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,12 +28,81 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     enable_lawyer_review_trace: bool = Field(default=False, alias="ENABLE_LAWYER_REVIEW_TRACE")
 
+    # v2.1.1 Phase 1 contracts. ANSWER_ENGINE remains legacy/v1 until a later
+    # separately approved rollout; the remaining values do not activate calls.
+    answer_engine: str = Field(default="v1", alias="ANSWER_ENGINE")
+    default_agent_model: str = Field(default="gpt-5.6-luna", alias="DEFAULT_AGENT_MODEL")
+    premium_agent_model: str = Field(default="gpt-5.6-sol", alias="PREMIUM_AGENT_MODEL")
+    legal_fact_check_model: str = Field(
+        default="gpt-5.6-luna", alias="LEGAL_FACT_CHECK_MODEL"
+    )
+    agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
+    agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
+    agent_max_provider_calls: int = Field(
+        default=3, ge=1, le=20, alias="AGENT_MAX_PROVIDER_CALLS"
+    )
+    agent_max_retries: int = Field(default=1, ge=0, le=10, alias="AGENT_MAX_RETRIES")
+    default_turn_deadline_ms: int = Field(
+        default=40000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
+    )
+    premium_turn_deadline_ms: int = Field(
+        default=45000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
+    )
+    default_answer_research_target_ms: int = Field(
+        default=32000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
+    )
+    premium_answer_research_target_ms: int = Field(
+        default=37000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
+    )
+    legal_fact_check_target_ms: int = Field(
+        default=8000, ge=1, alias="LEGAL_FACT_CHECK_TARGET_MS"
+    )
+    legal_evidence_postcondition_enabled: bool = Field(
+        default=True, alias="LEGAL_EVIDENCE_POSTCONDITION_ENABLED"
+    )
+    web_search_enabled: bool = Field(default=False, alias="WEB_SEARCH_ENABLED")
+    exact_legal_lookup_enabled: bool = Field(
+        default=False, alias="EXACT_LEGAL_LOOKUP_ENABLED"
+    )
+    lightrag_enabled: bool = Field(default=False, alias="LIGHTRAG_ENABLED")
+    lightrag_storage_profile: str | None = Field(
+        default=None, alias="LIGHTRAG_STORAGE_PROFILE"
+    )
+    flat_rag_tool_enabled: bool = Field(default=False, alias="FLAT_RAG_TOOL_ENABLED")
+    compact_matter_state_enabled: bool = Field(
+        default=False, alias="COMPACT_MATTER_STATE_ENABLED"
+    )
+    backend_political_failsafe_enabled: bool = Field(
+        default=False, alias="BACKEND_POLITICAL_FAILSAFE_ENABLED"
+    )
+    agent_shadow_enabled: bool = Field(default=False, alias="AGENT_SHADOW_ENABLED")
+    agent_rollout_percent_default: int = Field(
+        default=0, ge=0, le=100, alias="AGENT_ROLLOUT_PERCENT_DEFAULT"
+    )
+    agent_rollout_percent_premium: int = Field(
+        default=0, ge=0, le=100, alias="AGENT_ROLLOUT_PERCENT_PREMIUM"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_agent_deadline_targets(self):
+        if (
+            self.default_answer_research_target_ms + self.legal_fact_check_target_ms
+            > self.default_turn_deadline_ms
+        ):
+            raise ValueError("default answer/checker targets must fit inside the turn deadline")
+        if (
+            self.premium_answer_research_target_ms + self.legal_fact_check_target_ms
+            > self.premium_turn_deadline_ms
+        ):
+            raise ValueError("premium answer/checker targets must fit inside the turn deadline")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

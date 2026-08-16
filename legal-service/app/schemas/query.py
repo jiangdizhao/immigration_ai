@@ -25,7 +25,15 @@ class QueryRequest(BaseSchema):
     # Public UI processing lane. The default keeps the full legal verification pipeline.
     # The premium lane is still pre-screened for politics-sensitive content, then answers
     # directly with a high-reasoning model without Schedule/RAG/source verification.
-    assistant_mode: Literal["default_legal_pipeline", "premium_direct_gpt55_high"] = "default_legal_pipeline"
+    assistant_mode: Literal[
+        "default",
+        "premium",
+        "default_legal_pipeline",
+        "premium_direct_gpt55_high",
+    ] = "default_legal_pipeline"
+    political_gate_version: str | None = Field(default=None, max_length=100)
+    political_gate_decision_id: str | None = Field(default=None, max_length=255)
+    client_turn_id: str | None = Field(default=None, max_length=255)
     # Optional full frontend-visible message history.
     frontend_messages: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -56,3 +64,7 @@ class QueryResponse(BaseSchema):
     interaction_plan: InteractionPlan | None = None
     legal_reasoning_trace: dict[str, Any] = Field(default_factory=dict)
     retrieval_debug: dict[str, Any] = Field(default_factory=dict)
+    architecture_version: str | None = None
+    research_status: Literal["not_required", "complete", "incomplete"] | None = None
+    fact_check_status: Literal["not_required", "pass", "fix", "uncertain", "failed"] | None = None
+    trace_id: str | None = None

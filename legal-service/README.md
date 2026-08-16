@@ -1,5 +1,11 @@
 # Immigration legal service
 
+## v2.1.1 Phase 1
+
+Typed agent/tool/evidence/fact-check contracts and passive request observability are present, but `ANSWER_ENGINE=v1` remains authoritative. All new tool, shadow, compact-state, political-failsafe, and rollout flags are disabled by default. The observability deadline begins at FastAPI query acceptance; Phase 1 records the legacy request without enforcing a new legacy timeout or making any additional provider/tool call.
+
+Use `/home/rico/anaconda3/envs/torch/bin/python` for backend validation. The ignored `.env` file is the local runtime configuration; `.env.production.local.example` contains committed Phase 1 defaults without secrets.
+
 This is a separate Python backend for the immigration website. It is designed to sit beside the existing Next.js repo and provide:
 
 - structured intake endpoints

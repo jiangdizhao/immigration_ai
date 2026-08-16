@@ -11,6 +11,14 @@ legal-service/  # FastAPI legal backend, PostgreSQL/pgvector retrieval, reasonin
 
 The backend is the legal-reasoning authority. The frontend should mainly render the answer, collect structured intake facts, and forward user turns to the backend.
 
+## v2.1.1 migration status
+
+Phase 1 adds strict future-agent, tool, evidence, and fact-check contracts plus passive raw-execution observability. The customer answer path remains the existing legacy engine (`ANSWER_ENGINE=v1`): no Luna/Sol agent, new research tool, checker, compact state, or political gate is serving yet. All new rollout and tool flags default off, and the legacy default/premium paths remain the rollback baseline.
+
+The backend absolute-deadline contract starts at FastAPI query acceptance and is available to future agent operations. During Phase 1 it observes the legacy path without imposing a new timeout, so serving behavior is unchanged.
+
+Backend validation must use `/home/rico/anaconda3/envs/torch/bin/python`. Local secret-bearing settings remain in ignored `legal-service/.env`; committed examples document the safe Phase 1 defaults.
+
 ## Core backend idea
 
 The backend uses:
