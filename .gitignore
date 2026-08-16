@@ -41,7 +41,7 @@ doc/*.docx
 doc/*.csv
 doc/*.md
 doc/*.txt
-doc/immigration_ai_specification_v2.1.1_final/
+doc/local-codex-specs/
 
 # Phase 1B local container env files
 .env.phase1b.*.local
