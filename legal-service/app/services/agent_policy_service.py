@@ -158,14 +158,24 @@ FLAT_RAG_SEARCH_TOOL = {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "Search query for legal content"},
-            "top_k": {"type": "integer", "minimum": 1, "maximum": 20, "description": "Number of results to return"},
+            "top_k": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1, "maximum": 20},
+                    {"type": "null"},
+                ],
+                "description": "Number of results to return, or null for the configured default",
+            },
             "preferred_source_types": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Optional filter for source types",
+                "anyOf": [
+                    {"type": "array", "items": {"type": "string"}},
+                    {"type": "null"},
+                ],
+                "description": "Optional source-type filters, or null when no filter is requested",
             },
         },
-        "required": ["query"],
+        # OpenAI strict function schemas require every declared property to be
+        # present in required. Nullable fields preserve optional semantics.
+        "required": ["query", "top_k", "preferred_source_types"],
         "additionalProperties": False,
     },
 }

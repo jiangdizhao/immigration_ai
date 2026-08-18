@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -77,3 +78,26 @@ def test_summary_keeps_a_and_b_metrics_separate():
     assert summary["by_arm"]["luna_web"]["flat_rag_calls"] == 0
     assert summary["by_arm"]["luna_flat_web"]["flat_rag_calls"] == 1
     assert summary["by_arm"]["luna_flat_web"]["canonical_local_evidence"] == 3
+
+
+def test_arm_b_flat_rag_schema_is_strict_compatible():
+    from app.core.config import Settings
+    from app.services.agent_policy_service import AgentPolicyService
+
+    settings = Settings(
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+        FLAT_RAG_TOOL_ENABLED=True,
+    )
+    with patch("app.services.agent_policy_service.get_settings", return_value=settings):
+        policy = AgentPolicyService().build_policy(mode="default", experiment_arm="B")
+
+    flat_tool = next(tool for tool in policy.tools if tool.get("name") == "flat_rag_search")
+    parameters = flat_tool["parameters"]
+    assert flat_tool["strict"] is True
+    assert set(parameters["required"]) == set(parameters["properties"])
+    assert any(item.get("type") == "null" for item in parameters["properties"]["top_k"]["anyOf"])
+    assert any(
+        item.get("type") == "null"
+        for item in parameters["properties"]["preferred_source_types"]["anyOf"]
+    )
