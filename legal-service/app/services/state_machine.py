@@ -145,6 +145,8 @@ class StateMachine:
         base_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         metadata = dict(base_metadata or {})
+        # Preserve compact_state_v2 if present in base_metadata (dual-write)
+        compact_v2 = metadata.pop("compact_state_v2", None)
         metadata.update(
             {
                 "conversation_state": state.conversation_state,
@@ -164,6 +166,9 @@ class StateMachine:
                 "interaction_plan": state.interaction_plan.model_dump(),
             }
         )
+        # Restore compact_state_v2 if it was present (dual-write preservation)
+        if compact_v2 is not None:
+            metadata["compact_state_v2"] = compact_v2
         return metadata
 
     # ------------------------------------------------------------------

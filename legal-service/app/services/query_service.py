@@ -7,6 +7,7 @@ import logging
 import re
 import time
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,7 @@ from app.schemas.state import (
 from app.services.case_frame_service import CaseFrameService
 from app.services.case_state_service import CaseStateService
 from app.services.citation_quality_service import CitationQualityService
+from app.services.compact_matter_state_service import CompactMatterStateService
 from app.services.communication_plan_service import CommunicationPlanService
 from app.services.continuation_contract_service import ContinuationContractService
 from app.services.fact_extraction_service import FactExtractionService
@@ -230,6 +232,7 @@ class QueryService:
         self.natural_response_service = natural_response_service or NaturalResponseService()
         self.full_context_turn_resolver_service = full_context_turn_resolver_service or FullContextTurnResolverService()
         self.fast_triage_response_service = fast_triage_response_service or FastTriageResponseService()
+        self.compact_matter_state_service = CompactMatterStateService()
         self.max_history_turns = 12
 
     def run(self, db: Session, payload: QueryRequest) -> QueryResponse:
@@ -1265,6 +1268,58 @@ class QueryService:
                 "initial_question": existing_meta.get("initial_question") or payload.question,
             }
         )
+
+        # Phase 3 dual-write: update compact_state_v2 when enabled
+        from app.core.config import get_settings
+        if get_settings().compact_matter_state_enabled:
+            try:
+                compact = self.compact_matter_state_service.load_or_create(
+                    metadata_json=matter.metadata_json,
+                    matter_id=str(matter.id),
+                    session_id=matter.session_id,
+                    frontend_chat_id=matter.frontend_chat_id,
+                )
+                if compact is None:
+                    compact = self.compact_matter_state_service.initialize_state(
+                        matter_id=str(matter.id),
+                        session_id=matter.session_id,
+                        frontend_chat_id=matter.frontend_chat_id,
+                    )
+
+                # Extract option candidates from case_hypothesis if available
+                option_candidates = None
+                ch = getattr(state, "case_hypothesis", None)
+                if ch is not None and hasattr(ch, "candidates"):
+                    option_candidates = [
+                        c.model_dump() if hasattr(c, "model_dump") else dict(c)
+                        for c in (ch.candidates or [])
+                    ]
+
+                pending_offer = (state.carried_intake_facts or {}).get("pending_offer")
+
+                compact = self.compact_matter_state_service.update_after_turn(
+                    compact=compact,
+                    legacy_state=state,
+                    turn_id=str(uuid4()),
+                    user_question=payload.question,
+                    assistant_answer="",  # answer not yet available at this point
+                    issue_type=state.issue_type,
+                    operation_type=state.operation_type,
+                    visa_type=state.visa_type,
+                    next_action=state.next_action,
+                    carried_facts=dict(state.carried_intake_facts or {}),
+                    pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
+                    option_candidates=option_candidates,
+                )
+                existing_meta["compact_state_v2"] = (
+                    self.compact_matter_state_service.to_metadata_value(compact)
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to update compact_state_v2 for matter %s; legacy state preserved",
+                    matter.id,
+                )
+
         matter.metadata_json = self.state_machine.to_metadata_json(state, base_metadata=existing_meta)
 
     # ------------------------------------------------------------------
