@@ -1,35 +1,31 @@
+"""Check Phase 2's authoritative outer political policy contract statically."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
+
 ROOT = Path(__file__).resolve().parents[1]
-checks = {
-    "unified preflight gate": ROOT / "app/services/unified_context_runtime_patch.py",
-    "query general fast path": ROOT / "app/services/query_service.py",
-    "PFVD general fallback helpers": ROOT / "app/services/proposal_first_verification_depth_answer_service.py",
-}
 
-required = {
-    "unified preflight gate": [
-        "_analyze_semantic_turn",
-        "_is_politics_sensitive_general_turn",
-        "_should_use_general_topic_fast_path",
-        "ProposalFirstVerificationDepthAnswerService",
-    ],
-    "query general fast path": [
-        "general_topic_fast_answer",
-        "politics_sensitive_block_only",
-        "_handle_general_topic_fast_path",
-    ],
-    "PFVD general fallback helpers": [
-        "_answer_general_question_directly",
-        "_politics_sensitive_general_answer",
-        "_is_politics_sensitive_text",
-    ],
-}
 
-for name, rel in checks.items():
-    text = rel.read_text(encoding="utf-8")
-    missing = [needle for needle in required[name] if needle not in text]
-    if missing:
-        raise SystemExit(f"{name} missing markers: {missing}")
+def main() -> None:
+    route = (ROOT / "app/api/routes/query.py").read_text(encoding="utf-8")
+    matcher = (ROOT / "app/services/political_failsafe_service.py").read_text(encoding="utf-8")
+    premium = (ROOT / "app/services/premium_direct_answer_service.py").read_text(encoding="utf-8")
 
-print("OK: general-topic/politics-only fast routing markers are present")
+    assert "political_failsafe_service.evaluate_payload(payload)" in route
+    assert "record_political_gate" in route
+    assert "QueryService()" in route
+    assert route.index("political_failsafe_service.evaluate_payload(payload)") < route.index(
+        "QueryService()"
+    )
+    assert "frontend_messages" in matcher
+    assert "intake_facts" in matcher
+    assert "POLITICS_SENSITIVE_TERMS" not in premium
+    assert "_politics_block_response" not in premium
+
+    print("OK: shared outer policy protects default and premium paths before dispatch")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,7 @@
 import { ipAddress } from "@vercel/functions";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
+import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
   getImmigrationConversationByChatId,
   getOrCreateLocalImmigrationUserId,
@@ -9,6 +10,10 @@ import {
   updateImmigrationConversation,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import {
+  blockedResponseForLocale,
+  evaluateWidgetSubmission,
+} from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 180;
@@ -40,7 +45,10 @@ const widgetDirectRequestBodySchema = z.object({
   matterId: z.string().uuid().nullable().optional(),
   messages: z.array(messageSchema).min(1),
   selectedChatModel: z.string().optional(),
-  assistantMode: z.literal("premium_direct_gpt55_high").optional(),
+  assistantMode: z
+    .enum(["premium", "premium_direct_gpt55_high"])
+    .optional()
+    .default("premium"),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: z
@@ -279,10 +287,26 @@ export async function POST(request: Request) {
       frontendChatId,
       matterId,
       messages,
+      assistantMode: requestedAssistantMode,
       intakeFacts,
       responseLanguage: requestedResponseLanguage,
       answerPreference,
     } = widgetDirectRequestBodySchema.parse(json);
+
+    // Defence in depth for direct or stale clients. This must stay ahead of
+    // rate limiting, authentication, database access, FastAPI, and message
+    // persistence so the blocked text cannot enter a normal server path.
+    const gateDecision = evaluateWidgetSubmission({ messages, intakeFacts });
+    if (gateDecision.decision === "block") {
+      const blockedResponse = blockedResponseForLocale(gateDecision.locale);
+      return emptyWidgetResponse(
+        blockedResponse.text,
+        null,
+        blockedResponse.responseLanguage
+      );
+    }
+
+    const assistantMode = normalizeAssistantMode(requestedAssistantMode);
 
     await checkIpRateLimit(ipAddress(request));
 
@@ -338,7 +362,9 @@ export async function POST(request: Request) {
         intake_facts: intakeFacts ?? {},
         top_k: 1,
         answer_preference: answerPreference,
-        assistant_mode: "premium_direct_gpt55_high",
+        assistant_mode: assistantMode,
+        political_gate_version: gateDecision.policyVersion,
+        political_gate_decision_id: gateDecision.decisionId,
         frontend_messages: serializeFrontendMessages(messages),
       },
     });

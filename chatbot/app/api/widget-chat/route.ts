@@ -2,6 +2,7 @@ import { ipAddress } from "@vercel/functions";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
+import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
   getImmigrationConversationByChatId,
   getOrCreateLocalImmigrationUserId,
@@ -10,6 +11,10 @@ import {
   updateImmigrationConversation,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import {
+  blockedResponseForLocale,
+  evaluateWidgetSubmission,
+} from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 180;
@@ -40,6 +45,10 @@ const widgetRequestBodySchema = z.object({
   matterId: z.string().uuid().nullable().optional(),
   messages: z.array(messageSchema).min(1),
   selectedChatModel: z.string(),
+  assistantMode: z
+    .enum(["default", "default_legal_pipeline"])
+    .optional()
+    .default("default"),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: z
@@ -766,10 +775,26 @@ export async function POST(request: Request) {
       matterId,
       messages,
       selectedChatModel,
+      assistantMode: requestedAssistantMode,
       intakeFacts,
       responseLanguage: requestedResponseLanguage,
       answerPreference,
     } = widgetRequestBodySchema.parse(json);
+
+    // This is intentionally before rate limiting, authentication, database
+    // access, FastAPI, and persistence. Direct/stale callers cannot make a
+    // blocked turn reach any normal server-side state.
+    const gateDecision = evaluateWidgetSubmission({ messages, intakeFacts });
+    if (gateDecision.decision === "block") {
+      const blockedResponse = blockedResponseForLocale(gateDecision.locale);
+      return emptyWidgetResponse(
+        blockedResponse.text,
+        null,
+        blockedResponse.responseLanguage
+      );
+    }
+
+    const assistantMode = normalizeAssistantMode(requestedAssistantMode);
 
     if (!allowedModelIds.has(selectedChatModel)) {
       return new ChatbotError("bad_request:api").toResponse();
@@ -835,6 +860,9 @@ export async function POST(request: Request) {
         intake_facts: intakeFacts ?? {},
         top_k: 8,
         answer_preference: answerPreference,
+        assistant_mode: assistantMode,
+        political_gate_version: gateDecision.policyVersion,
+        political_gate_decision_id: gateDecision.decisionId,
         frontend_messages: serializeFrontendMessages(messages),
       },
     });

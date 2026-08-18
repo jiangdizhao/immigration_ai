@@ -267,6 +267,27 @@ class AgentObservabilityService:
         observation.metrics.terminal_submission_missing = missing
         observation.metrics.terminal_submission_continuation_count = continuation_count
 
+    def record_political_gate(
+        self,
+        *,
+        decision: str,
+        policy_version: str,
+        policy_hash: str,
+        latency_ms: float,
+    ) -> None:
+        """Record only the policy's approved content-free gate fields."""
+
+        if decision not in {"allow", "block"}:
+            raise ValueError("political gate decision must be allow or block")
+        if latency_ms < 0:
+            raise ValueError("political gate latency must be non-negative")
+        observation = self._require_turn()
+        observation.metrics.political_gate_decision = decision
+        observation.metrics.political_policy_version = policy_version
+        observation.metrics.political_policy_hash = policy_hash
+        observation.metrics.political_gate_enforcement_layer = "fastapi"
+        observation.metrics.political_gate_latency_ms = latency_ms
+
     def mark_metrics_complete(self) -> None:
         self._require_turn().metrics.metrics_complete = True
 

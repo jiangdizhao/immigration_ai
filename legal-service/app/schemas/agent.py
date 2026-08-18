@@ -150,6 +150,13 @@ class AgentExecutionMetrics(StrictContract):
     answer_agent_latency_ms: float = Field(default=0, ge=0)
     fact_check_latency_ms: float = Field(default=0, ge=0)
     total_latency_ms: float = Field(default=0, ge=0)
+    # Content-free political-gate observability.  Never add raw/normalized
+    # text, rule IDs, category, excerpts, or hashes derived from user text.
+    political_gate_decision: Literal["allow", "block"] | None = None
+    political_policy_version: str | None = Field(default=None, max_length=100)
+    political_policy_hash: str | None = Field(default=None, max_length=128)
+    political_gate_enforcement_layer: Literal["fastapi"] | None = None
+    political_gate_latency_ms: float | None = Field(default=None, ge=0)
     deadline_checkpoints: list[DeadlineCheckpoint] = Field(default_factory=list)
     provider_calls: list[ProviderCallObservation] = Field(default_factory=list)
     tool_calls: list[ToolCallObservation] = Field(default_factory=list)

@@ -162,7 +162,7 @@ def apply_patch() -> None:
     def unified_handle_query(self: QueryService, db: Any, payload: QueryRequest):
         if payload.assistant_mode == "premium_direct_gpt55_high":
             logger.info(
-                "Unified runtime selected premium direct path before semantic router; local politics filter and lightweight history are retained"
+                "Unified runtime selected premium direct path before semantic router; FastAPI ingress already applied the shared political gate"
             )
             return handle_premium_direct_query(self, db, payload)
 
@@ -203,22 +203,6 @@ def apply_patch() -> None:
                 response_language=language_context.response_language,
             )
             timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
-
-            if self._is_politics_sensitive_general_turn(
-                semantic_turn=semantic_turn,
-                raw_user_message=original_question,
-            ):
-                logger.info("Unified runtime selected politics-sensitive fast path before PFVD")
-                return self._handle_politics_sensitive_fast_path(
-                    db=db,
-                    matter=matter,
-                    payload=effective_payload,
-                    original_question=original_question,
-                    current_state=current_state,
-                    response_language=language_context.response_language,
-                    semantic_turn=semantic_turn,
-                    timing=timing,
-                )
 
             if self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
                 logger.info("Unified runtime selected general-topic fast path before PFVD")

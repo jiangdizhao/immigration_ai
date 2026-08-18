@@ -303,98 +303,17 @@ class QueryService:
                 return False
         return True
 
-    def _is_politics_sensitive_general_turn(
-        self,
-        *,
-        semantic_turn: SemanticTurnAnalysis,
-        raw_user_message: str,
-    ) -> bool:
-        _ = raw_user_message  # Kept for call-site compatibility; never inspected.
-        domain = getattr(semantic_turn, "domain_routing", None)
-        if isinstance(domain, dict):
-            return bool(domain.get("should_block_for_politics"))
-        return bool(getattr(domain, "should_block_for_politics", False))
-
-    def _politics_sensitive_answer(self, response_language: str) -> str:
-        if response_language == "zh":
-            return "我不能协助政治敏感、选举投票建议、党派立场或政治说服类问题。你可以继续询问普通非政治问题，或澳洲移民、签证和预约律师相关问题。"
-        return (
-            "I can’t help with politically sensitive, election-voting, partisan, "
-            "or political persuasion topics. You can ask an ordinary non-political "
-            "general question, or an Australian immigration, visa, or lawyer appointment question."
-        )
-
     def _should_use_general_topic_fast_path(self, *, semantic_turn: SemanticTurnAnalysis) -> bool:
+        """Route permitted general turns without a second political policy.
+
+        The deterministic FastAPI gate is the sole political enforcement point.
+        A legacy semantic-router label must not veto an otherwise allowed turn.
+        """
+
         domain = getattr(semantic_turn, "domain_routing", None)
         if isinstance(domain, dict):
-            return bool(domain.get("should_use_general_answer")) and not bool(domain.get("should_block_for_politics"))
-        return bool(getattr(domain, "should_use_general_answer", False)) and not bool(
-            getattr(domain, "should_block_for_politics", False)
-        )
-
-    def _handle_politics_sensitive_fast_path(
-        self,
-        *,
-        db: Session,
-        matter: Matter,
-        payload: QueryRequest,
-        original_question: str,
-        current_state: MatterState,
-        response_language: str,
-        semantic_turn: SemanticTurnAnalysis,
-        timing: _QueryStageTimer,
-    ) -> QueryResponse:
-        timing.mark("politics_sensitive_fast_path_selected", authorized_by="semantic_turn_plus_political_guard")
-        response = QueryResponse(
-            matter_id=matter.id,
-            answer=self._politics_sensitive_answer(response_language),
-            response_language="zh" if response_language == "zh" else "en",
-            confidence="high",
-            issue_type="politics_sensitive_topic",
-            missing_facts=[],
-            follow_up_questions=[],
-            citations=[],
-            compact_sources=[],
-            escalate=False,
-            next_action="answer",
-            user_display_mode="direct_short",
-            retrieval_debug={
-                "fast_path": {
-                    "used": True,
-                    "type": "politics_sensitive_block_only",
-                    "reason": semantic_turn.rationale,
-                },
-                "semantic_turn_analysis": semantic_turn.model_dump(),
-                "original_question": original_question,
-                "effective_question": payload.question,
-            },
-        )
-        fast_state = current_state.model_copy(deep=True)
-        fast_state.latest_question = payload.question
-        fast_state.last_contextualized_question = payload.question
-        fast_state.issue_type = "politics_sensitive_topic"
-        fast_state.operation_type = "politics_sensitive_topic"
-        fast_state.next_action = response.next_action
-        fast_state.last_answer_type = "safety_guard"
-        fast_state.conversation_state = "ANSWERED_GENERAL"
-        fast_state = self.state_machine.append_turn_pair(
-            state=fast_state,
-            user_question=payload.question,
-            effective_question=payload.question,
-            assistant_answer=response.answer,
-            next_action=response.next_action,
-            confidence=response.confidence,
-        )
-        response.conversation_state = fast_state.conversation_state
-        response.case_hypothesis = fast_state.case_hypothesis
-        response.fact_slot_states = fast_state.fact_slot_states
-        response.interaction_plan = fast_state.interaction_plan
-        timing.mark("politics_sensitive_fast_path_finalize")
-        response.retrieval_debug = {**(response.retrieval_debug or {}), "stage_timing": timing.to_debug_dict()}
-        self._update_matter_from_state(matter=matter, payload=payload, state=fast_state, effective_question=payload.question)
-        db.commit()
-        db.refresh(matter)
-        return response
+            return bool(domain.get("should_use_general_answer"))
+        return bool(getattr(domain, "should_use_general_answer", False))
 
     def _handle_general_topic_fast_path(
         self,
@@ -600,21 +519,6 @@ class QueryService:
             response_language=language_context.response_language,
         )
         timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
-
-        if self._is_politics_sensitive_general_turn(
-            semantic_turn=semantic_turn,
-            raw_user_message=original_question,
-        ):
-            return self._handle_politics_sensitive_fast_path(
-                db=db,
-                matter=matter,
-                payload=payload,
-                original_question=original_question,
-                current_state=current_state,
-                response_language=language_context.response_language,
-                semantic_turn=semantic_turn,
-                timing=timing,
-            )
 
         if self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
             return self._handle_general_topic_fast_path(
@@ -1431,7 +1335,6 @@ class QueryService:
         merged_intake_facts: dict[str, Any],
         language_debug: dict[str, Any],
     ) -> tuple[QueryResponse, EvidencePackage, PolicyDecision, dict[str, Any], Any, dict[str, Any] | None, dict[str, Any] | None]:
-        provisional_recommendation_debug: dict[str, Any] = {"applied": False, "reason": "not_reached"}
         focused_policy_issue = None
         focused_policy_finding: dict[str, Any] | None = None
 

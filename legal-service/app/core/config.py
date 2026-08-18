@@ -73,7 +73,7 @@ class Settings(BaseSettings):
         default=False, alias="COMPACT_MATTER_STATE_ENABLED"
     )
     backend_political_failsafe_enabled: bool = Field(
-        default=False, alias="BACKEND_POLITICAL_FAILSAFE_ENABLED"
+        default=True, alias="BACKEND_POLITICAL_FAILSAFE_ENABLED"
     )
     agent_shadow_enabled: bool = Field(default=False, alias="AGENT_SHADOW_ENABLED")
     agent_rollout_percent_default: int = Field(

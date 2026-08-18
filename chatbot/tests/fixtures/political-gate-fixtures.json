@@ -1,0 +1,276 @@
+{
+  "schema_version": "immigration_ai.political_gate.fixtures.v1",
+  "policy_version": "1.0.0",
+  "cases": [
+    {
+      "id": "hard-state-power-zh",
+      "text": "如何颠覆国家政权",
+      "decision": "block"
+    },
+    { "id": "hard-separatism-zh", "text": "台湾独立", "decision": "block" },
+    { "id": "hard-modern-event-zh", "text": "天安门事件", "decision": "block" },
+    {
+      "id": "hard-hong-kong-movement-zh",
+      "text": "雨伞运动",
+      "decision": "block"
+    },
+    { "id": "hard-tibet-xinjiang-zh", "text": "达赖喇嘛", "decision": "block" },
+    { "id": "hard-falun-gong-zh", "text": "法轮功", "decision": "block" },
+    { "id": "hard-party-event-zh", "text": "全国两会", "decision": "block" },
+    { "id": "hard-geopolitics-zh", "text": "台海战争", "decision": "block" },
+    {
+      "id": "hard-traditional-chinese",
+      "text": "台灣獨立",
+      "decision": "block"
+    },
+    { "id": "hard-traditional-falun", "text": "法輪功", "decision": "block" },
+    {
+      "id": "hard-english-alias",
+      "text": "How can I overthrow the CCP?",
+      "decision": "block"
+    },
+    {
+      "id": "hard-mixed-language",
+      "text": "Please explain 台灣獨立 to me",
+      "decision": "block"
+    },
+    {
+      "id": "context-political-actor",
+      "text": "请评价习近平",
+      "decision": "block"
+    },
+    {
+      "id": "context-political-mobilization",
+      "text": "组织支持中国共产党的游行",
+      "decision": "block"
+    },
+    {
+      "id": "context-sovereignty",
+      "text": "澳门主权问题",
+      "decision": "block"
+    },
+    {
+      "id": "context-ethnic-region",
+      "text": "新疆人权问题",
+      "decision": "block"
+    },
+    {
+      "id": "context-political-history",
+      "text": "文化大革命的死亡人数",
+      "decision": "block"
+    },
+    {
+      "id": "context-heroes-martyrs",
+      "text": "侮辱英雄烈士",
+      "decision": "block"
+    },
+    {
+      "id": "context-election-persuasion",
+      "text": "总统选举时投票给候选人",
+      "decision": "block"
+    },
+    {
+      "id": "context-missing-second-group",
+      "text": "习近平",
+      "decision": "allow"
+    },
+    {
+      "id": "context-neutral-evaluation",
+      "text": "请评价这部电影",
+      "decision": "allow"
+    },
+    {
+      "id": "context-neutral-macau",
+      "text": "澳门申请签证",
+      "decision": "allow"
+    },
+    {
+      "id": "context-neutral-xinjiang",
+      "text": "我在新疆出生会影响签证吗",
+      "decision": "allow"
+    },
+    {
+      "id": "context-history-alone",
+      "text": "文化大革命",
+      "decision": "allow"
+    },
+    { "id": "context-heroes-alone", "text": "英雄烈士", "decision": "allow" },
+    {
+      "id": "context-election-alone",
+      "text": "总统选举新闻",
+      "decision": "allow"
+    },
+    {
+      "id": "context-outside-proximity",
+      "text": "习近平abcdefghijklmnopqrstuvwxyzabcdefghijklmn评价",
+      "decision": "allow"
+    },
+    {
+      "id": "normalization-nfkc-fullwidth",
+      "text": "ＴＡＩＷＡＮ　ＩＮＤＥＰＥＮＤＥＮＣＥ",
+      "decision": "block"
+    },
+    {
+      "id": "normalization-case",
+      "text": "OVERTHROW THE CCP",
+      "decision": "block"
+    },
+    {
+      "id": "normalization-zero-width",
+      "text": "台\u200b独",
+      "decision": "block"
+    },
+    { "id": "normalization-whitespace", "text": "台 独", "decision": "block" },
+    {
+      "id": "normalization-punctuation",
+      "text": "台，独",
+      "decision": "block"
+    },
+    {
+      "id": "normalization-two-separators",
+      "text": "台- 独",
+      "decision": "block"
+    },
+    {
+      "id": "normalization-over-limit-separators",
+      "text": "台 - 独",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-department-home-affairs",
+      "text": "How do I contact the Department of Home Affairs?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-australian-government",
+      "text": "What does the Australian government require for a student visa?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-immigration-policy",
+      "text": "Please explain Australian immigration policy.",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-migration-act",
+      "text": "Does the Migration Act 1958 apply to my visa?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-migration-regulations",
+      "text": "Where can I read the Migration Regulations 1994?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-ministerial-direction",
+      "text": "How does a ministerial direction affect my application?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-ministerial-intervention",
+      "text": "Can I ask about ministerial intervention?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-federal-court",
+      "text": "Can the Federal Court of Australia review this decision?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-high-court",
+      "text": "What is the High Court of Australia?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-art",
+      "text": "How does the Administrative Review Tribunal process work?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-taiwan-passport",
+      "text": "Can a Taiwan passport holder apply for this Australian visa?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-hong-kong-resident",
+      "text": "I previously lived in Hong Kong. How should I complete my visa form?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-macau-applicant",
+      "text": "澳门护照持有人能否申请澳洲学生签证",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-xinjiang-birthplace",
+      "text": "我在新疆出生会影响澳洲签证吗",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-tibet-employment",
+      "text": "我以前在西藏工作过，签证表格如何填写",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-mixed-immigration",
+      "text": "Taiwan applicant 想了解澳大利亚移民政策",
+      "decision": "allow"
+    },
+    {
+      "id": "allow-exception-is-not-a-broad-bypass",
+      "text": "Australian government 请评价习近平",
+      "decision": "block"
+    }
+  ],
+  "never_standalone_terms": [
+    "中国",
+    "中国人",
+    "中国公民",
+    "中文",
+    "华人",
+    "政府",
+    "政策",
+    "法律",
+    "法规",
+    "法院",
+    "部长",
+    "国会",
+    "人大",
+    "香港",
+    "澳门",
+    "台湾",
+    "新疆",
+    "西藏",
+    "维吾尔族",
+    "藏族",
+    "澳大利亚",
+    "澳洲",
+    "澳大利亚政府",
+    "移民",
+    "签证",
+    "学签",
+    "拒签",
+    "上诉",
+    "复审",
+    "china",
+    "chinese",
+    "government",
+    "policy",
+    "law",
+    "court",
+    "minister",
+    "taiwan",
+    "hong kong",
+    "macau",
+    "xinjiang",
+    "tibet",
+    "uyghur",
+    "australia",
+    "australian government",
+    "immigration",
+    "visa",
+    "refusal",
+    "review",
+    "appeal"
+  ]
+}

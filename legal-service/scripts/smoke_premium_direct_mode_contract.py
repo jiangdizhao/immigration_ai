@@ -14,6 +14,7 @@ def main() -> None:
     query_schema = _read("app/schemas/query.py")
     runtime_patch = _read("app/services/unified_context_runtime_patch.py")
     direct_service = _read("app/services/premium_direct_answer_service.py")
+    query_route = _read("app/api/routes/query.py")
 
     # Existing frontend/backend mode contract remains backward-compatible.
     assert "assistant_mode" in query_schema
@@ -24,17 +25,26 @@ def main() -> None:
         'payload.assistant_mode == "premium_direct_gpt55_high"'
     )
     semantic_index = runtime_patch.index("_analyze_semantic_turn")
-    assert premium_gate_index < semantic_index, (
-        "premium direct mode must be intercepted before the full semantic-turn router"
-    )
+    assert (
+        premium_gate_index < semantic_index
+    ), "premium direct mode must be intercepted before the full semantic-turn router"
 
     assert "PremiumDirectAnswerService" in runtime_patch
     assert "fallback_to_slow_legal_pipeline" in runtime_patch
     assert "semantic_turn_router_skipped" in runtime_patch
     assert '"frontend_messages": []' not in runtime_patch
 
-    # Direct-lane safety and conversation continuity.
-    assert "POLITICS_SENSITIVE_TERMS" in direct_service
+    # The shared FastAPI ingress guard is authoritative for both serving
+    # lanes.  Premium must not retain an independently-maintained lexical
+    # politics filter that can disagree with the reviewed YAML policy.
+    assert "political_failsafe_service.evaluate_payload(payload)" in query_route
+    assert query_route.index(
+        "political_failsafe_service.evaluate_payload(payload)"
+    ) < query_route.index("QueryService()")
+    assert "POLITICS_SENSITIVE_TERMS" not in direct_service
+    assert "_politics_block_response" not in direct_service
+
+    # Direct-lane conversation continuity.
     assert "_history_text" in direct_service
     assert "frontend_history_sent_to_answer_model" in direct_service
     assert "system_prompt_sent_to_answer_model" in direct_service
@@ -78,9 +88,7 @@ def main() -> None:
     assert '"gpt-5.4-mini"' not in direct_service
     assert "AI quick research answer used live web search" in direct_service
 
-    print(
-        "OK: premium direct Terra/Luna agentic web-search contract is installed"
-    )
+    print("OK: premium direct Terra/Luna agentic web-search contract is installed")
 
 
 if __name__ == "__main__":

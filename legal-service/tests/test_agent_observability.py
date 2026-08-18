@@ -212,6 +212,7 @@ def test_new_execution_flags_do_not_activate_calls() -> None:
     assert settings.exact_legal_lookup_enabled is False
     assert settings.lightrag_enabled is False
     assert settings.flat_rag_tool_enabled is False
+    assert settings.backend_political_failsafe_enabled is True
     assert settings.agent_shadow_enabled is False
     assert settings.agent_rollout_percent_default == 0
     assert settings.agent_rollout_percent_premium == 0

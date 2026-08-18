@@ -19,7 +19,16 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
+import {
+  type AssistantMode,
+  widgetRouteForAssistantMode,
+} from "@/lib/assistant-mode";
 import { ChatbotError } from "@/lib/errors";
+import {
+  blockedResponseForLocale,
+  evaluateWidgetSubmission,
+  type PoliticalGateResult,
+} from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import { AssistantRichMarkdown } from "./assistant-rich-markdown";
 import { GuidedIntakeCard } from "./guided-intake-card";
@@ -336,6 +345,31 @@ function setWorkspaceChatParam(chatId: string) {
   window.history.replaceState(null, "", url.toString());
 }
 
+function blockedWidgetResponse(
+  decision: PoliticalGateResult
+): WidgetRouteResponse {
+  const blockedResponse = blockedResponseForLocale(decision.locale);
+  return {
+    text: blockedResponse.text,
+    responseLanguage: blockedResponse.responseLanguage,
+    citations: [],
+    compactSources: [],
+    userDisplayMode: "political_gate_blocked",
+    followUpQuestions: [],
+    missingFacts: [],
+    evidenceGaps: [],
+    confidence: null,
+    escalate: false,
+    nextAction: "none",
+    matterId: null,
+    conversationState: null,
+    caseHypothesis: null,
+    factSlotStates: [],
+    interactionPlan: null,
+    retrievalDebug: null,
+  };
+}
+
 function WorkspaceProcessingCard({
   elapsedMs,
   isZh,
@@ -368,7 +402,11 @@ function WorkspaceProcessingCard({
   );
 }
 
-export function ImmigrationAIWorkspace() {
+export function ImmigrationAIWorkspace({
+  assistantMode = "default",
+}: {
+  assistantMode?: AssistantMode;
+}) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
@@ -631,6 +669,13 @@ export function ImmigrationAIWorkspace() {
     );
   };
 
+  const appendBlockedResponse = async (decision: PoliticalGateResult) => {
+    setInput("");
+    setDraftFacts({});
+    setError(null);
+    await appendAssistantMessage(blockedWidgetResponse(decision));
+  };
+
   const sendToWidgetRoute = async (
     nextMessages: WidgetMessage[],
     facts: IntakeFacts,
@@ -639,25 +684,29 @@ export function ImmigrationAIWorkspace() {
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
-    const response = await fetchWithErrorHandlers("/api/widget-chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: stableConversationId,
-        frontendChatId: stableConversationId,
-        matterId,
-        intakeFacts: facts,
-        answerPreference,
-        selectedChatModel: DEFAULT_CHAT_MODEL,
-        messages: nextMessages.map((message) => ({
-          id: message.id,
-          role: message.role,
-          parts: [{ type: "text", text: message.text }],
-        })),
-      }),
-    });
+    const response = await fetchWithErrorHandlers(
+      widgetRouteForAssistantMode(assistantMode),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: stableConversationId,
+          frontendChatId: stableConversationId,
+          matterId,
+          intakeFacts: facts,
+          answerPreference,
+          selectedChatModel: DEFAULT_CHAT_MODEL,
+          assistantMode,
+          messages: nextMessages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            parts: [{ type: "text", text: message.text }],
+          })),
+        }),
+      }
+    );
 
     return (await response.json()) as WidgetRouteResponse;
   };
@@ -677,13 +726,23 @@ export function ImmigrationAIWorkspace() {
       text: trimmed,
     };
 
+    const nextMessages = [...messages, nextUserMessage];
+    const submissionDecision = evaluateWidgetSubmission({
+      messages: nextMessages,
+      intakeFacts,
+    });
+    if (submissionDecision.decision === "block") {
+      await appendBlockedResponse(submissionDecision);
+      setStatus("ready");
+      return;
+    }
+
     const activeConversationId = conversationId ?? (await createConversation());
     if (!activeConversationId) {
       toast.error("Unable to create a new conversation.");
       return;
     }
 
-    const nextMessages = [...messages, nextUserMessage];
     shouldAutoScrollRef.current = true;
     setMessages(nextMessages);
     scrollToBottom(true);
@@ -729,12 +788,6 @@ export function ImmigrationAIWorkspace() {
       return;
     }
 
-    const activeConversationId = conversationId ?? (await createConversation());
-    if (!activeConversationId) {
-      toast.error("Unable to create a new conversation.");
-      return;
-    }
-
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
     const visibleText = buildGuidedIntakeDisplaySummary(draftFacts);
@@ -752,6 +805,22 @@ export function ImmigrationAIWorkspace() {
 
     const visibleMessages = [...messages, visibleUserMessage];
     const backendMessages = [...messages, backendUserMessage];
+
+    const submissionDecision = evaluateWidgetSubmission({
+      messages: backendMessages,
+      intakeFacts: mergedFacts,
+    });
+    if (submissionDecision.decision === "block") {
+      await appendBlockedResponse(submissionDecision);
+      setStatus("ready");
+      return;
+    }
+
+    const activeConversationId = conversationId ?? (await createConversation());
+    if (!activeConversationId) {
+      toast.error("Unable to create a new conversation.");
+      return;
+    }
 
     shouldAutoScrollRef.current = true;
     setMessages(visibleMessages);
@@ -1007,6 +1076,7 @@ export function ImmigrationAIWorkspace() {
 
           <div
             className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
+            data-testid="workspace-message-list"
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
@@ -1077,6 +1147,14 @@ export function ImmigrationAIWorkspace() {
                               ? "border border-slate-200 bg-white text-slate-700"
                               : "bg-[#001736] text-white"
                           )}
+                          data-testid={
+                            isAssistant &&
+                            message.userDisplayMode === "political_gate_blocked"
+                              ? "political-block-response"
+                              : isAssistant
+                                ? "workspace-assistant-message"
+                                : "workspace-user-message"
+                          }
                         >
                           {isAssistant ? (
                             <AssistantRichMarkdown text={message.text} />
@@ -1195,6 +1273,7 @@ export function ImmigrationAIWorkspace() {
             <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3 shadow-sm">
               <Textarea
                 className="min-h-[96px] max-h-48 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+                data-testid="workspace-input"
                 disabled={status !== "ready"}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Type your question. Press Enter for a new paragraph; click Send to submit."
@@ -1207,6 +1286,7 @@ export function ImmigrationAIWorkspace() {
                 </p>
                 <Button
                   className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
+                  data-testid="workspace-send"
                   disabled={
                     !input.trim() || status !== "ready" || !conversationReady
                   }

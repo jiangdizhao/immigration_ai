@@ -20,6 +20,7 @@
       "!ai-sdk",
       "!components/ui",
       "!lib/utils.ts",
+      "!lib/political-gate/policy.runtime.json",
       "!hooks/use-mobile.ts"
     ]
   },

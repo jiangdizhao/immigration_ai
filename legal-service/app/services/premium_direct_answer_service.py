@@ -12,33 +12,6 @@ from app.schemas.query import QueryRequest, QueryResponse
 
 logger = logging.getLogger(__name__)
 
-POLITICS_SENSITIVE_TERMS = (
-    "election",
-    "vote",
-    "voting",
-    "voter",
-    "candidate",
-    "campaign",
-    "political party",
-    "party politics",
-    "persuade voters",
-    "who should i vote",
-    "how should i vote",
-    "referendum",
-    "ballot",
-    "民主党",
-    "共和党",
-    "工党",
-    "自由党",
-    "选举",
-    "投票",
-    "拉票",
-    "竞选",
-    "候选人",
-    "政党",
-    "公投",
-)
-
 HIGH_RISK_TERMS = (
     "refusal",
     "refused",
@@ -80,7 +53,8 @@ class PremiumDirectAnswerService:
     - no Schedule/PFVD/RAG/helper prompt chain;
     - no full semantic-turn router;
     - recent chat history is preserved for follow-up continuity;
-    - a lightweight local politics-sensitive gate runs before the model call;
+    - the authoritative deterministic political gate runs at FastAPI ingress
+      before this service is constructed;
     - GPT-5.6 Terra is attempted first, then GPT-5.6 Luna;
     - the Responses API web_search tool is enabled for agentic live research;
     - actual web-search sources are captured without an artificial cap;
@@ -191,14 +165,6 @@ class PremiumDirectAnswerService:
         high_risk = self._looks_high_risk(original_question) or self._looks_high_risk(
             effective_question
         )
-
-        if self._is_politics_sensitive(question_for_model):
-            return self._politics_block_response(
-                is_zh=is_zh,
-                matter_id=matter_id,
-                original_question=original_question,
-                effective_question=effective_question,
-            )
 
         if not question_for_model:
             return self._empty_question_response(is_zh=is_zh, matter_id=matter_id)
@@ -700,55 +666,9 @@ class PremiumDirectAnswerService:
 
         return references
 
-    def _is_politics_sensitive(self, text: str) -> bool:
-        lowered = text.lower()
-        return any(term in lowered for term in POLITICS_SENSITIVE_TERMS)
-
     def _looks_high_risk(self, text: str) -> bool:
         lowered = text.lower()
         return any(term in lowered for term in HIGH_RISK_TERMS)
-
-    def _politics_block_response(
-        self,
-        *,
-        is_zh: bool,
-        matter_id: str | None,
-        original_question: str,
-        effective_question: str,
-    ) -> QueryResponse:
-        answer = (
-            "抱歉，我不能帮助处理政治敏感、选举、投票建议或政治说服类请求。你可以改问澳大利亚移民或签证方面的一般问题。"
-            if is_zh
-            else "Sorry, I cannot help with politically sensitive, election, voting-advice, or political-persuasion requests. You can ask a general Australian immigration or visa question instead."
-        )
-        return QueryResponse(
-            matter_id=matter_id,
-            answer=answer,
-            response_language="zh" if is_zh else "en",
-            confidence="high",
-            user_display_mode="general_with_warning",
-            issue_type="politics_sensitive_block",
-            missing_facts=[],
-            follow_up_questions=[],
-            citations=[],
-            compact_sources=[
-                "Local politics-sensitive safety filter — no answer model was called."
-            ],
-            escalate=False,
-            next_action="answer",
-            retrieval_debug={
-                "original_question": original_question,
-                "effective_question": effective_question,
-                "premium_direct_answer": {
-                    "used": False,
-                    "blocked_by_politics_filter": True,
-                    "politics_filter_type": "local_lightweight_gate",
-                    "answer_model_called": False,
-                    "answer_model_input": None,
-                    "reference_status_shown": True,
-                },
-            },
-        )
 
     def _empty_question_response(
         self,

@@ -15,6 +15,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { ChatbotError } from "@/lib/errors";
+import {
+  blockedResponseForLocale,
+  evaluateWidgetSubmission,
+  type PoliticalGateResult,
+} from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import { AssistantRichMarkdown } from "./assistant-rich-markdown";
 import { GuidedIntakeCard } from "./guided-intake-card";
@@ -337,6 +342,31 @@ function processingStage(elapsedMs: number, isZh: boolean) {
   );
 }
 
+function blockedWidgetResponse(
+  decision: PoliticalGateResult
+): WidgetRouteResponse {
+  const blockedResponse = blockedResponseForLocale(decision.locale);
+  return {
+    text: blockedResponse.text,
+    responseLanguage: blockedResponse.responseLanguage,
+    citations: [],
+    compactSources: [],
+    userDisplayMode: "political_gate_blocked",
+    followUpQuestions: [],
+    missingFacts: [],
+    evidenceGaps: [],
+    confidence: null,
+    escalate: false,
+    nextAction: "none",
+    matterId: null,
+    conversationState: null,
+    caseHypothesis: null,
+    factSlotStates: [],
+    interactionPlan: null,
+    retrievalDebug: null,
+  };
+}
+
 function AssistantProcessingCard({
   elapsedMs,
   isZh,
@@ -540,6 +570,13 @@ export function ImmigrationAssistantWidget() {
     );
   };
 
+  const appendBlockedResponse = async (decision: PoliticalGateResult) => {
+    setInput("");
+    setDraftFacts({});
+    setError(null);
+    await appendAssistantMessage(blockedWidgetResponse(decision));
+  };
+
   const sendToWidgetRoute = async (
     nextMessages: WidgetMessage[],
     facts: IntakeFacts
@@ -554,6 +591,7 @@ export function ImmigrationAssistantWidget() {
         matterId,
         intakeFacts: facts,
         selectedChatModel: DEFAULT_CHAT_MODEL,
+        assistantMode: "default",
         messages: nextMessages.map((message) => ({
           id: message.id,
           role: message.role,
@@ -579,6 +617,16 @@ export function ImmigrationAssistantWidget() {
     };
 
     const nextMessages = [...messages, nextUserMessage];
+    const submissionDecision = evaluateWidgetSubmission({
+      messages: nextMessages,
+      intakeFacts,
+    });
+    if (submissionDecision.decision === "block") {
+      await appendBlockedResponse(submissionDecision);
+      setStatus("ready");
+      return;
+    }
+
     shouldAutoScrollRef.current = true;
     setMessages(nextMessages);
     scrollToBottom(true);
@@ -641,6 +689,16 @@ export function ImmigrationAssistantWidget() {
 
     const visibleMessages = [...messages, visibleUserMessage];
     const backendMessages = [...messages, backendUserMessage];
+
+    const submissionDecision = evaluateWidgetSubmission({
+      messages: backendMessages,
+      intakeFacts: mergedFacts,
+    });
+    if (submissionDecision.decision === "block") {
+      await appendBlockedResponse(submissionDecision);
+      setStatus("ready");
+      return;
+    }
 
     shouldAutoScrollRef.current = true;
     setMessages(visibleMessages);
