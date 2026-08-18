@@ -13,6 +13,8 @@ any new LLM/model/tool calls.  Handles:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from copy import deepcopy
@@ -510,8 +512,16 @@ class CompactMatterStateService:
 
         set_id = f"optset-{uuid4().hex[:12]}"
         options = []
+        duplicate_counts: dict[str, int] = {}
         for i, cand in enumerate(candidates[:20], start=1):
-            opt_id = cand.get("option_id") or cand.get("visa_type") or f"opt-{uuid4().hex[:8]}"
+            base_option_id = self._stable_option_id(cand)
+            duplicate_counts[base_option_id] = duplicate_counts.get(base_option_id, 0) + 1
+            duplicate_number = duplicate_counts[base_option_id]
+            opt_id = (
+                base_option_id
+                if duplicate_number == 1
+                else f"{base_option_id}#{duplicate_number}"
+            )
             label = cand.get("label") or cand.get("visa_type") or str(cand.get("operation_type", ""))
             options.append({
                 "option_id": str(opt_id),
@@ -526,6 +536,58 @@ class CompactMatterStateService:
             "created_turn_id": turn_id,
             "options": options,
         })
+
+    @staticmethod
+    def _stable_option_id(candidate: dict[str, Any]) -> str:
+        """Return a stable ID from the candidate's canonical structured identity.
+
+        CaseCandidate currently supplies ``operation_type`` but not an option
+        ID or visa type.  Scores and explanatory prose deliberately do not
+        participate, so reranking or rewritten explanations cannot change a
+        recurring option's identity.
+        """
+        explicit_option_id = str(candidate.get("option_id") or "").strip()
+        if explicit_option_id:
+            return explicit_option_id
+
+        canonical_visa = str(candidate.get("visa_type") or "").strip()
+        if canonical_visa:
+            return canonical_visa
+
+        operation_type = CompactMatterStateService._normalise_identifier(
+            candidate.get("operation_type")
+        )
+        if operation_type:
+            return f"operation:{operation_type}"
+
+        # Generic structured candidates may expose a composite canonical
+        # identity instead.  Keep this fallback restricted to stable identity
+        # fields; do not include rank, score, prose, or missing-fact wording.
+        identity = {
+            field: value
+            for field in (
+                "subclass",
+                "subclass_id",
+                "stream",
+                "pathway",
+                "category",
+                "code",
+            )
+            if (value := CompactMatterStateService._normalise_identifier(candidate.get(field)))
+        }
+        canonical_identity = json.dumps(
+            identity or {"candidate": "unidentified"},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        digest = hashlib.sha256(canonical_identity.encode("utf-8")).hexdigest()[:16]
+        return f"candidate:{digest}"
+
+    @staticmethod
+    def _normalise_identifier(value: Any) -> str:
+        """Normalize an existing structured identifier without parsing prose."""
+        normalized = re.sub(r"[^a-z0-9]+", "-", str(value or "").casefold())
+        return normalized.strip("-")
 
     # ------------------------------------------------------------------
     # Recent turns

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -36,10 +37,35 @@ from app.schemas.compact_matter_state import (
     StatePatchOperation,
 )
 from app.services.compact_matter_state_service import CompactMatterStateService
+from app.services.query_service import QueryService
 from app.services.state_patch_validator import (
     PatchRejectedError,
     StatePatchValidator,
 )
+from app.services.state_machine import StateMachine
+
+
+def _query_service_for_compact_state_tests():
+    """Build only the dependencies used by QueryService's dual-write boundary."""
+    service = QueryService.__new__(QueryService)
+    service.compact_matter_state_service = CompactMatterStateService()
+    service.state_machine = StateMachine()
+    return service
+
+
+def _make_matter_for_compact_state_tests(metadata: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="matter-1",
+        session_id="session-1",
+        frontend_chat_id="chat-1",
+        frontend_user_id="user-1",
+        issue_summary="",
+        last_user_message_at=None,
+        issue_type=None,
+        visa_type=None,
+        risk_level="medium",
+        metadata_json=metadata,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -805,6 +831,78 @@ class TestOrdinalResolution:
         assert updated.option_sets[0].options[1].option_id == "visa:482"
         assert updated.option_sets[0].options[1].ordinal == 2
 
+    def test_case_candidate_option_id_is_stable_when_score_and_prose_change(self):
+        """The real CaseCandidate identity must not depend on transient fields."""
+        from app.schemas.state import CaseCandidate, MatterState
+
+        service = CompactMatterStateService()
+        legacy = MatterState()
+        first_candidate = CaseCandidate(
+            operation_type="temporary_work",
+            score=0.72,
+            why_it_fits="Initial explanation",
+        )
+        second_candidate = CaseCandidate(
+            operation_type="temporary_work",
+            score=0.91,
+            why_it_fits="Rewritten explanation",
+        )
+
+        first = service.update_after_turn(
+            compact=_make_state(),
+            legacy_state=legacy,
+            turn_id="t1",
+            user_question="Show my options",
+            assistant_answer="",
+            option_candidates=[first_candidate.model_dump()],
+        )
+        second = service.update_after_turn(
+            compact=first,
+            legacy_state=legacy,
+            turn_id="t2",
+            user_question="Show my options again",
+            assistant_answer="",
+            option_candidates=[second_candidate.model_dump()],
+        )
+
+        assert first.option_sets[-1].options[0].option_id == "operation:temporary-work"
+        assert second.option_sets[-1].options[0].option_id == "operation:temporary-work"
+
+    def test_duplicate_structured_candidate_identities_are_deterministic(self):
+        from app.schemas.state import MatterState
+
+        service = CompactMatterStateService()
+        candidates = [
+            {"operation_type": "temporary_work"},
+            {"operation_type": "temporary_work"},
+        ]
+
+        first = service.update_after_turn(
+            compact=_make_state(),
+            legacy_state=MatterState(),
+            turn_id="t1",
+            user_question="Show my options",
+            assistant_answer="",
+            option_candidates=candidates,
+        )
+        second = service.update_after_turn(
+            compact=_make_state(),
+            legacy_state=MatterState(),
+            turn_id="t2",
+            user_question="Show my options again",
+            assistant_answer="",
+            option_candidates=candidates,
+        )
+
+        assert [option.option_id for option in first.option_sets[-1].options] == [
+            "operation:temporary-work",
+            "operation:temporary-work#2",
+        ]
+        assert [option.option_id for option in second.option_sets[-1].options] == [
+            "operation:temporary-work",
+            "operation:temporary-work#2",
+        ]
+
     def test_truncated_history_preserves_option_ids(self):
         """Even with truncated recent_turns, option IDs remain stable."""
         state = _make_state(topic_id="topic-aaa")
@@ -943,28 +1041,130 @@ class TestDualWrite:
         assert len(metadata["conversation_history"]) == 1
         assert metadata["conversation_history"][0]["content"] == "old message"
 
-    def test_v2_write_failure_does_not_corrupt_legacy(self):
-        """If compact state update fails, legacy state must be preserved."""
-        # The dual-write in query_service wraps V2 update in try/except.
-        # Here we verify the service gracefully handles errors.
-        service = CompactMatterStateService()
-        state = _make_state()
+    def test_query_service_topic_switch_updates_active_topic_before_options(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The production compact-state boundary must not retain stale options."""
+        from app.schemas.query import QueryRequest
+        from app.schemas.state import CaseCandidate, CaseHypothesis, MatterState
 
-        # Simulate an update that would fail (e.g., by passing invalid data)
-        # The service should return the original state unchanged
-        from app.schemas.state import MatterState
-        legacy = MatterState()
-        # Passing None for required fields should be handled
-        updated = service.update_after_turn(
-            compact=state,
-            legacy_state=legacy,
-            turn_id="t1",
-            user_question="",
-            assistant_answer="",
+        monkeypatch.setattr(
+            "app.core.config.get_settings",
+            lambda: SimpleNamespace(compact_matter_state_enabled=True),
         )
-        # Should still return a valid state
-        assert updated.revision == state.revision + 1
-        assert updated.identity.matter_id == state.identity.matter_id
+        compact_service = CompactMatterStateService()
+        stored = _make_state(topic_id="topic-a")
+        stored.active_thread.issue_type = "issue-a"
+        stored.option_sets = [
+            CompactOptionSet(
+                set_id="options-a",
+                topic_id="topic-a",
+                created_turn_id="turn-a",
+                options=[
+                    CompactOption(option_id="A1", ordinal=1, label="Option A1"),
+                    CompactOption(option_id="A2", ordinal=2, label="Option A2"),
+                ],
+            )
+        ]
+        matter = _make_matter_for_compact_state_tests(
+            {"compact_state_v2": stored.model_dump(), "legacy_marker": "keep"}
+        )
+        state = MatterState(
+            issue_type="issue-b",
+            operation_type="student_options",
+            next_action="answer",
+            case_hypothesis=CaseHypothesis(
+                candidates=[
+                    CaseCandidate(operation_type="student_option_one"),
+                    CaseCandidate(operation_type="student_option_two"),
+                ]
+            ),
+        )
+        query_service = _query_service_for_compact_state_tests()
+        payload = QueryRequest(question="Please compare these student options")
+
+        query_service._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=state,
+            effective_question=payload.question,
+        )
+
+        updated = compact_service.load_or_create(
+            metadata_json=matter.metadata_json,
+            matter_id="matter-1",
+        )
+        assert updated is not None
+        assert updated.active_thread.topic_id != "topic-a"
+        new_option_set = updated.option_sets[-1]
+        assert new_option_set.topic_id == updated.active_thread.topic_id
+        assert compact_service.resolve_ordinal("the second", updated, "turn-c") == (
+            "operation:student-option-two"
+        )
+        assert compact_service.resolve_ordinal("the second", updated, "turn-c") != "A2"
+
+        same_issue_state = MatterState(issue_type="issue-b", next_action="answer")
+        query_service._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=same_issue_state,
+            effective_question=payload.question,
+        )
+        unchanged_topic = compact_service.load_or_create(
+            metadata_json=matter.metadata_json,
+            matter_id="matter-1",
+        )
+        assert unchanged_topic is not None
+        assert unchanged_topic.active_thread.topic_id == updated.active_thread.topic_id
+
+    def test_v2_write_failure_does_not_corrupt_legacy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A real QueryService compact-write failure leaves legacy data intact."""
+        from app.schemas.query import QueryRequest
+        from app.schemas.state import ConversationTurn, MatterState
+
+        monkeypatch.setattr(
+            "app.core.config.get_settings",
+            lambda: SimpleNamespace(compact_matter_state_enabled=True),
+        )
+        previous_compact = _make_state(revision=4)
+        legacy_turn = ConversationTurn(
+            role="user", content="old message", timestamp=_utc_now_iso()
+        )
+        matter = _make_matter_for_compact_state_tests(
+            {
+                "compact_state_v2": previous_compact.model_dump(),
+                "legacy_marker": {"must": "survive"},
+            }
+        )
+        state = MatterState(
+            issue_type="legacy-issue",
+            conversation_history=[legacy_turn],
+        )
+        query_service = _query_service_for_compact_state_tests()
+
+        def fail_compact_update(**_: Any) -> CompactMatterStateV2:
+            raise RuntimeError("forced compact-state write failure")
+
+        monkeypatch.setattr(
+            query_service.compact_matter_state_service,
+            "update_after_turn",
+            fail_compact_update,
+        )
+        payload = QueryRequest(question="Please keep my existing history")
+
+        query_service._update_matter_from_state(
+            matter=matter,
+            payload=payload,
+            state=state,
+            effective_question=payload.question,
+        )
+
+        assert matter.metadata_json["issue_type"] == "legacy-issue"
+        assert matter.metadata_json["legacy_marker"] == {"must": "survive"}
+        assert matter.metadata_json["conversation_history"] == [legacy_turn.model_dump()]
+        assert matter.metadata_json["compact_state_v2"] == previous_compact.model_dump()
 
 
 # ===================================================================

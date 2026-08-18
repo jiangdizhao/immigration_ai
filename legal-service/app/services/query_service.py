@@ -1286,6 +1286,16 @@ class QueryService:
                         frontend_chat_id=matter.frontend_chat_id,
                     )
 
+                if self.compact_matter_state_service.detect_topic_switch(
+                    compact,
+                    state.issue_type,
+                    state.operation_type,
+                ):
+                    compact = self.compact_matter_state_service.switch_topic(
+                        compact,
+                        new_issue_type=state.issue_type,
+                    )
+
                 # Extract option candidates from case_hypothesis if available
                 option_candidates = None
                 ch = getattr(state, "case_hypothesis", None)
