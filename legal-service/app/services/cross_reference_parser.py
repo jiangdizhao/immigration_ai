@@ -357,15 +357,13 @@ def classify_schedule_family(schedule_ref: str) -> str | None:
         "4": "migration_regulations_schedule_4",
         "5": "migration_regulations_schedule_5",
         "6D": "migration_regulations_schedule_6d",
-        "6d": "migration_regulations_schedule_6d",
         "7A": "migration_regulations_schedule_7a",
-        "7a": "migration_regulations_schedule_7a",
         "8": "migration_regulations_schedule_8",
         "9": "migration_regulations_schedule_9",
         "10": "migration_regulations_schedule_10",
         "13": "migration_regulations_schedule_13",
     }
-    return schedule_map.get(schedule_ref)
+    return schedule_map.get(schedule_ref.strip().upper())
 
 
 def classify_locator_family(locator: LegalLocator) -> str | None:

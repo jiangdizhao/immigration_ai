@@ -94,6 +94,21 @@ class TestRequestEvidenceRegistry:
         assert entry.evidence_origin == "canonical_local"
         assert registry.resolve_evidence(ref).evidence_ref == ref
 
+    def test_exact_lookup_outcome_is_retained_per_tool_call(self):
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id="req-1")
+        ref = registry.register_canonical_evidence(
+            evidence=self._make_canonical_evidence(), tool_call_id="call-1"
+        )
+
+        registry.record_exact_lookup_outcome(
+            tool_call_id="call-1",
+            unresolved_cross_references=["section 48", "section 48"],
+        )
+
+        assert registry.unresolved_cross_references_for(ref) == ("section 48",)
+
     def test_registered_web_ref_accepted(self):
         from app.services.request_evidence_registry import RequestEvidenceRegistry
 
@@ -460,6 +475,42 @@ class TestCanonicalEvidenceProvenance:
         assert exc_info.value.code == "CANONICAL_URL_UNAVAILABLE"
 
 
+class TestAuthorityKindNormalization:
+    """Authority follows deterministic document identity, not broad type alone."""
+
+    @pytest.mark.parametrize(
+        ("title", "version", "expected"),
+        [
+            ("Migration Act 1958", "C2026C00090", "statute"),
+            ("Migration Regulations 1994", "F2026C00266", "delegated_legislation"),
+            (
+                "Migration Regulations 1994 - Schedule 2",
+                None,
+                "delegated_legislation",
+            ),
+        ],
+    )
+    def test_known_migration_document_identity(self, title, version, expected):
+        from app.services.canonical_evidence_service import normalize_authority_kind
+
+        assert (
+            normalize_authority_kind(
+                "legislation", {}, document_title=title, document_version=version
+            )
+            == expected
+        )
+
+    def test_unknown_generic_legislation_is_not_invented_as_statute(self):
+        from app.services.canonical_evidence_service import normalize_authority_kind
+
+        assert (
+            normalize_authority_kind(
+                "legislation", {}, document_title="Unclassified legal material"
+            )
+            == "commentary"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Cross-reference parser tests
 # ---------------------------------------------------------------------------
@@ -552,6 +603,37 @@ class TestCrossReferenceParser:
         refs = extract_cross_references(text)
         # Should not crash; may return empty or partial
         assert isinstance(refs, list)
+
+
+class TestExactLookupScheduleFamilyDetection:
+    """Named Schedule locators use the complete coverage-family mapping."""
+
+    @pytest.mark.parametrize(
+        ("locator", "expected"),
+        [
+            ("Schedule 1", "migration_regulations_schedule_1"),
+            ("Schedule 10", "migration_regulations_schedule_10"),
+            ("Schedule 13", "migration_regulations_schedule_13"),
+            ("Schedule 7A", "migration_regulations_schedule_7a"),
+            ("Schedule 6D", "migration_regulations_schedule_6d"),
+        ],
+    )
+    def test_named_schedule_uses_general_locator_family(self, locator, expected):
+        from app.schemas.tools import ExactLegalLookupRequest
+        from app.services.exact_legal_source_service import ExactLegalSourceService
+
+        request = ExactLegalLookupRequest(document_id=locator, as_of_date=date(2026, 8, 18))
+        assert ExactLegalSourceService(None)._determine_family(request) == expected
+
+    def test_unknown_named_schedule_remains_unknown(self):
+        from app.schemas.tools import ExactLegalLookupRequest
+        from app.services.exact_legal_source_service import ExactLegalSourceService
+
+        request = ExactLegalLookupRequest(
+            document_id="Migration Regulations 1994 - Schedule 12",
+            as_of_date=date(2026, 8, 18),
+        )
+        assert ExactLegalSourceService(None)._determine_family(request) is None
 
 
 # ---------------------------------------------------------------------------
@@ -1135,6 +1217,132 @@ class TestEvidencePostconditionService:
         result = evaluate_postcondition(submission, registry)
         assert result.status == "failed"
         assert result.claim_evaluations[0].status == "insufficient"
+
+    def test_partial_canonical_span_supports_bounded_legal_rule_and_keeps_limitation(self):
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id="partial-local-span")
+        evidence = self._make_canonical_evidence().model_copy(
+            update={
+                "document_id": "Migration Regulations 1994 - Schedule 2",
+                "document_version": "unknown",
+                "authority_kind": "delegated_legislation",
+                "provenance_complete": False,
+                "effective_from": None,
+                "effective_to": None,
+            }
+        )
+        ref = registry.register_canonical_evidence(evidence=evidence, tool_call_id="call-1")
+        draft = "The registered Schedule text states the bounded rule X."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            claims=[
+                AgentClaim(
+                    claim_id="c1",
+                    claim_type="legal_rule",
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=[ref],
+                )
+            ],
+            citations=[],
+            research_status="incomplete",
+            state_patch=[],
+        )
+
+        result = evaluate_postcondition(submission, registry)
+
+        assert result.status == "passed"
+        assert "Evidence provenance incomplete" in result.claim_evaluations[0].reasons
+        assert registry.resolve_evidence(ref).provenance_complete is False
+
+    def test_partial_canonical_span_cannot_support_current_law_claim(self):
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id="partial-current-law")
+        evidence = self._make_canonical_evidence().model_copy(
+            update={
+                "document_version": "unknown",
+                "authority_kind": "delegated_legislation",
+                "provenance_complete": False,
+                "effective_from": None,
+                "effective_to": None,
+            }
+        )
+        ref = registry.register_canonical_evidence(evidence=evidence, tool_call_id="call-1")
+        draft = "The current law is rule X."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            as_of_date=date(2026, 8, 18),
+            claims=[
+                AgentClaim(
+                    claim_id="c1",
+                    claim_type="current_fact",
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=[ref],
+                )
+            ],
+            citations=[],
+            research_status="incomplete",
+            state_patch=[],
+        )
+
+        result = evaluate_postcondition(submission, registry)
+
+        assert result.status == "failed"
+        assert "Canonical evidence has no document version" in result.claim_evaluations[0].reasons
+        assert "Canonical evidence has no effective interval" in result.claim_evaluations[0].reasons
+
+    def test_unresolved_cross_references_prevent_research_complete_claim(self):
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id="unresolved-xref")
+        ref = registry.register_canonical_evidence(
+            evidence=self._make_canonical_evidence(), tool_call_id="call-1"
+        )
+        registry.record_exact_lookup_outcome(
+            tool_call_id="call-1", unresolved_cross_references=["section 48"]
+        )
+        draft = "The research is complete and rule X applies."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            claims=[
+                AgentClaim(
+                    claim_id="c1",
+                    claim_type="legal_rule",
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=[ref],
+                )
+            ],
+            citations=[],
+            research_status="complete",
+            state_patch=[],
+        )
+
+        result = evaluate_postcondition(submission, registry)
+
+        assert result.status == "failed"
+        assert "Research marked complete despite unresolved cross-references" in result.claim_evaluations[0].reasons
 
     def test_guessed_ref_fails(self):
         from app.schemas.agent import AgentClaim, AgentSubmissionV2

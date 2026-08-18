@@ -108,7 +108,10 @@ SOURCE_TYPE_MAP: dict[str, SourceType] = {
 
 # Map source_type to default authority_kind (conservative)
 AUTHORITY_KIND_MAP: dict[str, AuthorityKind] = {
-    "legislation": "statute",
+    # The corpus's broad "legislation" type does not itself distinguish an
+    # Act from delegated legislation.  Known document identity below may do
+    # so; otherwise retain a conservative non-binding classification.
+    "legislation": "commentary",
     "statute": "statute",
     "act": "statute",
     "regulation": "delegated_legislation",
@@ -159,6 +162,9 @@ def normalize_source_type(raw: str | None) -> SourceType:
 def normalize_authority_kind(
     source_type: str | None,
     metadata: dict[str, Any] | None = None,
+    *,
+    document_title: str | None = None,
+    document_version: str | None = None,
 ) -> AuthorityKind:
     """Determine authority_kind from source type and metadata.
 
@@ -176,6 +182,18 @@ def normalize_authority_kind(
         }
         if candidate in valid_kinds:
             return candidate  # type: ignore[return-value]
+
+    title = (document_title or "").lower()
+    version = (document_version or "").upper()
+
+    # These are document-identity mechanics, not Schedule/visa routing.  The
+    # Federal Register compilation prefixes distinguish Commonwealth Acts
+    # (C...) from legislative instruments/regulations (F...) in the canonical
+    # corpus, while the descriptive title covers split Schedule sources.
+    if "migration act" in title or re.match(r"^C\d{4}C\d+", version):
+        return "statute"
+    if "migration regulations" in title or re.match(r"^F\d{4}C\d+", version):
+        return "delegated_legislation"
 
     if not source_type:
         return "commentary"  # Conservative unknown equivalent
@@ -406,7 +424,10 @@ class CanonicalEvidenceService:
         # Normalize metadata
         source_type = normalize_source_type(source.source_type)
         authority_kind = normalize_authority_kind(
-            source.source_type, source.metadata_json
+            source.source_type,
+            source.metadata_json,
+            document_title=source.title,
+            document_version=source.document_version,
         )
         court_level = normalize_court_level(source.source_type, source.metadata_json)
         binding_status = normalize_binding_status(authority_kind, court_level)
@@ -472,7 +493,10 @@ class CanonicalEvidenceService:
         # Normalize metadata
         source_type = normalize_source_type(source.source_type)
         authority_kind = normalize_authority_kind(
-            source.source_type, source.metadata_json
+            source.source_type,
+            source.metadata_json,
+            document_title=source.title,
+            document_version=source.document_version,
         )
         court_level = normalize_court_level(source.source_type, source.metadata_json)
         binding_status = normalize_binding_status(authority_kind, court_level)

@@ -202,8 +202,10 @@ class ExactLegalSourceService:
 
         duration_ms = (time.monotonic() - start_time) * 1000
 
-        # Build output
-        return self._build_output(
+        # Build output, then attach unresolved dependencies to every evidence
+        # ref issued by this lookup.  The registry is request-scoped and this
+        # is used only by the deterministic submission postcondition.
+        output = self._build_output(
             request=request,
             coverage=coverage,
             family_id=family_id,
@@ -214,6 +216,11 @@ class ExactLegalSourceService:
             gap_reason=gap_reason,
             duration_ms=duration_ms,
         )
+        registry.record_exact_lookup_outcome(
+            tool_call_id=tool_call_id,
+            unresolved_cross_references=output.unresolved_cross_references,
+        )
+        return output
 
     def _determine_family(self, request: ExactLegalLookupRequest) -> str | None:
         """Determine target source family from request."""
@@ -227,17 +234,25 @@ class ExactLegalSourceService:
         # This is syntax-level locator handling, not semantic routing.
         locator_text = " ".join(
             value for value in (request.document_id, request.query) if value
-        ).lower()
+        )
         if locator_text:
-            doc_lower = locator_text
-            if "schedule 2" in doc_lower or "sch 2" in doc_lower:
-                return "migration_regulations_schedule_2"
-            if "schedule 1" in doc_lower or "sch 1" in doc_lower:
-                return "migration_regulations_schedule_1"
-            if "schedule 3" in doc_lower:
-                return "migration_regulations_schedule_3"
-            if "schedule 8" in doc_lower:
-                return "migration_regulations_schedule_8"
+            locators = extract_cross_references(locator_text)
+            schedule_locators = [
+                item.locator
+                for item in locators
+                if item.locator.locator_type == "schedule"
+            ]
+            # A named schedule is a precise legal locator.  Do not map an
+            # unknown Schedule to another covered family merely because the
+            # surrounding text also mentions the Regulations.
+            if schedule_locators:
+                for locator in schedule_locators:
+                    family = classify_schedule_family(locator.target_provision or "")
+                    if family:
+                        return family
+                return None
+
+            doc_lower = locator_text.lower()
             if "migration act" in doc_lower:
                 return "migration_act"
             if "migration regulations" in doc_lower:
@@ -281,6 +296,7 @@ class ExactLegalSourceService:
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
             .options(joinedload(SourceChunk.source))
             .where(LegalSource.status == "active")
+            .order_by(LegalSource.title.asc(), SourceChunk.chunk_index.asc(), SourceChunk.id.asc())
             .limit(request.max_hits)
         )
 
@@ -293,9 +309,7 @@ class ExactLegalSourceService:
         conditions = []
 
         if request.schedule:
-            # Match schedule in title
-            schedule_pattern = f"%Schedule {request.schedule}%"
-            conditions.append(LegalSource.title.ilike(schedule_pattern))
+            conditions.append(self._schedule_title_condition(request.schedule))
 
         if request.provision:
             # Match provision in section_ref or text
@@ -364,6 +378,18 @@ class ExactLegalSourceService:
         return matches
 
     @staticmethod
+    def _schedule_title_condition(schedule: str):
+        """Match one Schedule locator, never a numeric/alphanumeric prefix.
+
+        PostgreSQL's case-insensitive POSIX regexp makes the terminating
+        legal-locator boundary explicit: Schedule 1 cannot match Schedule 10
+        or 13, and Schedule 7A cannot match a longer alphanumeric suffix.
+        """
+        normalized = schedule.strip().upper()
+        pattern = rf"(^|[^[:alnum:]])schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
+        return LegalSource.title.op("~*")(pattern)
+
+    @staticmethod
     def _family_source_condition(family_id: str | None):
         """Return the deterministic canonical-source scope for a family.
 
@@ -378,7 +404,7 @@ class ExactLegalSourceService:
             return None
         if family_id.startswith("migration_regulations_schedule_"):
             suffix = family_id.removeprefix("migration_regulations_schedule_")
-            return LegalSource.title.ilike(f"%Schedule {suffix.upper()}%")
+            return ExactLegalSourceService._schedule_title_condition(suffix)
         if family_id == "migration_act":
             return and_(
                 LegalSource.source_type.in_(["legislation", "act", "statute"]),
@@ -520,6 +546,7 @@ class ExactLegalSourceService:
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
             .options(joinedload(SourceChunk.source))
             .where(LegalSource.status == "active")
+            .order_by(LegalSource.title.asc(), SourceChunk.chunk_index.asc(), SourceChunk.id.asc())
             .limit(3)
         )
         family_condition = self._family_source_condition(family_id)
@@ -529,9 +556,7 @@ class ExactLegalSourceService:
 
         # Build exact match conditions
         if locator.locator_type == "schedule":
-            stmt = stmt.where(
-                LegalSource.title.ilike(f"%Schedule {locator.target_provision}%")
-            )
+            stmt = stmt.where(self._schedule_title_condition(locator.target_provision or ""))
         elif locator.locator_type in ("regulation", "subregulation"):
             stmt = stmt.where(
                 SourceChunk.section_ref.ilike(f"%{locator.target_provision}%")

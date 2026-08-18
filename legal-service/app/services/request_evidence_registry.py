@@ -49,6 +49,10 @@ class RegistryEntry:
     search_call_id: str | None = None
     url: str | None = None
     native_web_citation: dict[str, Any] | None = None
+    # Exact-lookup outcome recorded for this tool call.  These are locators,
+    # not raw matter text, and let the postcondition reject an assertion that
+    # research is complete when an actual dependency remains unresolved.
+    unresolved_cross_references: tuple[str, ...] = ()
     # Full evidence record (for retrieval)
     evidence_record: EvidenceRef | None = None
 
@@ -247,6 +251,28 @@ class RequestEvidenceRegistry:
         if entry.evidence_record is None:
             raise EvidenceNotRegisteredError(evidence_ref)
         return entry.evidence_record
+
+    def record_exact_lookup_outcome(
+        self,
+        *,
+        tool_call_id: str,
+        unresolved_cross_references: list[str],
+    ) -> None:
+        """Attach a bounded exact-lookup result to its registered evidence.
+
+        A registered canonical span remains usable for the wording it proves.
+        This metadata separately preserves unresolved dependencies so a later
+        submission cannot represent the associated research as complete.
+        """
+        self._check_not_disposed()
+        unresolved = tuple(dict.fromkeys(unresolved_cross_references))
+        for entry in self._entries.values():
+            if entry.tool_call_id == tool_call_id:
+                entry.unresolved_cross_references = unresolved
+
+    def unresolved_cross_references_for(self, evidence_ref: str) -> tuple[str, ...]:
+        """Return unresolved exact-lookup dependencies for an evidence ref."""
+        return self.resolve(evidence_ref).unresolved_cross_references
 
     def get_all_refs(self) -> list[str]:
         """Return all registered evidence refs (for observability)."""

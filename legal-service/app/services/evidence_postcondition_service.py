@@ -153,6 +153,7 @@ class EvidencePostconditionService:
             evaluation = self._evaluate_claim(
                 claim=claim,
                 as_of_date=as_of_date or submission.as_of_date,
+                research_status=submission.research_status,
             )
             evaluations.append(evaluation)
 
@@ -173,6 +174,7 @@ class EvidencePostconditionService:
         claim: AgentClaim,
         *,
         as_of_date: date | None,
+        research_status: str,
     ) -> ClaimEvaluation:
         """Evaluate evidence support for a single claim."""
         # Determine if evidence is required
@@ -217,6 +219,16 @@ class EvidencePostconditionService:
                 reasons.append(f"Evidence ref not registered: {ref[:20]}...")
                 continue
 
+            # A genuine local span remains evidence for the bounded wording it
+            # contains, but a claim cannot represent research as complete if
+            # that lookup disclosed unresolved decisive dependencies.
+            unresolved = self._registry.unresolved_cross_references_for(ref)
+            if research_status == "complete" and unresolved:
+                reasons.append(
+                    "Research marked complete despite unresolved cross-references"
+                )
+                continue
+
             # Evaluate evidence suitability
             suitability = self._evaluate_evidence_suitability(
                 evidence=evidence,
@@ -226,8 +238,9 @@ class EvidencePostconditionService:
 
             if suitability["suitable"]:
                 valid_evidence_count += 1
-            else:
-                reasons.extend(suitability["reasons"])
+            # Limitations are part of the deterministic review trace even
+            # when the exact span is sufficient for this bounded claim.
+            reasons.extend(suitability["reasons"])
 
         if valid_evidence_count > 0:
             return ClaimEvaluation(
@@ -308,9 +321,6 @@ class EvidencePostconditionService:
         suitable = True
 
         if effective_interval_invalid:
-            suitable = False
-
-        if isinstance(evidence, CanonicalLocalEvidenceRef) and not evidence.provenance_complete:
             suitable = False
 
         # Disqualify if only non-binding evidence for legal_rule
