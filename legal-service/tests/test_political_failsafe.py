@@ -179,6 +179,12 @@ def test_fastapi_block_returns_before_engine_db_or_provider_and_keeps_metrics_ze
     monkeypatch.setattr(query_route, "QueryService", RejectingQueryService)
     monkeypatch.setattr(query_route, "get_settings", lambda: Settings())
     monkeypatch.delenv("ANSWER_ENGINE", raising=False)
+    shadow_calls = []
+    monkeypatch.setattr(
+        query_route,
+        "_schedule_shadow_run",
+        lambda **kwargs: shadow_calls.append(kwargs),
+    )
 
     response = query_route.run_query(
         QueryRequest(question=blocked_text, assistant_mode=assistant_mode),
@@ -215,6 +221,7 @@ def test_fastapi_block_returns_before_engine_db_or_provider_and_keeps_metrics_ze
     assert metrics.political_gate_enforcement_layer == "fastapi"
     assert metrics.political_policy_version == FIXTURES["policy_version"]
     assert metrics.provider_api_call_count == 0
+    assert shadow_calls == []
     assert metrics.tool_call_count == 0
     assert metrics.tool_round_count == 0
     assert metrics.logical_llm_stage_count == 0

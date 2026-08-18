@@ -30,7 +30,7 @@ def _schedule_shadow_run(
     checker_target_ms: int,
     experiment_arm: str | None = None,
 ) -> None:
-    """Schedule a non-blocking shadow Luna run via BackgroundTasks.
+    """Schedule a non-blocking shadow Luna run in a daemon thread.
 
     Creates a fresh DB session inside the background task.
     Does NOT retain the request-scoped session.
@@ -57,6 +57,17 @@ def _schedule_shadow_run(
         def _run_in_thread() -> None:
             """Run the async shadow task in a dedicated event loop."""
             try:
+                shadow_started_at = time.perf_counter()
+                logger.info(
+                    "Shadow Luna run started",
+                    extra={
+                        "shadow_start_delay_ms": max(
+                            0.0, (shadow_started_at - accepted_at) * 1000
+                        ),
+                        "initial_remaining_deadline_ms": deadline.remaining_ms(),
+                        "turn_deadline_ms": deadline.turn_deadline_ms,
+                    },
+                )
                 asyncio.run(_run_shadow())
             except Exception:
                 logger.exception("Shadow Luna background task failed")
@@ -151,6 +162,32 @@ def run_query(
                     retrieval_debug={},
                 )
 
+        # Launch the non-serving shadow after the political gate and before
+        # legacy work.  The shadow receives only immutable request data and
+        # owns its DB/provider resources, so legacy state mutation cannot race
+        # with a shared Matter/session snapshot.
+        if settings.agent_shadow_enabled and not politically_blocked:
+            is_premium = payload.assistant_mode in (
+                "premium", "premium_direct_gpt55_high",
+            )
+            shadow_kwargs = {
+                "question": payload.question,
+                "mode": "premium" if is_premium else "default",
+                "response_language": payload.response_language or "en",
+                "accepted_at": accepted_at,
+                "turn_deadline_ms": (
+                    settings.premium_turn_deadline_ms if is_premium
+                    else settings.default_turn_deadline_ms
+                ),
+                "answer_research_target_ms": (
+                    settings.premium_answer_research_target_ms if is_premium
+                    else settings.default_answer_research_target_ms
+                ),
+                "checker_target_ms": settings.legal_fact_check_target_ms,
+                "experiment_arm": None,
+            }
+            _schedule_shadow_run(**shadow_kwargs)
+
         # Additive public aliases use the existing legacy engines in Phase 1.
         if payload.assistant_mode == "default":
             payload = payload.model_copy(update={"assistant_mode": "default_legal_pipeline"})
@@ -166,33 +203,6 @@ def run_query(
         observability_service.mark_agent_started("serving_engine_dispatch")
         response = service.handle_query(db, payload)
         observability_service.mark_answer_completed()
-
-        # Schedule Phase-5 shadow Luna run AFTER political gate and AFTER
-        # public response is ready.  Shadow is non-blocking and isolated.
-        if settings.agent_shadow_enabled and not politically_blocked:
-            is_premium = payload.assistant_mode in (
-                "premium", "premium_direct_gpt55_high",
-            )
-            shadow_kwargs = {
-                "question": payload.question,
-                "mode": "premium" if is_premium else "default",
-                "response_language": response.response_language or "en",
-                "accepted_at": accepted_at,
-                "turn_deadline_ms": (
-                    settings.premium_turn_deadline_ms if is_premium
-                    else settings.default_turn_deadline_ms
-                ),
-                "answer_research_target_ms": (
-                    settings.premium_answer_research_target_ms if is_premium
-                    else settings.default_answer_research_target_ms
-                ),
-                "checker_target_ms": settings.legal_fact_check_target_ms,
-                "experiment_arm": None,
-            }
-            if background_tasks is not None:
-                background_tasks.add_task(_schedule_shadow_run, **shadow_kwargs)
-            else:
-                _schedule_shadow_run(**shadow_kwargs)
 
         return response
     finally:

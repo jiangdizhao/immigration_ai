@@ -252,8 +252,30 @@ class ToolExecutorService:
         evidence postcondition. Records terminal submission state.
         """
         try:
-            # Parse submission
-            args = tool_call.arguments
+            # Parse submission.
+            # Deterministically normalize claim spans when claim.text occurs
+            # exactly once in draft_markdown. Never guess ambiguous spans.
+            args = dict(tool_call.arguments)
+            draft = args.get("draft_markdown")
+            claims = args.get("claims")
+
+            if isinstance(draft, str) and isinstance(claims, list):
+                normalized_claims = []
+                for raw_claim in claims:
+                    claim = dict(raw_claim) if isinstance(raw_claim, dict) else raw_claim
+
+                    if isinstance(claim, dict):
+                        claim_text = claim.get("text")
+                        if isinstance(claim_text, str) and claim_text:
+                            start = draft.find(claim_text)
+                            if start >= 0 and draft.find(claim_text, start + 1) == -1:
+                                claim["draft_start"] = start
+                                claim["draft_end"] = start + len(claim_text)
+
+                    normalized_claims.append(claim)
+
+                args["claims"] = normalized_claims
+
             submission = AgentSubmissionV2(**args)
 
             # Validate against registry

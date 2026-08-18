@@ -812,6 +812,42 @@ class TestRegistryLifecycle:
         )
         assert trace.evidence_refs is not None
 
+    async def test_shadow_uses_fresh_session_and_deep_copies_matter_state(self):
+        original_state = {"topic": {"selected": "original"}}
+        captured: dict[str, Any] = {}
+
+        class FakeSession:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        session = FakeSession()
+
+        class CapturingRuntime(AgentRuntimeService):
+            async def run_shadow(self, request, **kwargs):
+                captured["request"] = request
+                captured["db_session"] = kwargs["db_session"]
+                request.matter_state["topic"]["selected"] = "shadow-only"
+                return await super().run_shadow(request, **kwargs)
+
+        runtime = CapturingRuntime(provider=MockProvider([make_greeting_response()]))
+        shadow = ShadowAgentService(runtime)
+        trace = await shadow.run_shadow(
+            user_text="Hello",
+            mode="default",
+            matter_state=original_state,
+            db_session_factory=lambda: session,
+            experiment_arm="A",
+            upstream_gate_allowed=True,
+        )
+
+        assert trace.status == "completed"
+        assert captured["db_session"] is session
+        assert session.closed is True
+        assert captured["request"].matter_state["topic"]["selected"] == "shadow-only"
+        assert original_state == {"topic": {"selected": "original"}}
+
 
 # ---------------------------------------------------------------------------
 # Tests: Provider adapter (mock-based)

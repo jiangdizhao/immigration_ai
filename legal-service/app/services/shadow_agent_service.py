@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal
@@ -208,7 +209,7 @@ class ShadowAgentService:
             user_text=user_text,
             response_language=response_language,
             as_of_date=as_of_date,
-            matter_state=matter_state or {},
+            matter_state=deepcopy(matter_state) if matter_state is not None else {},
             execution_budget=execution_budget,
             experiment_arm=experiment_arm,
         )

@@ -64,7 +64,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
         web_normalizer: WebEvidenceNormalizer | None = None,
     ) -> None:
         settings = get_settings()
-        self._client = client or OpenAI(api_key=settings.openai_api_key)
+        self._client = client or OpenAI(api_key=settings.openai_api_key, max_retries=0)
         self._privacy_guard = privacy_guard or SearchPrivacyGuard()
         self._web_normalizer = web_normalizer or WebEvidenceNormalizer()
 

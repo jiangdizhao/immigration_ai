@@ -163,6 +163,107 @@ def test_query_route_starts_deadline_before_service_setup(monkeypatch) -> None:
     assert state_metrics["backend_total_latency_ms"] >= 25
 
 
+def test_shadow_starts_after_gate_before_slow_legacy_path(monkeypatch) -> None:
+    from app.api.routes import query as query_route
+
+    clock = FakeClock()
+    observer = AgentObservabilityService(clock=clock)
+    captured: dict[str, object] = {}
+
+    class Settings:
+        backend_political_failsafe_enabled = False
+        agent_shadow_enabled = True
+        default_turn_deadline_ms = 40000
+        premium_turn_deadline_ms = 45000
+        default_answer_research_target_ms = 32000
+        premium_answer_research_target_ms = 37000
+        legal_fact_check_target_ms = 8000
+        agent_max_tool_rounds = 2
+        agent_max_provider_calls = 3
+        agent_max_retries = 0
+
+    class FakeThread:
+        def __init__(self, *, target, daemon):
+            captured["thread_target"] = target
+            captured["thread_started_at"] = clock()
+            captured["daemon"] = daemon
+
+        def start(self):
+            captured["started"] = True
+
+    class SlowLegacyService:
+        def handle_query(self, _db, _payload):
+            clock.advance_ms(26600)
+            return QueryResponse(
+                answer="legacy answer",
+                response_language="en",
+                confidence="medium",
+                next_action="answer",
+            )
+
+    monkeypatch.setattr(query_route, "observability_service", observer)
+    monkeypatch.setattr(query_route, "get_settings", lambda: Settings())
+    monkeypatch.setattr(query_route, "QueryService", SlowLegacyService)
+    monkeypatch.setattr(query_route.threading, "Thread", FakeThread)
+    monkeypatch.setattr(query_route.time, "perf_counter", clock)
+    monkeypatch.delenv("ANSWER_ENGINE", raising=False)
+
+    response = query_route.run_query(QueryRequest(question="Current information"), db=object())
+
+    assert response.answer == "legacy answer"
+    assert captured["started"] is True
+    assert captured["thread_started_at"] == pytest.approx(100.0)
+    assert captured["daemon"] is True
+    assert clock() == pytest.approx(126.6)
+
+
+def test_shadow_launcher_is_nonblocking_when_legacy_response_is_ready_late(monkeypatch) -> None:
+    from app.api.routes import query as query_route
+
+    clock = FakeClock()
+    captured: dict[str, object] = {}
+
+    class Settings:
+        backend_political_failsafe_enabled = False
+        agent_shadow_enabled = True
+        default_turn_deadline_ms = 40000
+        premium_turn_deadline_ms = 45000
+        default_answer_research_target_ms = 32000
+        premium_answer_research_target_ms = 37000
+        legal_fact_check_target_ms = 8000
+        agent_max_tool_rounds = 2
+        agent_max_provider_calls = 3
+        agent_max_retries = 0
+
+    class FakeThread:
+        def __init__(self, *, target, daemon):
+            captured["target"] = target
+
+        def start(self):
+            captured["started"] = True
+
+    class LegacyService:
+        def handle_query(self, _db, _payload):
+            return QueryResponse(
+                answer="public",
+                response_language="en",
+                confidence="medium",
+                next_action="answer",
+            )
+
+    monkeypatch.setattr(query_route, "get_settings", lambda: Settings())
+    monkeypatch.setattr(query_route, "QueryService", LegacyService)
+    monkeypatch.setattr(query_route.threading, "Thread", FakeThread)
+    monkeypatch.setattr(query_route.time, "perf_counter", clock)
+    monkeypatch.delenv("ANSWER_ENGINE", raising=False)
+
+    response = query_route.run_query(QueryRequest(question="Hello"), db=object())
+
+    assert response.answer == "public"
+    assert captured["started"] is True
+    assert clock() == pytest.approx(100.0)
+
+
 def test_query_aliases_reuse_existing_legacy_modes(monkeypatch) -> None:
     from app.api.routes import query as query_route
 
