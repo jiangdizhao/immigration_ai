@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -128,7 +128,7 @@ def evaluate_native_web_applicability(
         if retrieved_at.tzinfo is not None
         else retrieved_at.date()
     )
-    if as_of_date != retrieved_date or retrieved_date != date.today():
+    if as_of_date != retrieved_date or retrieved_date != datetime.now(timezone.utc).date():
         return NativeWebApplicability(applicable=False, basis="unknown")
 
     parsed = urlparse(evidence.url)

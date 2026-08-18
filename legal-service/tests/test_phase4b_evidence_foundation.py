@@ -1347,7 +1347,10 @@ class TestEvidencePostconditionService:
 
     @pytest.mark.parametrize(
         "claim_date",
-        [date.today() - date.resolution, date.today() + date.resolution],
+        [
+            datetime.now(timezone.utc).date() - date.resolution,
+            datetime.now(timezone.utc).date() + date.resolution,
+        ],
     )
     def test_native_latest_is_insufficient_for_historical_or_future_date(self, claim_date):
         retrieved_at = datetime.now(timezone.utc)
