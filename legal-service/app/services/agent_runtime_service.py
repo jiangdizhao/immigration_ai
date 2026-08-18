@@ -216,6 +216,10 @@ class AgentRuntimeService:
                 provider_response_ids.append(response.response_id)
                 pii_violation_count += response.pii_violation_count
 
+                if response.pii_violation_count:
+                    errors.append("Generated web search query failed the privacy policy")
+                    break
+
                 # Save response ID for Responses API continuation
                 if response.response_id:
                     previous_response_id = response.response_id

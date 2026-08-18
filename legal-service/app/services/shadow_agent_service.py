@@ -90,16 +90,8 @@ class ShadowTrace:
 class ShadowAgentService:
     """Non-blocking shadow Luna execution service.
 
-    Usage in FastAPI query route:
-        if settings.agent_shadow_enabled and not politically_blocked:
-            shadow = ShadowAgentService(runtime)
-            bg_task = asyncio.create_task(
-                shadow.run_shadow(
-                    user_text=...,
-                    deadline=deadline_from_acceptance,
-                    upstream_gate_allowed=True,
-                )
-            )
+    The FastAPI query route schedules this service through its post-response
+    background-task adapter and a dedicated event loop.
     """
 
     def __init__(

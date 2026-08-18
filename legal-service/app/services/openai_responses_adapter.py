@@ -139,6 +139,14 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 elif item_type == "web_search_call":
                     self._handle_web_search_call(output_item, ctx)
 
+            if ctx.pii_violation_count:
+                return ProviderResponse(
+                    response_id=response_id, model=model, status="error",
+                    text=None, tool_calls=[], duration_ms=duration_ms,
+                    raw_response=response,
+                    pii_violation_count=ctx.pii_violation_count,
+                )
+
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "input_tokens", None) if usage else None
             output_tokens = getattr(usage, "output_tokens", None) if usage else None
@@ -173,7 +181,13 @@ class OpenAIResponsesAdapter(ProviderInterface):
             if role == "assistant" and "tool_calls" in msg:
                 items.append({"role": "assistant", "content": [{"type": "output_text", "text": str(content)}]})
             elif role == "tool":
-                pass
+                call_id = msg.get("tool_call_id")
+                if call_id:
+                    items.append({
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": str(content),
+                    })
             else:
                 items.append({"role": role if role in ("user", "assistant") else "user",
                               "content": [{"type": "input_text", "text": str(content)}]})

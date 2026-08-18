@@ -19,19 +19,6 @@ observability_service = AgentObservabilityService()
 political_failsafe_service = get_political_failsafe_service()
 logger = logging.getLogger(__name__)
 
-# Single background event loop for shadow tasks (thread-safe)
-_bg_loop: asyncio.AbstractEventLoop | None = None
-_bg_loop_lock = threading.Lock()
-
-
-def _get_bg_loop() -> asyncio.AbstractEventLoop:
-    global _bg_loop
-    with _bg_loop_lock:
-        if _bg_loop is None or _bg_loop.is_closed():
-            _bg_loop = asyncio.new_event_loop()
-        return _bg_loop
-
-
 def _schedule_shadow_run(
     *,
     question: str,
@@ -69,14 +56,10 @@ def _schedule_shadow_run(
 
         def _run_in_thread() -> None:
             """Run the async shadow task in a dedicated event loop."""
-            loop = _get_bg_loop()
-            asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(_run_shadow())
+                asyncio.run(_run_shadow())
             except Exception:
                 logger.exception("Shadow Luna background task failed")
-            finally:
-                pass  # Don't close the loop — it's shared
 
         async def _run_shadow() -> None:
             db = SessionLocal()
@@ -117,7 +100,7 @@ def _schedule_shadow_run(
 @router.post("", response_model=QueryResponse)
 def run_query(
     payload: QueryRequest,
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks = None,
     db=Depends(get_db),
 ) -> QueryResponse:
     # This is the backend timing origin: before engine selection, service
@@ -190,22 +173,26 @@ def run_query(
             is_premium = payload.assistant_mode in (
                 "premium", "premium_direct_gpt55_high",
             )
-            _schedule_shadow_run(
-                question=payload.question,
-                mode="premium" if is_premium else "default",
-                response_language=response.response_language or "en",
-                accepted_at=accepted_at,
-                turn_deadline_ms=(
+            shadow_kwargs = {
+                "question": payload.question,
+                "mode": "premium" if is_premium else "default",
+                "response_language": response.response_language or "en",
+                "accepted_at": accepted_at,
+                "turn_deadline_ms": (
                     settings.premium_turn_deadline_ms if is_premium
                     else settings.default_turn_deadline_ms
                 ),
-                answer_research_target_ms=(
+                "answer_research_target_ms": (
                     settings.premium_answer_research_target_ms if is_premium
                     else settings.default_answer_research_target_ms
                 ),
-                checker_target_ms=settings.legal_fact_check_target_ms,
-                experiment_arm=None,
-            )
+                "checker_target_ms": settings.legal_fact_check_target_ms,
+                "experiment_arm": None,
+            }
+            if background_tasks is not None:
+                background_tasks.add_task(_schedule_shadow_run, **shadow_kwargs)
+            else:
+                _schedule_shadow_run(**shadow_kwargs)
 
         return response
     finally:
