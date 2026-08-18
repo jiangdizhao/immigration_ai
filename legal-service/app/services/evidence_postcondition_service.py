@@ -211,6 +211,7 @@ class EvidencePostconditionService:
         # Resolve and evaluate evidence
         reasons: list[str] = []
         valid_evidence_count = 0
+        controlling_evidence_count = 0
 
         for ref in claim.evidence_refs:
             try:
@@ -234,13 +235,29 @@ class EvidencePostconditionService:
                 evidence=evidence,
                 claim_type=claim.claim_type,
                 as_of_date=as_of_date,
+                research_status=research_status,
             )
 
             if suitability["suitable"]:
                 valid_evidence_count += 1
+            if suitability.get("controlling"):
+                controlling_evidence_count += 1
             # Limitations are part of the deterministic review trace even
             # when the exact span is sufficient for this bounded claim.
             reasons.extend(suitability["reasons"])
+
+        if claim.claim_type in ("legal_rule", "legal_application") and controlling_evidence_count == 0:
+            reasons.append(
+                "Decisive legal claims require controlling binding legal authority"
+            )
+            return ClaimEvaluation(
+                claim_id=claim.claim_id,
+                claim_type=claim.claim_type,
+                materiality=claim.materiality,
+                status="insufficient",
+                reasons=reasons,
+                evidence_refs=claim.evidence_refs,
+            )
 
         if valid_evidence_count > 0:
             return ClaimEvaluation(
@@ -267,33 +284,115 @@ class EvidencePostconditionService:
         *,
         claim_type: str,
         as_of_date: date | None,
+        research_status: str,
     ) -> dict:
         """Evaluate whether evidence is suitable for a claim type."""
         reasons: list[str] = []
+        controlling = False
+
+        if isinstance(evidence, CanonicalLocalEvidenceRef) and not evidence.provenance_complete:
+            reasons.append("Evidence provenance incomplete")
 
         # LightRAG derived relationships are never sufficient
         if evidence.authority_kind == "derived_relationship":
             return {
                 "suitable": False,
+                "controlling": False,
                 "reasons": ["LightRAG relationship alone cannot support legal claims"],
             }
 
-        # Check binding status for legal claims
-        if claim_type in ("legal_rule", "legal_application"):
-            if evidence.binding_status == "non_binding":
-                # Non-binding evidence may still be suitable for some claims
-                # (e.g., guidance claims), but flag it
-                reasons.append("Evidence is non-binding")
-
         effective_interval_invalid = False
-        # Check effective dates for current_fact claims
-        if claim_type == "current_fact" and as_of_date:
-            if evidence.effective_from and evidence.effective_from > as_of_date:
-                reasons.append("Evidence not yet effective as of claim date")
+
+        # Legal claims need a known authoritative source.  Authenticity and
+        # binding status are independent: an unverified URL cannot become a
+        # controlling rule merely by carrying a statute label.
+        if claim_type in ("legal_rule", "legal_application"):
+            authoritative_authenticity = evidence.source_authenticity in {
+                "canonical_official",
+                "official_copy",
+            }
+            controlling = (
+                authoritative_authenticity
+                and evidence.authority_kind
+                in {"statute", "delegated_legislation", "binding_precedent"}
+                and evidence.binding_status == "binding"
+            )
+            if not authoritative_authenticity:
+                reasons.append("Legal claims require verified official evidence")
+            if evidence.binding_status != "binding":
+                reasons.append("Evidence is not binding legal authority")
+            if evidence.authority_kind not in {
+                "statute",
+                "delegated_legislation",
+                "binding_precedent",
+            }:
+                reasons.append("Evidence authority kind is not controlling law")
+
+            # Operational guidance may supplement a legal application, but it
+            # cannot be its sole controlling basis.
+            supplementary_guidance = (
+                claim_type == "legal_application"
+                and evidence.authority_kind == "operational_guidance"
+                and evidence.source_authenticity
+                in {"canonical_official", "official_copy"}
+                and evidence.binding_status == "non_binding"
+            )
+            if supplementary_guidance:
+                reasons.append("Official guidance is supplementary, not controlling")
+
+            version_unknown = not evidence.document_version or evidence.document_version == "unknown"
+            if version_unknown:
+                reasons.append("Evidence has no applicable document version")
                 effective_interval_invalid = True
-            if evidence.effective_to and evidence.effective_to < as_of_date:
-                reasons.append("Evidence no longer effective as of claim date")
+
+            if as_of_date:
+                if evidence.effective_from is None and evidence.effective_to is None:
+                    reasons.append("Evidence has no effective interval for claim date")
+                    effective_interval_invalid = True
+                if evidence.effective_from and evidence.effective_from > as_of_date:
+                    reasons.append("Evidence not yet effective as of claim date")
+                    effective_interval_invalid = True
+                if evidence.effective_to and evidence.effective_to < as_of_date:
+                    reasons.append("Evidence no longer effective as of claim date")
+                    effective_interval_invalid = True
+            elif research_status == "complete" and evidence.effective_from is None and evidence.effective_to is None:
+                reasons.append("Complete legal claims require an applicable effective interval")
                 effective_interval_invalid = True
+
+            suitable = (controlling or supplementary_guidance) and not effective_interval_invalid
+            return {
+                "suitable": suitable,
+                "controlling": controlling and not effective_interval_invalid,
+                "reasons": reasons,
+            }
+
+        # Change-sensitive current facts retain a strict applicability gate,
+        # while official operational guidance may remain non-binding evidence.
+        if claim_type == "current_fact":
+            if evidence.source_authenticity == "unverified":
+                reasons.append("Current facts require verified evidence")
+                effective_interval_invalid = True
+            if not evidence.document_version or evidence.document_version == "unknown":
+                reasons.append(
+                    "Canonical evidence has no document version"
+                    if isinstance(evidence, CanonicalLocalEvidenceRef)
+                    else "Current evidence has no document version"
+                )
+                effective_interval_invalid = True
+            if as_of_date:
+                if evidence.effective_from is None and evidence.effective_to is None:
+                    reasons.append(
+                        "Canonical evidence has no effective interval"
+                        if isinstance(evidence, CanonicalLocalEvidenceRef)
+                        else "Current evidence has no effective interval"
+                    )
+                    effective_interval_invalid = True
+                if evidence.effective_from and evidence.effective_from > as_of_date:
+                    reasons.append("Evidence not yet effective as of claim date")
+                    effective_interval_invalid = True
+                if evidence.effective_to and evidence.effective_to < as_of_date:
+                    reasons.append("Evidence no longer effective as of claim date")
+                    effective_interval_invalid = True
 
         # Native web evidence limitations
         if isinstance(evidence, NativeWebEvidenceRef):
@@ -301,35 +400,12 @@ class EvidencePostconditionService:
             # This is a limitation, not automatic disqualification
             reasons.append("Native web evidence lacks exact text/hash")
 
-        # Canonical local evidence is generally suitable
-        if isinstance(evidence, CanonicalLocalEvidenceRef):
-            # Check provenance completeness
-            if not evidence.provenance_complete:
-                reasons.append("Evidence provenance incomplete")
-
-            # A local partial-family span may still prove its own wording, but
-            # it cannot establish a change-sensitive current fact when its
-            # own version/effective applicability is unknown.
-            if claim_type == "current_fact":
-                if evidence.document_version == "unknown":
-                    reasons.append("Canonical evidence has no document version")
-                    effective_interval_invalid = True
-                if evidence.effective_from is None and evidence.effective_to is None:
-                    reasons.append("Canonical evidence has no effective interval")
-                    effective_interval_invalid = True
-
         suitable = True
 
         if effective_interval_invalid:
             suitable = False
 
-        # Disqualify if only non-binding evidence for legal_rule
-        if claim_type == "legal_rule" and evidence.binding_status == "non_binding":
-            # Non-binding alone is insufficient for legal rules
-            suitable = False
-            reasons.append("Legal rule claims require binding authority")
-
-        return {"suitable": suitable, "reasons": reasons}
+        return {"suitable": suitable, "controlling": controlling, "reasons": reasons}
 
 
 def evaluate_postcondition(

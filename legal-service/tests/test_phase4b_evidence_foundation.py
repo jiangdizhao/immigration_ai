@@ -290,6 +290,70 @@ class TestWebEvidenceNormalizer:
         assert evidence.text is None  # Native web has no exact text
         assert evidence.content_hash is None  # Native web has no hash
         assert evidence.source_authenticity == "canonical_official"  # Home Affairs domain
+        assert evidence.authority_kind == "operational_guidance"
+        assert evidence.binding_status == "non_binding"
+
+    @staticmethod
+    def _normalize_one(source: dict):
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+        from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+
+        registry = RequestEvidenceRegistry(request_id="authority-adversarial")
+        results = WebEvidenceNormalizer().normalize_search_output(
+            search_output={"sources": [source]},
+            search_call_id="search-authority",
+            tool_call_id="call-authority",
+            registry=registry,
+        )
+        assert len(results) == 1
+        return results[0][0]
+
+    def test_legislation_domain_does_not_imply_statute(self):
+        evidence = self._normalize_one(
+            {
+                "url": "https://www.legislation.gov.au/unknown-document/latest/text",
+                "title": "Migration Act 1958 (ambiguous search title)",
+                "authority_kind": "statute",
+                "citation": {"start_index": 0, "end_index": 10},
+            }
+        )
+        assert evidence.source_authenticity == "canonical_official"
+        assert evidence.authority_kind == "commentary"
+        assert evidence.binding_status != "binding"
+
+    def test_known_act_identity_is_statute(self):
+        evidence = self._normalize_one(
+            {
+                "url": "https://www.legislation.gov.au/C1958A00062/latest/text",
+                "title": "Federal Register result",
+                "citation": {"start_index": 0, "end_index": 10},
+            }
+        )
+        assert evidence.authority_kind == "statute"
+        assert evidence.binding_status == "binding"
+
+    def test_known_delegated_identity_is_delegated_legislation(self):
+        evidence = self._normalize_one(
+            {
+                "url": "https://www.legislation.gov.au/F1996B03551/latest/text",
+                "title": "Federal Register result",
+                "citation": {"start_index": 0, "end_index": 10},
+            }
+        )
+        assert evidence.authority_kind == "delegated_legislation"
+        assert evidence.binding_status == "binding"
+
+    def test_unknown_domain_cannot_become_binding_from_document_shape(self):
+        evidence = self._normalize_one(
+            {
+                "url": "https://example.com/C1958A00062/latest/text",
+                "title": "Copied legal page",
+                "citation": {"start_index": 0, "end_index": 10},
+            }
+        )
+        assert evidence.source_authenticity == "unverified"
+        assert evidence.authority_kind == "commentary"
+        assert evidence.binding_status != "binding"
 
     def test_plain_prose_url_not_evidence(self):
         """URLs in model prose are NOT normalized as evidence."""
@@ -1085,12 +1149,172 @@ class TestEvidencePostconditionService:
             document_id="Test Document",
             document_version="v1",
             provision_or_span="s 48",
-            effective_from=None,
+            effective_from=date(2020, 1, 1),
             effective_to=None,
             canonical_url="https://www.legislation.gov.au/test",
             content_hash=hashlib.sha256(text.encode()).hexdigest(),
             text=text,
         )
+
+    def _evaluate_decisive_claim(
+        self,
+        *,
+        evidence_records,
+        claim_type: str,
+        as_of_date: date | None = date(2026, 8, 18),
+        research_status: str = "complete",
+    ):
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id=f"{claim_type}-focused")
+        evidence_refs = [
+            registry.register_canonical_evidence(evidence=item, tool_call_id="call-focused")
+            for item in evidence_records
+        ]
+        draft = f"Decisive {claim_type} proposition."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            as_of_date=as_of_date,
+            claims=[
+                AgentClaim(
+                    claim_id="focused-claim",
+                    claim_type=claim_type,
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=evidence_refs,
+                )
+            ],
+            citations=[],
+            research_status=research_status,
+            state_patch=[],
+        )
+        return evaluate_postcondition(submission, registry), registry
+
+    def test_unverified_native_web_evidence_cannot_prove_legal_rule(self):
+        from app.schemas.evidence import NativeWebCitation, NativeWebEvidenceRef
+
+        evidence = NativeWebEvidenceRef(
+            evidence_origin="openai_web_native",
+            evidence_ref="web:pending",
+            source_type="legislation",
+            source_authenticity="unverified",
+            authority_kind="statute",
+            jurisdiction="Cth",
+            binding_status="binding",
+            court_or_tribunal_level=None,
+            retrieved_at=datetime.now(timezone.utc),
+            provenance_complete=True,
+            search_call_id="search-focused",
+            url="https://example.com/copied-act",
+            title="Copied Act",
+            native_web_citation=NativeWebCitation(start_index=0, end_index=10),
+            canonical_source_id=None,
+            document_version="v1",
+            effective_from=date(2020, 1, 1),
+            effective_to=None,
+            text=None,
+            content_hash=None,
+        )
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+
+        registry = RequestEvidenceRegistry(request_id="unverified-rule")
+        ref = registry.register_native_web_evidence(evidence=evidence, tool_call_id="call-1")
+        draft = "The statute establishes rule X."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            as_of_date=date(2026, 8, 18),
+            claims=[
+                AgentClaim(
+                    claim_id="c1",
+                    claim_type="legal_rule",
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=[ref],
+                )
+            ],
+            citations=[],
+            research_status="complete",
+            state_patch=[],
+        )
+        result = evaluate_postcondition(submission, registry)
+        assert result.status == "failed"
+
+    def test_non_binding_guidance_cannot_alone_prove_legal_rule_or_application(self):
+        guidance = self._make_canonical_evidence().model_copy(
+            update={
+                "source_type": "official_guidance",
+                "authority_kind": "operational_guidance",
+                "binding_status": "non_binding",
+            }
+        )
+        rule_result, _ = self._evaluate_decisive_claim(
+            evidence_records=[guidance], claim_type="legal_rule"
+        )
+        application_result, _ = self._evaluate_decisive_claim(
+            evidence_records=[guidance], claim_type="legal_application"
+        )
+        assert rule_result.status == "failed"
+        assert application_result.status == "failed"
+
+    def test_expired_legal_rule_evidence_fails(self):
+        evidence = self._make_canonical_evidence().model_copy(
+            update={"effective_to": date(2020, 1, 1)}
+        )
+        result, _ = self._evaluate_decisive_claim(
+            evidence_records=[evidence], claim_type="legal_rule"
+        )
+        assert result.status == "failed"
+        assert "Evidence no longer effective as of claim date" in result.claim_evaluations[0].reasons
+
+    def test_future_effective_legal_rule_evidence_fails(self):
+        evidence = self._make_canonical_evidence().model_copy(
+            update={"effective_from": date(2027, 1, 1)}
+        )
+        result, _ = self._evaluate_decisive_claim(
+            evidence_records=[evidence], claim_type="legal_rule"
+        )
+        assert result.status == "failed"
+        assert "Evidence not yet effective as of claim date" in result.claim_evaluations[0].reasons
+
+    def test_complete_legal_rule_with_unknown_version_or_interval_fails(self):
+        evidence = self._make_canonical_evidence().model_copy(
+            update={
+                "document_version": "unknown",
+                "effective_from": None,
+                "effective_to": None,
+            }
+        )
+        result, _ = self._evaluate_decisive_claim(
+            evidence_records=[evidence], claim_type="legal_rule"
+        )
+        assert result.status == "failed"
+        assert "Evidence has no applicable document version" in result.claim_evaluations[0].reasons
+
+    def test_binding_authority_plus_guidance_supports_application(self):
+        guidance = self._make_canonical_evidence().model_copy(
+            update={
+                "source_type": "official_guidance",
+                "authority_kind": "operational_guidance",
+                "binding_status": "non_binding",
+            }
+        )
+        result, _ = self._evaluate_decisive_claim(
+            evidence_records=[self._make_canonical_evidence(), guidance],
+            claim_type="legal_application",
+        )
+        assert result.status == "passed"
 
     def test_general_submission_not_required(self):
         from app.schemas.agent import AgentSubmissionV2
@@ -1218,7 +1442,7 @@ class TestEvidencePostconditionService:
         assert result.status == "failed"
         assert result.claim_evaluations[0].status == "insufficient"
 
-    def test_partial_canonical_span_supports_bounded_legal_rule_and_keeps_limitation(self):
+    def test_partial_canonical_span_is_retained_but_unknown_applicability_fails(self):
         from app.schemas.agent import AgentClaim, AgentSubmissionV2
         from app.services.evidence_postcondition_service import evaluate_postcondition
         from app.services.request_evidence_registry import RequestEvidenceRegistry
@@ -1258,7 +1482,8 @@ class TestEvidencePostconditionService:
 
         result = evaluate_postcondition(submission, registry)
 
-        assert result.status == "passed"
+        assert result.status == "failed"
+        assert "Evidence has no applicable document version" in result.claim_evaluations[0].reasons
         assert "Evidence provenance incomplete" in result.claim_evaluations[0].reasons
         assert registry.resolve_evidence(ref).provenance_complete is False
 

@@ -17,6 +17,7 @@ Tests use fixtures/mocks, not live OpenAI calls.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -74,6 +75,16 @@ GOVERNMENT_GUIDANCE_DOMAINS = {
     "servicesaustralia.gov.au",
 }
 
+# Federal Register identifiers already used by this repository. The document
+# identity convention is evidence about the document, while the domain only
+# establishes authenticity.
+FEDERAL_REGISTER_ACT_ID = re.compile(
+    r"(?<![A-Z0-9])C\d{4}[AC]\d+(?![A-Z0-9])", re.IGNORECASE
+)
+FEDERAL_REGISTER_DELEGATED_ID = re.compile(
+    r"(?<![A-Z0-9])F\d{4}[A-Z]\d+(?![A-Z0-9])", re.IGNORECASE
+)
+
 
 def extract_domain(url: str) -> str:
     """Extract domain from URL."""
@@ -110,21 +121,59 @@ def classify_source_type_from_url(url: str) -> SourceType:
     return "web_page"
 
 
-def classify_authority_kind_from_url(url: str) -> AuthorityKind:
-    """Classify likely authority kind from URL.
+def _structured_document_identity(source: dict[str, Any] | None) -> str:
+    """Return actual identity fields from a native result, excluding titles."""
+    if not source:
+        return ""
+    values: list[str] = []
+    for key in (
+        "document_id",
+        "document_version",
+        "identifier",
+        "citation",
+        "canonical_source_id",
+        "legislation_id",
+    ):
+        value = source.get(key)
+        if isinstance(value, str):
+            values.append(value)
+        elif isinstance(value, dict):
+            for nested_key in ("document_id", "document_version", "identifier", "id"):
+                nested = value.get(nested_key)
+                if isinstance(nested, str):
+                    values.append(nested)
+    return " ".join(values)
 
-    IMPORTANT: This does NOT determine binding status.
-    Official guidance is authentic but non-binding.
+
+def classify_authority_kind_from_url(
+    url: str,
+    *,
+    structured_source: dict[str, Any] | None = None,
+) -> AuthorityKind:
+    """Classify authority from structured identity, never domain alone.
+
+    Federal Register C-series Act identities and F-series delegated identities
+    are deterministic document conventions already used in this repository.
+    An otherwise unknown Federal Register page remains commentary.
     """
     domain = extract_domain(url)
     if domain in LEGISLATION_DOMAINS:
-        return "statute"  # May be Act or instrument; conservative
+        identity = " ".join((_structured_document_identity(structured_source), url))
+        if FEDERAL_REGISTER_ACT_ID.search(identity):
+            return "statute"
+        if FEDERAL_REGISTER_DELEGATED_ID.search(identity):
+            return "delegated_legislation"
+        return "commentary"
     if domain in GOVERNMENT_GUIDANCE_DOMAINS:
         return "operational_guidance"
-    return "commentary"  # Unknown/conservative
+    return "commentary"
 
 
-def classify_binding_status(authority_kind: AuthorityKind) -> BindingStatus:
+def classify_binding_status(
+    authority_kind: AuthorityKind,
+    *,
+    uncertain: bool = False,
+) -> BindingStatus:
     """Determine binding status from authority kind.
 
     Only legislation is binding. Guidance, commentary, etc. are not.
@@ -133,6 +182,8 @@ def classify_binding_status(authority_kind: AuthorityKind) -> BindingStatus:
         return "binding"
     if authority_kind == "binding_precedent":
         return "binding"
+    if authority_kind == "commentary" and uncertain:
+        return "unknown"
     return "non_binding"
 
 
@@ -229,8 +280,17 @@ class WebEvidenceNormalizer:
             # Classify metadata deterministically from URL
             source_authenticity = classify_source_authenticity(url)
             source_type = classify_source_type_from_url(url)
-            authority_kind = classify_authority_kind_from_url(url)
-            binding_status = classify_binding_status(authority_kind)
+            authority_kind = classify_authority_kind_from_url(
+                url,
+                structured_source=source,
+            )
+            binding_status = classify_binding_status(
+                authority_kind,
+                uncertain=(
+                    extract_domain(url) in LEGISLATION_DOMAINS
+                    and authority_kind == "commentary"
+                ),
+            )
 
             evidence = NativeWebEvidenceRef(
                 evidence_origin="openai_web_native",
