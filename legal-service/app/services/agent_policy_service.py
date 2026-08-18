@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.core.config import get_settings
-from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V1, LUNA_PROMPT_VERSION
+from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V2, LUNA_PROMPT_VERSION
 
 ExperimentArm = Literal["A", "B", "C", "D"] | None
 
@@ -27,7 +27,7 @@ ExperimentArm = Literal["A", "B", "C", "D"] | None
 SUBMIT_ANSWER_TOOL = {
     "type": "function",
     "name": "submit_answer",
-    "description": "Terminal function to submit the completed answer. Must be called exactly once at the end of every response.",
+    "description": "Terminal function to submit the completed answer. Must be called exactly once at the end of every response. Claim text must be copied verbatim as a contiguous excerpt from draft_markdown; the backend verifies and derives its span.",
     "strict": False,
     "parameters": {
         "type": "object",
@@ -52,7 +52,7 @@ SUBMIT_ANSWER_TOOL = {
             },
             "claims": {
                 "type": "array",
-                "description": "Typed claims with evidence references",
+                "description": "Typed claims with evidence references. For each claim, text must be an exact contiguous excerpt from draft_markdown; do not paraphrase. Use an empty array for general/procedural answers without claims.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -65,9 +65,9 @@ SUBMIT_ANSWER_TOOL = {
                             "type": "string",
                             "enum": ["decisive", "supporting"],
                         },
-                        "text": {"type": "string"},
-                        "draft_start": {"type": "integer", "minimum": 0},
-                        "draft_end": {"type": "integer", "minimum": 0},
+                        "text": {"type": "string", "description": "Exact contiguous excerpt copied from draft_markdown; never a paraphrase"},
+                        "draft_start": {"type": "integer", "minimum": 0, "description": "Advisory offset; backend derives and validates the authoritative span"},
+                        "draft_end": {"type": "integer", "minimum": 0, "description": "Advisory offset; backend derives and validates the authoritative span"},
                         "evidence_refs": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -221,7 +221,7 @@ class AgentPolicyService:
             model = settings.default_agent_model
 
         return AgentPolicy(
-            system_prompt=LUNA_SYSTEM_PROMPT_V1,
+            system_prompt=LUNA_SYSTEM_PROMPT_V2,
             prompt_version=LUNA_PROMPT_VERSION,
             model=model,
             tools=tools,

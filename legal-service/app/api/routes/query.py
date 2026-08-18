@@ -59,14 +59,10 @@ def _schedule_shadow_run(
             try:
                 shadow_started_at = time.perf_counter()
                 logger.info(
-                    "Shadow Luna run started",
-                    extra={
-                        "shadow_start_delay_ms": max(
-                            0.0, (shadow_started_at - accepted_at) * 1000
-                        ),
-                        "initial_remaining_deadline_ms": deadline.remaining_ms(),
-                        "turn_deadline_ms": deadline.turn_deadline_ms,
-                    },
+                    "Shadow Luna run started: start_delay_ms=%.0f initial_remaining_deadline_ms=%.0f turn_deadline_ms=%d",
+                    max(0.0, (shadow_started_at - accepted_at) * 1000),
+                    deadline.remaining_ms(),
+                    deadline.turn_deadline_ms,
                 )
                 asyncio.run(_run_shadow())
             except Exception:

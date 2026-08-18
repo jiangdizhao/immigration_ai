@@ -196,6 +196,163 @@ def make_runtime_request(**overrides: Any) -> AgentRuntimeRequest:
     return AgentRuntimeRequest(**defaults)
 
 
+def make_submit_context() -> ToolExecutorContext:
+    return ToolExecutorContext(request_id="span-test", registry=create_registry("span-test"))
+
+
+def make_submit_call(*, draft: str, claim_text: str, start: int, end: int) -> ToolCallRequest:
+    return ToolCallRequest(
+        call_id="submit-span-test",
+        name="submit_answer",
+        arguments={
+            "schema_version": "agent_submission.v2",
+            "answer_class": "general",
+            "draft_markdown": draft,
+            "as_of_date": None,
+            "claims": [{
+                "claim_id": "c1",
+                "claim_type": "general",
+                "materiality": "supporting",
+                "text": claim_text,
+                "draft_start": start,
+                "draft_end": end,
+                "evidence_refs": [],
+            }],
+            "citations": [],
+            "research_status": "not_required",
+            "state_patch": [],
+        },
+    )
+
+
+class TestClaimSpanNormalization:
+    def test_valid_model_offsets_are_preserved(self):
+        draft = "A unique claim appears here."
+        claim_text = "A unique claim appears here."
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(
+                draft=draft,
+                claim_text=claim_text,
+                start=0,
+                end=len(claim_text),
+            ),
+            context,
+        )
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        claim = result.submission.claims[0]
+        assert (claim.draft_start, claim.draft_end) == (0, len(claim_text))
+
+    def test_wrong_model_offsets_are_replaced_by_unique_exact_span(self):
+        draft = "Prefix. A unique claim appears here."
+        claim_text = "A unique claim appears here."
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(draft=draft, claim_text=claim_text, start=0, end=5),
+            context,
+        )
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        claim = result.submission.claims[0]
+        assert draft[claim.draft_start:claim.draft_end] == claim_text
+        assert claim.draft_end <= len(draft)
+
+    def test_whitespace_and_markdown_are_handled_without_fuzzy_matching(self):
+        draft = "*Current\ninformation* is available."
+        claim_text = "Current information"
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(draft=draft, claim_text=claim_text, start=0, end=999),
+            context,
+        )
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        claim = result.submission.claims[0]
+        assert draft[claim.draft_start:claim.draft_end] == "Current\ninformation"
+
+    def test_ambiguous_repeated_text_is_rejected_without_guessing(self):
+        draft = "Repeat. Repeat."
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(draft=draft, claim_text="Repeat.", start=0, end=7),
+            context,
+        )
+        assert result.result.status == "invalid_request"
+        assert result.submission is None
+        assert result.submission_action is not None
+        assert result.submission_action.can_continue is True
+        assert result.result.data["errors"][0]["code"] == "CLAIM_TEXT_AMBIGUOUS"
+        assert context.terminal_record.correction_count == 1
+
+    def test_absent_or_paraphrased_text_is_rejected(self):
+        draft = "Hello! How can I help you with Australian immigration today?"
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(
+                draft=draft,
+                claim_text="The assistant offers help with Australian immigration matters.",
+                start=0,
+                end=72,
+            ),
+            context,
+        )
+        assert result.result.status == "invalid_request"
+        assert result.submission is None
+        assert result.result.data["errors"][0]["code"] == "CLAIM_TEXT_NOT_FOUND"
+
+    def test_unicode_claim_span_is_codepoint_safe_and_in_bounds(self):
+        draft = "说明：签证申请需要材料。"
+        claim_text = "签证申请需要材料。"
+        context = make_submit_context()
+        result = ToolExecutorService().execute_tool(
+            make_submit_call(draft=draft, claim_text=claim_text, start=0, end=1),
+            context,
+        )
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        claim = result.submission.claims[0]
+        assert draft[claim.draft_start:claim.draft_end] == claim_text
+        assert 0 <= claim.draft_start <= claim.draft_end <= len(draft)
+
+    async def test_rejected_submit_receives_one_bounded_repair_then_accepts(self):
+        draft = "Hello!"
+        invalid = make_submit_call(
+            draft=draft,
+            claim_text="A paraphrase that is not in the draft.",
+            start=0,
+            end=100,
+        )
+        valid = ToolCallRequest(
+            call_id="submit-valid-after-repair",
+            name="submit_answer",
+            arguments={
+                "schema_version": "agent_submission.v2",
+                "answer_class": "general",
+                "draft_markdown": draft,
+                "claims": [],
+                "citations": [],
+                "research_status": "not_required",
+                "state_patch": [],
+            },
+        )
+        provider = MockProvider([
+            ProviderResponse(response_id="invalid-submit", model="gpt-5.6-luna", status="ok", tool_calls=[invalid]),
+            ProviderResponse(response_id="valid-submit", model="gpt-5.6-luna", status="ok", tool_calls=[valid]),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry("repair-test"),
+        )
+        assert result.status == "completed"
+        assert result.metrics.provider_api_call_count == 2
+        assert result.terminal_submission_continuation_count == 1
+        assert result.tool_outputs[0].status == "invalid_request"
+        assert result.tool_outputs[0].data["errors"][0]["code"] == "CLAIM_TEXT_NOT_FOUND"
+
+
 # ---------------------------------------------------------------------------
 # Tests: Shadow disabled
 # ---------------------------------------------------------------------------

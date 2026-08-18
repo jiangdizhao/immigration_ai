@@ -13,6 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -41,6 +42,106 @@ from app.tools.base import ToolExecutionError, build_tool_result
 from app.tools.deterministic_utility import execute_utility
 
 logger = logging.getLogger(__name__)
+
+
+def _find_claim_text_spans(*, draft: str, claim_text: str) -> list[tuple[int, int]]:
+    """Find whitespace-equivalent contiguous excerpts in the submitted draft.
+
+    This deliberately allows only whitespace differences. Markdown punctuation,
+    Unicode characters, and wording must remain exact; paraphrases are not
+    eligible for structural span derivation.
+    """
+    tokens = claim_text.split()
+    if not tokens:
+        return []
+    pattern = r"\s+".join(re.escape(token) for token in tokens)
+    # Lookahead preserves overlapping occurrences (for example, "aa" in
+    # "aaa"), so ambiguity can never be hidden by normal regex iteration.
+    return [
+        (match.start(1), match.end(1))
+        for match in re.finditer(f"(?=({pattern}))", draft)
+    ]
+
+
+def _normalize_claim_spans(
+    *,
+    draft: Any,
+    claims: Any,
+) -> tuple[list[dict[str, Any]], list[SubmissionError]]:
+    """Derive claim spans before strict AgentSubmissionV2 construction.
+
+    Model-provided offsets are advisory. A unique whitespace-equivalent excerpt
+    determines the backend-owned span; an ambiguous or absent excerpt is a
+    deterministic rejection, never a fuzzy association.
+    """
+    if not isinstance(draft, str) or not isinstance(claims, list):
+        return [], [
+            SubmissionError(
+                code="SUBMISSION_SCHEMA_INVALID",
+                field="submission",
+            )
+        ]
+
+    normalized_claims: list[dict[str, Any]] = []
+    errors: list[SubmissionError] = []
+    for raw_claim in claims:
+        if not isinstance(raw_claim, dict):
+            errors.append(
+                SubmissionError(code="SUBMISSION_SCHEMA_INVALID", field="claims")
+            )
+            continue
+
+        claim = dict(raw_claim)
+        claim_id = str(claim.get("claim_id") or "")
+        claim_text = claim.get("text")
+        if not isinstance(claim_text, str) or not claim_text:
+            errors.append(
+                SubmissionError(
+                    code="CLAIM_TEXT_INVALID",
+                    field=f"claims.{claim_id or '<unknown>'}.text",
+                    affected_claim_ids=[claim_id] if claim_id else [],
+                )
+            )
+            normalized_claims.append(claim)
+            continue
+
+        matches = _find_claim_text_spans(draft=draft, claim_text=claim_text)
+        if len(matches) == 1:
+            start, end = matches[0]
+            raw_start = claim.get("draft_start")
+            raw_end = claim.get("draft_end")
+            raw_span_is_valid = (
+                isinstance(raw_start, int)
+                and not isinstance(raw_start, bool)
+                and isinstance(raw_end, int)
+                and not isinstance(raw_end, bool)
+                and 0 <= raw_start <= raw_end <= len(draft)
+                and " ".join(draft[raw_start:raw_end].split())
+                == " ".join(claim_text.split())
+            )
+            if not raw_span_is_valid:
+                claim["draft_start"] = start
+                claim["draft_end"] = end
+        elif len(matches) == 0:
+            errors.append(
+                SubmissionError(
+                    code="CLAIM_TEXT_NOT_FOUND",
+                    field=f"claims.{claim_id or '<unknown>'}.text",
+                    affected_claim_ids=[claim_id] if claim_id else [],
+                )
+            )
+        else:
+            errors.append(
+                SubmissionError(
+                    code="CLAIM_TEXT_AMBIGUOUS",
+                    field=f"claims.{claim_id or '<unknown>'}.text",
+                    affected_claim_ids=[claim_id] if claim_id else [],
+                )
+            )
+
+        normalized_claims.append(claim)
+
+    return normalized_claims, errors
 
 
 @dataclass(slots=True)
@@ -252,31 +353,32 @@ class ToolExecutorService:
         evidence postcondition. Records terminal submission state.
         """
         try:
-            # Parse submission.
-            # Deterministically normalize claim spans when claim.text occurs
-            # exactly once in draft_markdown. Never guess ambiguous spans.
             args = dict(tool_call.arguments)
-            draft = args.get("draft_markdown")
-            claims = args.get("claims")
+            normalized_claims, span_errors = _normalize_claim_spans(
+                draft=args.get("draft_markdown"),
+                claims=args.get("claims"),
+            )
+            if span_errors:
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=span_errors,
+                )
+            args["claims"] = normalized_claims
 
-            if isinstance(draft, str) and isinstance(claims, list):
-                normalized_claims = []
-                for raw_claim in claims:
-                    claim = dict(raw_claim) if isinstance(raw_claim, dict) else raw_claim
-
-                    if isinstance(claim, dict):
-                        claim_text = claim.get("text")
-                        if isinstance(claim_text, str) and claim_text:
-                            start = draft.find(claim_text)
-                            if start >= 0 and draft.find(claim_text, start + 1) == -1:
-                                claim["draft_start"] = start
-                                claim["draft_end"] = start + len(claim_text)
-
-                    normalized_claims.append(claim)
-
-                args["claims"] = normalized_claims
-
-            submission = AgentSubmissionV2(**args)
+            try:
+                submission = AgentSubmissionV2(**args)
+            except (TypeError, ValueError):
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=[
+                        SubmissionError(
+                            code="SUBMISSION_SCHEMA_INVALID",
+                            field="submission",
+                        )
+                    ],
+                )
 
             # Validate against registry
             validator = AgentSubmissionValidator(context.registry)
@@ -381,6 +483,43 @@ class ToolExecutorService:
                 duration_ms=0,
                 error={"code": "SUBMIT_ANSWER_ERROR", "message": str(exc)},
             ), None, None
+
+    def _reject_submission(
+        self,
+        *,
+        tool_call: ToolCallRequest,
+        context: ToolExecutorContext,
+        errors: list[SubmissionError],
+    ) -> tuple[ToolResultEnvelope, AgentSubmissionV2 | None, TerminalSubmissionAction | None]:
+        """Return a bounded structured rejection and consume one repair allowance."""
+        action = context.terminal_policy.handle_invalid_submission(
+            context.terminal_record,
+            errors=[error.code for error in errors],
+            deadline_remaining_ms=(
+                context.deadline_monotonic
+                and max(0.0, (context.deadline_monotonic - time.monotonic()) * 1000.0)
+            ),
+        )
+        rejected = SubmitAnswerRejected(
+            accepted=False,
+            submission_id=None,
+            postcondition_status="failed",
+            errors=errors,
+        )
+        return (
+            build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="invalid_request",
+                data=rejected.model_dump(mode="json"),
+                duration_ms=0,
+                error={
+                    "code": "SUBMISSION_INVALID",
+                    "message": "Submission validation failed",
+                },
+            ),
+            None,
+            action,
+        )
 
     def handle_missing_submission(
         self,

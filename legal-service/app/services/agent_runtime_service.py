@@ -267,10 +267,13 @@ class AgentRuntimeService:
                                 else:
                                     submission_received = True
                                     submission = result.submission
-                            elif result.submission_action is not None and not result.submission_action.can_continue:
-                                errors.append(f"Terminal submission failed: {result.submission_action.reason}")
-                                terminal_failure = True
-                                break
+                            elif result.submission_action is not None:
+                                if result.submission_action.can_continue:
+                                    continuation_count += 1
+                                else:
+                                    errors.append(f"Terminal submission failed: {result.submission_action.reason}")
+                                    terminal_failure = True
+                                    break
 
                         tool_results_for_provider.append({
                             "role": "tool",

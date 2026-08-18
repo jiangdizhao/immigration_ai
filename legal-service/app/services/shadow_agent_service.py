@@ -72,6 +72,7 @@ class ShadowTrace:
     provider_response_ids: list[str] = field(default_factory=list)
     tool_call_count: int = 0
     tool_round_count: int = 0
+    web_search_call_count: int = 0
     tool_outputs: list[dict[str, Any]] = field(default_factory=list)
     total_input_tokens: int | None = None
     total_output_tokens: int | None = None
@@ -301,6 +302,7 @@ class ShadowAgentService:
             provider_response_ids=result.provider_response_ids,
             tool_call_count=result.metrics.tool_call_count,
             tool_round_count=result.metrics.tool_round_count,
+            web_search_call_count=result.metrics.web_search_call_count,
             tool_outputs=[t.model_dump(mode="json") for t in result.tool_outputs],
             total_duration_ms=result.metrics.total_latency_ms,
             deadline_ms=deadline.turn_deadline_ms,
@@ -316,10 +318,23 @@ class ShadowAgentService:
         )
 
         logger.info(
-            "Shadow Luna run completed: status=%s arm=%s duration=%.0fms errors=%d",
+            "Shadow Luna run completed: status=%s arm=%s duration=%.0fms provider_calls=%d tool_calls=%d tool_rounds=%d web_search_calls=%d submit_answer_accepted=%s submit_answer_rejected=%s repair_count=%d submission_error_codes=%s errors=%d",
             trace.status,
             trace.experiment_arm,
             trace.total_duration_ms,
+            trace.provider_call_count,
+            trace.tool_call_count,
+            trace.tool_round_count,
+            trace.web_search_call_count,
+            trace.submission is not None,
+            trace.terminal_submission_continuation_count > 0,
+            trace.terminal_submission_continuation_count,
+            sorted({
+                error.get("code")
+                for output in trace.tool_outputs
+                for error in output.get("data", {}).get("errors", [])
+                if isinstance(error, dict) and error.get("code")
+            }),
             len(trace.errors),
         )
 
