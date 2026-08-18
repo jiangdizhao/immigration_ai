@@ -63,36 +63,24 @@ class ShadowTrace:
     model: str
     status: Literal["completed", "timeout", "error", "incomplete", "disabled", "blocked"]
     submission: AgentSubmissionV2 | None
-    # Candidate state patch (recorded, NOT applied)
     candidate_state_patch: list[dict[str, Any]] | None = None
-    # Research status
     research_status: str | None = None
-    # Evidence refs
     evidence_refs: list[str] = field(default_factory=list)
-    # Citations
     citations: list[dict[str, str]] = field(default_factory=list)
-    # Provider calls
     provider_call_count: int = 0
     provider_response_ids: list[str] = field(default_factory=list)
-    # Tool calls
     tool_call_count: int = 0
     tool_round_count: int = 0
     tool_outputs: list[dict[str, Any]] = field(default_factory=list)
-    # Token usage
     total_input_tokens: int | None = None
     total_output_tokens: int | None = None
-    # Latency
     total_duration_ms: float = 0.0
     deadline_ms: int = 0
     remaining_deadline_ms: float = 0.0
-    # Terminal submission
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = 0
-    # Postcondition
     postcondition_status: str | None = None
-    # Errors
     errors: list[str] = field(default_factory=list)
-    # Timestamps
     created_at: str | None = None
     completed_at: str | None = None
     # Never store: chain of thought, hidden reasoning, political-blocked raw text,
@@ -105,7 +93,13 @@ class ShadowAgentService:
     Usage in FastAPI query route:
         if settings.agent_shadow_enabled and not politically_blocked:
             shadow = ShadowAgentService(runtime)
-            asyncio.create_task(shadow.run_shadow(request_snapshot))
+            bg_task = asyncio.create_task(
+                shadow.run_shadow(
+                    user_text=...,
+                    deadline=deadline_from_acceptance,
+                    upstream_gate_allowed=True,
+                )
+            )
     """
 
     def __init__(
@@ -130,6 +124,11 @@ class ShadowAgentService:
         experiment_arm: Literal["A", "B"] | None = None,
         flat_rag_search_fn: Any = None,
         db_session_factory: Any = None,
+        # Inherited from request acceptance
+        deadline: AbsoluteTurnDeadline | None = None,
+        execution_budget: ExecutionBudget | None = None,
+        # Political gate enforcement
+        upstream_gate_allowed: bool = False,
     ) -> ShadowTrace:
         """Execute one shadow Luna run with full isolation.
 
@@ -144,37 +143,70 @@ class ShadowAgentService:
             experiment_arm: A or B
             flat_rag_search_fn: Flat RAG function (Arm B only)
             db_session_factory: Callable to create a fresh DB session
+            deadline: Absolute deadline from request acceptance (REQUIRED)
+            execution_budget: Execution budget from request acceptance (REQUIRED)
+            upstream_gate_allowed: Must be True if political gate passed
 
         Returns:
             ShadowTrace with complete engineering data
         """
         settings = get_settings()
+
+        # Political gate enforcement: must have explicit upstream approval
+        if not upstream_gate_allowed:
+            logger.warning("ShadowAgentService invoked without upstream gate approval")
+            return ShadowTrace(
+                trace_id=str(uuid4()),
+                request_id="",
+                turn_id=turn_id or "",
+                matter_id=matter_id,
+                experiment_arm=experiment_arm,
+                model=settings.default_agent_model,
+                status="blocked",
+                submission=None,
+                errors=["Shadow execution blocked: upstream political gate not passed"],
+                created_at=str(time.perf_counter()),
+                completed_at=str(time.perf_counter()),
+            )
+
         request_id = str(uuid4())
         turn_id = turn_id or str(uuid4())
         as_of_date = as_of_date or date.today()
 
+        # Use inherited deadline or create one (inherited is preferred)
+        if deadline is None:
+            is_premium = mode == "premium"
+            turn_deadline_ms = (
+                settings.premium_turn_deadline_ms if is_premium
+                else settings.default_turn_deadline_ms
+            )
+            deadline = AbsoluteTurnDeadline(
+                started_at=time.perf_counter(),
+                turn_deadline_ms=turn_deadline_ms,
+            )
+
+        # Use inherited budget or create one
+        if execution_budget is None:
+            is_premium = mode == "premium"
+            turn_deadline_ms = (
+                settings.premium_turn_deadline_ms if is_premium
+                else settings.default_turn_deadline_ms
+            )
+            answer_research_target_ms = (
+                settings.premium_answer_research_target_ms if is_premium
+                else settings.default_answer_research_target_ms
+            )
+            execution_budget = ExecutionBudget(
+                max_tool_rounds=settings.agent_max_tool_rounds,
+                max_provider_calls=settings.agent_max_provider_calls,
+                max_retries=settings.agent_max_retries,
+                turn_deadline_ms=turn_deadline_ms,
+                answer_research_target_ms=answer_research_target_ms,
+                checker_target_ms=settings.legal_fact_check_target_ms,
+            )
+
         # Create fresh registry for this shadow run
         registry = create_registry(request_id)
-
-        # Build execution budget
-        is_premium = mode == "premium"
-        turn_deadline_ms = (
-            settings.premium_turn_deadline_ms if is_premium
-            else settings.default_turn_deadline_ms
-        )
-        answer_research_target_ms = (
-            settings.premium_answer_research_target_ms if is_premium
-            else settings.default_answer_research_target_ms
-        )
-
-        budget = ExecutionBudget(
-            max_tool_rounds=settings.agent_max_tool_rounds,
-            max_provider_calls=settings.agent_max_provider_calls,
-            max_retries=settings.agent_max_retries,
-            turn_deadline_ms=turn_deadline_ms,
-            answer_research_target_ms=answer_research_target_ms,
-            checker_target_ms=settings.legal_fact_check_target_ms,
-        )
 
         # Build runtime request with immutable snapshot
         runtime_request = AgentRuntimeRequest(
@@ -185,15 +217,8 @@ class ShadowAgentService:
             response_language=response_language,
             as_of_date=as_of_date,
             matter_state=matter_state or {},
-            execution_budget=budget,
+            execution_budget=execution_budget,
             experiment_arm=experiment_arm,
-        )
-
-        # Create absolute deadline
-        started_at = time.perf_counter()
-        deadline = AbsoluteTurnDeadline(
-            started_at=started_at,
-            turn_deadline_ms=turn_deadline_ms,
         )
 
         # Create fresh DB session if factory provided
@@ -206,6 +231,7 @@ class ShadowAgentService:
 
         # Execute shadow run
         created_at = time.perf_counter()
+        result = None
         try:
             result = await self._runtime.run_shadow(
                 runtime_request,
@@ -214,9 +240,33 @@ class ShadowAgentService:
                 flat_rag_search_fn=flat_rag_search_fn,
                 db_session=db_session,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Shadow agent run failed with exception")
-            # Build error trace
+        finally:
+            # Clean up DB session
+            if db_session:
+                try:
+                    db_session.close()
+                except Exception:
+                    pass
+
+        completed_at = time.perf_counter()
+
+        # Capture evidence refs BEFORE registry disposal
+        evidence_refs: list[str] = []
+        try:
+            evidence_refs = registry.get_all_refs()
+        except Exception:
+            pass
+
+        # Dispose registry AFTER capturing evidence
+        try:
+            registry.dispose()
+        except Exception:
+            pass
+
+        # Handle exception case
+        if result is None:
             return ShadowTrace(
                 trace_id=str(uuid4()),
                 request_id=request_id,
@@ -226,21 +276,11 @@ class ShadowAgentService:
                 model=settings.default_agent_model,
                 status="error",
                 submission=None,
-                errors=[f"Shadow run exception: {exc}"],
-                created_at=created_at,
-                completed_at=time.perf_counter(),
+                errors=["Shadow run exception"],
+                evidence_refs=evidence_refs,
+                created_at=str(created_at),
+                completed_at=str(completed_at),
             )
-        finally:
-            # Clean up DB session
-            if db_session:
-                try:
-                    db_session.close()
-                except Exception:
-                    pass
-            # Dispose registry
-            registry.dispose()
-
-        completed_at = time.perf_counter()
 
         # Build shadow trace
         trace = ShadowTrace(
@@ -258,7 +298,7 @@ class ShadowAgentService:
             research_status=(
                 result.submission.research_status if result.submission else None
             ),
-            evidence_refs=registry.get_all_refs() if not registry.is_disposed else [],
+            evidence_refs=evidence_refs,
             citations=(
                 [c.model_dump(mode="json") for c in result.submission.citations]
                 if result.submission
@@ -282,7 +322,6 @@ class ShadowAgentService:
             completed_at=str(completed_at),
         )
 
-        # Log shadow completion (engineering only)
         logger.info(
             "Shadow Luna run completed: status=%s arm=%s duration=%.0fms errors=%d",
             trace.status,

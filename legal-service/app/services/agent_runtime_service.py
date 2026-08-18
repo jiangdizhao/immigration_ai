@@ -27,16 +27,18 @@ from app.services.agent_observability_service import (
 )
 from app.services.agent_policy_service import AgentPolicyService
 from app.services.request_evidence_registry import RequestEvidenceRegistry
+from app.services.search_privacy_guard import SearchPrivacyGuard
 from app.services.tool_executor_service import (
     ToolCallRequest,
     ToolExecutorContext,
     ToolExecutorService,
 )
+from app.services.web_evidence_normalizer import WebEvidenceNormalizer
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Mock provider interface (replace with real OpenAI client in production)
+# Provider interface
 # ---------------------------------------------------------------------------
 
 
@@ -54,8 +56,9 @@ class ProviderResponse:
     reasoning_tokens: int | None = None
     output_tokens: int | None = None
     duration_ms: float = 0.0
-    # Raw provider response for evidence extraction
     raw_response: Any = None
+    # PII violation tracking
+    pii_violation_count: int = 0
 
 
 class ProviderInterface:
@@ -76,10 +79,6 @@ class ProviderInterface:
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
     ) -> ProviderResponse:
-        """Make a provider call.
-
-        Returns ProviderResponse with text and/or tool calls.
-        """
         raise NotImplementedError("use a mock for implementation tests")
 
 
@@ -104,7 +103,6 @@ class ShadowRunResult:
     terminal_submission_missing: bool
     terminal_submission_continuation_count: int
     errors: list[str]
-    # Shadow trace data
     shadow_trace: dict[str, Any] | None = None
 
 
@@ -124,11 +122,15 @@ class AgentRuntimeService:
         policy_service: AgentPolicyService | None = None,
         tool_executor: ToolExecutorService | None = None,
         observability: AgentObservabilityService | None = None,
+        privacy_guard: SearchPrivacyGuard | None = None,
+        web_normalizer: WebEvidenceNormalizer | None = None,
     ) -> None:
         self._provider = provider
         self._policy_service = policy_service or AgentPolicyService()
         self._tool_executor = tool_executor or ToolExecutorService()
         self._observability = observability or AgentObservabilityService()
+        self._privacy_guard = privacy_guard or SearchPrivacyGuard()
+        self._web_normalizer = web_normalizer or WebEvidenceNormalizer()
 
     async def run_shadow(
         self,
@@ -142,8 +144,8 @@ class AgentRuntimeService:
         """Execute one shadow Luna agent run.
 
         Args:
-            request: The agent runtime request
-            deadline: The absolute monotonic deadline
+            request: The agent runtime request (includes ExecutionBudget)
+            deadline: The absolute monotonic deadline from request acceptance
             registry: Request-scoped evidence registry
             flat_rag_search_fn: Optional flat RAG search function (Arm B)
             db_session: Optional DB session for tools
@@ -155,12 +157,16 @@ class AgentRuntimeService:
         errors: list[str] = []
         provider_response_ids: list[str] = []
         tool_outputs: list[ToolResultEnvelope] = []
+        pii_violation_count = 0
 
         # Build policy
         policy = self._policy_service.build_policy(
             mode=request.mode,
             experiment_arm=request.experiment_arm,
         )
+
+        # Use ExecutionBudget from the request (inherited from request acceptance)
+        budget = request.execution_budget
 
         # Build tool executor context
         tool_context = ToolExecutorContext(
@@ -170,6 +176,8 @@ class AgentRuntimeService:
             deadline_monotonic=deadline.deadline_at,
             flat_rag_search_fn=flat_rag_search_fn,
             db_session=db_session,
+            privacy_guard=self._privacy_guard,
+            web_normalizer=self._web_normalizer,
         )
 
         # Build messages
@@ -178,7 +186,7 @@ class AgentRuntimeService:
             {"role": "user", "content": self._build_user_message(request)},
         ]
 
-        # Execution loop
+        # Execution loop — bounded by ExecutionBudget
         provider_call_count = 0
         tool_round_count = 0
         submission_received = False
@@ -187,7 +195,7 @@ class AgentRuntimeService:
         continuation_count = 0
 
         try:
-            while provider_call_count < policy.max_provider_calls:
+            while provider_call_count < budget.max_provider_calls:
                 # Check deadline
                 remaining = deadline.remaining_ms()
                 if remaining <= 0:
@@ -200,19 +208,19 @@ class AgentRuntimeService:
                 try:
                     response = await self._provider.call(
                         system_prompt=policy.system_prompt,
-                        user_text="",  # Already in messages
+                        user_text="",
                         model=policy.model,
                         tools=policy.tools,
                         tool_choice=policy.tool_choice,
                         messages_history=messages,
-                        timeout_ms=min(remaining, 30000),
+                        timeout_ms=min(remaining, budget.answer_research_target_ms),
                     )
                 except TurnDeadlineExceeded:
                     errors.append("Deadline exceeded during provider call")
                     break
                 except Exception as exc:
                     logger.exception("Provider call failed")
-                    if provider_call_count <= policy.max_retries + 1:
+                    if provider_call_count <= budget.max_retries + 1:
                         errors.append(f"Provider call failed (attempt {provider_call_count}): {exc}")
                         continue
                     else:
@@ -220,26 +228,26 @@ class AgentRuntimeService:
                         break
 
                 provider_response_ids.append(response.response_id)
+                pii_violation_count += response.pii_violation_count
 
                 if response.status == "timeout":
                     errors.append("Provider call timed out")
-                    if provider_call_count <= policy.max_retries + 1:
+                    if provider_call_count <= budget.max_retries + 1:
                         continue
                     break
 
                 if response.status == "error":
                     errors.append("Provider call returned error")
-                    if provider_call_count <= policy.max_retries + 1:
+                    if provider_call_count <= budget.max_retries + 1:
                         continue
                     break
 
                 # Process tool calls
                 if response.tool_calls:
-                    tool_round_count += 1
-
-                    if tool_round_count > policy.max_tool_rounds:
-                        errors.append(f"Max tool rounds ({policy.max_tool_rounds}) exceeded")
+                    if tool_round_count >= budget.max_tool_rounds:
+                        errors.append(f"Max tool rounds ({budget.max_tool_rounds}) exceeded")
                         break
+                    tool_round_count += 1
 
                     # Execute each tool call
                     tool_results_for_provider: list[dict[str, Any]] = []
@@ -251,6 +259,14 @@ class AgentRuntimeService:
                             errors.append("Deadline exceeded before tool execution")
                             break
 
+                        # Handle web_search specially — normalize and register evidence
+                        if tc.name == "web_search":
+                            self._handle_web_search_tool_call(
+                                tc, tool_context, tool_outputs
+                            )
+                            # web_search is provider-built-in; no custom tool result needed
+                            continue
+
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
 
@@ -258,15 +274,12 @@ class AgentRuntimeService:
                         if tc.name == "submit_answer":
                             if result.result.status == "ok":
                                 submission_received = True
-                                # Parse submission from result
                                 try:
                                     submission = AgentSubmissionV2(**tc.arguments)
                                 except Exception:
                                     pass
                             else:
-                                # Invalid submission
                                 if tool_context.terminal_record.correction_count >= 1:
-                                    # Second miss
                                     errors.append("Terminal submission failed after correction")
                                     break
 
@@ -297,7 +310,8 @@ class AgentRuntimeService:
                     messages.append(assistant_msg)
 
                     # Add tool results
-                    messages.extend(tool_results_for_provider)
+                    if tool_results_for_provider:
+                        messages.extend(tool_results_for_provider)
 
                     if submission_received:
                         break
@@ -305,12 +319,10 @@ class AgentRuntimeService:
                     # No tool calls — provider returned text without submit_answer
                     terminal_missing = True
 
-                    # Handle missing submission
                     action = self._tool_executor.handle_missing_submission(tool_context)
 
                     if action.can_continue:
                         continuation_count += 1
-                        # Add continuation message
                         messages.append({
                             "role": "user",
                             "content": action.continuation_message,
@@ -320,16 +332,8 @@ class AgentRuntimeService:
                         errors.append(f"Terminal submission missing: {action.reason}")
                         break
 
-            # End of loop
-
-            # Check final state
             if not submission_received and not terminal_missing:
-                # Provider returned nothing useful
                 errors.append("No response from provider")
-
-            if terminal_missing and continuation_count == 0:
-                # First miss, no continuation attempted
-                pass  # Already handled in loop
 
         except TurnDeadlineExceeded as exc:
             errors.append(f"Deadline exceeded at stage: {exc.stage}")
@@ -345,7 +349,7 @@ class AgentRuntimeService:
             tool_call_count=len(tool_outputs),
             tool_round_count=tool_round_count,
             web_search_call_count=sum(1 for t in tool_outputs if "web_search" in str(t.data)),
-            web_search_pii_violation_count=0,
+            web_search_pii_violation_count=pii_violation_count,
             exact_lookup_call_count=0,
             lightrag_call_count=0,
             flat_rag_call_count=sum(1 for t in tool_outputs if "flat_rag" in str(t.data)),
@@ -375,7 +379,6 @@ class AgentRuntimeService:
         else:
             status = "incomplete"
 
-        # Build shadow trace
         shadow_trace = {
             "request_id": request.request_id,
             "turn_id": request.turn_id,
@@ -393,6 +396,7 @@ class AgentRuntimeService:
             "deadline_ms": deadline.turn_deadline_ms,
             "total_duration_ms": total_duration,
             "remaining_deadline_ms": deadline.remaining_ms(),
+            "pii_violation_count": pii_violation_count,
         }
 
         return ShadowRunResult(
@@ -411,22 +415,48 @@ class AgentRuntimeService:
             shadow_trace=shadow_trace,
         )
 
+    def _handle_web_search_tool_call(
+        self,
+        tc: ToolCallRequest,
+        tool_context: ToolExecutorContext,
+        tool_outputs: list[ToolResultEnvelope],
+    ) -> None:
+        """Handle a web_search tool call by normalizing and registering evidence.
+
+        The actual web search is performed by the provider (built-in).
+        This method normalizes the results that were already captured
+        in the provider response and registered via the adapter.
+        """
+        # PII guard: check the query before recording
+        query = tc.arguments.get("query", "")
+        privacy_result = self._privacy_guard.check_query(query)
+        if not privacy_result.allowed:
+            logger.warning("PII blocked in web_search tool call arguments")
+            return
+
+        # The actual normalization happens in the provider adapter
+        # when it processes web_search_call output items.
+        # Here we just record the tool call for observability.
+        from app.tools.base import build_tool_result
+
+        result = build_tool_result(
+            tool_call_id=tc.call_id,
+            status="ok",
+            data={"query": query, "note": "web_search handled by provider built-in"},
+            duration_ms=0,
+        )
+        tool_outputs.append(result)
+
     def _build_user_message(self, request: AgentRuntimeRequest) -> str:
         """Build the user message with compact state context."""
         parts: list[str] = []
-
-        # User text
         parts.append(request.user_text)
 
-        # Compact state context
         if request.matter_state:
             state_str = json.dumps(request.matter_state, indent=2, default=str)
             parts.append(f"\n\n## Current Matter State\n```json\n{state_str}\n```")
 
-        # Response language hint
         parts.append(f"\n\nRespond in: {request.response_language}")
-
-        # As-of date
         parts.append(f"\nAs of date: {request.as_of_date.isoformat()}")
 
         return "\n".join(parts)
