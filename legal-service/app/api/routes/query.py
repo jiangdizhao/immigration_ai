@@ -2,8 +2,9 @@ import asyncio
 import os
 import time
 import logging
+import threading
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 
 from app.api.deps import verify_api_key
 from app.db.session import get_db, SessionLocal
@@ -18,23 +19,22 @@ observability_service = AgentObservabilityService()
 political_failsafe_service = get_political_failsafe_service()
 logger = logging.getLogger(__name__)
 
-# Track spawned shadow tasks to avoid "Task exception was never retrieved"
-_shadow_tasks: set[asyncio.Task] = set()
+# Single background event loop for shadow tasks (thread-safe)
+_bg_loop: asyncio.AbstractEventLoop | None = None
+_bg_loop_lock = threading.Lock()
 
 
-def _shadow_done_callback(task: asyncio.Task) -> None:
-    """Consume shadow task completion/exception without leaking."""
-    _shadow_tasks.discard(task)
-    if task.cancelled():
-        return
-    exc = task.exception()
-    if exc is not None:
-        logger.warning("Shadow Luna task failed: %s", exc)
+def _get_bg_loop() -> asyncio.AbstractEventLoop:
+    global _bg_loop
+    with _bg_loop_lock:
+        if _bg_loop is None or _bg_loop.is_closed():
+            _bg_loop = asyncio.new_event_loop()
+        return _bg_loop
 
 
 def _schedule_shadow_run(
     *,
-    user_text: str,
+    question: str,
     mode: str,
     response_language: str,
     accepted_at: float,
@@ -43,7 +43,7 @@ def _schedule_shadow_run(
     checker_target_ms: int,
     experiment_arm: str | None = None,
 ) -> None:
-    """Schedule a non-blocking shadow Luna run.
+    """Schedule a non-blocking shadow Luna run via BackgroundTasks.
 
     Creates a fresh DB session inside the background task.
     Does NOT retain the request-scoped session.
@@ -53,13 +53,11 @@ def _schedule_shadow_run(
         from app.services.agent_runtime_service import AgentRuntimeService
         from app.services.shadow_agent_service import ShadowAgentService
 
-        # Create deadline from request acceptance time
         deadline = AbsoluteTurnDeadline(
             started_at=accepted_at,
             turn_deadline_ms=turn_deadline_ms,
         )
 
-        # Build execution budget
         budget = ExecutionBudget(
             max_tool_rounds=get_settings().agent_max_tool_rounds,
             max_provider_calls=get_settings().agent_max_provider_calls,
@@ -69,34 +67,28 @@ def _schedule_shadow_run(
             checker_target_ms=checker_target_ms,
         )
 
-        async def _run() -> None:
-            # Create fresh DB session inside the background task
+        def _run_in_thread() -> None:
+            """Run the async shadow task in a dedicated event loop."""
+            loop = _get_bg_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_run_shadow())
+            except Exception:
+                logger.exception("Shadow Luna background task failed")
+            finally:
+                pass  # Don't close the loop — it's shared
+
+        async def _run_shadow() -> None:
             db = SessionLocal()
             try:
-                # Create provider — use real OpenAI adapter when available,
-                # fall back to a simple mock for implementation testing.
-                try:
-                    from app.services.openai_responses_adapter import OpenAIResponsesAdapter
-                    provider = OpenAIResponsesAdapter()
-                except Exception:
-                    # Fallback mock provider for testing
-                    from app.services.agent_runtime_service import ProviderInterface, ProviderResponse
-
-                    class _ShadowMockProvider(ProviderInterface):
-                        async def call(self, **kwargs):
-                            return ProviderResponse(
-                                response_id="shadow-mock",
-                                model="gpt-5.6-luna",
-                                status="ok",
-                                text="Shadow mock response",
-                            )
-                    provider = _ShadowMockProvider()
-
+                # Create provider — OpenAI adapter only, NO mock fallback
+                from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+                provider = OpenAIResponsesAdapter()
                 runtime = AgentRuntimeService(provider=provider)
                 shadow = ShadowAgentService(runtime)
 
                 trace = await shadow.run_shadow(
-                    user_text=user_text,
+                    user_text=question,
                     mode=mode if mode in ("default", "premium") else "default",
                     response_language=response_language,
                     deadline=deadline,
@@ -114,16 +106,20 @@ def _schedule_shadow_run(
             finally:
                 db.close()
 
-        task = asyncio.create_task(_run())
-        _shadow_tasks.add(task)
-        task.add_done_callback(_shadow_done_callback)
+        # Run in a daemon thread so it doesn't block process shutdown
+        t = threading.Thread(target=_run_in_thread, daemon=True)
+        t.start()
 
     except Exception:
         logger.exception("Failed to schedule shadow Luna run")
 
 
 @router.post("", response_model=QueryResponse)
-def run_query(payload: QueryRequest, db=Depends(get_db)) -> QueryResponse:
+def run_query(
+    payload: QueryRequest,
+    background_tasks: BackgroundTasks,
+    db=Depends(get_db),
+) -> QueryResponse:
     # This is the backend timing origin: before engine selection, service
     # construction, matter/state loading, or agent setup.
     accepted_at = time.perf_counter()
@@ -195,7 +191,7 @@ def run_query(payload: QueryRequest, db=Depends(get_db)) -> QueryResponse:
                 "premium", "premium_direct_gpt55_high",
             )
             _schedule_shadow_run(
-                user_text=payload.user_text,
+                question=payload.question,
                 mode="premium" if is_premium else "default",
                 response_language=response.response_language or "en",
                 accepted_at=accepted_at,

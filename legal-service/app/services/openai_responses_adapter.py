@@ -5,17 +5,18 @@ for GPT-5.6 Luna shadow execution.
 
 Supports:
 - tool_choice=auto
-- built-in web_search
-- custom function tools
-- submit_answer terminal function
-- native citation annotations
-- PII guard at provider boundary
+- built-in web_search (provider-native, NOT a custom function)
+- custom function tools (deterministic_utility, flat_rag_search, submit_answer)
+- native citation annotations from assistant message output_text
+- PII inspection of generated search-action queries (retroactive gate)
+- Responses continuation via previous_response_id
 
 Does NOT:
 - invent API keys
 - print secrets
 - use Chat Completions instead of Responses
 - implement fake web search
+- treat web_search as a custom function_call
 """
 
 from __future__ import annotations
@@ -39,19 +40,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class _CallContext:
-    """Per-call context for the adapter."""
+class AdapterCallContext:
+    """Per-call context carrying the request-scoped registry and guards."""
 
+    registry: RequestEvidenceRegistry
     privacy_guard: SearchPrivacyGuard
     web_normalizer: WebEvidenceNormalizer
-    registry: RequestEvidenceRegistry
     pii_violation_count: int = 0
 
 
 class OpenAIResponsesAdapter(ProviderInterface):
     """OpenAI Responses API adapter for GPT-5.6 Luna.
 
-    Wraps the real OpenAI client. For implementation tests, use MockProvider.
+    Wraps the real OpenAI client.  For implementation tests, inject MockProvider
+    via dependency injection — there is NO automatic production fallback.
     """
 
     def __init__(
@@ -76,27 +78,28 @@ class OpenAIResponsesAdapter(ProviderInterface):
         tool_choice: Literal["auto"] = "auto",
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
+        registry: RequestEvidenceRegistry | None = None,
+        previous_response_id: str | None = None,
     ) -> ProviderResponse:
-        """Make a provider call through the OpenAI Responses API.
-
-        Returns ProviderResponse with text and/or tool calls.
-        Web search results are normalized and registered.
-        """
+        """Make a provider call through the OpenAI Responses API."""
         start = time.perf_counter()
-        ctx = _CallContext(
+
+        if registry is None:
+            return ProviderResponse(
+                response_id="", model=model, status="error", text=None, duration_ms=0,
+            )
+
+        ctx = AdapterCallContext(
+            registry=registry,
             privacy_guard=self._privacy_guard,
             web_normalizer=self._web_normalizer,
-            registry=None,  # Set by caller via run_shadow
         )
 
         try:
-            # Build input messages
-            input_messages = self._build_input(
-                system_prompt=system_prompt,
-                messages_history=messages_history,
+            input_items = self._build_input(
+                system_prompt=system_prompt, messages_history=messages_history,
             )
 
-            # Separate web_search tool from custom function tools
             web_search_tool = None
             function_tools: list[dict[str, Any]] = []
             for tool in tools:
@@ -105,212 +108,179 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 elif tool.get("type") == "function":
                     function_tools.append(tool)
 
-            # Build Responses API parameters
             params: dict[str, Any] = {
-                "model": model,
-                "input": input_messages,
-                "tools": [],
-                "tool_choice": tool_choice,
+                "model": model, "input": input_items, "tools": [], "tool_choice": tool_choice,
             }
-
             if web_search_tool:
                 params["tools"].append(web_search_tool)
-
             for ft in function_tools:
                 params["tools"].append(ft)
+            if previous_response_id:
+                params["previous_response_id"] = previous_response_id
+            if timeout_ms > 0:
+                params["timeout"] = timeout_ms / 1000.0
 
-            # Make the API call
             response = self._client.responses.create(**params)
-
             duration_ms = (time.perf_counter() - start) * 1000.0
 
-            # Extract tool calls from response
-            tool_calls: list[ToolCallRequest] = []
+            custom_tool_calls: list[ToolCallRequest] = []
             text_output: str | None = None
+            response_id = getattr(response, "id", "")
 
-            # Process response output
             for output_item in getattr(response, "output", []):
                 item_type = getattr(output_item, "type", None)
-
                 if item_type == "message":
-                    # Text content
-                    for content_block in getattr(output_item, "content", []):
-                        if getattr(content_block, "type", None) == "output_text":
-                            text_output = getattr(content_block, "text", None)
-
+                    text_output = self._extract_message_text(output_item)
+                    self._normalize_message_citations(output_item, ctx)
                 elif item_type == "function_call":
-                    # Custom function call
-                    call_id = getattr(output_item, "call_id", "")
-                    name = getattr(output_item, "name", "")
-                    arguments_str = getattr(output_item, "arguments", "{}")
-                    try:
-                        arguments = json.loads(arguments_str)
-                    except json.JSONDecodeError:
-                        arguments = {}
-
-                    # PII guard for web_search queries
-                    if name == "web_search":
-                        query = arguments.get("query", "")
-                        privacy_result = self._privacy_guard.check_query(query)
-                        if not privacy_result.allowed:
-                            ctx.pii_violation_count += 1
-                            logger.warning(
-                                "PII blocked in web_search query (violation #%d)",
-                                ctx.pii_violation_count,
-                            )
-                            # Return error response — don't send PII to provider
-                            return ProviderResponse(
-                                response_id=getattr(response, "id", ""),
-                                model=model,
-                                status="error",
-                                text=None,
-                                tool_calls=[],
-                                duration_ms=duration_ms,
-                            )
-
-                    tool_calls.append(ToolCallRequest(
-                        call_id=call_id,
-                        name=name,
-                        arguments=arguments,
-                    ))
-
+                    tc = self._parse_function_call(output_item)
+                    if tc is not None:
+                        custom_tool_calls.append(tc)
                 elif item_type == "web_search_call":
-                    # Built-in web search completed — normalize results
-                    search_call_id = getattr(output_item, "id", "")
-                    self._normalize_web_search_results(
-                        output_item=output_item,
-                        search_call_id=search_call_id,
-                        tool_call_id=search_call_id,
-                        ctx=ctx,
-                    )
+                    self._handle_web_search_call(output_item, ctx)
 
-            # Extract token usage
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "input_tokens", None) if usage else None
             output_tokens = getattr(usage, "output_tokens", None) if usage else None
 
             return ProviderResponse(
-                response_id=getattr(response, "id", ""),
-                model=model,
-                status="ok",
-                text=text_output,
-                tool_calls=tool_calls,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                duration_ms=duration_ms,
-                raw_response=response,
+                response_id=response_id, model=model, status="ok",
+                text=text_output, tool_calls=custom_tool_calls,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                duration_ms=duration_ms, raw_response=response,
+                pii_violation_count=ctx.pii_violation_count,
             )
-
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000.0
             logger.exception("OpenAI Responses API call failed")
             return ProviderResponse(
-                response_id="",
-                model=model,
-                status="error",
-                text=None,
-                duration_ms=duration_ms,
+                response_id="", model=model, status="error", text=None,
+                duration_ms=duration_ms, pii_violation_count=ctx.pii_violation_count,
             )
 
     def _build_input(
-        self,
-        *,
-        system_prompt: str,
-        messages_history: list[dict[str, Any]] | None,
+        self, *, system_prompt: str, messages_history: list[dict[str, Any]] | None,
     ) -> list[dict[str, Any]]:
-        """Build input messages for the Responses API."""
-        input_messages: list[dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
+        items.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
+        if not messages_history:
+            return items
+        for msg in messages_history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                continue
+            if role == "assistant" and "tool_calls" in msg:
+                items.append({"role": "assistant", "content": [{"type": "output_text", "text": str(content)}]})
+            elif role == "tool":
+                pass
+            else:
+                items.append({"role": role if role in ("user", "assistant") else "user",
+                              "content": [{"type": "input_text", "text": str(content)}]})
+        return items
 
-        # System prompt
-        input_messages.append({
-            "role": "system",
-            "content": [{"type": "input_text", "text": system_prompt}],
-        })
+    @staticmethod
+    def _extract_message_text(message_item: Any) -> str | None:
+        for content_block in getattr(message_item, "content", []):
+            if getattr(content_block, "type", None) == "output_text":
+                return getattr(content_block, "text", None)
+        return None
 
-        # History messages
-        if messages_history:
-            for msg in messages_history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-
-                if role == "system":
-                    continue  # Already added
-
-                if role == "assistant" and "tool_calls" in msg:
-                    # Assistant message with tool calls
-                    input_messages.append({
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": content}],
-                    })
-                    # Tool calls are handled separately in Responses API
-                elif role == "tool":
-                    # Tool result — skip for now, Responses API handles differently
-                    pass
-                else:
-                    input_messages.append({
-                        "role": role if role in ("user", "assistant") else "user",
-                        "content": [{"type": "input_text", "text": str(content)}],
-                    })
-
-        return input_messages
-
-    def _normalize_web_search_results(
-        self,
-        *,
-        output_item: Any,
-        search_call_id: str,
-        tool_call_id: str,
-        ctx: _CallContext,
-    ) -> None:
-        """Normalize built-in web search results into evidence registry."""
-        if ctx.registry is None:
-            return
-
+    @staticmethod
+    def _parse_function_call(item: Any) -> ToolCallRequest | None:
+        call_id = getattr(item, "call_id", "")
+        name = getattr(item, "name", "")
+        arguments_str = getattr(item, "arguments", "{}")
         try:
-            # Extract sources from the web_search_call output
-            sources = getattr(output_item, "sources", None) or []
-            if not sources:
-                return
+            arguments = json.loads(arguments_str)
+        except json.JSONDecodeError:
+            arguments = {}
+        if not call_id or not name:
+            return None
+        return ToolCallRequest(call_id=call_id, name=name, arguments=arguments)
 
-            # Build search output dict for normalizer
-            search_output: dict[str, Any] = {
-                "sources": [],
+    def _handle_web_search_call(self, item: Any, ctx: AdapterCallContext) -> None:
+        search_call_id = getattr(item, "id", "")
+        action = getattr(item, "action", None)
+        if action is not None:
+            queries = getattr(action, "queries", None) or []
+            for q in queries:
+                if isinstance(q, str):
+                    result = ctx.privacy_guard.check_query(q)
+                    if not result.allowed:
+                        ctx.pii_violation_count += 1
+                        logger.warning("PII detected in generated web_search query (violation #%d)", ctx.pii_violation_count)
+
+        sources = getattr(item, "sources", None) or []
+        if not sources:
+            return
+        search_output: dict[str, Any] = {"sources": []}
+        for source in sources:
+            source_dict: dict[str, Any] = {
+                "url": getattr(source, "url", ""),
+                "title": getattr(source, "title", ""),
             }
-
-            for source in sources:
-                source_dict: dict[str, Any] = {
-                    "url": getattr(source, "url", ""),
-                    "title": getattr(source, "title", ""),
+            citation = getattr(source, "citation", None)
+            if citation is not None:
+                source_dict["citation"] = {
+                    "start_index": getattr(citation, "start_index", 0),
+                    "end_index": getattr(citation, "end_index", 0),
                 }
-                # Extract citation if available
-                citation = getattr(source, "citation", None)
-                if citation:
-                    source_dict["citation"] = {
-                        "start_index": getattr(citation, "start_index", 0),
-                        "end_index": getattr(citation, "end_index", 0),
-                    }
-                search_output["sources"].append(source_dict)
-
-            # Normalize and register
+            search_output["sources"].append(source_dict)
+        try:
             ctx.web_normalizer.normalize_search_output(
-                search_output=search_output,
-                search_call_id=search_call_id,
-                tool_call_id=tool_call_id,
-                registry=ctx.registry,
+                search_output=search_output, search_call_id=search_call_id,
+                tool_call_id=search_call_id, registry=ctx.registry,
             )
-
         except Exception:
             logger.exception("Failed to normalize web search results")
 
-    def set_registry(self, registry: RequestEvidenceRegistry) -> None:
-        """Set the request-scoped evidence registry for this call chain."""
-        # This is set by the runtime before each call
-        pass
+    def _normalize_message_citations(self, message_item: Any, ctx: AdapterCallContext) -> None:
+        for content_block in getattr(message_item, "content", []):
+            annotations = getattr(content_block, "annotations", None) or []
+            for ann in annotations:
+                ann_type = getattr(ann, "type", None)
+                if ann_type == "url_citation":
+                    url = getattr(ann, "url", "")
+                    title = getattr(ann, "title", "") or url
+                    if url and url.startswith("https://"):
+                        self._register_citation_evidence(url=url, title=title, ann=ann, ctx=ctx)
+
+    def _register_citation_evidence(self, *, url: str, title: str, ann: Any, ctx: AdapterCallContext) -> None:
+        from datetime import datetime, timezone
+        from app.schemas.evidence import NativeWebCitation, NativeWebEvidenceRef
+        from app.services.web_evidence_normalizer import (
+            classify_source_authenticity, classify_source_type_from_url,
+            classify_authority_kind_from_url, classify_binding_status,
+        )
+
+        start_idx = getattr(ann, "start_index", 0)
+        end_idx = getattr(ann, "end_index", 0)
+        source_authenticity = classify_source_authenticity(url)
+        source_type = classify_source_type_from_url(url)
+        authority_kind = classify_authority_kind_from_url(url)
+        binding_status = classify_binding_status(authority_kind)
+
+        evidence = NativeWebEvidenceRef(
+            evidence_origin="openai_web_native", evidence_ref="web:pending",
+            source_type=source_type, source_authenticity=source_authenticity,
+            authority_kind=authority_kind,
+            jurisdiction="Cth" if source_authenticity != "unverified" else None,
+            binding_status=binding_status, court_or_tribunal_level=None,
+            retrieved_at=datetime.now(timezone.utc), provenance_complete=True,
+            search_call_id="citation", url=url, title=title,
+            native_web_citation=NativeWebCitation(start_index=start_idx, end_index=end_idx),
+            canonical_source_id=None, document_version=None,
+            effective_from=None, effective_to=None, text=None, content_hash=None,
+        )
+        try:
+            ctx.registry.register_native_web_evidence(
+                evidence=evidence, tool_call_id="citation", tool_name="web_search",
+            )
+        except Exception:
+            pass
 
 
-def create_openai_adapter(
-    *,
-    client: OpenAI | None = None,
-) -> OpenAIResponsesAdapter:
+def create_openai_adapter(*, client: OpenAI | None = None) -> OpenAIResponsesAdapter:
     """Create a new OpenAI Responses adapter."""
     return OpenAIResponsesAdapter(client=client)

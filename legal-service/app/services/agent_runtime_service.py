@@ -57,7 +57,6 @@ class ProviderResponse:
     output_tokens: int | None = None
     duration_ms: float = 0.0
     raw_response: Any = None
-    # PII violation tracking
     pii_violation_count: int = 0
 
 
@@ -78,6 +77,8 @@ class ProviderInterface:
         tool_choice: Literal["auto"] = "auto",
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
+        registry: RequestEvidenceRegistry | None = None,
+        previous_response_id: str | None = None,
     ) -> ProviderResponse:
         raise NotImplementedError("use a mock for implementation tests")
 
@@ -141,34 +142,19 @@ class AgentRuntimeService:
         flat_rag_search_fn: Any = None,
         db_session: Any = None,
     ) -> ShadowRunResult:
-        """Execute one shadow Luna agent run.
-
-        Args:
-            request: The agent runtime request (includes ExecutionBudget)
-            deadline: The absolute monotonic deadline from request acceptance
-            registry: Request-scoped evidence registry
-            flat_rag_search_fn: Optional flat RAG search function (Arm B)
-            db_session: Optional DB session for tools
-
-        Returns:
-            ShadowRunResult with submission, metrics, and trace data
-        """
+        """Execute one shadow Luna agent run."""
         start_time = time.perf_counter()
         errors: list[str] = []
         provider_response_ids: list[str] = []
         tool_outputs: list[ToolResultEnvelope] = []
         pii_violation_count = 0
 
-        # Build policy
         policy = self._policy_service.build_policy(
             mode=request.mode,
             experiment_arm=request.experiment_arm,
         )
-
-        # Use ExecutionBudget from the request (inherited from request acceptance)
         budget = request.execution_budget
 
-        # Build tool executor context
         tool_context = ToolExecutorContext(
             request_id=request.request_id,
             registry=registry,
@@ -180,29 +166,27 @@ class AgentRuntimeService:
             web_normalizer=self._web_normalizer,
         )
 
-        # Build messages
+        # Build initial input for first call
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": policy.system_prompt},
             {"role": "user", "content": self._build_user_message(request)},
         ]
 
-        # Execution loop — bounded by ExecutionBudget
         provider_call_count = 0
         tool_round_count = 0
         submission_received = False
         submission: AgentSubmissionV2 | None = None
         terminal_missing = False
         continuation_count = 0
+        previous_response_id: str | None = None
 
         try:
             while provider_call_count < budget.max_provider_calls:
-                # Check deadline
                 remaining = deadline.remaining_ms()
                 if remaining <= 0:
                     errors.append("Deadline exceeded before provider call")
                     break
 
-                # Make provider call
                 provider_call_count += 1
 
                 try:
@@ -214,6 +198,8 @@ class AgentRuntimeService:
                         tool_choice=policy.tool_choice,
                         messages_history=messages,
                         timeout_ms=min(remaining, budget.answer_research_target_ms),
+                        registry=registry,
+                        previous_response_id=previous_response_id,
                     )
                 except TurnDeadlineExceeded:
                     errors.append("Deadline exceeded during provider call")
@@ -230,6 +216,10 @@ class AgentRuntimeService:
                 provider_response_ids.append(response.response_id)
                 pii_violation_count += response.pii_violation_count
 
+                # Save response ID for Responses API continuation
+                if response.response_id:
+                    previous_response_id = response.response_id
+
                 if response.status == "timeout":
                     errors.append("Provider call timed out")
                     if provider_call_count <= budget.max_retries + 1:
@@ -242,35 +232,28 @@ class AgentRuntimeService:
                         continue
                     break
 
-                # Process tool calls
+                # Process custom function tool calls (NOT built-in web_search)
                 if response.tool_calls:
                     if tool_round_count >= budget.max_tool_rounds:
                         errors.append(f"Max tool rounds ({budget.max_tool_rounds}) exceeded")
                         break
                     tool_round_count += 1
 
-                    # Execute each tool call
                     tool_results_for_provider: list[dict[str, Any]] = []
 
                     for tc in response.tool_calls:
-                        # Check deadline before each tool
                         remaining = deadline.remaining_ms()
                         if remaining <= 0:
                             errors.append("Deadline exceeded before tool execution")
                             break
 
-                        # Handle web_search specially — normalize and register evidence
+                        # web_search is built-in, not a custom function — skip
                         if tc.name == "web_search":
-                            self._handle_web_search_tool_call(
-                                tc, tool_context, tool_outputs
-                            )
-                            # web_search is provider-built-in; no custom tool result needed
                             continue
 
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
 
-                        # Check if this was submit_answer
                         if tc.name == "submit_answer":
                             if result.result.status == "ok":
                                 submission_received = True
@@ -283,14 +266,13 @@ class AgentRuntimeService:
                                     errors.append("Terminal submission failed after correction")
                                     break
 
-                        # Format result for provider
                         tool_results_for_provider.append({
                             "role": "tool",
                             "tool_call_id": tc.call_id,
                             "content": json.dumps(result.result.model_dump(mode="json")),
                         })
 
-                    # Add assistant message with tool calls
+                    # Build assistant message for history
                     assistant_msg: dict[str, Any] = {
                         "role": "assistant",
                         "content": response.text or "",
@@ -309,16 +291,14 @@ class AgentRuntimeService:
                         ]
                     messages.append(assistant_msg)
 
-                    # Add tool results
                     if tool_results_for_provider:
                         messages.extend(tool_results_for_provider)
 
                     if submission_received:
                         break
                 else:
-                    # No tool calls — provider returned text without submit_answer
+                    # No custom tool calls — provider returned text without submit_answer
                     terminal_missing = True
-
                     action = self._tool_executor.handle_missing_submission(tool_context)
 
                     if action.can_continue:
@@ -369,7 +349,6 @@ class AgentRuntimeService:
             metrics_complete=True,
         )
 
-        # Determine status
         if deadline.remaining_ms() <= 0:
             status = "timeout"
         elif submission_received and submission is not None:
@@ -415,50 +394,14 @@ class AgentRuntimeService:
             shadow_trace=shadow_trace,
         )
 
-    def _handle_web_search_tool_call(
-        self,
-        tc: ToolCallRequest,
-        tool_context: ToolExecutorContext,
-        tool_outputs: list[ToolResultEnvelope],
-    ) -> None:
-        """Handle a web_search tool call by normalizing and registering evidence.
-
-        The actual web search is performed by the provider (built-in).
-        This method normalizes the results that were already captured
-        in the provider response and registered via the adapter.
-        """
-        # PII guard: check the query before recording
-        query = tc.arguments.get("query", "")
-        privacy_result = self._privacy_guard.check_query(query)
-        if not privacy_result.allowed:
-            logger.warning("PII blocked in web_search tool call arguments")
-            return
-
-        # The actual normalization happens in the provider adapter
-        # when it processes web_search_call output items.
-        # Here we just record the tool call for observability.
-        from app.tools.base import build_tool_result
-
-        result = build_tool_result(
-            tool_call_id=tc.call_id,
-            status="ok",
-            data={"query": query, "note": "web_search handled by provider built-in"},
-            duration_ms=0,
-        )
-        tool_outputs.append(result)
-
     def _build_user_message(self, request: AgentRuntimeRequest) -> str:
-        """Build the user message with compact state context."""
         parts: list[str] = []
         parts.append(request.user_text)
-
         if request.matter_state:
             state_str = json.dumps(request.matter_state, indent=2, default=str)
             parts.append(f"\n\n## Current Matter State\n```json\n{state_str}\n```")
-
         parts.append(f"\n\nRespond in: {request.response_language}")
         parts.append(f"\nAs of date: {request.as_of_date.isoformat()}")
-
         return "\n".join(parts)
 
 
