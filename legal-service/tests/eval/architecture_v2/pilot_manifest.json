@@ -1,0 +1,69 @@
+{
+  "schema_version": "architecture_eval.phase5_ab.v1",
+  "scope": "phase5_ab_subset",
+  "complete_pilot": false,
+  "description": "Initial Phase 5 Arms A/B engineering subset. This is not the complete 30-50 conversation pilot and must not be represented as such.",
+  "cases": [
+    {
+      "case_id": "p5_general_greeting_en",
+      "category": "general_conversation",
+      "question": "Hello, how are you?",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_stable_general_en",
+      "category": "stable_general",
+      "question": "What is the capital of Australia?",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_current_home_affairs_en",
+      "category": "current_immigration_information",
+      "question": "As of today, what does the Australian Department of Home Affairs Explore visa options page help people do? Please use current information.",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_schedule2_schedule3_en",
+      "category": "cross_schedule_legal",
+      "question": "In Australian migration law, how can a Schedule 2 visa criterion require consideration of Schedule 3 criteria? Explain using current authoritative sources.",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_400_vs_482_en",
+      "category": "visa_pathway_comparison",
+      "question": "An overseas worker has specialised skills and an Australian business needs the worker for short-term work that cannot readily be filled locally. What is the difference between considering a Subclass 400 visa and a Subclass 482 visa?",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_substantive_no_keyword_en",
+      "category": "substantive_legal_without_obvious_keyword",
+      "question": "If a person applies after their substantive visa has ceased, what additional legal requirements may become relevant to the grant of another visa?",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_485_schedule_en",
+      "category": "schedule_retrieval",
+      "question": "Using current authoritative sources, explain where the primary grant criteria for the Temporary Graduate visa are found in the Migration Regulations and how a researcher should verify the applicable criteria.",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_general_legal_words_en",
+      "category": "general_with_legal_sounding_words",
+      "question": "What does the word 'appeal' mean in ordinary English?",
+      "response_language": "en"
+    },
+    {
+      "case_id": "p5_calculation_en",
+      "category": "calculation",
+      "question": "What date is 28 calendar days after 1 August 2026?",
+      "response_language": "en",
+      "as_of_date": "2026-08-19"
+    },
+    {
+      "case_id": "p5_legal_zh",
+      "category": "chinese_substantive_legal",
+      "question": "请根据现行澳大利亚移民法的权威来源，说明签证的 Schedule 2 条款为什么有时会引用 Schedule 3 的附加标准。",
+      "response_language": "zh"
+    }
+  ]
+}
