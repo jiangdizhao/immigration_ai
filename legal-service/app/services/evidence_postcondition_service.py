@@ -28,9 +28,11 @@ This service does NOT:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timezone
 from typing import Literal
+from urllib.parse import urlparse
 
 from app.schemas.agent import AgentClaim, AgentSubmissionV2
 from app.schemas.evidence import (
@@ -61,6 +63,103 @@ EVIDENCE_NOT_REQUIRED_CLAIM_TYPES = {
     "procedure",
     "calculation",  # Calculations use utility, not evidence
 }
+
+_FEDERAL_REGISTER_CURRENT_ENDPOINT_RE = re.compile(
+    r"^/(?:C\d{4}[AC]\d+|F\d{4}[A-Z]\d+)/latest(?:/text)?/?$",
+    re.IGNORECASE,
+)
+_HOME_AFFAIRS_DOMAINS = {
+    "homeaffairs.gov.au",
+    "immi.homeaffairs.gov.au",
+    "www.homeaffairs.gov.au",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class NativeWebApplicability:
+    """Deterministic applicability basis for native, non-exact web evidence."""
+
+    applicable: bool
+    basis: Literal[
+        "explicit_metadata",
+        "official_current_latest",
+        "official_current_retrieved",
+        "unknown",
+    ]
+    limitations: tuple[str, ...] = ()
+
+
+def evaluate_native_web_applicability(
+    evidence: NativeWebEvidenceRef,
+    as_of_date: date | None,
+) -> NativeWebApplicability:
+    """Evaluate native web applicability without inventing version/date data.
+
+    Explicit provider metadata is handled by the ordinary version/effective
+    interval checks.  When that metadata is absent, only a recognized Federal
+    Register ``/latest`` endpoint or current Home Affairs guidance retrieved on
+    the claim date receives a deterministic current applicability basis.
+    """
+    if not isinstance(evidence, NativeWebEvidenceRef):
+        raise TypeError("native web applicability requires NativeWebEvidenceRef")
+
+    has_explicit_metadata = any(
+        value is not None
+        for value in (
+            evidence.document_version,
+            evidence.effective_from,
+            evidence.effective_to,
+        )
+    )
+    if has_explicit_metadata:
+        return NativeWebApplicability(
+            applicable=False,
+            basis="explicit_metadata",
+        )
+
+    if not evidence.provenance_complete or evidence.native_web_citation is None:
+        return NativeWebApplicability(applicable=False, basis="unknown")
+    if as_of_date is None:
+        return NativeWebApplicability(applicable=False, basis="unknown")
+
+    retrieved_at = evidence.retrieved_at
+    retrieved_date = (
+        retrieved_at.astimezone(timezone.utc).date()
+        if retrieved_at.tzinfo is not None
+        else retrieved_at.date()
+    )
+    if as_of_date != retrieved_date or retrieved_date != date.today():
+        return NativeWebApplicability(applicable=False, basis="unknown")
+
+    parsed = urlparse(evidence.url)
+    if (
+        parsed.netloc.lower() in {"legislation.gov.au", "www.legislation.gov.au"}
+        and not parsed.query
+        and not parsed.fragment
+        and _FEDERAL_REGISTER_CURRENT_ENDPOINT_RE.fullmatch(parsed.path)
+        and evidence.source_authenticity == "canonical_official"
+        and evidence.authority_kind in {"statute", "delegated_legislation"}
+        and evidence.binding_status == "binding"
+    ):
+        return NativeWebApplicability(
+            applicable=True,
+            basis="official_current_latest",
+            limitations=(),
+        )
+
+    if (
+        parsed.netloc.lower() in _HOME_AFFAIRS_DOMAINS
+        and evidence.source_authenticity == "canonical_official"
+        and evidence.authority_kind == "operational_guidance"
+        and evidence.binding_status == "non_binding"
+    ):
+        return NativeWebApplicability(
+            applicable=True,
+            basis="official_current_retrieved",
+            limitations=("Official guidance is non-binding",),
+        )
+
+    return NativeWebApplicability(applicable=False, basis="unknown")
 
 
 @dataclass(slots=True)
@@ -293,6 +392,20 @@ class EvidencePostconditionService:
         if isinstance(evidence, CanonicalLocalEvidenceRef) and not evidence.provenance_complete:
             reasons.append("Evidence provenance incomplete")
 
+        native_applicability = (
+            evaluate_native_web_applicability(evidence, as_of_date)
+            if isinstance(evidence, NativeWebEvidenceRef)
+            else NativeWebApplicability(applicable=False, basis="unknown")
+        )
+        native_current = native_applicability.applicable
+        if native_current:
+            reasons.append(
+                f"Native evidence applicability basis: {native_applicability.basis}"
+            )
+            reasons.extend(native_applicability.limitations)
+        if isinstance(evidence, NativeWebEvidenceRef):
+            reasons.append("Native web evidence lacks exact text/hash")
+
         # LightRAG derived relationships are never sufficient
         if evidence.authority_kind == "derived_relationship":
             return {
@@ -336,16 +449,20 @@ class EvidencePostconditionService:
                 and evidence.source_authenticity
                 in {"canonical_official", "official_copy"}
                 and evidence.binding_status == "non_binding"
+                and (
+                    not isinstance(evidence, NativeWebEvidenceRef)
+                    or native_current
+                )
             )
             if supplementary_guidance:
                 reasons.append("Official guidance is supplementary, not controlling")
 
             version_unknown = not evidence.document_version or evidence.document_version == "unknown"
-            if version_unknown:
+            if version_unknown and not native_current:
                 reasons.append("Evidence has no applicable document version")
                 effective_interval_invalid = True
 
-            if as_of_date:
+            if as_of_date and not native_current:
                 if evidence.effective_from is None and evidence.effective_to is None:
                     reasons.append("Evidence has no effective interval for claim date")
                     effective_interval_invalid = True
@@ -355,7 +472,12 @@ class EvidencePostconditionService:
                 if evidence.effective_to and evidence.effective_to < as_of_date:
                     reasons.append("Evidence no longer effective as of claim date")
                     effective_interval_invalid = True
-            elif research_status == "complete" and evidence.effective_from is None and evidence.effective_to is None:
+            elif (
+                not as_of_date
+                and research_status == "complete"
+                and evidence.effective_from is None
+                and evidence.effective_to is None
+            ):
                 reasons.append("Complete legal claims require an applicable effective interval")
                 effective_interval_invalid = True
 
@@ -372,14 +494,17 @@ class EvidencePostconditionService:
             if evidence.source_authenticity == "unverified":
                 reasons.append("Current facts require verified evidence")
                 effective_interval_invalid = True
-            if not evidence.document_version or evidence.document_version == "unknown":
+            if (
+                not native_current
+                and (not evidence.document_version or evidence.document_version == "unknown")
+            ):
                 reasons.append(
                     "Canonical evidence has no document version"
                     if isinstance(evidence, CanonicalLocalEvidenceRef)
                     else "Current evidence has no document version"
                 )
                 effective_interval_invalid = True
-            if as_of_date:
+            if as_of_date and not native_current:
                 if evidence.effective_from is None and evidence.effective_to is None:
                     reasons.append(
                         "Canonical evidence has no effective interval"
@@ -393,12 +518,6 @@ class EvidencePostconditionService:
                 if evidence.effective_to and evidence.effective_to < as_of_date:
                     reasons.append("Evidence no longer effective as of claim date")
                     effective_interval_invalid = True
-
-        # Native web evidence limitations
-        if isinstance(evidence, NativeWebEvidenceRef):
-            # Native web evidence cannot support exact-wording claims
-            # This is a limitation, not automatic disqualification
-            reasons.append("Native web evidence lacks exact text/hash")
 
         suitable = True
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -143,6 +143,60 @@ def _structured_document_identity(source: dict[str, Any] | None) -> str:
                 if isinstance(nested, str):
                     values.append(nested)
     return " ".join(values)
+
+
+def _provider_date(value: Any) -> tuple[date | None, bool]:
+    """Parse explicit provider applicability dates without inferring them."""
+    if value is None:
+        return None, False
+    if isinstance(value, datetime):
+        return value.date(), False
+    if isinstance(value, date):
+        return value, False
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None, False
+        try:
+            return date.fromisoformat(raw), False
+        except ValueError:
+            try:
+                return datetime.fromisoformat(raw.replace("Z", "+00:00")).date(), False
+            except ValueError:
+                return None, True
+    return None, True
+
+
+def _provider_applicability_metadata(
+    source: dict[str, Any],
+) -> tuple[str | None, date | None, date | None]:
+    """Return only explicit version/effective metadata from native output."""
+    nested = source.get("applicability")
+    applicability = nested if isinstance(nested, dict) else {}
+
+    def _first(*keys: str) -> Any:
+        for key in keys:
+            if key in source:
+                return source[key]
+            if key in applicability:
+                return applicability[key]
+        return None
+
+    raw_version = _first("document_version", "version")
+    if raw_version is not None and not isinstance(raw_version, str):
+        raise ValueError("document version metadata must be a string")
+    document_version = raw_version.strip() if isinstance(raw_version, str) else None
+    document_version = document_version or None
+
+    effective_from, invalid_from = _provider_date(
+        _first("effective_from", "effective_date")
+    )
+    effective_to, invalid_to = _provider_date(_first("effective_to", "repeal_date"))
+    if invalid_from or invalid_to:
+        raise ValueError("effective applicability metadata is not a supported date")
+    if effective_from and effective_to and effective_to < effective_from:
+        raise ValueError("effective applicability interval is contradictory")
+    return document_version, effective_from, effective_to
 
 
 def classify_authority_kind_from_url(
@@ -277,6 +331,14 @@ class WebEvidenceNormalizer:
                 end_index=end_index,
             )
 
+            try:
+                document_version, effective_from, effective_to = (
+                    _provider_applicability_metadata(source)
+                )
+            except ValueError as exc:
+                logger.warning("Skipping invalid applicability metadata at index %d: %s", i, exc)
+                continue
+
             # Classify metadata deterministically from URL
             source_authenticity = classify_source_authenticity(url)
             source_type = classify_source_type_from_url(url)
@@ -308,9 +370,9 @@ class WebEvidenceNormalizer:
                 title=title,
                 native_web_citation=native_citation,
                 canonical_source_id=None,
-                document_version=None,
-                effective_from=None,
-                effective_to=None,
+                document_version=document_version,
+                effective_from=effective_from,
+                effective_to=effective_to,
                 text=None,  # Native web evidence has no exact text
                 content_hash=None,  # Native web evidence has no hash
             )

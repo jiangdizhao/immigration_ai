@@ -343,6 +343,30 @@ class TestWebEvidenceNormalizer:
         assert evidence.authority_kind == "delegated_legislation"
         assert evidence.binding_status == "binding"
 
+    def test_contradictory_provider_applicability_is_not_normalized(self):
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+        from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+
+        registry = RequestEvidenceRegistry(request_id="invalid-applicability")
+        results = WebEvidenceNormalizer().normalize_search_output(
+            search_output={
+                "sources": [
+                    {
+                        "url": "https://www.legislation.gov.au/C1958A00062/latest/text",
+                        "title": "Federal Register result",
+                        "citation": {"start_index": 0, "end_index": 10},
+                        "effective_from": "2027-01-01",
+                        "effective_to": "2026-01-01",
+                    }
+                ]
+            },
+            search_call_id="search-invalid-applicability",
+            tool_call_id="call-invalid-applicability",
+            registry=registry,
+        )
+        assert results == []
+        assert registry.entry_count == 0
+
     def test_unknown_domain_cannot_become_binding_from_document_shape(self):
         evidence = self._normalize_one(
             {
@@ -1195,6 +1219,247 @@ class TestEvidencePostconditionService:
             state_patch=[],
         )
         return evaluate_postcondition(submission, registry), registry
+
+    @staticmethod
+    def _make_native_evidence(
+        *,
+        url: str,
+        source_authenticity: str = "canonical_official",
+        authority_kind: str = "statute",
+        binding_status: str = "binding",
+        retrieved_at: datetime | None = None,
+        document_version: str | None = None,
+        effective_from: date | None = None,
+        effective_to: date | None = None,
+    ):
+        from app.schemas.evidence import NativeWebCitation, NativeWebEvidenceRef
+
+        return NativeWebEvidenceRef(
+            evidence_origin="openai_web_native",
+            evidence_ref="web:pending",
+            source_type=(
+                "official_guidance"
+                if authority_kind == "operational_guidance"
+                else "legislation"
+            ),
+            source_authenticity=source_authenticity,
+            authority_kind=authority_kind,
+            jurisdiction="Cth" if source_authenticity != "unverified" else None,
+            binding_status=binding_status,
+            court_or_tribunal_level=None,
+            retrieved_at=retrieved_at or datetime.now(timezone.utc),
+            provenance_complete=True,
+            search_call_id="search-focused",
+            url=url,
+            title="Provider-native result",
+            native_web_citation=NativeWebCitation(start_index=0, end_index=10),
+            canonical_source_id=None,
+            document_version=document_version,
+            effective_from=effective_from,
+            effective_to=effective_to,
+            text=None,
+            content_hash=None,
+        )
+
+    def _evaluate_native_decisive_claim(
+        self,
+        *,
+        evidence,
+        claim_type: str,
+        as_of_date: date | None,
+    ):
+        from app.schemas.agent import AgentClaim, AgentSubmissionV2
+        from app.services.evidence_postcondition_service import evaluate_postcondition
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+
+        registry = RequestEvidenceRegistry(request_id=f"native-{claim_type}")
+        evidence_ref = registry.register_native_web_evidence(
+            evidence=evidence,
+            tool_call_id="call-native-focused",
+        )
+        draft = f"Current {claim_type} paraphrase."
+        submission = AgentSubmissionV2(
+            schema_version="agent_submission.v2",
+            answer_class="substantive_legal",
+            draft_markdown=draft,
+            as_of_date=as_of_date,
+            claims=[
+                AgentClaim(
+                    claim_id="native-focused-claim",
+                    claim_type=claim_type,
+                    materiality="decisive",
+                    text=draft,
+                    draft_start=0,
+                    draft_end=len(draft),
+                    evidence_refs=[evidence_ref],
+                )
+            ],
+            citations=[],
+            research_status="complete",
+            state_patch=[],
+        )
+        return evaluate_postcondition(submission, registry), registry
+
+    def test_native_current_latest_act_supports_non_exact_legal_rule(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/C1958A00062/latest/text",
+            retrieved_at=retrieved_at,
+        )
+        result, registry = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "passed"
+        assert "Native evidence applicability basis: official_current_latest" in result.claim_evaluations[0].reasons
+        assert "Native web evidence lacks exact text/hash" in result.claim_evaluations[0].reasons
+        registered = registry.resolve_evidence(result.claim_evaluations[0].evidence_refs[0])
+        assert registered.text is None
+        assert registered.content_hash is None
+
+    def test_native_current_latest_delegated_legislation_supports_non_exact_rule(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/F1996B03551/latest/text",
+            authority_kind="delegated_legislation",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "passed"
+
+    def test_native_current_latest_act_supports_non_exact_legal_application(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/C1958A00062/latest/text",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_application",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "passed"
+
+    @pytest.mark.parametrize(
+        "claim_date",
+        [date.today() - date.resolution, date.today() + date.resolution],
+    )
+    def test_native_latest_is_insufficient_for_historical_or_future_date(self, claim_date):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/C1958A00062/latest/text",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=claim_date,
+        )
+        assert result.status == "failed"
+        assert "Evidence has no applicable document version" in result.claim_evaluations[0].reasons
+
+    def test_native_non_latest_federal_register_url_requires_metadata(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/C1958A00062/2020-01-01/text",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "failed"
+
+    def test_unknown_federal_register_document_cannot_control_legal_rule(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/unknown-document/latest/text",
+            authority_kind="commentary",
+            binding_status="unknown",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "failed"
+
+    def test_current_home_affairs_guidance_can_support_current_fact(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing",
+            authority_kind="operational_guidance",
+            binding_status="non_binding",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="current_fact",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "passed"
+
+    def test_current_home_affairs_guidance_cannot_control_legal_rule(self):
+        retrieved_at = datetime.now(timezone.utc)
+        evidence = self._make_native_evidence(
+            url="https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing",
+            authority_kind="operational_guidance",
+            binding_status="non_binding",
+            retrieved_at=retrieved_at,
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=retrieved_at.date(),
+        )
+        assert result.status == "failed"
+
+    def test_native_explicit_applicability_metadata_is_used(self):
+        from app.services.request_evidence_registry import RequestEvidenceRegistry
+        from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+
+        registry = RequestEvidenceRegistry(request_id="native-explicit-metadata")
+        results = WebEvidenceNormalizer().normalize_search_output(
+            search_output={
+                "sources": [
+                    {
+                        "url": "https://www.legislation.gov.au/C1958A00062/2020-01-01/text",
+                        "title": "Federal Register result",
+                        "citation": {"start_index": 0, "end_index": 10},
+                        "document_version": "C2020C00001",
+                        "effective_from": "2020-01-01",
+                    }
+                ]
+            },
+            search_call_id="search-explicit",
+            tool_call_id="call-explicit",
+            registry=registry,
+        )
+        evidence, _ = results[0]
+        assert evidence.document_version == "C2020C00001"
+        assert evidence.effective_from == date(2020, 1, 1)
+        assert evidence.effective_to is None
+
+    def test_native_explicit_applicability_metadata_supports_historical_rule(self):
+        evidence = self._make_native_evidence(
+            url="https://www.legislation.gov.au/C1958A00062/2020-01-01/text",
+            retrieved_at=datetime.now(timezone.utc),
+            document_version="C2020C00001",
+            effective_from=date(2020, 1, 1),
+        )
+        result, _ = self._evaluate_native_decisive_claim(
+            evidence=evidence,
+            claim_type="legal_rule",
+            as_of_date=date(2020, 6, 1),
+        )
+        assert result.status == "passed"
 
     def test_unverified_native_web_evidence_cannot_prove_legal_rule(self):
         from app.schemas.evidence import NativeWebCitation, NativeWebEvidenceRef
