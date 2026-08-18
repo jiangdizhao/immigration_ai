@@ -1093,6 +1093,144 @@ class TestProviderAdapter:
 
         anyio.run(_test)
 
+    def test_responses_registers_action_sources_and_annotations(self):
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        url = "https://immi.homeaffairs.gov.au/visas/getting-a-visa/explore-visa-options"
+
+        class FakeResponses:
+            def __init__(self):
+                self.calls = []
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                return SimpleNamespace(
+                    id="resp-native-web",
+                    output=[
+                        SimpleNamespace(
+                            type="web_search_call",
+                            id="ws-native-1",
+                            action=SimpleNamespace(
+                                type="search",
+                                queries=["Explore visa options"],
+                                sources=[SimpleNamespace(type="url", url=url)],
+                            ),
+                        ),
+                        SimpleNamespace(
+                            type="message",
+                            content=[SimpleNamespace(
+                                type="output_text",
+                                text="The page helps people explore visa options.",
+                                annotations=[SimpleNamespace(
+                                    type="url_citation",
+                                    start_index=0,
+                                    end_index=46,
+                                    title="Explore visa options",
+                                    url=url,
+                                )],
+                            )],
+                        ),
+                    ],
+                )
+
+        fake_responses = FakeResponses()
+        adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=fake_responses))
+        registry = create_registry("native-web-adapter")
+
+        async def _test():
+            response = await adapter.call(
+                system_prompt="test",
+                user_text="test",
+                model="gpt-5.6-luna",
+                tools=[{"type": "web_search"}],
+                timeout_ms=1000,
+                registry=registry,
+            )
+            assert response.status == "ok"
+
+        anyio.run(_test)
+        refs = registry.get_all_refs()
+        assert len(refs) == 1
+        assert refs[0].startswith("web:")
+        evidence = registry.resolve_evidence(refs[0])
+        assert evidence.url == url
+        assert evidence.title == "Explore visa options"
+        assert evidence.search_call_id == "ws-native-1"
+        assert evidence.provenance_complete is True
+        assert evidence.native_web_citation is not None
+        assert fake_responses.calls[0]["include"] == ["web_search_call.action.sources"]
+
+    def test_responses_registers_source_without_fabricating_citation(self):
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                return SimpleNamespace(
+                    id="resp-source-only",
+                    output=[SimpleNamespace(
+                        type="web_search_call",
+                        id="ws-source-only",
+                        action=SimpleNamespace(
+                            type="search",
+                            queries=["source only"],
+                            sources=[SimpleNamespace(type="url", url="https://example.gov.au/page")],
+                        ),
+                    )],
+                )
+
+        registry = create_registry("native-web-source-only")
+        adapter = OpenAIResponsesAdapter(
+            client=SimpleNamespace(responses=FakeResponses())
+        )
+
+        async def _test():
+            await adapter.call(
+                system_prompt="test",
+                user_text="test",
+                model="gpt-5.6-luna",
+                tools=[{"type": "web_search"}],
+                timeout_ms=1000,
+                registry=registry,
+            )
+
+        anyio.run(_test)
+        refs = registry.get_all_refs()
+        assert len(refs) == 1
+        evidence = registry.resolve_evidence(refs[0])
+        assert evidence.native_web_citation is None
+
+    def test_responses_without_sources_or_annotations_registers_nothing(self):
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                return SimpleNamespace(
+                    id="resp-no-native-web",
+                    output=[SimpleNamespace(
+                        type="web_search_call",
+                        id="ws-no-native-web",
+                        action=SimpleNamespace(type="search", queries=["no results"], sources=[]),
+                    )],
+                )
+
+        registry = create_registry("native-web-empty")
+        adapter = OpenAIResponsesAdapter(
+            client=SimpleNamespace(responses=FakeResponses())
+        )
+
+        async def _test():
+            await adapter.call(
+                system_prompt="test",
+                user_text="test",
+                model="gpt-5.6-luna",
+                tools=[{"type": "web_search"}],
+                timeout_ms=1000,
+                registry=registry,
+            )
+
+        anyio.run(_test)
+        assert registry.get_all_refs() == []
+
     def test_responses_continuation_uses_exact_call_id_and_previous_response(self):
         from app.services.openai_responses_adapter import OpenAIResponsesAdapter
 
@@ -1374,3 +1512,111 @@ class TestNativeEvidenceFlow:
         assert registry.is_disposed is True
         # But we already captured refs_before disposal
         assert isinstance(refs_before, list)
+
+    def test_provider_tokens_are_rejected_and_registered_refs_are_exposed_for_repair(self):
+        from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+
+        registry = create_registry("repair-native-web")
+        draft = "The page helps people explore visa options."
+        ref = WebEvidenceNormalizer().normalize_search_output(
+            search_output={"sources": [{
+                "url": "https://immi.homeaffairs.gov.au/visas/getting-a-visa/explore-visa-options",
+                "title": "Explore visa options",
+                "citation": {"start_index": 0, "end_index": len(draft)},
+            }]},
+            search_call_id="ws-repair-1",
+            tool_call_id="ws-repair-1",
+            registry=registry,
+        )[0][1]
+
+        current_date = datetime.now(timezone.utc).date()
+        context = ToolExecutorContext(
+            request_id="repair-native-web",
+            registry=registry,
+            as_of_date=current_date,
+        )
+        executor = ToolExecutorService()
+        base_arguments = {
+            "schema_version": "agent_submission.v2",
+            "answer_class": "procedural",
+            "draft_markdown": draft,
+            "as_of_date": current_date.isoformat(),
+            "claims": [{
+                "claim_id": "c1",
+                "claim_type": "current_fact",
+                "materiality": "decisive",
+                "text": draft,
+                "draft_start": 0,
+                "draft_end": len(draft),
+                "evidence_refs": ["turn0search1"],
+            }],
+            "citations": [{"evidence_ref": "turn0search1", "display_label": "Explore visa options"}],
+            "research_status": "complete",
+            "state_patch": [],
+        }
+        first = executor.execute_tool(
+            ToolCallRequest(call_id="submit-first", name="submit_answer", arguments=base_arguments),
+            context,
+        )
+        assert first.result.status == "invalid_request"
+        assert first.result.data["errors"][0]["code"] == "INVALID_EVIDENCE_REF_FORMAT"
+        assert first.result.data["available_evidence_refs"] == [ref]
+        assert first.result.data["available_native_web_evidence"][0]["evidence_ref"] == ref
+        assert "native_web_citation is non-null" in first.result.data["repair_instruction"]
+
+        repaired = dict(base_arguments)
+        repaired["claims"] = [dict(base_arguments["claims"][0], evidence_refs=[ref])]
+        repaired["citations"] = [{"evidence_ref": ref, "display_label": "Explore visa options"}]
+        second = executor.execute_tool(
+            ToolCallRequest(call_id="submit-repaired", name="submit_answer", arguments=repaired),
+            context,
+        )
+        assert second.result.status == "ok"
+        assert second.submission_action is not None
+        assert second.submission_action.action == "accept_submission"
+
+    def test_repair_cannot_remove_decisive_claims_while_claiming_complete_research(self):
+        from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+
+        registry = create_registry("repair-claim-removal")
+        draft = "The page helps people explore visa options."
+        ref = WebEvidenceNormalizer().normalize_search_output(
+            search_output={"sources": [{
+                "url": "https://immi.homeaffairs.gov.au/visas/getting-a-visa/explore-visa-options",
+                "title": "Explore visa options",
+                "citation": {"start_index": 0, "end_index": len(draft)},
+            }]},
+            search_call_id="ws-claim-removal",
+            tool_call_id="ws-claim-removal",
+            registry=registry,
+        )[0][1]
+        context = ToolExecutorContext(
+            request_id="repair-claim-removal",
+            registry=registry,
+            as_of_date=datetime.now(timezone.utc).date(),
+        )
+        executor = ToolExecutorService()
+        first_args = {
+            "schema_version": "agent_submission.v2",
+            "answer_class": "procedural",
+            "draft_markdown": draft,
+            "as_of_date": datetime.now(timezone.utc).date().isoformat(),
+            "claims": [{
+                "claim_id": "c1", "claim_type": "current_fact", "materiality": "decisive",
+                "text": draft, "draft_start": 0, "draft_end": len(draft),
+                "evidence_refs": ["turn0search1"],
+            }],
+            "citations": [{"evidence_ref": "turn0search1", "display_label": "Explore visa options"}],
+            "research_status": "complete", "state_patch": [],
+        }
+        executor.execute_tool(
+            ToolCallRequest(call_id="claim-removal-first", name="submit_answer", arguments=first_args),
+            context,
+        )
+        repaired_args = dict(first_args, claims=[], citations=[{"evidence_ref": ref, "display_label": "Explore visa options"}])
+        repaired = executor.execute_tool(
+            ToolCallRequest(call_id="claim-removal-second", name="submit_answer", arguments=repaired_args),
+            context,
+        )
+        assert repaired.result.status == "invalid_request"
+        assert repaired.result.data["errors"][0]["code"] == "REPAIR_REMOVED_REQUIRED_CLAIMS"

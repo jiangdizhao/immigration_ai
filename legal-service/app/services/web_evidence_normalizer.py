@@ -310,26 +310,30 @@ class WebEvidenceNormalizer:
 
             title = source.get("title") or url
 
-            # Native evidence requires an actual provider citation annotation.
-            # A bare URL in a structured-looking object remains insufficient.
+            # A provider sources-list record is genuine native evidence even
+            # without an inline citation annotation.  Do not manufacture a
+            # span: the postcondition will reject a decisive claim that relies
+            # on this record until an actual citation annotation is available.
             citation_data = source.get("citation") or source.get("native_web_citation")
-            if not isinstance(citation_data, dict):
-                logger.warning("Skipping source without native citation at index %d", i)
-                continue
-            start_index = citation_data.get("start_index")
-            end_index = citation_data.get("end_index")
-            if (
-                not isinstance(start_index, int)
-                or not isinstance(end_index, int)
-                or start_index < 0
-                or end_index < start_index
-            ):
-                logger.warning("Skipping malformed native citation at index %d", i)
-                continue
-            native_citation = NativeWebCitation(
-                start_index=start_index,
-                end_index=end_index,
-            )
+            native_citation = None
+            if citation_data is not None:
+                if not isinstance(citation_data, dict):
+                    logger.warning("Skipping malformed native citation at index %d", i)
+                    continue
+                start_index = citation_data.get("start_index")
+                end_index = citation_data.get("end_index")
+                if (
+                    not isinstance(start_index, int)
+                    or not isinstance(end_index, int)
+                    or start_index < 0
+                    or end_index < start_index
+                ):
+                    logger.warning("Skipping malformed native citation at index %d", i)
+                    continue
+                native_citation = NativeWebCitation(
+                    start_index=start_index,
+                    end_index=end_index,
+                )
 
             try:
                 document_version, effective_from, effective_to = (
@@ -377,9 +381,10 @@ class WebEvidenceNormalizer:
                 content_hash=None,  # Native web evidence has no hash
             )
 
+            source_search_call_id = source.get("search_call_id") or search_call_id
             registered_ref = registry.register_native_web_evidence(
                 evidence=evidence,
-                tool_call_id=tool_call_id,
+                tool_call_id=source_search_call_id or tool_call_id,
                 tool_name="web_search",
             )
             evidence = evidence.model_copy(update={"evidence_ref": registered_ref})

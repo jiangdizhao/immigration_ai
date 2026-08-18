@@ -444,7 +444,7 @@ class TestWebEvidenceNormalizer:
 
         assert len(results) == 1  # Deduplicated
 
-    def test_bare_structured_url_without_native_citation_is_not_evidence(self):
+    def test_provider_source_without_inline_citation_is_registered_without_span(self):
         from app.services.request_evidence_registry import RequestEvidenceRegistry
         from app.services.web_evidence_normalizer import WebEvidenceNormalizer
 
@@ -456,8 +456,11 @@ class TestWebEvidenceNormalizer:
             registry=registry,
         )
 
-        assert results == []
-        assert registry.entry_count == 0
+        assert len(results) == 1
+        evidence, ref = results[0]
+        assert ref.startswith("web:")
+        assert evidence.native_web_citation is None
+        assert registry.entry_count == 1
 
 
 # ---------------------------------------------------------------------------

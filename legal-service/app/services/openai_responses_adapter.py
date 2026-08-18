@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from openai import OpenAI
@@ -47,6 +47,13 @@ class AdapterCallContext:
     privacy_guard: SearchPrivacyGuard
     web_normalizer: WebEvidenceNormalizer
     pii_violation_count: int = 0
+    # Collected first and normalized after the complete provider output is
+    # available.  This lets action.sources records inherit a real URL
+    # citation annotation without registering a second record for the same
+    # URL, and lets us retain the actual search-call provenance.
+    search_call_ids: list[str] = field(default_factory=list)
+    native_sources: list[dict[str, Any]] = field(default_factory=list)
+    citation_annotations: list[dict[str, Any]] = field(default_factory=list)
 
 
 class OpenAIResponsesAdapter(ProviderInterface):
@@ -115,6 +122,9 @@ class OpenAIResponsesAdapter(ProviderInterface):
             }
             if web_search_tool:
                 params["tools"].append(web_search_tool)
+                # The Responses API returns the complete provider source list
+                # only when this explicit include is requested.
+                params["include"] = ["web_search_call.action.sources"]
             for ft in function_tools:
                 params["tools"].append(ft)
             if previous_response_id:
@@ -140,6 +150,8 @@ class OpenAIResponsesAdapter(ProviderInterface):
                         custom_tool_calls.append(tc)
                 elif item_type == "web_search_call":
                     self._handle_web_search_call(output_item, ctx)
+
+            self._register_native_web_evidence(ctx)
 
             if ctx.pii_violation_count:
                 return ProviderResponse(
@@ -244,6 +256,8 @@ class OpenAIResponsesAdapter(ProviderInterface):
 
     def _handle_web_search_call(self, item: Any, ctx: AdapterCallContext) -> None:
         search_call_id = getattr(item, "id", "")
+        if search_call_id:
+            ctx.search_call_ids.append(search_call_id)
         action = getattr(item, "action", None)
         if action is not None:
             queries = getattr(action, "queries", None) or []
@@ -254,29 +268,15 @@ class OpenAIResponsesAdapter(ProviderInterface):
                         ctx.pii_violation_count += 1
                         logger.warning("PII detected in generated web_search query (violation #%d)", ctx.pii_violation_count)
 
-        sources = getattr(item, "sources", None) or []
-        if not sources:
-            return
-        search_output: dict[str, Any] = {"sources": []}
+        # In the current Responses SDK, sources are nested under
+        # web_search_call.action.sources.  Keep a top-level fallback for
+        # older/fixture response shapes.
+        sources = getattr(action, "sources", None) or getattr(item, "sources", None) or []
         for source in sources:
-            source_dict: dict[str, Any] = {
-                "url": getattr(source, "url", ""),
-                "title": getattr(source, "title", ""),
-            }
-            citation = getattr(source, "citation", None)
-            if citation is not None:
-                source_dict["citation"] = {
-                    "start_index": getattr(citation, "start_index", 0),
-                    "end_index": getattr(citation, "end_index", 0),
-                }
-            search_output["sources"].append(source_dict)
-        try:
-            ctx.web_normalizer.normalize_search_output(
-                search_output=search_output, search_call_id=search_call_id,
-                tool_call_id=search_call_id, registry=ctx.registry,
-            )
-        except Exception:
-            logger.exception("Failed to normalize web search results")
+            source_dict = self._provider_object_to_dict(source)
+            if source_dict.get("url"):
+                source_dict["search_call_id"] = search_call_id
+                ctx.native_sources.append(source_dict)
 
     def _normalize_message_citations(self, message_item: Any, ctx: AdapterCallContext) -> None:
         for content_block in getattr(message_item, "content", []):
@@ -284,44 +284,75 @@ class OpenAIResponsesAdapter(ProviderInterface):
             for ann in annotations:
                 ann_type = getattr(ann, "type", None)
                 if ann_type == "url_citation":
-                    url = getattr(ann, "url", "")
-                    title = getattr(ann, "title", "") or url
+                    ann_dict = self._provider_object_to_dict(ann)
+                    nested = ann_dict.get("url_citation")
+                    if isinstance(nested, dict):
+                        ann_dict = {**ann_dict, **nested}
+                    url = ann_dict.get("url", "")
                     if url and url.startswith("https://"):
-                        self._register_citation_evidence(url=url, title=title, ann=ann, ctx=ctx)
+                        ctx.citation_annotations.append(ann_dict)
 
-    def _register_citation_evidence(self, *, url: str, title: str, ann: Any, ctx: AdapterCallContext) -> None:
-        from datetime import datetime, timezone
-        from app.schemas.evidence import NativeWebCitation, NativeWebEvidenceRef
-        from app.services.web_evidence_normalizer import (
-            classify_source_authenticity, classify_source_type_from_url,
-            classify_authority_kind_from_url, classify_binding_status,
-        )
+    @staticmethod
+    def _provider_object_to_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump(mode="json")
+            if isinstance(dumped, dict):
+                return dumped
+        return {
+            key: getattr(value, key)
+            for key in ("url", "title", "type", "start_index", "end_index")
+            if getattr(value, key, None) is not None
+        }
 
-        start_idx = getattr(ann, "start_index", 0)
-        end_idx = getattr(ann, "end_index", 0)
-        source_authenticity = classify_source_authenticity(url)
-        source_type = classify_source_type_from_url(url)
-        authority_kind = classify_authority_kind_from_url(url)
-        binding_status = classify_binding_status(authority_kind)
+    def _register_native_web_evidence(self, ctx: AdapterCallContext) -> None:
+        """Join provider source metadata and URL annotations, then register."""
+        if not ctx.search_call_ids:
+            return
 
-        evidence = NativeWebEvidenceRef(
-            evidence_origin="openai_web_native", evidence_ref="web:pending",
-            source_type=source_type, source_authenticity=source_authenticity,
-            authority_kind=authority_kind,
-            jurisdiction="Cth" if source_authenticity != "unverified" else None,
-            binding_status=binding_status, court_or_tribunal_level=None,
-            retrieved_at=datetime.now(timezone.utc), provenance_complete=True,
-            search_call_id="citation", url=url, title=title,
-            native_web_citation=NativeWebCitation(start_index=start_idx, end_index=end_idx),
-            canonical_source_id=None, document_version=None,
-            effective_from=None, effective_to=None, text=None, content_hash=None,
-        )
+        source_by_url: dict[str, dict[str, Any]] = {}
+        for source in ctx.native_sources:
+            url = str(source.get("url") or "").strip()
+            if not url:
+                continue
+            key = url.rstrip("/").lower()
+            source_by_url.setdefault(key, dict(source))
+
+        for annotation in ctx.citation_annotations:
+            url = str(annotation.get("url") or "").strip()
+            if not url:
+                continue
+            key = url.rstrip("/").lower()
+            source = source_by_url.get(key)
+            if source is None:
+                # A URL annotation is attributable to the only search call in
+                # the response.  With multiple calls and no source-list link,
+                # provenance is ambiguous and must not be guessed.
+                if len(ctx.search_call_ids) != 1:
+                    continue
+                source = {"url": url, "search_call_id": ctx.search_call_ids[0]}
+                source_by_url[key] = source
+            source.setdefault("search_call_id", ctx.search_call_ids[0])
+            source.setdefault("title", annotation.get("title") or url)
+            source.setdefault("citation", {
+                "start_index": annotation.get("start_index"),
+                "end_index": annotation.get("end_index"),
+            })
+
+        if not source_by_url:
+            return
+
         try:
-            ctx.registry.register_native_web_evidence(
-                evidence=evidence, tool_call_id="citation", tool_name="web_search",
+            ctx.web_normalizer.normalize_search_output(
+                search_output={"sources": list(source_by_url.values())},
+                search_call_id=ctx.search_call_ids[0],
+                tool_call_id=ctx.search_call_ids[0],
+                registry=ctx.registry,
             )
         except Exception:
-            pass
+            logger.exception("Failed to normalize web search results")
 
 
 def create_openai_adapter(*, client: OpenAI | None = None) -> OpenAIResponsesAdapter:

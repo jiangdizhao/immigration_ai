@@ -179,6 +179,10 @@ class ToolExecutorContext:
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
     terminal_policy: TerminalSubmissionPolicy = field(default_factory=TerminalSubmissionPolicy)
+    # Set from the first parsed submission.  A repair must not evade the
+    # evidence postcondition by deleting decisive evidence-required claims
+    # while retaining citations or claiming research is complete.
+    repair_requires_evidence: bool = False
     # Accumulated tool outputs
     tool_outputs: list[ToolResultEnvelope] = field(default_factory=list)
     # Web evidence normalizer
@@ -380,6 +384,30 @@ class ToolExecutorService:
                     ],
                 )
 
+            if any(
+                claim.claim_type in {"current_fact", "legal_rule", "legal_application"}
+                and claim.materiality == "decisive"
+                for claim in submission.claims
+            ):
+                context.repair_requires_evidence = True
+
+            if (
+                context.repair_requires_evidence
+                and context.terminal_record.correction_count > 0
+                and not submission.claims
+                and (submission.citations or submission.research_status == "complete")
+            ):
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=[
+                        SubmissionError(
+                            code="REPAIR_REMOVED_REQUIRED_CLAIMS",
+                            field="claims",
+                        )
+                    ],
+                )
+
             # Validate against registry
             validator = AgentSubmissionValidator(context.registry)
             validation_result = validator.validate(submission)
@@ -406,10 +434,15 @@ class ToolExecutorService:
                     errors=validation_result.errors,
                 )
 
+                rejected_data = self._rejection_data(
+                    rejected=rejected,
+                    context=context,
+                )
+
                 return build_tool_result(
                     tool_call_id=tool_call.call_id,
                     status="invalid_request",
-                    data=rejected.model_dump(mode="json"),
+                    data=rejected_data,
                     duration_ms=0,
                     error={"code": "SUBMISSION_INVALID", "message": "Submission validation failed"},
                 ), submission, _action
@@ -449,10 +482,15 @@ class ToolExecutorService:
                     errors=errors,
                 )
 
+                rejected_data = self._rejection_data(
+                    rejected=rejected,
+                    context=context,
+                )
+
                 return build_tool_result(
                     tool_call_id=tool_call.call_id,
                     status="invalid_request",
-                    data=rejected.model_dump(mode="json"),
+                    data=rejected_data,
                     duration_ms=0,
                     error={"code": "EVIDENCE_POSTCONDITION_FAILED", "message": "Evidence postcondition failed"},
                 ), submission, _action
@@ -510,7 +548,7 @@ class ToolExecutorService:
             build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="invalid_request",
-                data=rejected.model_dump(mode="json"),
+                data=self._rejection_data(rejected=rejected, context=context),
                 duration_ms=0,
                 error={
                     "code": "SUBMISSION_INVALID",
@@ -520,6 +558,43 @@ class ToolExecutorService:
             None,
             action,
         )
+
+    @staticmethod
+    def _rejection_data(
+        *,
+        rejected: SubmitAnswerRejected,
+        context: ToolExecutorContext,
+    ) -> dict[str, Any]:
+        """Add genuine request-scoped evidence to a bounded repair response."""
+        data = rejected.model_dump(mode="json")
+        refs = context.registry.get_all_refs()
+        data["available_evidence_refs"] = refs
+        web_evidence: list[dict[str, Any]] = []
+        for ref in context.registry.get_refs_by_origin("openai_web_native"):
+            try:
+                evidence = context.registry.resolve_evidence(ref)
+            except Exception:
+                continue
+            web_evidence.append({
+                "evidence_ref": ref,
+                "url": evidence.url,
+                "title": evidence.title,
+                "search_call_id": evidence.search_call_id,
+                "provenance_complete": evidence.provenance_complete,
+                "native_web_citation": (
+                    evidence.native_web_citation.model_dump(mode="json")
+                    if evidence.native_web_citation is not None
+                    else None
+                ),
+            })
+        data["available_native_web_evidence"] = web_evidence
+        data["repair_instruction"] = (
+            "For decisive current claims, use only an available evidence ref whose "
+            "native_web_citation is non-null. If no such ref is available, submit "
+            "a clearly evidence-insufficient/incomplete answer with no unsupported "
+            "decisive current claims; do not treat a URL or source-only ref as proof."
+        )
+        return data
 
     def handle_missing_submission(
         self,

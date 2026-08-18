@@ -92,7 +92,12 @@ class NativeWebEvidenceRef(EvidenceRefBase):
     search_call_id: str = Field(min_length=1, max_length=255)
     url: str = Field(pattern=r"^https://", max_length=2000)
     title: str = Field(min_length=1, max_length=1000)
-    native_web_citation: NativeWebCitation
+    # A sources-list record can be genuine provider evidence even when the
+    # provider did not emit an inline citation annotation for that URL.  The
+    # evidence postcondition still requires this field for a decisive claim;
+    # keeping it optional lets the registry preserve the real source metadata
+    # without manufacturing a citation span.
+    native_web_citation: NativeWebCitation | None = None
     canonical_source_id: str | None = Field(default=None, min_length=1, max_length=255)
     document_version: str | None = Field(default=None, min_length=1, max_length=255)
     effective_from: date | None = None
