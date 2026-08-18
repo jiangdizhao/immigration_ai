@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -297,6 +298,93 @@ class TestTerminalSubmission:
         assert result.status == "completed"
         assert result.terminal_submission_missing is False
         assert result.metrics.submit_answer_call_count == 1
+
+    def test_tool_executor_propagates_accepted_submission_and_terminal_action(self):
+        executor = ToolExecutorService()
+        context = ToolExecutorContext(request_id="test-req", registry=create_registry())
+        result = executor.execute_tool(
+            ToolCallRequest(
+                call_id="submit-call-1",
+                name="submit_answer",
+                arguments=make_greeting_response().tool_calls[0].arguments,
+            ),
+            context,
+        )
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        assert result.submission_action is not None
+        assert result.submission_action.action == "accept_submission"
+
+    async def test_accepted_submit_does_not_make_acknowledgement_call(self):
+        provider = MockProvider([make_greeting_response()])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry(),
+        )
+        assert result.status == "completed"
+        assert result.submission is not None
+        assert provider.call_count == 1
+
+    async def test_rejected_submit_sends_matching_output_and_allows_one_repair(self):
+        invalid_args = make_greeting_response().tool_calls[0].arguments | {
+            "answer_class": "substantive_legal",
+            "research_status": "not_required",
+        }
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-invalid-submit",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[ToolCallRequest(
+                    call_id="submit-rejected-1", name="submit_answer", arguments=invalid_args,
+                )],
+            ),
+            make_greeting_response(),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry(),
+        )
+        assert result.status == "completed"
+        assert provider.call_count == 2
+        second_history = provider.call_args[1]["messages_history"]
+        matching_outputs = [
+            message for message in second_history
+            if message.get("role") == "tool" and message.get("tool_call_id") == "submit-rejected-1"
+        ]
+        assert len(matching_outputs) == 1
+
+    async def test_deterministic_utility_sends_matching_output_and_continues(self):
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-utility",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[ToolCallRequest(
+                    call_id="utility-call-1",
+                    name="deterministic_utility",
+                    arguments={"operation": "arithmetic", "operands": [1, 2], "expression": "1 + 2"},
+                )],
+            ),
+            make_greeting_response(),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Calculate 1 + 2"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry(),
+        )
+        assert result.status == "completed"
+        assert provider.call_count == 2
+        second_history = provider.call_args[1]["messages_history"]
+        assert any(
+            message.get("role") == "tool" and message.get("tool_call_id") == "utility-call-1"
+            for message in second_history
+        )
 
     async def test_one_missing_submit_continuation(self):
         provider = MockProvider([make_no_submit_response(), make_greeting_response()])
@@ -767,6 +855,68 @@ class TestProviderAdapter:
             resp2 = await provider.call(system_prompt="test", user_text="test", model="gpt-5.6-luna", tools=[], timeout_ms=1000)
             assert resp2.tool_calls[0].name == "submit_answer"
         anyio.run(_test)
+
+    def test_responses_mixed_output_returns_only_custom_function_calls(self):
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        class FakeResponses:
+            def __init__(self):
+                self.calls = []
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                return SimpleNamespace(
+                    id="resp-mixed",
+                    output=[
+                        SimpleNamespace(
+                            type="web_search_call",
+                            id="search-1",
+                            action=SimpleNamespace(queries=["Australian migration law"]),
+                            sources=[],
+                        ),
+                        SimpleNamespace(
+                            type="function_call",
+                            call_id="utility-call-2",
+                            name="deterministic_utility",
+                            arguments='{"operation":"arithmetic","operands":[2,3],"expression":"2 + 3"}',
+                        ),
+                    ],
+                )
+
+        fake_responses = FakeResponses()
+        adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=fake_responses))
+
+        async def _test():
+            response = await adapter.call(
+                system_prompt="test",
+                user_text="test",
+                model="gpt-5.6-luna",
+                tools=[{"type": "web_search"}, {"type": "function", "name": "deterministic_utility"}],
+                timeout_ms=1000,
+                registry=create_registry(),
+            )
+            assert [call.call_id for call in response.tool_calls] == ["utility-call-2"]
+            assert all(call.name != "web_search" for call in response.tool_calls)
+
+        anyio.run(_test)
+
+    def test_responses_continuation_uses_exact_call_id_and_previous_response(self):
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        adapter = OpenAIResponsesAdapter(client=SimpleNamespace(responses=SimpleNamespace(create=lambda **_: SimpleNamespace(id="resp-2", output=[]))))
+        items = adapter._build_input(
+            system_prompt="test",
+            previous_response_id="resp-1",
+            messages_history=[
+                {"role": "assistant", "content": "", "tool_calls": [{"id": "utility-call-3"}]},
+                {"role": "tool", "tool_call_id": "utility-call-3", "content": "{\"status\":\"ok\"}"},
+            ],
+        )
+        assert items == [{
+            "type": "function_call_output",
+            "call_id": "utility-call-3",
+            "output": '{"status":"ok"}',
+        }]
 
     def test_provider_missing_terminal_submit(self):
         resp = make_no_submit_response()

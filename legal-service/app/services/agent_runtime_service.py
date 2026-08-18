@@ -244,6 +244,7 @@ class AgentRuntimeService:
                     tool_round_count += 1
 
                     tool_results_for_provider: list[dict[str, Any]] = []
+                    terminal_failure = False
 
                     for tc in response.tool_calls:
                         remaining = deadline.remaining_ms()
@@ -259,16 +260,17 @@ class AgentRuntimeService:
                         tool_outputs.append(result.result)
 
                         if tc.name == "submit_answer":
-                            if result.result.status == "ok":
-                                submission_received = True
-                                try:
-                                    submission = AgentSubmissionV2(**tc.arguments)
-                                except Exception:
-                                    pass
-                            else:
-                                if tool_context.terminal_record.correction_count >= 1:
-                                    errors.append("Terminal submission failed after correction")
-                                    break
+                            if result.submission_action is not None and result.submission_action.action == "accept_submission":
+                                if result.submission is None:
+                                    errors.append("Accepted terminal submission was not propagated")
+                                    terminal_failure = True
+                                else:
+                                    submission_received = True
+                                    submission = result.submission
+                            elif result.submission_action is not None and not result.submission_action.can_continue:
+                                errors.append(f"Terminal submission failed: {result.submission_action.reason}")
+                                terminal_failure = True
+                                break
 
                         tool_results_for_provider.append({
                             "role": "tool",
@@ -299,6 +301,8 @@ class AgentRuntimeService:
                         messages.extend(tool_results_for_provider)
 
                     if submission_received:
+                        break
+                    if terminal_failure:
                         break
                 else:
                     # No custom tool calls — provider returned text without submit_answer

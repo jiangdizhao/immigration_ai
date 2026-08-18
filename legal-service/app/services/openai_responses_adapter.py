@@ -97,7 +97,9 @@ class OpenAIResponsesAdapter(ProviderInterface):
 
         try:
             input_items = self._build_input(
-                system_prompt=system_prompt, messages_history=messages_history,
+                system_prompt=system_prompt,
+                messages_history=messages_history,
+                previous_response_id=previous_response_id,
             )
 
             web_search_tool = None
@@ -167,11 +169,38 @@ class OpenAIResponsesAdapter(ProviderInterface):
             )
 
     def _build_input(
-        self, *, system_prompt: str, messages_history: list[dict[str, Any]] | None,
+        self,
+        *,
+        system_prompt: str,
+        messages_history: list[dict[str, Any]] | None,
+        previous_response_id: str | None = None,
     ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        items.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
+        if not previous_response_id:
+            items.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
         if not messages_history:
+            return items
+        if previous_response_id:
+            latest_user_message: dict[str, Any] | None = None
+            for message in messages_history:
+                if message.get("role") == "user":
+                    latest_user_message = message
+            for message in messages_history:
+                if message.get("role") == "tool":
+                    call_id = message.get("tool_call_id")
+                    if call_id:
+                        items.append({
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": str(message.get("content") or ""),
+                        })
+            if latest_user_message is not None and not any(
+                message.get("role") == "tool" for message in messages_history
+            ):
+                items.append({
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": str(latest_user_message.get("content") or "")}],
+                })
             return items
         for msg in messages_history:
             role = msg.get("role", "user")
@@ -179,7 +208,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
             if role == "system":
                 continue
             if role == "assistant" and "tool_calls" in msg:
-                items.append({"role": "assistant", "content": [{"type": "output_text", "text": str(content)}]})
+                continue
             elif role == "tool":
                 call_id = msg.get("tool_call_id")
                 if call_id:

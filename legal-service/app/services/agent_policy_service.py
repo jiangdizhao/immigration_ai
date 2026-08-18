@@ -28,7 +28,7 @@ SUBMIT_ANSWER_TOOL = {
     "type": "function",
     "name": "submit_answer",
     "description": "Terminal function to submit the completed answer. Must be called exactly once at the end of every response.",
-    "strict": True,
+    "strict": False,
     "parameters": {
         "type": "object",
         "properties": {
@@ -120,11 +120,16 @@ DETERMINISTIC_UTILITY_TOOL = {
             },
             "operands": {
                 "type": "array",
-                "items": {},
+                "items": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "number"},
+                    ]
+                },
                 "minItems": 1,
                 "maxItems": 20,
             },
-            "expression": {"type": "string"},
+            "expression": {"anyOf": [{"type": "string"}, {"type": "null"}]},
             "calendar": {
                 "type": "string",
                 "enum": ["calendar_days", "business_days"],
@@ -139,7 +144,7 @@ DETERMINISTIC_UTILITY_TOOL = {
             },
             "precision": {"type": "integer", "minimum": 0, "maximum": 12},
         },
-        "required": ["operation", "operands"],
+        "required": ["operation", "operands", "expression", "calendar", "timezone", "rounding", "precision"],
         "additionalProperties": False,
     },
 }

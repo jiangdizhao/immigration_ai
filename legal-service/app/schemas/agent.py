@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.tools import ToolResultEnvelope
 
@@ -42,6 +42,16 @@ class AgentSubmissionV2(StrictContract):
     answer_class: Literal["general", "procedural", "substantive_legal", "safety_blocked"]
     draft_markdown: str = Field(min_length=1, max_length=50000)
     as_of_date: date | None = None
+
+    @field_validator("as_of_date", mode="before")
+    @classmethod
+    def parse_as_of_date(cls, value):
+        if value is None or isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        return value
+
     claims: list[AgentClaim] = Field(default_factory=list, max_length=100)
     citations: list[AgentCitation] = Field(default_factory=list, max_length=100)
     research_status: Literal["not_required", "complete", "incomplete"]

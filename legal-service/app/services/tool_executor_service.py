@@ -110,6 +110,8 @@ class ToolExecutorService:
         Routes to the appropriate tool handler based on tool name.
         """
         start = time.perf_counter()
+        submission: AgentSubmissionV2 | None = None
+        submission_action: TerminalSubmissionAction | None = None
 
         try:
             if tool_call.name == "deterministic_utility":
@@ -117,7 +119,7 @@ class ToolExecutorService:
             elif tool_call.name == "flat_rag_search":
                 result = self._execute_flat_rag_search(tool_call, context)
             elif tool_call.name == "submit_answer":
-                result = self._execute_submit_answer(tool_call, context)
+                result, submission, submission_action = self._execute_submit_answer(tool_call, context)
             else:
                 result = build_tool_result(
                     tool_call_id=tool_call.call_id,
@@ -155,6 +157,8 @@ class ToolExecutorService:
             tool_name=tool_call.name,
             result=result,
             duration_ms=duration_ms,
+            submission=submission,
+            submission_action=submission_action,
         )
 
     def _execute_deterministic_utility(
@@ -241,7 +245,7 @@ class ToolExecutorService:
         self,
         tool_call: ToolCallRequest,
         context: ToolExecutorContext,
-    ) -> ToolResultEnvelope:
+    ) -> tuple[ToolResultEnvelope, AgentSubmissionV2 | None, TerminalSubmissionAction | None]:
         """Execute submit_answer terminal tool.
 
         Validates the submission against the evidence registry and
@@ -284,7 +288,7 @@ class ToolExecutorService:
                     data=rejected.model_dump(mode="json"),
                     duration_ms=0,
                     error={"code": "SUBMISSION_INVALID", "message": "Submission validation failed"},
-                )
+                ), submission, _action
 
             # Run evidence postcondition
             postcondition = EvidencePostconditionService(context.registry)
@@ -327,7 +331,7 @@ class ToolExecutorService:
                     data=rejected.model_dump(mode="json"),
                     duration_ms=0,
                     error={"code": "EVIDENCE_POSTCONDITION_FAILED", "message": "Evidence postcondition failed"},
-                )
+                ), submission, _action
 
             # Valid submission
             _action = context.terminal_policy.handle_valid_submission(context.terminal_record)
@@ -344,7 +348,7 @@ class ToolExecutorService:
                 status="ok",
                 data=accepted.model_dump(mode="json"),
                 duration_ms=0,
-            )
+            ), submission, _action
 
         except Exception as exc:
             logger.exception("submit_answer execution failed")
@@ -354,7 +358,7 @@ class ToolExecutorService:
                 data={},
                 duration_ms=0,
                 error={"code": "SUBMIT_ANSWER_ERROR", "message": str(exc)},
-            )
+            ), None, None
 
     def handle_missing_submission(
         self,
