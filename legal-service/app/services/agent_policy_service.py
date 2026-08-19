@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V2, LUNA_PROMPT_VERSION
 
 ExperimentArm = Literal["A", "B", "C", "D"] | None
+ReasoningEffort = Literal["none", "low", "medium", "high"]
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +197,10 @@ class AgentPolicy:
     model: str
     tools: list[dict[str, Any]]
     tool_choice: Literal["auto"] = "auto"
+    # Phase 5.1A explicit reasoning effort for the default (Luna) agent.
+    # Baseline-preserving default is "medium". Passed verbatim to the
+    # OpenAI Responses request as reasoning.effort.
+    reasoning_effort: ReasoningEffort = "medium"
     experiment_arm: ExperimentArm = None
     max_tool_rounds: int = 2
     max_provider_calls: int = 3
@@ -238,6 +243,9 @@ class AgentPolicyService:
             model=model,
             tools=tools,
             tool_choice="auto",
+            # Phase 5.1A: explicit, configurable reasoning effort. The default is
+            # "medium" so introducing the field does not change inference behavior.
+            reasoning_effort=settings.default_agent_reasoning_effort,
             experiment_arm=experiment_arm,
             max_tool_rounds=settings.agent_max_tool_rounds,
             max_provider_calls=settings.agent_max_provider_calls,

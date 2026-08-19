@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # separately approved rollout; the remaining values do not activate calls.
     answer_engine: str = Field(default="v1", alias="ANSWER_ENGINE")
     default_agent_model: str = Field(default="gpt-5.6-luna", alias="DEFAULT_AGENT_MODEL")
+    # Phase 5.1A: make GPT-5.6 Luna reasoning effort explicit and configurable.
+    # Baseline-preserving default is "medium"; Rico/ChatGPT will later use
+    # temporary shell exports to compare none/low/medium. This is a calibration
+    # field, not a quality decision or a second configuration system.
+    default_agent_reasoning_effort: Literal["none", "low", "medium", "high"] = Field(
+        default="medium", alias="DEFAULT_AGENT_REASONING_EFFORT"
+    )
     premium_agent_model: str = Field(default="gpt-5.6-sol", alias="PREMIUM_AGENT_MODEL")
     legal_fact_check_model: str = Field(
         default="gpt-5.6-luna", alias="LEGAL_FACT_CHECK_MODEL"

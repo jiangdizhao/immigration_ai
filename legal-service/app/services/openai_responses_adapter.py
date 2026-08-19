@@ -83,6 +83,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
         model: str,
         tools: list[dict[str, Any]],
         tool_choice: Literal["auto"] = "auto",
+        reasoning_effort: str | None = None,
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
         registry: RequestEvidenceRegistry | None = None,
@@ -120,6 +121,11 @@ class OpenAIResponsesAdapter(ProviderInterface):
             params: dict[str, Any] = {
                 "model": model, "input": input_items, "tools": [], "tool_choice": tool_choice,
             }
+            # Phase 5.1A: explicitly send the configured reasoning effort (default
+            # "medium" for Luna). This is a calibration feature, not a hidden
+            # inference change; the default preserves the current baseline.
+            if reasoning_effort:
+                params["reasoning"] = {"effort": reasoning_effort}
             if web_search_tool:
                 params["tools"].append(web_search_tool)
                 # The Responses API returns the complete provider source list
@@ -159,6 +165,10 @@ class OpenAIResponsesAdapter(ProviderInterface):
                     text=None, tool_calls=[], duration_ms=duration_ms,
                     raw_response=response,
                     pii_violation_count=ctx.pii_violation_count,
+                    effort=reasoning_effort,
+                    native_web_search_call_count=len(ctx.search_call_ids),
+                    native_web_source_count=len(ctx.native_sources),
+                    native_web_citation_count=len(ctx.citation_annotations),
                 )
 
             usage = getattr(response, "usage", None)
@@ -171,6 +181,10 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 input_tokens=input_tokens, output_tokens=output_tokens,
                 duration_ms=duration_ms, raw_response=response,
                 pii_violation_count=ctx.pii_violation_count,
+                effort=reasoning_effort,
+                native_web_search_call_count=len(ctx.search_call_ids),
+                native_web_source_count=len(ctx.native_sources),
+                native_web_citation_count=len(ctx.citation_annotations),
             )
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000.0
@@ -178,6 +192,10 @@ class OpenAIResponsesAdapter(ProviderInterface):
             return ProviderResponse(
                 response_id="", model=model, status="error", text=None,
                 duration_ms=duration_ms, pii_violation_count=ctx.pii_violation_count,
+                effort=reasoning_effort,
+                native_web_search_call_count=len(ctx.search_call_ids),
+                native_web_source_count=len(ctx.native_sources),
+                native_web_citation_count=len(ctx.citation_annotations),
             )
 
     def _build_input(

@@ -61,6 +61,15 @@ class ProviderResponse:
     duration_ms: float = 0.0
     raw_response: Any = None
     pii_violation_count: int = 0
+    # Phase 5.1A observability: the actual reasoning effort sent to the provider.
+    # Populated by providers that expose/config the effort explicitly.
+    effort: str | None = None
+    # Phase 5.1A: provider-native built-in web_search usage observed directly from
+    # the provider output (OpenAI hosted web_search), NOT custom backend function
+    # calls and NOT model prose/guessed URLs.
+    native_web_search_call_count: int = 0
+    native_web_source_count: int = 0
+    native_web_citation_count: int = 0
 
 
 class ProviderInterface:
@@ -78,6 +87,7 @@ class ProviderInterface:
         model: str,
         tools: list[dict[str, Any]],
         tool_choice: Literal["auto"] = "auto",
+        reasoning_effort: str | None = None,
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
         registry: RequestEvidenceRegistry | None = None,
@@ -226,6 +236,7 @@ class AgentRuntimeService:
                         model=policy.model,
                         tools=policy.tools,
                         tool_choice=policy.tool_choice,
+                        reasoning_effort=policy.reasoning_effort,
                         messages_history=messages,
                         timeout_ms=min(remaining, research_remaining),
                         registry=registry,
@@ -269,7 +280,7 @@ class AgentRuntimeService:
                     response_id=response.response_id or None,
                     previous_response_id=previous_response_id,
                     model=policy.model,
-                    effort=getattr(policy, "reasoning_effort", None),
+                    effort=response.effort or getattr(policy, "reasoning_effort", None),
                     input_tokens=response.input_tokens,
                     cached_input_tokens=response.cached_input_tokens,
                     reasoning_tokens=response.reasoning_tokens,
@@ -283,6 +294,10 @@ class AgentRuntimeService:
                     returned_tool_call_count=len(response.tool_calls),
                     returned_tool_names=[tc.name for tc in response.tool_calls],
                     web_search_reported=any(tc.name == "web_search" for tc in response.tool_calls),
+                    # Phase 5.1A: record actual provider-native built-in web_search use.
+                    native_web_search_call_count=response.native_web_search_call_count,
+                    native_web_source_count=response.native_web_source_count,
+                    native_web_citation_count=response.native_web_citation_count,
                     input_items_count=len(messages),
                     input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
                     function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
@@ -516,6 +531,17 @@ class AgentRuntimeService:
             tool_call_count=len(tool_outputs),
             tool_round_count=tool_round_count,
             web_search_call_count=sum(1 for t in tool_outputs if "web_search" in str(t.data)),
+            # Phase 5.1A: aggregate actual provider-native built-in web_search usage
+            # across all provider calls in this run from the actual provider output.
+            native_web_search_call_count=sum(
+                pc.native_web_search_call_count for pc in provider_call_observations
+            ),
+            native_web_source_count=sum(
+                pc.native_web_source_count for pc in provider_call_observations
+            ),
+            native_web_citation_count=sum(
+                pc.native_web_citation_count for pc in provider_call_observations
+            ),
             web_search_pii_violation_count=pii_violation_count,
             exact_lookup_call_count=0,
             lightrag_call_count=0,

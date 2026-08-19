@@ -73,6 +73,14 @@ class ShadowTrace:
     tool_call_count: int = 0
     tool_round_count: int = 0
     web_search_call_count: int = 0
+    # Phase 5.1A: provider-native built-in web_search usage derived from actual
+    # provider output. Distinct from custom backend tool execution.
+    native_web_search_call_count: int = 0
+    native_web_source_count: int = 0
+    native_web_citation_count: int = 0
+    # Phase 5.1A: configured/default reasoning effort used for this run (content-free
+    # calibration metadata).
+    reasoning_effort: str | None = None
     tool_outputs: list[dict[str, Any]] = field(default_factory=list)
     # Phase-5 diagnostic observability (content-free).
     provider_calls: list[dict[str, Any]] = field(default_factory=list)
@@ -310,6 +318,13 @@ class ShadowAgentService:
             tool_call_count=result.metrics.tool_call_count,
             tool_round_count=result.metrics.tool_round_count,
             web_search_call_count=result.metrics.web_search_call_count,
+            native_web_search_call_count=result.metrics.native_web_search_call_count,
+            native_web_source_count=result.metrics.native_web_source_count,
+            native_web_citation_count=result.metrics.native_web_citation_count,
+            reasoning_effort=(
+                result.metrics.provider_calls[0].effort
+                if result.metrics.provider_calls else None
+            ),
             provider_calls=[pc.model_dump(mode="json") for pc in result.metrics.provider_calls],
             tool_calls=[tc.model_dump(mode="json") for tc in result.metrics.tool_calls],
             total_provider_duration_ms=result.metrics.total_provider_duration_ms,

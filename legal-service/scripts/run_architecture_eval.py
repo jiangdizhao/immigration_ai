@@ -22,7 +22,13 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APPROVED_BRANCH = "next-architecture-agentic-tools"
+# Phase 5.1A calibration runs on its own implementation branch; the earlier
+# Phase-5 A/B runs used next-architecture-agentic-tools. Keep an explicit
+# immutable allowlist so no other branch is silently accepted.
+APPROVED_BRANCHES = {
+    "next-architecture-agentic-tools",
+    "phase5.1-luna-calibration",
+}
 PHASE5_ARMS = {
     "luna_web": "A",
     "luna_flat_web": "B",
@@ -88,9 +94,10 @@ def current_git_identity() -> tuple[str, str]:
         ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
     ).strip()
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if branch != APPROVED_BRANCH:
+    if branch not in APPROVED_BRANCHES:
         raise RuntimeError(
-            f"evaluation must run on {APPROVED_BRANCH}; active branch is {branch}"
+            f"evaluation must run on one of {sorted(APPROVED_BRANCHES)}; "
+            f"active branch is {branch}"
         )
     return branch, sha
 
@@ -232,6 +239,12 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "tool_call_count": trace.tool_call_count,
         "tool_round_count": trace.tool_round_count,
         "web_search_call_count": provider.web_search_call_count,
+        # Phase 5.1A: authoritative provider-native built-in web_search metrics
+        # derived from actual provider output (searches, sources, citations).
+        "native_web_search_call_count": trace.native_web_search_call_count,
+        "native_web_source_count": trace.native_web_source_count,
+        "native_web_citation_count": trace.native_web_citation_count,
+        "reasoning_effort": trace.reasoning_effort,
         "flat_rag_call_count": flat_rag_call_count,
         "evidence_count": len(trace.evidence_refs),
         "native_web_evidence_count": sum(
@@ -271,6 +284,15 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
                 1 for row in rows if row["status"] in {"error", "timeout", "incomplete"}
             ),
             "web_search_calls": sum(int(row.get("web_search_call_count") or 0) for row in rows),
+            "native_web_search_calls": sum(
+                int(row.get("native_web_search_call_count") or 0) for row in rows
+            ),
+            "native_web_sources": sum(
+                int(row.get("native_web_source_count") or 0) for row in rows
+            ),
+            "native_web_citations": sum(
+                int(row.get("native_web_citation_count") or 0) for row in rows
+            ),
             "flat_rag_calls": sum(int(row.get("flat_rag_call_count") or 0) for row in rows),
             "canonical_local_evidence": sum(
                 int(row.get("canonical_local_evidence_count") or 0) for row in rows

@@ -105,6 +105,7 @@ class MockProvider(ProviderInterface):
         model: str,
         tools: list[dict[str, Any]],
         tool_choice: str = "auto",
+        reasoning_effort: str | None = None,
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
         registry: RequestEvidenceRegistry | None = None,
@@ -117,6 +118,7 @@ class MockProvider(ProviderInterface):
             "model": model,
             "tools": tools,
             "tool_choice": tool_choice,
+            "reasoning_effort": reasoning_effort,
             "messages_history": messages_history,
             "timeout_ms": timeout_ms,
             "registry": registry,
@@ -665,7 +667,8 @@ class TestPhase5ResourceGovernance:
             self.advance_ms_per_call = advance_ms_per_call
 
         async def call(self, *, system_prompt, user_text, model, tools,
-                       tool_choice="auto", messages_history=None, timeout_ms,
+                       tool_choice="auto", reasoning_effort=None,
+                       messages_history=None, timeout_ms,
                        registry=None, previous_response_id=None):
             self.call_count += 1
             if self.clock is not None:

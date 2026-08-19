@@ -120,6 +120,13 @@ class ProviderCallObservation(StrictContract):
     previous_response_id: str | None = Field(default=None, max_length=255)
     model: str | None = Field(default=None, max_length=255)
     effort: str | None = Field(default=None, max_length=100)
+    # Phase 5.1A: actual provider-native built-in web_search usage observed
+    # directly from the OpenAI Responses output.  These are NOT custom backend
+    # tool calls (flat_rag_search/deterministic_utility/submit_answer) and
+    # never count model prose or guessed URLs.
+    native_web_search_call_count: int = Field(default=0, ge=0)
+    native_web_source_count: int = Field(default=0, ge=0)
+    native_web_citation_count: int = Field(default=0, ge=0)
     input_tokens: int | None = Field(default=None, ge=0)
     cached_input_tokens: int | None = Field(default=None, ge=0)
     reasoning_tokens: int | None = Field(default=None, ge=0)
@@ -170,6 +177,14 @@ class AgentExecutionMetrics(StrictContract):
     tool_call_count: int = Field(default=0, ge=0)
     tool_round_count: int = Field(default=0, ge=0)
     web_search_call_count: int = Field(default=0, ge=0)
+    # Phase 5.1A observability: provider-native (OpenAI hosted) built-in
+    # web_search usage derived from the actual Responses output, distinct from
+    # any custom backend function execution.  web_search_call_count above is
+    # retained for custom/legacy tooling; native_* fields are authoritative for
+    # OpenAI hosted web_search.
+    native_web_search_call_count: int = Field(default=0, ge=0)
+    native_web_source_count: int = Field(default=0, ge=0)
+    native_web_citation_count: int = Field(default=0, ge=0)
     web_search_pii_violation_count: int = Field(default=0, ge=0)
     exact_lookup_call_count: int = Field(default=0, ge=0)
     lightrag_call_count: int = Field(default=0, ge=0)

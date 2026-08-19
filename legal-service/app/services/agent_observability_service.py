@@ -191,6 +191,9 @@ class AgentObservabilityService:
         response_id: str | None = None,
         model: str | None = None,
         effort: str | None = None,
+        native_web_search_call_count: int = 0,
+        native_web_source_count: int = 0,
+        native_web_citation_count: int = 0,
         input_tokens: int | None = None,
         cached_input_tokens: int | None = None,
         reasoning_tokens: int | None = None,
@@ -210,6 +213,9 @@ class AgentObservabilityService:
                 response_id=response_id,
                 model=model,
                 effort=effort,
+                native_web_search_call_count=native_web_search_call_count,
+                native_web_source_count=native_web_source_count,
+                native_web_citation_count=native_web_citation_count,
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
                 reasoning_tokens=reasoning_tokens,
@@ -221,6 +227,11 @@ class AgentObservabilityService:
             )
         )
         observation.metrics.provider_api_call_count = len(observation.metrics.provider_calls)
+        # Phase 5.1A: aggregate provider-native built-in web_search usage from the
+        # actual provider output at the turn level.
+        observation.metrics.native_web_search_call_count += native_web_search_call_count
+        observation.metrics.native_web_source_count += native_web_source_count
+        observation.metrics.native_web_citation_count += native_web_citation_count
         if is_retry:
             observation.metrics.retry_count += 1
 
