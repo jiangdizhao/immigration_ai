@@ -4,6 +4,7 @@ import pytest
 
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.agent_observability_service import (
+    AbsoluteTurnDeadline,
     AgentObservabilityService,
     TurnDeadlineExceeded,
 )
@@ -105,6 +106,23 @@ def test_absolute_deadline_is_inherited_and_retry_does_not_reset_it() -> None:
         service.reset_turn(token)
 
 
+def test_stage_budget_is_non_resetting_from_original_turn_start() -> None:
+    clock = FakeClock(value=100.0)
+    deadline = AbsoluteTurnDeadline(started_at=100.0, turn_deadline_ms=40000, clock=clock)
+    # Research stage = 32s from original turn start => deadline at 132.0
+    assert deadline.stage_deadline_at(32000) == 132.0
+    assert deadline.stage_remaining_ms(32000) == pytest.approx(32000)
+    # Advance 20s => stage remaining 12s (NOT reset to 32s)
+    clock.advance_ms(20000)
+    assert deadline.stage_remaining_ms(32000) == pytest.approx(12000)
+    # Advance past stage => 0 (and no negative)
+    clock.advance_ms(13000)
+    assert deadline.stage_remaining_ms(32000) == pytest.approx(0)
+    # The absolute turn deadline is independent (40s => 140.0)
+    assert deadline.deadline_at == 140.0
+    assert deadline.remaining_ms() == pytest.approx(7000)
+
+
 def test_missing_terminal_submission_metrics_are_bounded() -> None:
     service = AgentObservabilityService(clock=FakeClock())
     token = service.begin_turn(mode="premium", turn_deadline_ms=45000)
@@ -181,6 +199,8 @@ def test_shadow_starts_after_gate_before_slow_legacy_path(monkeypatch) -> None:
         agent_max_tool_rounds = 2
         agent_max_provider_calls = 3
         agent_max_retries = 0
+        agent_max_flat_rag_calls = 1
+        agent_retry_viability_threshold_ms = 8000
 
     class FakeThread:
         def __init__(self, *, target, daemon):
@@ -234,6 +254,8 @@ def test_shadow_launcher_is_nonblocking_when_legacy_response_is_ready_late(monke
         agent_max_tool_rounds = 2
         agent_max_provider_calls = 3
         agent_max_retries = 0
+        agent_max_flat_rag_calls = 1
+        agent_retry_viability_threshold_ms = 8000
 
     class FakeThread:
         def __init__(self, *, target, daemon):

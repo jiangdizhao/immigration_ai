@@ -200,6 +200,8 @@ class AgentPolicy:
     max_tool_rounds: int = 2
     max_provider_calls: int = 3
     max_retries: int = 1
+    max_flat_rag_calls: int = 1
+    retry_viability_threshold_ms: int = 8000
 
 
 class AgentPolicyService:
@@ -240,6 +242,8 @@ class AgentPolicyService:
             max_tool_rounds=settings.agent_max_tool_rounds,
             max_provider_calls=settings.agent_max_provider_calls,
             max_retries=settings.agent_max_retries,
+            max_flat_rag_calls=settings.agent_max_flat_rag_calls,
+            retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
         )
 
     def _build_default_tools(self, experiment_arm: ExperimentArm) -> list[dict[str, Any]]:

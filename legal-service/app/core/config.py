@@ -42,6 +42,12 @@ class Settings(BaseSettings):
         default=3, ge=1, le=20, alias="AGENT_MAX_PROVIDER_CALLS"
     )
     agent_max_retries: int = Field(default=1, ge=0, le=10, alias="AGENT_MAX_RETRIES")
+    agent_max_flat_rag_calls: int = Field(
+        default=1, ge=0, le=100, alias="AGENT_MAX_FLAT_RAG_CALLS"
+    )
+    agent_retry_viability_threshold_ms: int = Field(
+        default=8000, ge=0, le=40000, alias="AGENT_RETRY_VIABILITY_THRESHOLD_MS"
+    )
     default_turn_deadline_ms: int = Field(
         default=40000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
     )

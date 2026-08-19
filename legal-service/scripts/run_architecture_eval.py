@@ -181,6 +181,8 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         turn_deadline_ms=settings.default_turn_deadline_ms,
         answer_research_target_ms=settings.default_answer_research_target_ms,
         checker_target_ms=settings.legal_fact_check_target_ms,
+        max_flat_rag_calls=settings.agent_max_flat_rag_calls,
+        retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
     )
 
     db = None
@@ -245,6 +247,10 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "terminal_submission_missing": trace.terminal_submission_missing,
         "total_duration_ms": round(trace.total_duration_ms, 3),
         "remaining_deadline_ms": round(trace.remaining_deadline_ms, 3),
+        "provider_calls": trace.provider_calls,
+        "tool_calls": trace.tool_calls,
+        "total_provider_duration_ms": round(trace.total_provider_duration_ms, 3),
+        "total_tool_duration_ms": round(trace.total_tool_duration_ms, 3),
         "errors": trace.errors,
         "answer": submission.draft_markdown if submission else None,
     }

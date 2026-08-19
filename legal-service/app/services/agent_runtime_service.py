@@ -18,6 +18,8 @@ from app.schemas.agent import (
     AgentExecutionMetrics,
     AgentRuntimeRequest,
     AgentSubmissionV2,
+    ProviderCallObservation,
+    ToolCallObservation,
 )
 from app.schemas.tools import ToolResultEnvelope
 from app.services.agent_observability_service import (
@@ -33,6 +35,7 @@ from app.services.tool_executor_service import (
     ToolExecutorContext,
     ToolExecutorService,
 )
+from app.tools.base import build_tool_result
 from app.services.web_evidence_normalizer import WebEvidenceNormalizer
 
 logger = logging.getLogger(__name__)
@@ -179,12 +182,39 @@ class AgentRuntimeService:
         terminal_missing = False
         continuation_count = 0
         previous_response_id: str | None = None
+        flat_rag_executed_count = 0
+        flat_rag_denied_count = 0
+        provider_retry_skipped_reason: str | None = None
+        provider_call_observations: list[ProviderCallObservation] = []
+        tool_call_observations: list[ToolCallObservation] = []
+        total_provider_duration_ms = 0.0
+        total_tool_duration_ms = 0.0
+        prev_call_was_failed = False
+        prev_call_was_missing_terminal = False
+
+        # Phase 5 resource governance: the answer/research target is a NON-RESETTING
+        # stage budget inherited from the SAME original turn start, not a per-call
+        # timeout.  Every provider call (initial, continuation, retry) and every
+        # research tool round consumes from this shared stage budget.  It never
+        # resets to now + answer_research_target_ms.
+        research_stage_budget_ms = budget.answer_research_target_ms
+        research_stage_deadline_at = deadline.stage_deadline_at(research_stage_budget_ms)
+
+        def _research_stage_remaining_ms() -> float:
+            return max(0.0, (research_stage_deadline_at - deadline.clock()) * 1000.0)
 
         try:
             while provider_call_count < budget.max_provider_calls:
                 remaining = deadline.remaining_ms()
                 if remaining <= 0:
                     errors.append("Deadline exceeded before provider call")
+                    break
+
+                # A provider continuation/retry cannot consume a fresh research
+                # budget.  If the shared answer/research stage is exhausted, stop.
+                research_remaining = _research_stage_remaining_ms()
+                if research_remaining <= 0:
+                    errors.append("Answer/research stage budget exceeded before provider call")
                     break
 
                 provider_call_count += 1
@@ -197,7 +227,7 @@ class AgentRuntimeService:
                         tools=policy.tools,
                         tool_choice=policy.tool_choice,
                         messages_history=messages,
-                        timeout_ms=min(remaining, budget.answer_research_target_ms),
+                        timeout_ms=min(remaining, research_remaining),
                         registry=registry,
                         previous_response_id=previous_response_id,
                     )
@@ -207,14 +237,62 @@ class AgentRuntimeService:
                 except Exception as exc:
                     logger.exception("Provider call failed")
                     if provider_call_count <= budget.max_retries + 1:
+                        if not self._retry_threshold_met(budget=budget, deadline=deadline):
+                            provider_retry_skipped_reason = "retry_viability_threshold_not_met"
+                            errors.append(
+                                f"Provider call failed (attempt {provider_call_count}); retry skipped because remaining "
+                                f"deadline is below retry viability threshold ({budget.retry_viability_threshold_ms}ms)"
+                            )
+                            break
                         errors.append(f"Provider call failed (attempt {provider_call_count}): {exc}")
                         continue
                     else:
+                        provider_retry_skipped_reason = "retry_allowance_exhausted"
                         errors.append(f"Provider call failed after {provider_call_count} attempts: {exc}")
                         break
 
                 provider_response_ids.append(response.response_id)
                 pii_violation_count += response.pii_violation_count
+
+                # Record provider-call diagnostic observation (content-free).
+                call_kind = "initial"
+                if prev_call_was_failed:
+                    call_kind = "retry"
+                elif provider_call_count > 1 and prev_call_was_missing_terminal:
+                    call_kind = "missing_terminal_continuation"
+                elif provider_call_count > 1:
+                    call_kind = "continuation"
+                provider_call_observations.append(ProviderCallObservation(
+                    stage="answer_research",
+                    call_index=provider_call_count,
+                    call_kind=call_kind,
+                    response_id=response.response_id or None,
+                    previous_response_id=previous_response_id,
+                    model=policy.model,
+                    effort=getattr(policy, "reasoning_effort", None),
+                    input_tokens=response.input_tokens,
+                    cached_input_tokens=response.cached_input_tokens,
+                    reasoning_tokens=response.reasoning_tokens,
+                    output_tokens=response.output_tokens,
+                    duration_ms=response.duration_ms,
+                    timeout_allocated_ms=min(remaining, research_remaining),
+                    remaining_deadline_before_call_ms=remaining,
+                    research_stage_remaining_before_ms=research_remaining,
+                    absolute_remaining_after_ms=deadline.remaining_ms(),
+                    research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                    returned_tool_call_count=len(response.tool_calls),
+                    returned_tool_names=[tc.name for tc in response.tool_calls],
+                    web_search_reported=any(tc.name == "web_search" for tc in response.tool_calls),
+                    input_items_count=len(messages),
+                    input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
+                    function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                    tool_definitions_count=len(policy.tools),
+                    status=response.status,
+                    is_retry=(call_kind == "retry"),
+                ))
+                total_provider_duration_ms += response.duration_ms
+                prev_call_was_failed = response.status in ("timeout", "error")
+                prev_call_was_missing_terminal = False
 
                 if response.pii_violation_count:
                     errors.append("Generated web search query failed the privacy policy")
@@ -227,13 +305,29 @@ class AgentRuntimeService:
                 if response.status == "timeout":
                     errors.append("Provider call timed out")
                     if provider_call_count <= budget.max_retries + 1:
+                        if not self._retry_threshold_met(budget=budget, deadline=deadline):
+                            provider_retry_skipped_reason = "retry_viability_threshold_not_met"
+                            errors.append(
+                                f"Provider call timed out; retry skipped because remaining "
+                                f"deadline is below retry viability threshold ({budget.retry_viability_threshold_ms}ms)"
+                            )
+                            break
                         continue
+                    provider_retry_skipped_reason = "retry_allowance_exhausted"
                     break
 
                 if response.status == "error":
                     errors.append("Provider call returned error")
                     if provider_call_count <= budget.max_retries + 1:
+                        if not self._retry_threshold_met(budget=budget, deadline=deadline):
+                            provider_retry_skipped_reason = "retry_viability_threshold_not_met"
+                            errors.append(
+                                f"Provider call returned error; retry skipped because remaining "
+                                f"deadline is below retry viability threshold ({budget.retry_viability_threshold_ms}ms)"
+                            )
+                            break
                         continue
+                    provider_retry_skipped_reason = "retry_allowance_exhausted"
                     break
 
                 # Process custom function tool calls (NOT built-in web_search)
@@ -252,12 +346,94 @@ class AgentRuntimeService:
                             errors.append("Deadline exceeded before tool execution")
                             break
 
+                        # Research tool execution also consumes the shared
+                        # non-resetting answer/research stage budget.
+                        research_remaining = _research_stage_remaining_ms()
+                        if research_remaining <= 0:
+                            errors.append("Answer/research stage budget exceeded before tool execution")
+                            break
+
                         # web_search is built-in, not a custom function — skip
                         if tc.name == "web_search":
                             continue
 
+                        # Phase 5 resource governance: bound the number of actual
+                        # flat_rag_search executions per run (not merely tool rounds).
+                        # When the bound is exceeded, the additional call is DENIED
+                        # with a deterministic envelope, but still returned to the
+                        # provider as a tool output so Luna can continue.
+                        if tc.name == "flat_rag_search" and flat_rag_executed_count >= budget.max_flat_rag_calls:
+                            flat_rag_denied_count += 1
+                            denied = build_tool_result(
+                                tool_call_id=tc.call_id,
+                                status="partial",
+                                data={
+                                    "chunks": [],
+                                    "evidence_refs": [],
+                                    "denied_reason": "FLAT_RAG_BUDGET_EXHAUSTED",
+                                    "denied_call_count": flat_rag_denied_count,
+                                    "flat_rag_calls_limited_to": budget.max_flat_rag_calls,
+                                },
+                                duration_ms=0,
+                                error={
+                                    "code": "FLAT_RAG_BUDGET_EXHAUSTED",
+                                    "message": (
+                                        f"Flat RAG execution budget exhausted: maximum "
+                                        f"{budget.max_flat_rag_calls} flat_rag_search execution(s) per run "
+                                        f"already performed. Continue with web search or submit the answer "
+                                        f"with the evidence already collected."
+                                    ),
+                                },
+                            )
+                            tool_outputs.append(denied)
+                            tool_results_for_provider.append({
+                                "role": "tool",
+                                "tool_call_id": tc.call_id,
+                                "content": json.dumps(denied.model_dump(mode="json")),
+                            })
+                            # Record the denied tool execution (governor).
+                            tool_call_observations.append(ToolCallObservation(
+                                tool_name=tc.name,
+                                tool_call_id=tc.call_id,
+                                round_index=tool_round_count,
+                                status="partial",
+                                duration_ms=0.0,
+                                remaining_deadline_before_call_ms=remaining,
+                                research_stage_remaining_before_ms=research_remaining,
+                                absolute_remaining_after_ms=deadline.remaining_ms(),
+                                research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                                result_count=0,
+                                governor_denied=True,
+                                is_retry=False,
+                            ))
+                            continue
+
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
+
+                        # Record tool-call diagnostic observation (content-free).
+                        tool_call_observations.append(ToolCallObservation(
+                            tool_name=tc.name,
+                            tool_call_id=tc.call_id,
+                            round_index=tool_round_count,
+                            status=result.result.status,
+                            duration_ms=result.duration_ms,
+                            remaining_deadline_before_call_ms=remaining,
+                            research_stage_remaining_before_ms=research_remaining,
+                            absolute_remaining_after_ms=deadline.remaining_ms(),
+                            research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                            result_count=(len(result.result.data.get("chunks", []))
+                                          if isinstance(result.result.data.get("chunks"), (list, tuple))
+                                          else (len(result.result.data.get("evidence_refs", []))
+                                                if isinstance(result.result.data.get("evidence_refs"), (list, tuple))
+                                                else None)),
+                            governor_denied=False,
+                            is_retry=False,
+                        ))
+                        total_tool_duration_ms += result.duration_ms
+
+                        if tc.name == "flat_rag_search":
+                            flat_rag_executed_count += 1
 
                         if tc.name == "submit_answer":
                             if result.submission_action is not None and result.submission_action.action == "accept_submission":
@@ -343,7 +519,7 @@ class AgentRuntimeService:
             web_search_pii_violation_count=pii_violation_count,
             exact_lookup_call_count=0,
             lightrag_call_count=0,
-            flat_rag_call_count=sum(1 for t in tool_outputs if "flat_rag" in str(t.data)),
+            flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
             submit_answer_call_count=1 if submission_received else 0,
             retry_count=max(0, provider_call_count - 1),
@@ -358,6 +534,12 @@ class AgentRuntimeService:
             fact_check_latency_ms=0,
             total_latency_ms=total_duration,
             metrics_complete=True,
+            flat_rag_denied_call_count=flat_rag_denied_count,
+            provider_retry_skipped_reason=provider_retry_skipped_reason,
+            total_provider_duration_ms=total_provider_duration_ms,
+            total_tool_duration_ms=total_tool_duration_ms,
+            provider_calls=provider_call_observations,
+            tool_calls=tool_call_observations,
         )
 
         if deadline.remaining_ms() <= 0:
@@ -404,6 +586,30 @@ class AgentRuntimeService:
             errors=errors,
             shadow_trace=shadow_trace,
         )
+
+    @staticmethod
+    def _retry_threshold_met(
+        *,
+        budget: Any,
+        deadline: AbsoluteTurnDeadline,
+    ) -> bool:
+        """Return True if the remaining absolute deadline still exceeds the
+        retry viability threshold — i.e. enough useful budget remains that a
+        retry could complete a provider call, tools, continuation and terminal
+        submit without predictably failing against the original deadline.
+
+        This is deterministic backend resource governance — not a visa/legal rule.
+        """
+        remaining = deadline.remaining_ms()
+        threshold = getattr(budget, "retry_viability_threshold_ms", 0)
+        stage_remaining = deadline.stage_remaining_ms(getattr(budget, "answer_research_target_ms", 0))
+        # A retry is only useful if the MINIMUM of the absolute turn remaining and
+        # the non-resetting answer/research stage remaining still covers the
+        # viability threshold.  Even if the absolute deadline has room, a stage
+        # that is nearly spent leaves the retry predictably unable to complete
+        # inside the original research stage, so it must not start.
+        usable_retry_budget_ms = min(remaining, stage_remaining)
+        return usable_retry_budget_ms >= threshold
 
     def _build_user_message(self, request: AgentRuntimeRequest) -> str:
         parts: list[str] = []

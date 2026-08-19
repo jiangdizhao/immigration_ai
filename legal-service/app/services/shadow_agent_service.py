@@ -74,6 +74,11 @@ class ShadowTrace:
     tool_round_count: int = 0
     web_search_call_count: int = 0
     tool_outputs: list[dict[str, Any]] = field(default_factory=list)
+    # Phase-5 diagnostic observability (content-free).
+    provider_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    total_provider_duration_ms: float = 0.0
+    total_tool_duration_ms: float = 0.0
     total_input_tokens: int | None = None
     total_output_tokens: int | None = None
     total_duration_ms: float = 0.0
@@ -197,6 +202,8 @@ class ShadowAgentService:
                 turn_deadline_ms=turn_deadline_ms,
                 answer_research_target_ms=answer_research_target_ms,
                 checker_target_ms=settings.legal_fact_check_target_ms,
+                max_flat_rag_calls=settings.agent_max_flat_rag_calls,
+                retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
             )
 
         # Create fresh registry for this shadow run
@@ -303,6 +310,10 @@ class ShadowAgentService:
             tool_call_count=result.metrics.tool_call_count,
             tool_round_count=result.metrics.tool_round_count,
             web_search_call_count=result.metrics.web_search_call_count,
+            provider_calls=[pc.model_dump(mode="json") for pc in result.metrics.provider_calls],
+            tool_calls=[tc.model_dump(mode="json") for tc in result.metrics.tool_calls],
+            total_provider_duration_ms=result.metrics.total_provider_duration_ms,
+            total_tool_duration_ms=result.metrics.total_tool_duration_ms,
             tool_outputs=[t.model_dump(mode="json") for t in result.tool_outputs],
             total_duration_ms=result.metrics.total_latency_ms,
             deadline_ms=deadline.turn_deadline_ms,

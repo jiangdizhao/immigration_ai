@@ -77,11 +77,20 @@ class ExecutionBudget(StrictContract):
     turn_deadline_ms: int = Field(ge=1)
     answer_research_target_ms: int = Field(ge=1)
     checker_target_ms: int = Field(ge=1)
+    # Phase 5 resource governance. Per-turn Flat-RAG execution bound (Arm B only).
+    # The bound applies to actual flat_rag_search executions, not merely tool rounds.
+    max_flat_rag_calls: int = Field(default=1, ge=0, le=100)
+    # A provider retry is launched only when the remaining absolute deadline still
+    # exceeds this threshold. Prevents a futile late provider call from burning the
+    # residual budget after a first attempt consumed most of the research budget.
+    retry_viability_threshold_ms: int = Field(default=8000, ge=0, le=40000)
 
     @model_validator(mode="after")
     def validate_budget(self):
         if self.answer_research_target_ms + self.checker_target_ms > self.turn_deadline_ms:
             raise ValueError("answer and checker targets must fit inside turn_deadline_ms")
+        if self.retry_viability_threshold_ms > self.turn_deadline_ms:
+            raise ValueError("retry viability threshold must fit inside turn_deadline_ms")
         return self
 
 
@@ -105,7 +114,10 @@ class DeadlineCheckpoint(StrictContract):
 
 class ProviderCallObservation(StrictContract):
     stage: str = Field(min_length=1, max_length=255)
+    call_index: int = Field(default=1, ge=1)
+    call_kind: Literal["initial", "continuation", "retry", "missing_terminal_continuation", "unknown"] = "initial"
     response_id: str | None = Field(default=None, max_length=255)
+    previous_response_id: str | None = Field(default=None, max_length=255)
     model: str | None = Field(default=None, max_length=255)
     effort: str | None = Field(default=None, max_length=100)
     input_tokens: int | None = Field(default=None, ge=0)
@@ -113,7 +125,19 @@ class ProviderCallObservation(StrictContract):
     reasoning_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     duration_ms: float = Field(ge=0)
+    timeout_allocated_ms: float = Field(default=0, ge=0)
     remaining_deadline_before_call_ms: float = Field(ge=0)
+    research_stage_remaining_before_ms: float = Field(default=0, ge=0)
+    absolute_remaining_after_ms: float = Field(default=0, ge=0)
+    research_stage_remaining_after_ms: float = Field(default=0, ge=0)
+    returned_tool_call_count: int = Field(default=0, ge=0)
+    returned_tool_names: list[str] = Field(default_factory=list, max_length=50)
+    web_search_reported: bool = False
+    # Payload-size metadata (counts/approximate sizes only, NO content).
+    input_items_count: int = Field(default=0, ge=0)
+    input_char_count: int = Field(default=0, ge=0)
+    function_output_count: int = Field(default=0, ge=0)
+    tool_definitions_count: int = Field(default=0, ge=0)
     status: Literal["ok", "timeout", "error"] = "ok"
     is_retry: bool = False
 
@@ -132,7 +156,11 @@ class ToolCallObservation(StrictContract):
     status: Literal["ok", "partial", "unavailable", "invalid_request", "timeout", "error"]
     duration_ms: float = Field(ge=0)
     remaining_deadline_before_call_ms: float = Field(ge=0)
+    research_stage_remaining_before_ms: float = Field(default=0, ge=0)
+    absolute_remaining_after_ms: float = Field(default=0, ge=0)
+    research_stage_remaining_after_ms: float = Field(default=0, ge=0)
     result_count: int | None = Field(default=None, ge=0)
+    governor_denied: bool = False
     is_retry: bool = False
 
 
@@ -160,6 +188,11 @@ class AgentExecutionMetrics(StrictContract):
     answer_agent_latency_ms: float = Field(default=0, ge=0)
     fact_check_latency_ms: float = Field(default=0, ge=0)
     total_latency_ms: float = Field(default=0, ge=0)
+    # Phase 5 resource governance observability (deterministic, content-free).
+    flat_rag_denied_call_count: int = Field(default=0, ge=0)
+    provider_retry_skipped_reason: str | None = Field(default=None, max_length=255)
+    total_provider_duration_ms: float = Field(default=0, ge=0)
+    total_tool_duration_ms: float = Field(default=0, ge=0)
     # Content-free political-gate observability.  Never add raw/normalized
     # text, rule IDs, category, excerpts, or hashes derived from user text.
     political_gate_decision: Literal["allow", "block"] | None = None

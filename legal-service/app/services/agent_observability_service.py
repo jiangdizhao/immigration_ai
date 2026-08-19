@@ -46,6 +46,24 @@ class AbsoluteTurnDeadline:
             raise TurnDeadlineExceeded(stage)
         return min(float(component_timeout_ms), remaining)
 
+    def stage_deadline_at(self, stage_duration_ms: int | float) -> float:
+        """Return the non-resetting wall-clock deadline for a named stage.
+
+        The stage deadline inherits the SAME original monotonic start time as
+        the absolute turn deadline (this object's ``started_at``); it is NOT
+        derived from ``now + stage_duration``.  A stage that started at turn
+        acceptance ends at ``started_at + stage_duration_ms`` regardless of how
+        many calls/rounds/retries occur inside it.
+        """
+        return self.started_at + (float(stage_duration_ms) / 1000.0)
+
+    def stage_remaining_ms(self, stage_duration_ms: int | float) -> float:
+        """Return the remaining time for a stage whose deadline is derived from
+        the original turn start (non-resetting).  Never negative.
+        """
+        stage_at = self.stage_deadline_at(stage_duration_ms)
+        return max(0.0, (stage_at - self.clock()) * 1000.0)
+
 
 @dataclass(slots=True)
 class _TurnObservation:

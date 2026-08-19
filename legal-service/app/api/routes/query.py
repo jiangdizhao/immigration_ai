@@ -52,6 +52,8 @@ def _schedule_shadow_run(
             turn_deadline_ms=turn_deadline_ms,
             answer_research_target_ms=answer_research_target_ms,
             checker_target_ms=checker_target_ms,
+            max_flat_rag_calls=get_settings().agent_max_flat_rag_calls,
+            retry_viability_threshold_ms=get_settings().agent_retry_viability_threshold_ms,
         )
 
         def _run_in_thread() -> None:

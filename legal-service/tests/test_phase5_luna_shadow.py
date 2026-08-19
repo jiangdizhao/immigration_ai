@@ -43,6 +43,7 @@ All tests use MOCKED provider outputs. No live OpenAI calls.
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
@@ -644,6 +645,444 @@ class TestBudgets:
         initial = deadline.deadline_at
         await runtime.run_shadow(make_runtime_request(user_text="Hello"), deadline=deadline, registry=registry)
         assert deadline.deadline_at == initial
+
+
+# ---------------------------------------------------------------------------
+# Tests: Phase-5 resource governance (Flat-RAG bound + retry viability)
+# ---------------------------------------------------------------------------
+
+
+class TestPhase5ResourceGovernance:
+    class _AdvancingProvider(ProviderInterface):
+        """Provider whose call advances a controllable clock, simulating elapsed
+        research time.  Returns responses in order; any excess returns a default
+        ok response without submit."""
+
+        def __init__(self, clock, responses, advance_ms_per_call=100.0):
+            self.clock = clock
+            self.responses = list(responses)
+            self.call_count = 0
+            self.advance_ms_per_call = advance_ms_per_call
+
+        async def call(self, *, system_prompt, user_text, model, tools,
+                       tool_choice="auto", messages_history=None, timeout_ms,
+                       registry=None, previous_response_id=None):
+            self.call_count += 1
+            if self.clock is not None:
+                self.clock.advance_ms(self.advance_ms_per_call)
+            if self.call_count <= len(self.responses):
+                return self.responses[self.call_count - 1]
+            return ProviderResponse(
+                response_id=f"resp-{self.call_count}", model=model,
+                status="ok", text="No submission.", duration_ms=0,
+            )
+
+    class _FakeClock:
+        def __init__(self, value: float = 0.0) -> None:
+            self.value = value
+
+        def __call__(self) -> float:
+            return self.value
+
+        def advance_ms(self, ms: float) -> None:
+            self.value += ms / 1000.0
+
+    async def test_flat_rag_bounded_to_one_execution_per_run(self):
+        """Arm B: when Luna emits 3 flat_rag_search calls in one response,
+        only 1 may execute; the rest are denied with a deterministic envelope."""
+        flat_rag_calls = [
+            ToolCallRequest(call_id=f"flat-{i}", name="flat_rag_search",
+                            arguments={"query": f"query {i}", "top_k": None, "preferred_source_types": None})
+            for i in range(3)
+        ]
+        executed: list[str] = []
+
+        def fake_flat_rag_search(**kwargs):
+            executed.append(kwargs.get("query"))
+            from app.tools.flat_rag_search import FlatRagResult
+            return FlatRagResult(chunks=[], evidence_refs=[], debug={}, duration_ms=1.0)
+
+        provider = MockProvider([
+            ProviderResponse(response_id="resp-flat", model="gpt-5.6-luna", status="ok",
+                             tool_calls=flat_rag_calls),
+            make_greeting_response(),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1,
+            retry_viability_threshold_ms=8000,
+        )
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal query", execution_budget=budget, experiment_arm="B"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry("flat-bound"),
+            flat_rag_search_fn=fake_flat_rag_search,
+        )
+        # Only one actual execution happened.
+        assert len(executed) == 1
+        assert result.metrics.flat_rag_call_count == 1
+        assert result.metrics.flat_rag_denied_call_count == 2
+        # Denied calls surfaced to the provider so Luna can continue.
+        denied = [t for t in result.tool_outputs if t.error and t.error.code == "FLAT_RAG_BUDGET_EXHAUSTED"]
+        assert len(denied) == 2
+        # The provider received a second call (the denied outputs were returned).
+        assert provider.call_count == 2
+
+    async def test_early_transient_failure_allows_one_bounded_retry(self):
+        """The first provider call fails fast with plenty of budget left;
+        one bounded retry is allowed."""
+        provider = MockProvider([
+            ProviderResponse(response_id="", model="gpt-5.6-luna", status="error", duration_ms=50),
+            make_greeting_response(),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry("retry-early"),
+        )
+        assert provider.call_count == 2
+        assert result.metrics.retry_count >= 1
+        assert result.metrics.provider_retry_skipped_reason is None
+
+    async def test_late_failure_retry_skipped_when_remaining_below_threshold(self):
+        """The first provider call starts while the 32s research stage is still
+        valid, then fails late enough that no useful retry budget remains.  The
+        retry is skipped; exactly one provider call occurs."""
+        # Use a controllable clock so timing is deterministic and the first call
+        # starts inside the 32s stage but consumes most of it.
+        clock = self._FakeClock(value=0.0)
+        # Absolute deadline = started_at + 40s.  Research stage = started_at + 32s.
+        # First provider call advances 31s (stage still valid at start, but only
+        # ~1s of 32s remains after it).  After the call, absolute remaining
+        # ~9s (> 0) but research-stage remaining ~1s and < retry threshold 8s.
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[
+                ProviderResponse(response_id="", model="gpt-5.6-luna", status="error", duration_ms=31000),
+                make_greeting_response(),
+            ],
+            advance_ms_per_call=31000.0,
+        )
+        runtime = AgentRuntimeService(provider=provider)
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1,
+            retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello", execution_budget=budget),
+            deadline=deadline,
+            registry=create_registry("retry-late"),
+        )
+        # Exactly one provider call: it started while the 32s stage was valid.
+        assert provider.call_count == 1
+        # After the 31s call, research-stage remaining ~1s < retry threshold 8s,
+        # so the retry is skipped.
+        assert result.metrics.provider_retry_skipped_reason == "retry_viability_threshold_not_met"
+        assert "retry skipped" in " ".join(result.errors).lower()
+
+    async def test_deadline_remains_absolute_and_unchanged(self):
+        """The resource-governance changes do not reset or extend the absolute
+        deadline; the deadline object is unchanged across flat-RAG denials and
+        retry viability checks."""
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-flat2", model="gpt-5.6-luna", status="ok",
+                tool_calls=[
+                    ToolCallRequest(call_id="f1", name="flat_rag_search",
+                                    arguments={"query": "q", "top_k": None, "preferred_source_types": None}),
+                    ToolCallRequest(call_id="f2", name="flat_rag_search",
+                                    arguments={"query": "q2", "top_k": None, "preferred_source_types": None}),
+                ],
+            ),
+            make_greeting_response(),
+        ])
+
+        def fake_flat_rag_search(**kwargs):
+            from app.tools.flat_rag_search import FlatRagResult
+            return FlatRagResult(chunks=[], evidence_refs=[], debug={}, duration_ms=1.0)
+
+        runtime = AgentRuntimeService(provider=provider)
+        started = time.perf_counter()
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000)
+        initial = deadline.deadline_at
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal", execution_budget=ExecutionBudget(
+                max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+                turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+                max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+            ), experiment_arm="B"),
+            deadline=deadline,
+            registry=create_registry("deadline-preserve"),
+            flat_rag_search_fn=fake_flat_rag_search,
+        )
+        assert deadline.deadline_at == initial
+        assert result.metrics.flat_rag_call_count == 1
+        assert result.metrics.flat_rag_denied_call_count == 1
+
+    def _make_utility_call(self, call_id: str) -> ProviderResponse:
+        """A provider response emitting a legitimate nonterminal custom function
+        call (deterministic_utility).  Executing it sends a function_call_output,
+        which drives the REAL Responses function-output -> provider-continuation
+        protocol for the next provider call (not a terminal submit repair)."""
+        return ProviderResponse(
+            response_id=f"resp-utility-{call_id}",
+            model="gpt-5.6-luna",
+            status="ok",
+            tool_calls=[ToolCallRequest(
+                call_id=call_id,
+                name="deterministic_utility",
+                arguments={
+                    "operation": "arithmetic",
+                    "operands": [1, 2],
+                    "expression": "1 + 2",
+                    "calendar": "calendar_days",
+                    "timezone": "Australia/Sydney",
+                    "rounding": "none",
+                    "precision": 2,
+                },
+            )],
+            duration_ms=100,
+        )
+
+    async def test_answer_research_budget_is_non_resetting_across_calls(self):
+        """Multiple provider continuations triggered by a legitimate nonterminal
+        custom function call (deterministic_utility -> function output) share the
+        SAME non-resetting 32s research budget.  Once cumulative stage time
+        reaches 32s the loop stops; a later continuation is not started."""
+        clock = self._FakeClock(value=0.0)
+        # Call 1 (stage 0s): emits deterministic_utility -> backend executes the
+        # tool and appends a function_call_output -> provider continuation call 2.
+        # Call 2 (stage ~20s): same utility call -> continuation call 3 would be
+        # needed, but cumulative stage = ~40s > 32s so call 3 is blocked.
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[
+                self._make_utility_call(call_id="util-call-1"),
+                self._make_utility_call(call_id="util-call-2"),
+            ],
+            advance_ms_per_call=18000.0,
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=0,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal", execution_budget=budget, experiment_arm="A"),
+            deadline=deadline,
+            registry=create_registry("stage-nonreset"),
+        )
+        # Call 1 (stage 0) runs and executes the FIRST utility.  Call 2
+        # (continuation) starts at stage ~18s and requests a SECOND utility, but
+        # by the time it is about to execute, cumulative stage = ~36s > 32s, so
+        # the second utility MUST be denied and a third provider call never
+        # starts.  Only the first utility executes.
+        assert provider.call_count == 2
+        assert result.metrics.provider_api_call_count == 2
+        # Only the FIRST deterministic_utility executed; the second was blocked by
+        # the exhausted 32s answer/research stage.
+        assert result.metrics.utility_call_count == 1
+        # Cumulative elapsed time exceeded the 32s stage but stayed within 40s.
+        assert clock() >= 32.0
+        assert clock() < 40.0
+        # No third provider call occurred.
+        assert provider.call_count == 2
+        # No provider call/tool received a fresh 32s stage budget (the loop
+        # stopped at stage exhaustion, not at the 40s absolute deadline).
+        # The absolute 40s deadline was not reset.
+        errs_lower = " ".join(result.errors).lower()
+        assert any(k in errs_lower for k in (
+            "answer/research stage", "deadline exceeded", "max tool rounds",
+            "terminal submission",
+        ))
+
+    async def test_provider_continuation_blocked_after_stage_exhausted(self):
+        """A provider continuation cannot start after the 32s answer/research
+        stage budget is exhausted, even though the 40s absolute deadline remains."""
+        clock = self._FakeClock()
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[make_no_submit_response()],
+            advance_ms_per_call=33000.0,  # first call already consumes the stage
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=0,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal", execution_budget=budget),
+            deadline=deadline,
+            registry=create_registry("stage-exhausted-continuation"),
+        )
+        # First provider call occurred exactly once.
+        assert provider.call_count == 1
+        # Fake clock advanced past the 32s research-stage boundary.
+        assert clock() >= 32.0
+        # The absolute turn still had ~7s remaining (well inside 40s).
+        assert clock() < 40.0
+        # The second continuation did NOT occur.
+        assert result.metrics.provider_api_call_count == 1
+        # A controlled terminal/stage/deadline error occurred (behavioral, not
+        # one exact human-readable sentence).
+        errs_lower = " ".join(result.errors).lower()
+        assert any(k in errs_lower for k in (
+            "answer/research stage", "deadline exceeded", "no continuation allowed",
+            "terminal submission",
+        ))
+
+    async def test_early_retry_still_allowed_with_stage_budget(self):
+        """A fast early transient failure still gets one bounded retry when both
+        the absolute deadline and the stage budget have room."""
+        clock = self._FakeClock()
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[
+                ProviderResponse(response_id="", model="gpt-5.6-luna", status="error", duration_ms=50),
+                make_greeting_response(),
+            ],
+            advance_ms_per_call=100.0,
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello", execution_budget=budget),
+            deadline=deadline,
+            registry=create_registry("stage-early-retry"),
+        )
+        assert provider.call_count == 2
+        assert result.metrics.retry_count >= 1
+        assert result.metrics.provider_retry_skipped_reason is None
+
+    async def test_observability_records_ordered_provider_and_tool_observations(self):
+        """Multiple provider calls generate ordered observations with correct
+        classification, timeout allocation, stage-budget remainders, and tool
+        timing; observability is content-free (no raw prompt/PII)."""
+        clock = self._FakeClock(value=0.0)
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[
+                self._make_utility_call(call_id="util-obs-1"),
+                self._make_utility_call(call_id="util-obs-2"),
+            ],
+            advance_ms_per_call=18000.0,
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=0,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal", execution_budget=budget, experiment_arm="A"),
+            deadline=deadline,
+            registry=create_registry("obs-diag"),
+        )
+        # Ordered provider observations.
+        pcs = result.metrics.provider_calls
+        assert len(pcs) == 2
+        assert pcs[0].call_index == 1
+        assert pcs[0].call_kind == "initial"
+        assert pcs[1].call_index == 2
+        assert pcs[1].call_kind in ("continuation",)
+        # Timeout allocation and stage remainders observable.
+        assert pcs[0].timeout_allocated_ms == 32000
+        assert pcs[0].research_stage_remaining_before_ms == 32000
+        assert pcs[1].research_stage_remaining_before_ms < 32000
+        # Tool observations ordered & timed.
+        tcs = result.metrics.tool_calls
+        assert len(tcs) == 1  # only first utility executed; second denied by stage
+        assert tcs[0].tool_name == "deterministic_utility"
+        assert tcs[0].governor_denied is False
+        assert tcs[0].duration_ms >= 0
+        assert result.metrics.total_provider_duration_ms >= 0
+        assert result.metrics.total_tool_duration_ms >= 0
+        # Content-free: no raw user prompt or PII in serialized observations.
+        blob = json.dumps([pc.model_dump(mode="json") for pc in pcs] + [tc.model_dump(mode="json") for tc in tcs])
+        assert "legal" not in blob  # only our user_text is "legal"; ensure not stored
+        assert "chain_of_thought" not in blob.lower()
+
+    async def test_observability_classifies_retry(self):
+        """A provider retry after an early transient failure is classified as
+        'retry' with is_retry=True; the initial call is 'initial'."""
+        clock = self._FakeClock(value=0.0)
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[
+                ProviderResponse(response_id="", model="gpt-5.6-luna", status="error", duration_ms=50),
+                make_greeting_response(),
+            ],
+            advance_ms_per_call=100.0,
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello", execution_budget=budget),
+            deadline=deadline,
+            registry=create_registry("obs-retry"),
+        )
+        pcs = result.metrics.provider_calls
+        assert len(pcs) == 2
+        assert pcs[0].call_kind == "initial"
+        assert pcs[0].status == "error"
+        assert pcs[1].call_kind == "retry"
+        assert pcs[1].is_retry is True
+
+    async def test_multiple_short_calls_share_32s_budget_not_each_32s(self):
+        """Twelve ~3s calls would consume ~36s; under a per-call timeout all 12
+        would run.  Under the non-resetting stage budget the loop must stop at
+        ~32s (10-11 calls), not run 12."""
+        clock = self._FakeClock()
+        provider = self._AdvancingProvider(
+            clock=clock,
+            responses=[make_no_submit_response()] * 12,
+            advance_ms_per_call=3000.0,
+        )
+        budget = ExecutionBudget(
+            max_tool_rounds=2, max_provider_calls=12, max_retries=0,
+            turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+            max_flat_rag_calls=1, retry_viability_threshold_ms=8000,
+        )
+        started = 0.0
+        deadline = AbsoluteTurnDeadline(started_at=started, turn_deadline_ms=40000, clock=clock)
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="legal", execution_budget=budget),
+            deadline=deadline,
+            registry=create_registry("stage-shared-32s"),
+        )
+        # 32s / 3s per call = up to 10 full calls + the blocked 11th attempt.
+        assert provider.call_count < 12
+        assert provider.call_count <= 11
+        assert clock() < 40.0
+        assert result.metrics.provider_api_call_count < 12
 
 
 # ---------------------------------------------------------------------------
@@ -1305,12 +1744,26 @@ class TestExecutionBudgetEnforcement:
         budget = ExecutionBudget(max_tool_rounds=2, max_provider_calls=3, max_retries=1,
                                  turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000)
         assert budget.answer_research_target_ms + budget.checker_target_ms <= budget.turn_deadline_ms
+        assert budget.max_flat_rag_calls == 1
+        assert budget.retry_viability_threshold_ms == 8000
 
     def test_execution_budget_rejects_invalid(self):
         from pydantic import ValidationError
         try:
             ExecutionBudget(max_tool_rounds=2, max_provider_calls=3, max_retries=1,
                             turn_deadline_ms=1000, answer_research_target_ms=32000, checker_target_ms=8000)
+            assert False, "Should have raised"
+        except ValidationError:
+            pass
+
+    def test_execution_budget_rejects_invalid_retry_threshold(self):
+        from pydantic import ValidationError
+        try:
+            ExecutionBudget(
+                max_tool_rounds=2, max_provider_calls=3, max_retries=1,
+                turn_deadline_ms=40000, answer_research_target_ms=32000, checker_target_ms=8000,
+                retry_viability_threshold_ms=50000,
+            )
             assert False, "Should have raised"
         except ValidationError:
             pass
