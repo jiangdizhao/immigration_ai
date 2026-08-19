@@ -127,6 +127,11 @@ class ProviderCallObservation(StrictContract):
     native_web_search_call_count: int = Field(default=0, ge=0)
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
+    # Phase 5.1A.1: content-free per-call search-privacy violation category
+    # counts (category -> count). Never stores raw query text, hashes, names,
+    # or identifier values.
+    search_privacy_violation_count: int = Field(default=0, ge=0)
+    search_privacy_violation_categories: dict[str, int] = Field(default_factory=dict)
     input_tokens: int | None = Field(default=None, ge=0)
     cached_input_tokens: int | None = Field(default=None, ge=0)
     reasoning_tokens: int | None = Field(default=None, ge=0)
@@ -186,6 +191,11 @@ class AgentExecutionMetrics(StrictContract):
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
     web_search_pii_violation_count: int = Field(default=0, ge=0)
+    # Phase 5.1A.1: content-free aggregated search-privacy violation category
+    # counts (category -> count). Never stores raw query text, hashes, names,
+    # or identifier values.
+    search_privacy_violation_count: int = Field(default=0, ge=0)
+    search_privacy_violation_categories: dict[str, int] = Field(default_factory=dict)
     exact_lookup_call_count: int = Field(default=0, ge=0)
     lightrag_call_count: int = Field(default=0, ge=0)
     flat_rag_call_count: int = Field(default=0, ge=0)

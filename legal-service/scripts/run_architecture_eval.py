@@ -245,6 +245,8 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "native_web_source_count": trace.native_web_source_count,
         "native_web_citation_count": trace.native_web_citation_count,
         "reasoning_effort": trace.reasoning_effort,
+        "search_privacy_violation_count": trace.search_privacy_violation_count,
+        "search_privacy_violation_categories": dict(trace.search_privacy_violation_categories),
         "flat_rag_call_count": flat_rag_call_count,
         "evidence_count": len(trace.evidence_refs),
         "native_web_evidence_count": sum(
@@ -292,6 +294,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "native_web_citations": sum(
                 int(row.get("native_web_citation_count") or 0) for row in rows
+            ),
+            "search_privacy_violations": sum(
+                int(row.get("search_privacy_violation_count") or 0) for row in rows
             ),
             "flat_rag_calls": sum(int(row.get("flat_rag_call_count") or 0) for row in rows),
             "canonical_local_evidence": sum(

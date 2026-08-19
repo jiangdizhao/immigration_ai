@@ -61,6 +61,10 @@ class ProviderResponse:
     duration_ms: float = 0.0
     raw_response: Any = None
     pii_violation_count: int = 0
+    # Phase 5.1A.1: content-free aggregated search-privacy violation category
+    # counts (category -> count). Never stores raw query text, hashes, names,
+    # or identifier values.
+    search_privacy_violation_categories: dict[str, int] = field(default_factory=dict)
     # Phase 5.1A observability: the actual reasoning effort sent to the provider.
     # Populated by providers that expose/config the effort explicitly.
     effort: str | None = None
@@ -298,6 +302,9 @@ class AgentRuntimeService:
                     native_web_search_call_count=response.native_web_search_call_count,
                     native_web_source_count=response.native_web_source_count,
                     native_web_citation_count=response.native_web_citation_count,
+                    # Phase 5.1A.1: content-free search-privacy violation category counts.
+                    search_privacy_violation_count=response.pii_violation_count,
+                    search_privacy_violation_categories=dict(response.search_privacy_violation_categories),
                     input_items_count=len(messages),
                     input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
                     function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
@@ -543,6 +550,13 @@ class AgentRuntimeService:
                 pc.native_web_citation_count for pc in provider_call_observations
             ),
             web_search_pii_violation_count=pii_violation_count,
+            # Phase 5.1A.1: aggregate content-free search-privacy violation counts.
+            search_privacy_violation_count=sum(
+                pc.search_privacy_violation_count for pc in provider_call_observations
+            ),
+            search_privacy_violation_categories=self._merge_category_counts(
+                [pc.search_privacy_violation_categories for pc in provider_call_observations]
+            ),
             exact_lookup_call_count=0,
             lightrag_call_count=0,
             flat_rag_call_count=flat_rag_executed_count,
@@ -612,6 +626,15 @@ class AgentRuntimeService:
             errors=errors,
             shadow_trace=shadow_trace,
         )
+
+    @staticmethod
+    def _merge_category_counts(counts: list[dict[str, int]]) -> dict[str, int]:
+        """Merge category-count dicts deterministically into one dict."""
+        merged: dict[str, int] = {}
+        for category_map in counts:
+            for category, count in category_map.items():
+                merged[category] = merged.get(category, 0) + count
+        return merged
 
     @staticmethod
     def _retry_threshold_met(

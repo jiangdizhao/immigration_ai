@@ -100,6 +100,10 @@ class PrivacyCheckResult:
 
     allowed: bool
     violations: list[str] = field(default_factory=list)
+    # Phase 5.1A.1: content-free per-category counts (category -> count).
+    # Never contains raw query text, normalized text, hashes, names, or
+    # identifier values — only the stable category keys from _PROHIBITED_PATTERNS.
+    violation_categories: dict[str, int] = field(default_factory=dict)
     sanitized_query: str | None = None
 
 
@@ -126,18 +130,21 @@ class SearchPrivacyGuard:
             return PrivacyCheckResult(allowed=False, violations=["empty query"])
 
         violations: list[str] = []
+        violation_categories: dict[str, int] = {}
 
         for category, pattern, description in _PROHIBITED_PATTERNS:
             if pattern.search(query):
                 violations.append(f"{description} ({category})")
+                violation_categories[category] = violation_categories.get(category, 0) + 1
 
         if violations:
             return PrivacyCheckResult(
                 allowed=False,
                 violations=violations,
+                violation_categories=violation_categories,
             )
 
-        return PrivacyCheckResult(allowed=True)
+        return PrivacyCheckResult(allowed=True, violation_categories=violation_categories)
 
     def sanitize_query(self, query: str) -> PrivacyCheckResult:
         """Attempt to sanitize a query by redacting PII.

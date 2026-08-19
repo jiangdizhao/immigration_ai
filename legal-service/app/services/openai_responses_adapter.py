@@ -47,6 +47,10 @@ class AdapterCallContext:
     privacy_guard: SearchPrivacyGuard
     web_normalizer: WebEvidenceNormalizer
     pii_violation_count: int = 0
+    # Phase 5.1A.1: content-free aggregated violation category counts.
+    # Keys are stable guard categories (name_indicator, phone, ...); values are
+    # counts.  Never stores raw query text, snippets, hashes, names, or values.
+    search_privacy_violation_categories: dict[str, int] = field(default_factory=dict)
     # Collected first and normalized after the complete provider output is
     # available.  This lets action.sources records inherit a real URL
     # citation annotation without registering a second record for the same
@@ -165,6 +169,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
                     text=None, tool_calls=[], duration_ms=duration_ms,
                     raw_response=response,
                     pii_violation_count=ctx.pii_violation_count,
+                    search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),
                     effort=reasoning_effort,
                     native_web_search_call_count=len(ctx.search_call_ids),
                     native_web_source_count=len(ctx.native_sources),
@@ -181,6 +186,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 input_tokens=input_tokens, output_tokens=output_tokens,
                 duration_ms=duration_ms, raw_response=response,
                 pii_violation_count=ctx.pii_violation_count,
+                search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),
                 effort=reasoning_effort,
                 native_web_search_call_count=len(ctx.search_call_ids),
                 native_web_source_count=len(ctx.native_sources),
@@ -192,6 +198,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
             return ProviderResponse(
                 response_id="", model=model, status="error", text=None,
                 duration_ms=duration_ms, pii_violation_count=ctx.pii_violation_count,
+                search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),
                 effort=reasoning_effort,
                 native_web_search_call_count=len(ctx.search_call_ids),
                 native_web_source_count=len(ctx.native_sources),
@@ -284,6 +291,10 @@ class OpenAIResponsesAdapter(ProviderInterface):
                     result = ctx.privacy_guard.check_query(q)
                     if not result.allowed:
                         ctx.pii_violation_count += 1
+                        for category, count in result.violation_categories.items():
+                            ctx.search_privacy_violation_categories[category] = (
+                                ctx.search_privacy_violation_categories.get(category, 0) + count
+                            )
                         logger.warning("PII detected in generated web_search query (violation #%d)", ctx.pii_violation_count)
 
         # In the current Responses SDK, sources are nested under

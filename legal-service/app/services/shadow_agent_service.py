@@ -73,6 +73,9 @@ class ShadowTrace:
     tool_call_count: int = 0
     tool_round_count: int = 0
     web_search_call_count: int = 0
+    # Phase 5.1A.1: content-free aggregated search-privacy violation telemetry.
+    search_privacy_violation_count: int = 0
+    search_privacy_violation_categories: dict[str, int] = field(default_factory=dict)
     # Phase 5.1A: provider-native built-in web_search usage derived from actual
     # provider output. Distinct from custom backend tool execution.
     native_web_search_call_count: int = 0
