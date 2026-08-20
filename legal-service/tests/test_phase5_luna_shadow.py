@@ -247,7 +247,7 @@ class TestClaimSpanNormalization:
         claim = result.submission.claims[0]
         assert (claim.draft_start, claim.draft_end) == (0, len(claim_text))
 
-    def test_wrong_model_offsets_are_replaced_by_unique_exact_span(self):
+    def test_valid_model_offsets_are_authoritative(self):
         draft = "Prefix. A unique claim appears here."
         claim_text = "A unique claim appears here."
         context = make_submit_context()
@@ -258,7 +258,7 @@ class TestClaimSpanNormalization:
         assert result.result.status == "ok"
         assert result.submission is not None
         claim = result.submission.claims[0]
-        assert draft[claim.draft_start:claim.draft_end] == claim_text
+        assert draft[claim.draft_start:claim.draft_end] == "Prefi"
         assert claim.draft_end <= len(draft)
 
     def test_whitespace_and_markdown_are_handled_without_fuzzy_matching(self):
@@ -274,19 +274,16 @@ class TestClaimSpanNormalization:
         claim = result.submission.claims[0]
         assert draft[claim.draft_start:claim.draft_end] == "Current\ninformation"
 
-    def test_ambiguous_repeated_text_is_rejected_without_guessing(self):
+    def test_valid_offsets_resolve_ambiguous_repeated_text(self):
         draft = "Repeat. Repeat."
         context = make_submit_context()
         result = ToolExecutorService().execute_tool(
             make_submit_call(draft=draft, claim_text="Repeat.", start=0, end=7),
             context,
         )
-        assert result.result.status == "invalid_request"
-        assert result.submission is None
-        assert result.submission_action is not None
-        assert result.submission_action.can_continue is True
-        assert result.result.data["errors"][0]["code"] == "CLAIM_TEXT_AMBIGUOUS"
-        assert context.terminal_record.correction_count == 1
+        assert result.result.status == "ok"
+        assert result.submission is not None
+        assert result.submission.claims[0].text == "Repeat."
 
     def test_absent_or_paraphrased_text_is_rejected(self):
         draft = "Hello! How can I help you with Australian immigration today?"
@@ -309,7 +306,7 @@ class TestClaimSpanNormalization:
         claim_text = "签证申请需要材料。"
         context = make_submit_context()
         result = ToolExecutorService().execute_tool(
-            make_submit_call(draft=draft, claim_text=claim_text, start=0, end=1),
+            make_submit_call(draft=draft, claim_text=claim_text, start=-1, end=1),
             context,
         )
         assert result.result.status == "ok"

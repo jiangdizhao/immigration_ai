@@ -108,51 +108,55 @@ def _normalize_claim_spans(
 
         claim = dict(raw_claim)
         claim_id = str(claim.get("claim_id") or "")
-        claim_text = claim.get("text")
-        if not isinstance(claim_text, str) or not claim_text:
-            errors.append(
-                SubmissionError(
-                    code="CLAIM_TEXT_INVALID",
-                    field=f"claims.{claim_id or '<unknown>'}.text",
-                    affected_claim_ids=[claim_id] if claim_id else [],
+        raw_start = claim.get("draft_start")
+        raw_end = claim.get("draft_end")
+        valid_offsets = (
+            isinstance(raw_start, int)
+            and not isinstance(raw_start, bool)
+            and isinstance(raw_end, int)
+            and not isinstance(raw_end, bool)
+            and 0 <= raw_start < raw_end <= len(draft)
+        )
+        if valid_offsets:
+            # The submitted draft is authoritative whenever a safe location is
+            # supplied. This also repairs duplicate/paraphrased model text.
+            claim["text"] = draft[raw_start:raw_end]
+            claim["draft_start"] = raw_start
+            claim["draft_end"] = raw_end
+        else:
+            claim_text = claim.get("text")
+            if not isinstance(claim_text, str) or not claim_text.strip():
+                errors.append(
+                    SubmissionError(
+                        code="CLAIM_LOCATION_MISSING",
+                        field=f"claims.{claim_id or '<unknown>'}",
+                        affected_claim_ids=[claim_id] if claim_id else [],
+                    )
                 )
-            )
-            normalized_claims.append(claim)
-            continue
-
-        matches = _find_claim_text_spans(draft=draft, claim_text=claim_text)
-        if len(matches) == 1:
-            start, end = matches[0]
-            raw_start = claim.get("draft_start")
-            raw_end = claim.get("draft_end")
-            raw_span_is_valid = (
-                isinstance(raw_start, int)
-                and not isinstance(raw_start, bool)
-                and isinstance(raw_end, int)
-                and not isinstance(raw_end, bool)
-                and 0 <= raw_start <= raw_end <= len(draft)
-                and " ".join(draft[raw_start:raw_end].split())
-                == " ".join(claim_text.split())
-            )
-            if not raw_span_is_valid:
+                normalized_claims.append(claim)
+                continue
+            matches = _find_claim_text_spans(draft=draft, claim_text=claim_text)
+            if len(matches) == 1:
+                start, end = matches[0]
+                claim["text"] = draft[start:end]
                 claim["draft_start"] = start
                 claim["draft_end"] = end
-        elif len(matches) == 0:
-            errors.append(
-                SubmissionError(
-                    code="CLAIM_TEXT_NOT_FOUND",
-                    field=f"claims.{claim_id or '<unknown>'}.text",
-                    affected_claim_ids=[claim_id] if claim_id else [],
+            elif len(matches) == 0:
+                errors.append(
+                    SubmissionError(
+                        code="CLAIM_TEXT_NOT_FOUND",
+                        field=f"claims.{claim_id or '<unknown>'}.text",
+                        affected_claim_ids=[claim_id] if claim_id else [],
+                    )
                 )
-            )
-        else:
-            errors.append(
-                SubmissionError(
-                    code="CLAIM_TEXT_AMBIGUOUS",
-                    field=f"claims.{claim_id or '<unknown>'}.text",
-                    affected_claim_ids=[claim_id] if claim_id else [],
+            else:
+                errors.append(
+                    SubmissionError(
+                        code="CLAIM_TEXT_AMBIGUOUS",
+                        field=f"claims.{claim_id or '<unknown>'}.text",
+                        affected_claim_ids=[claim_id] if claim_id else [],
+                    )
                 )
-            )
 
         normalized_claims.append(claim)
 
@@ -300,6 +304,19 @@ def _reject_model_canonical_refs(
                 field=f"citations.{index}.evidence_ref",
             )
     return None
+
+
+def _strip_lightweight_evidence_bookkeeping(args: dict[str, Any]) -> None:
+    """Remove model-authored evidence bookkeeping for revised Arm L."""
+
+    claims = args.get("claims")
+    if isinstance(claims, list):
+        for claim in claims:
+            if isinstance(claim, dict):
+                claim.pop("evidence_refs", None)
+                claim.pop("native_web_locators", None)
+    if isinstance(args.get("citations"), list):
+        args["citations"] = []
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +469,7 @@ class ToolExecutorContext:
     # producer. Keep model-authored canonical refs disabled in that context;
     # resolved locator refs are created internally after same-request checks.
     allow_model_canonical_refs: bool = True
+    lightweight_submission: bool = False
     deadline_monotonic: float | None = None
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
@@ -637,6 +655,8 @@ class ToolExecutorService:
         try:
             args = dict(tool_call.arguments)
             contract_diagnostics = _submission_contract_diagnostics(args, context)
+            if context.lightweight_submission:
+                _strip_lightweight_evidence_bookkeeping(args)
             canonical_ref_error = _reject_model_canonical_refs(
                 args=args,
                 context=context,

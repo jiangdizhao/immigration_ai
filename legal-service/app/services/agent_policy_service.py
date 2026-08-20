@@ -210,13 +210,17 @@ WEB_SEARCH_TOOL = {
 }
 
 
-def build_submit_answer_tool(*, allow_canonical_refs: bool = True) -> dict[str, Any]:
+def build_submit_answer_tool(
+    *,
+    allow_canonical_refs: bool = True,
+    lightweight_claims: bool = False,
+) -> dict[str, Any]:
     """Build the model-facing terminal contract for an evidence context.
 
-    Arm A has only provider-native web discovery, so model-authored canonical
-    refs cannot be valid input there. NativeWebLocators remain available and
-    are deterministically promoted by the backend. Arm B and callers with
-    genuine custom evidence tools retain the canonical-ref fields.
+    Arms A and L do not expose model-authored canonical evidence bookkeeping in
+    their initial answer contracts. Arm L is normalized further by the backend
+    and the checker selects final support refs. Arm B and callers with genuine
+    custom evidence tools retain canonical-ref fields.
     """
 
     tool = deepcopy(SUBMIT_ANSWER_TOOL)
@@ -228,12 +232,19 @@ def build_submit_answer_tool(*, allow_canonical_refs: bool = True) -> dict[str, 
         "type": "array",
         "maxItems": 0,
         "items": {"type": "string"},
-        "description": "Not available in Arm A; use native_web_locators for observed web sources.",
+        "description": "Not available in this lightweight arm; backend/checker owns evidence associations.",
     }
     citations = tool["parameters"]["properties"]["citations"]["items"]["properties"]
     citations.pop("evidence_ref", None)
+    if lightweight_claims:
+        claims.pop("evidence_refs", None)
+        claims.pop("native_web_locators", None)
+        citations.pop("native_web_locator", None)
+        claim_required = tool["parameters"]["properties"]["claims"]["items"]["required"]
+        if "text" in claim_required:
+            claim_required.remove("text")
     tool["description"] = (
-        f"{tool['description']} Arm A evidence contract: do not furnish canonical "
+        f"{tool['description']} Lightweight evidence contract: do not furnish canonical "
         "evidence_refs or citation evidence_ref values. For provider-native web "
         "sources, use only observed native_web_locators; the backend resolves "
         "them within this request."
@@ -248,6 +259,15 @@ ARM_A_NATIVE_WEB_PROMPT_SUFFIX = """
 - Do not write or guess `web:<opaque>` or `exact:<opaque>` values in `evidence_refs` or citation `evidence_ref`.
 - For a provider source you observed in this request, use its observed HTTPS URL only as `native_web_locators: [{"url": "..."}]`.
 - The backend resolves that locator to a request-scoped canonical ref. Never use a URL in an evidence-ref field.
+"""
+
+ARM_L_LIGHTWEIGHT_PROMPT_SUFFIX = """
+
+## Arm-L Lightweight Submission Contract
+- Submit the draft and material claim structure only.
+- Do not construct claim evidence_refs or final citation evidence_ref values.
+- The backend and compact checker own request-scoped evidence associations.
+- Include depends_on claim IDs for material conclusions and keep claim locations addressable in the draft.
 """
 
 
@@ -305,6 +325,9 @@ class AgentPolicyService:
         if mode == "default" and experiment_arm == "A":
             system_prompt += ARM_A_NATIVE_WEB_PROMPT_SUFFIX
             prompt_version = f"{LUNA_PROMPT_VERSION}.arm-a-native-locator"
+        elif mode == "default" and experiment_arm == "L":
+            system_prompt += ARM_L_LIGHTWEIGHT_PROMPT_SUFFIX
+            prompt_version = f"{LUNA_PROMPT_VERSION}.arm-l-lightweight"
 
         return AgentPolicy(
             system_prompt=system_prompt,
@@ -326,8 +349,9 @@ class AgentPolicyService:
     def _build_default_tools(self, experiment_arm: ExperimentArm) -> list[dict[str, Any]]:
         """Build tool list for default mode based on experiment arm.
 
-        Arm A: web_search + deterministic_utility + submit_answer
-        Arm B: web_search + flat_rag_search + deterministic_utility + submit_answer
+        Arm A: web_search + deterministic_utility + native-locator submit
+        Arm B: historical web_search + flat_rag_search + utility + submit
+        Arm L: revised web_search + flat_rag_search + lightweight submit
         """
         settings = get_settings()
 
@@ -341,7 +365,10 @@ class AgentPolicyService:
                 tools.append(FLAT_RAG_SEARCH_TOOL)
             tools.extend([
                 DETERMINISTIC_UTILITY_TOOL,
-                build_submit_answer_tool(allow_canonical_refs=True),
+                build_submit_answer_tool(
+                    allow_canonical_refs=experiment_arm == "B",
+                    lightweight_claims=experiment_arm == "L",
+                ),
             ])
             return tools
 

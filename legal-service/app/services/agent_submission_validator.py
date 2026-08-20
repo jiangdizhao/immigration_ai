@@ -152,6 +152,42 @@ class AgentSubmissionValidator:
                     affected_claim_ids=[claim.claim_id],
                 )
 
+        claim_ids = {claim.claim_id for claim in submission.claims}
+        dependencies = {
+            claim.claim_id: set(claim.depends_on) for claim in submission.claims
+        }
+        for claim_id, claim_dependencies in dependencies.items():
+            for dependency in sorted(claim_dependencies - claim_ids):
+                result.add_error(
+                    code="CLAIM_DEPENDENCY_UNKNOWN",
+                    field_path=f"claims.{claim_id}.depends_on",
+                    affected_claim_ids=[claim_id],
+                )
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(claim_id: str) -> bool:
+            if claim_id in visiting:
+                return False
+            if claim_id in visited:
+                return True
+            visiting.add(claim_id)
+            for dependency in dependencies[claim_id] & claim_ids:
+                if not visit(dependency):
+                    return False
+            visiting.remove(claim_id)
+            visited.add(claim_id)
+            return True
+
+        for claim_id in claim_ids:
+            if not visit(claim_id):
+                result.add_error(
+                    code="CLAIM_DEPENDENCY_CYCLE",
+                    field_path="claims",
+                )
+                break
+
     def _validate_evidence_refs(
         self,
         submission: AgentSubmissionV2,

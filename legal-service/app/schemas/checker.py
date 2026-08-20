@@ -13,6 +13,7 @@ class CheckerDecision(StrictCheckerContract):
     claim_id: str = Field(min_length=1, max_length=100)
     decision: Literal["keep", "drop"]
     reason_code: str = Field(min_length=1, max_length=100)
+    supporting_evidence_refs: list[str] = Field(default_factory=list, max_length=30)
     qualification: str | None = Field(default=None, max_length=8000)
     original_claim_sha256: str | None = Field(default=None, max_length=64)
 

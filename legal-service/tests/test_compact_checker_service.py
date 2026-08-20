@@ -22,8 +22,8 @@ def _submission() -> AgentSubmissionV2:
         claims=[
             AgentClaim(
                 claim_id="c1",
-                claim_type="legal_application",
-                materiality="decisive",
+                claim_type="procedure",
+                materiality="supporting",
                 text="Conclusion.",
                 draft_start=draft.index("Conclusion."),
                 draft_end=draft.index("Conclusion.") + len("Conclusion."),
@@ -56,9 +56,9 @@ def test_drop_propagates_to_materially_dependent_conclusion():
     result = CompactCheckerResult(
         schema_version="compact_checker.result.v1",
         decisions=[
-            {"claim_id": "c1", "decision": "keep", "reason_code": "supported_current"},
-            {"claim_id": "c2", "decision": "drop", "reason_code": "unsupported"},
-            {"claim_id": "c3", "decision": "keep", "reason_code": "supported_current"},
+            {"claim_id": "c1", "decision": "keep", "reason_code": "supported_current", "supporting_evidence_refs": []},
+            {"claim_id": "c2", "decision": "drop", "reason_code": "unsupported", "supporting_evidence_refs": []},
+            {"claim_id": "c3", "decision": "keep", "reason_code": "supported_current", "supporting_evidence_refs": []},
         ],
     )
     filtered, dropped, propagated, error = apply_checker_result(_submission(), result)
@@ -76,12 +76,13 @@ def test_qualification_requires_existing_claim_hash_and_is_targeted():
     result = CompactCheckerResult(
         schema_version="compact_checker.result.v1",
         decisions=[
-            {"claim_id": "c1", "decision": "drop", "reason_code": "unsupported"},
-            {"claim_id": "c2", "decision": "drop", "reason_code": "unsupported"},
+            {"claim_id": "c1", "decision": "drop", "reason_code": "unsupported", "supporting_evidence_refs": []},
+            {"claim_id": "c2", "decision": "drop", "reason_code": "unsupported", "supporting_evidence_refs": []},
             {
                 "claim_id": "c3",
                 "decision": "keep",
                 "reason_code": "supported_current",
+                "supporting_evidence_refs": [],
                 "qualification": "Independent, bounded.",
                 "original_claim_sha256": __import__("hashlib").sha256(claim.text.encode()).hexdigest(),
             },
@@ -101,8 +102,8 @@ def test_checker_provider_receives_only_checker_tool():
         draft_markdown="A claim.",
         claims=[AgentClaim(
             claim_id="c1",
-            claim_type="legal_rule",
-            materiality="decisive",
+                claim_type="procedure",
+                materiality="supporting",
             text="A claim.",
             draft_start=0,
             draft_end=len("A claim."),
@@ -129,6 +130,7 @@ def test_checker_provider_receives_only_checker_tool():
                             "claim_id": "c1",
                             "decision": "keep",
                             "reason_code": "supported_current",
+                            "supporting_evidence_refs": [],
                             "qualification": None,
                             "original_claim_sha256": None,
                         }],
@@ -217,9 +219,80 @@ def test_semantic_evidence_failure_becomes_checker_input_not_terminal_rejection(
                 "state_patch": [],
             },
         ),
-        ToolExecutorContext(request_id="integrity-only", registry=registry),
+        ToolExecutorContext(
+            request_id="integrity-only",
+            registry=registry,
+            lightweight_submission=True,
+            allow_model_canonical_refs=False,
+        ),
     )
     assert result.result.status == "ok"
     assert result.result.data["accepted"] is True
     assert result.result.data["postcondition_status"] == "integrity_passed"
     assert result.result.data["semantic_review_required"] is True
+
+
+def test_arm_l_unknown_model_ref_is_stripped_before_integrity_validation():
+    registry = create_registry("arm-l-strip")
+    result = ToolExecutorService().execute_tool(
+        ToolCallRequest(
+            call_id="submit-arm-l",
+            name="submit_answer",
+            arguments={
+                "schema_version": "agent_submission.v2",
+                "answer_class": "general",
+                "draft_markdown": "A draft.",
+                "claims": [{
+                    "claim_id": "c1",
+                    "claim_type": "general",
+                    "materiality": "supporting",
+                    "draft_start": 0,
+                    "draft_end": len("A draft."),
+                    "evidence_refs": ["web:model-guessed"],
+                }],
+                "citations": [{
+                    "evidence_ref": "web:model-guessed",
+                    "display_label": "guessed",
+                }],
+                "research_status": "not_required",
+                "state_patch": [],
+            },
+        ),
+        ToolExecutorContext(
+            request_id="arm-l-strip",
+            registry=registry,
+            lightweight_submission=True,
+            allow_model_canonical_refs=False,
+        ),
+    )
+    assert result.result.status == "ok"
+    assert result.submission is not None
+    assert result.submission.claims[0].evidence_refs == []
+    assert result.submission.citations == []
+
+
+def test_checker_registered_support_refs_become_final_claim_evidence():
+    submission = _submission()
+    submission = submission.model_copy(update={
+        "claims": [submission.claims[2]],
+        "draft_markdown": "Independent.",
+    })
+    result = CompactCheckerResult(
+        schema_version="compact_checker.result.v1",
+        decisions=[{
+            "claim_id": "c3",
+            "decision": "keep",
+            "reason_code": "supported_current",
+            "supporting_evidence_refs": ["web:registered"],
+            "qualification": None,
+            "original_claim_sha256": None,
+        }],
+    )
+    filtered, _, _, error = apply_checker_result(
+        submission,
+        result,
+        registered_evidence_refs={"web:registered"},
+    )
+    assert error is None
+    assert filtered is not None
+    assert filtered.claims[0].evidence_refs == ["web:registered"]

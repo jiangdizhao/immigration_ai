@@ -37,6 +37,11 @@ CHECKER_RESULT_TOOL = {
                         "claim_id": {"type": "string", "maxLength": 100},
                         "decision": {"type": "string", "enum": ["keep", "drop"]},
                         "reason_code": {"type": "string", "maxLength": 100},
+                        "supporting_evidence_refs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 30,
+                        },
                         "qualification": {
                             "anyOf": [
                                 {"type": "string", "maxLength": 8000},
@@ -54,6 +59,7 @@ CHECKER_RESULT_TOOL = {
                         "claim_id",
                         "decision",
                         "reason_code",
+                        "supporting_evidence_refs",
                         "qualification",
                         "original_claim_sha256",
                     ],
@@ -77,6 +83,8 @@ For every supplied claim, return exactly one decision:
 - drop: the claim is unsupported, contradicted, materially stale, logically invalid, based on a non-genuine/too-weak source, or depends on a dropped premise.
 
 A qualification is allowed only when the weaker wording is directly supported by the supplied evidence, adds no substantive fact, and narrows certainty or scope. Otherwise drop the claim. Do not send claims back to the answer agent. Do not rewrite the whole draft. Preserve independent claims.
+
+For a KEEP decision, supporting_evidence_refs must contain only refs from the supplied request evidence. DROP decisions need no support refs.
 
 Missing document_version, effective dates, or exact statutory spans are not automatic failures. Consider whether that metadata is material to this particular proposition. Historical, transitional, exact-wording, and date-specific claims need stronger support than broad current propositions.
 
@@ -176,19 +184,49 @@ def _dependency_drop_ids(
 def apply_checker_result(
     submission: AgentSubmissionV2,
     checker_result: CompactCheckerResult,
+    *,
+    registered_evidence_refs: set[str] | None = None,
 ) -> tuple[AgentSubmissionV2 | None, list[str], list[str], str | None]:
     """Apply KEEP/DROP decisions and dependencies without an LLM rewrite."""
 
     claims_by_id = {claim.claim_id: claim for claim in submission.claims}
-    decisions_by_id = {decision.claim_id: decision for decision in checker_result.decisions}
-    if len(decisions_by_id) != len(checker_result.decisions):
+    registered = registered_evidence_refs or set()
+    normalized_decisions = []
+    for decision in checker_result.decisions:
+        claim = claims_by_id.get(decision.claim_id)
+        invalid_support = bool(
+            decision.supporting_evidence_refs
+            and not set(decision.supporting_evidence_refs).issubset(registered)
+        )
+        missing_material_support = bool(
+            claim is not None
+            and decision.decision == "keep"
+            and claim.materiality == "decisive"
+            and claim.claim_type in {"legal_rule", "legal_application", "current_fact"}
+            and not decision.supporting_evidence_refs
+            and not claim.evidence_refs
+        )
+        if invalid_support or missing_material_support:
+            decision = decision.model_copy(update={
+                "decision": "drop",
+                "reason_code": (
+                    "unregistered_checker_evidence"
+                    if invalid_support else "insufficient_evidence"
+                ),
+                "supporting_evidence_refs": [],
+                "qualification": None,
+                "original_claim_sha256": None,
+            })
+        normalized_decisions.append(decision)
+    decisions_by_id = {decision.claim_id: decision for decision in normalized_decisions}
+    if len(decisions_by_id) != len(normalized_decisions):
         return None, [], [], "duplicate checker decision"
     if set(decisions_by_id) != set(claims_by_id):
         return None, [], [], "checker did not decide every claim"
 
     drop_ids, propagated_ids, dependency_error = _dependency_drop_ids(
         submission.claims,
-        checker_result,
+        checker_result.model_copy(update={"decisions": normalized_decisions}),
     )
     if dependency_error:
         return None, [], [], dependency_error
@@ -226,6 +264,9 @@ def apply_checker_result(
                     "text": claim_text,
                     "draft_start": span[0],
                     "draft_end": span[1],
+                    "evidence_refs": list(
+                        decision.supporting_evidence_refs or claim.evidence_refs
+                    ),
                     "depends_on": [
                         dependency
                         for dependency in claim.depends_on
@@ -323,6 +364,7 @@ class CompactCheckerService:
             filtered, dropped, propagated, error = apply_checker_result(
                 submission,
                 checker_result,
+                registered_evidence_refs=set(registry.get_all_refs()),
             )
         except Exception as exc:
             filtered, dropped, propagated, error = None, [], [], f"checker result invalid: {exc}"
