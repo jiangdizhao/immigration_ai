@@ -79,6 +79,42 @@ def test_raw_provider_tool_round_and_retry_counters() -> None:
     assert metrics.metrics_complete is True
 
 
+def test_terminal_submission_does_not_consume_tool_round() -> None:
+    service = AgentObservabilityService()
+    token = service.begin_turn(mode="default", turn_deadline_ms=40000)
+    try:
+        service.record_tool_call(
+            tool_name="flat_rag_search",
+            tool_call_id="flat-1",
+            round_index=1,
+            status="ok",
+            duration_ms=1,
+        )
+        service.record_tool_call(
+            tool_name="submit_answer",
+            tool_call_id="submit-1",
+            round_index=2,
+            status="ok",
+            duration_ms=1,
+        )
+        service.record_tool_call(
+            tool_name="submit_compact_checker_result",
+            tool_call_id="checker-1",
+            round_index=2,
+            status="ok",
+            duration_ms=1,
+        )
+        metrics = service.snapshot()
+    finally:
+        service.reset_turn(token)
+
+    assert metrics is not None
+    assert metrics.tool_call_count == 3
+    assert metrics.tool_round_count == 1
+    assert metrics.submit_answer_call_count == 1
+    assert metrics.checker_call_count == 1
+
+
 def test_absolute_deadline_is_inherited_and_retry_does_not_reset_it() -> None:
     clock = FakeClock()
     service = AgentObservabilityService(clock=clock)

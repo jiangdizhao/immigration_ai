@@ -486,6 +486,7 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "repair_count": trace.terminal_submission_continuation_count,
         "terminal_submission_missing": trace.terminal_submission_missing,
         "checker_status": trace.checker_status,
+        "checker_call_count": trace.checker_call_count,
         "checker_dropped_claim_count": len(trace.checker_dropped_claim_ids),
         "checker_dependency_dropped_claim_count": len(
             trace.checker_dependency_dropped_claim_ids

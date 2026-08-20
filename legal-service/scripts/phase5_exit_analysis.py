@@ -330,6 +330,9 @@ def _arm_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "checker_failed_runs": sum(
             row.get("checker_status") == "failed" for row in rows
         ),
+        "checker_call_count": sum(
+            _int(row.get("checker_call_count")) or 0 for row in rows
+        ),
         "checker_dropped_claims": sum(
             _int(row.get("checker_dropped_claim_count")) or 0 for row in rows
         ),

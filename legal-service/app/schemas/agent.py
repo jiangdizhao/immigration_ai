@@ -167,6 +167,7 @@ class ToolCallObservation(StrictContract):
         "flat_rag_search",
         "deterministic_utility",
         "submit_answer",
+        "submit_compact_checker_result",
     ]
     tool_call_id: str | None = Field(default=None, max_length=255)
     round_index: int = Field(ge=1)
@@ -206,6 +207,7 @@ class AgentExecutionMetrics(StrictContract):
     flat_rag_call_count: int = Field(default=0, ge=0)
     utility_call_count: int = Field(default=0, ge=0)
     submit_answer_call_count: int = Field(default=0, ge=0)
+    checker_call_count: int = Field(default=0, ge=0)
     retry_count: int = Field(default=0, ge=0)
     turn_deadline_ms: int = Field(ge=1)
     backend_total_latency_ms: float = Field(default=0, ge=0)

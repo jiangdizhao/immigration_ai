@@ -125,6 +125,7 @@ class ShadowRunResult:
     errors: list[str]
     shadow_trace: dict[str, Any] | None = None
     checker_status: Literal["not_required", "completed", "failed"] = "not_required"
+    checker_call_count: int = 0
     checker_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_latency_ms: float = 0.0
@@ -214,6 +215,7 @@ class AgentRuntimeService:
         checker_dropped_claim_ids: list[str] = []
         checker_dependency_dropped_claim_ids: list[str] = []
         checker_latency_ms = 0.0
+        checker_call_count = 0
         answer_agent_duration_ms = 0.0
         answer_provider_call_count = 0
         prev_call_was_failed = False
@@ -245,13 +247,18 @@ class AgentRuntimeService:
                     break
 
                 provider_call_count += 1
+                provider_tools = self._provider_tools_for_round(
+                    policy.tools,
+                    flat_rag_executed_count=flat_rag_executed_count,
+                    max_flat_rag_calls=budget.max_flat_rag_calls,
+                )
 
                 try:
                     response = await self._provider.call(
                         system_prompt=policy.system_prompt,
                         user_text="",
                         model=policy.model,
-                        tools=policy.tools,
+                        tools=provider_tools,
                         tool_choice=policy.tool_choice,
                         reasoning_effort=policy.reasoning_effort,
                         messages_history=messages,
@@ -321,7 +328,7 @@ class AgentRuntimeService:
                     input_items_count=len(messages),
                     input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
                     function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
-                    tool_definitions_count=len(policy.tools),
+                    tool_definitions_count=len(provider_tools),
                     status=response.status,
                     is_retry=(call_kind == "retry"),
                 ))
@@ -365,12 +372,22 @@ class AgentRuntimeService:
                     provider_retry_skipped_reason = "retry_allowance_exhausted"
                     break
 
-                # Process custom function tool calls (NOT built-in web_search)
+                # Process research/custom calls and terminal submission
+                # independently. Research rounds never block submit_answer.
                 if response.tool_calls:
-                    if tool_round_count >= budget.max_tool_rounds:
-                        errors.append(f"Max tool rounds ({budget.max_tool_rounds}) exceeded")
-                        break
-                    tool_round_count += 1
+                    research_calls = [
+                        tc for tc in response.tool_calls
+                        if tc.name != "submit_answer"
+                        and not (
+                            tc.name == "flat_rag_search"
+                            and flat_rag_executed_count >= budget.max_flat_rag_calls
+                        )
+                    ]
+                    research_round_available = bool(research_calls) and (
+                        tool_round_count < budget.max_tool_rounds
+                    )
+                    if research_round_available:
+                        tool_round_count += 1
 
                     tool_results_for_provider: list[dict[str, Any]] = []
                     terminal_failure = False
@@ -390,6 +407,46 @@ class AgentRuntimeService:
 
                         # web_search is built-in, not a custom function — skip
                         if tc.name == "web_search":
+                            continue
+
+                        if not research_round_available and tc.name != "submit_answer":
+                            denied = build_tool_result(
+                                tool_call_id=tc.call_id,
+                                status="partial",
+                                data={
+                                    "chunks": [],
+                                    "evidence_refs": [],
+                                    "denied_reason": "RESEARCH_TOOL_ROUND_BUDGET_EXHAUSTED",
+                                },
+                                duration_ms=0,
+                                error={
+                                    "code": "RESEARCH_TOOL_ROUND_BUDGET_EXHAUSTED",
+                                    "message": (
+                                        f"Research tool-round budget exhausted at "
+                                        f"{budget.max_tool_rounds}; submit_answer remains available."
+                                    ),
+                                },
+                            )
+                            tool_outputs.append(denied)
+                            tool_call_observations.append(ToolCallObservation(
+                                tool_name=tc.name,
+                                tool_call_id=tc.call_id,
+                                round_index=max(1, tool_round_count),
+                                status="partial",
+                                duration_ms=0.0,
+                                remaining_deadline_before_call_ms=remaining,
+                                research_stage_remaining_before_ms=research_remaining,
+                                absolute_remaining_after_ms=deadline.remaining_ms(),
+                                research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                                result_count=0,
+                                governor_denied=True,
+                                is_retry=False,
+                            ))
+                            tool_results_for_provider.append({
+                                "role": "tool",
+                                "tool_call_id": tc.call_id,
+                                "content": json.dumps(denied.model_dump(mode="json")),
+                            })
                             continue
 
                         # Phase 5 resource governance: bound the number of actual
@@ -426,11 +483,12 @@ class AgentRuntimeService:
                                 "tool_call_id": tc.call_id,
                                 "content": json.dumps(denied.model_dump(mode="json")),
                             })
-                            # Record the denied tool execution (governor).
+                            # Record the denied tool execution without consuming
+                            # another research round.
                             tool_call_observations.append(ToolCallObservation(
                                 tool_name=tc.name,
                                 tool_call_id=tc.call_id,
-                                round_index=tool_round_count,
+                                round_index=max(1, tool_round_count),
                                 status="partial",
                                 duration_ms=0.0,
                                 remaining_deadline_before_call_ms=remaining,
@@ -450,7 +508,7 @@ class AgentRuntimeService:
                         tool_call_observations.append(ToolCallObservation(
                             tool_name=tc.name,
                             tool_call_id=tc.call_id,
-                            round_index=tool_round_count,
+                            round_index=max(1, tool_round_count),
                             status=result.result.status,
                             duration_ms=result.duration_ms,
                             remaining_deadline_before_call_ms=remaining,
@@ -478,6 +536,7 @@ class AgentRuntimeService:
                                 else:
                                     submission_received = True
                                     submission = result.submission
+                                    break
                             elif result.submission_action is not None:
                                 if result.submission_action.can_continue:
                                     continuation_count += 1
@@ -567,6 +626,27 @@ class AgentRuntimeService:
                 if checker.provider_response is not None:
                     provider_call_count += 1
                     response = checker.provider_response
+                    checker_call_count = sum(
+                        getattr(call, "name", None) == "submit_compact_checker_result"
+                        for call in response.tool_calls
+                    )
+                    for checker_call in response.tool_calls:
+                        if checker_call.name != "submit_compact_checker_result":
+                            continue
+                        tool_call_observations.append(ToolCallObservation(
+                            tool_name="submit_compact_checker_result",
+                            tool_call_id=checker_call.call_id,
+                            round_index=max(1, tool_round_count),
+                            status="ok" if response.status == "ok" else response.status,
+                            duration_ms=response.duration_ms,
+                            remaining_deadline_before_call_ms=max(0.0, checker_remaining_before),
+                            research_stage_remaining_before_ms=0,
+                            absolute_remaining_after_ms=deadline.remaining_ms(),
+                            research_stage_remaining_after_ms=0,
+                            result_count=1,
+                            governor_denied=False,
+                            is_retry=False,
+                        ))
                     remaining_before_checker = max(0.0, checker_remaining_before)
                     provider_call_observations.append(ProviderCallObservation(
                         stage="fact_check",
@@ -620,7 +700,7 @@ class AgentRuntimeService:
         metrics = AgentExecutionMetrics(
             logical_llm_stage_count=1 + int(checker_status != "not_required"),
             provider_api_call_count=provider_call_count,
-            tool_call_count=len(tool_outputs),
+            tool_call_count=len(tool_outputs) + checker_call_count,
             tool_round_count=tool_round_count,
             web_search_call_count=sum(1 for t in tool_outputs if "web_search" in str(t.data)),
             # Phase 5.1A: aggregate actual provider-native built-in web_search usage
@@ -647,6 +727,7 @@ class AgentRuntimeService:
             flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
             submit_answer_call_count=1 if submission_received else 0,
+            checker_call_count=checker_call_count,
             retry_count=max(0, answer_provider_call_count - 1),
             turn_deadline_ms=deadline.turn_deadline_ms,
             backend_total_latency_ms=total_duration,
@@ -711,10 +792,27 @@ class AgentRuntimeService:
             errors=errors,
             shadow_trace=shadow_trace,
             checker_status=checker_status,
+            checker_call_count=checker_call_count,
             checker_dropped_claim_ids=checker_dropped_claim_ids,
             checker_dependency_dropped_claim_ids=checker_dependency_dropped_claim_ids,
             checker_latency_ms=checker_latency_ms,
         )
+
+    @staticmethod
+    def _provider_tools_for_round(
+        tools: list[dict[str, Any]],
+        *,
+        flat_rag_executed_count: int,
+        max_flat_rag_calls: int,
+    ) -> list[dict[str, Any]]:
+        """Return continuation-visible tools after deterministic budgets apply."""
+
+        if flat_rag_executed_count < max_flat_rag_calls:
+            return tools
+        return [
+            tool for tool in tools
+            if tool.get("name") != "flat_rag_search"
+        ]
 
     @staticmethod
     def _requires_checker(submission: AgentSubmissionV2) -> bool:

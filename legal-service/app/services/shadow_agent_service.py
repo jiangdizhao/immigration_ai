@@ -99,6 +99,7 @@ class ShadowTrace:
     terminal_submission_continuation_count: int = 0
     postcondition_status: str | None = None
     checker_status: str = "not_required"
+    checker_call_count: int = 0
     checker_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_latency_ms: float = 0.0
@@ -359,6 +360,7 @@ class ShadowAgentService:
                 "passed" if result.submission else None
             ),
             checker_status=result.checker_status,
+            checker_call_count=result.checker_call_count,
             checker_dropped_claim_ids=list(result.checker_dropped_claim_ids),
             checker_dependency_dropped_claim_ids=list(
                 result.checker_dependency_dropped_claim_ids
