@@ -284,6 +284,7 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
         # reason categories, and per-claim evidence classification; never
         # claim text/URLs/refs/titles/queries/PII).
         diagnostics = data.get("postcondition_diagnostics") or {}
+        contract_diagnostics = data.get("terminal_contract_diagnostics") or {}
         attempts.append({
             "attempt_index": len(attempts) + 1,
             "tool_call_id": call_id,
@@ -303,6 +304,22 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
             "affected_claim_ids": diagnostics.get("affected_claim_ids"),
             "postcondition_reason_categories": diagnostics.get("postcondition_reason_categories"),
             "claim_evidence_classification": diagnostics.get("claim_evidence_classification"),
+            # Terminal-contract observability: counts only, never refs, URLs,
+            # claim/draft text, titles, queries, or PII.
+            "claim_count": contract_diagnostics.get("claim_count"),
+            "claims_using_evidence_refs_count": contract_diagnostics.get("claims_using_evidence_refs_count"),
+            "claims_using_native_web_locators_count": contract_diagnostics.get("claims_using_native_web_locators_count"),
+            "claims_using_both_count": contract_diagnostics.get("claims_using_both_count"),
+            "claims_using_neither_count": contract_diagnostics.get("claims_using_neither_count"),
+            "citation_count": contract_diagnostics.get("citation_count"),
+            "citations_using_evidence_ref_count": contract_diagnostics.get("citations_using_evidence_ref_count"),
+            "citations_using_native_web_locator_count": contract_diagnostics.get("citations_using_native_web_locator_count"),
+            "citations_using_both_count": contract_diagnostics.get("citations_using_both_count"),
+            "citations_using_neither_count": contract_diagnostics.get("citations_using_neither_count"),
+            "unregistered_evidence_ref_count": contract_diagnostics.get("unregistered_evidence_ref_count"),
+            "duplicate_citation_count": contract_diagnostics.get("duplicate_citation_count"),
+            "claim_text_not_found_count": contract_diagnostics.get("claim_text_not_found_count"),
+            "citation_evidence_missing_count": contract_diagnostics.get("citation_evidence_missing_count"),
         })
     return attempts
 

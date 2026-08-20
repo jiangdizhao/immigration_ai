@@ -169,6 +169,43 @@ def test_successful_submission() -> None:
     assert a["available_native_web_cited_evidence_count"] == 0
 
 
+def test_terminal_contract_diagnostics_are_content_safe_counts() -> None:
+    trace = _trace(
+        tool_calls=[_submit_call("s1")],
+        tool_outputs=[_submit_output("s1", status="invalid_request", data={
+            "accepted": False,
+            "postcondition_status": "failed",
+            "errors": [{"code": "EVIDENCE_NOT_REGISTERED"}],
+            "terminal_contract_diagnostics": {
+                "claim_count": 2,
+                "claims_using_evidence_refs_count": 1,
+                "claims_using_native_web_locators_count": 1,
+                "claims_using_both_count": 0,
+                "claims_using_neither_count": 0,
+                "citation_count": 1,
+                "citations_using_evidence_ref_count": 0,
+                "citations_using_native_web_locator_count": 1,
+                "citations_using_both_count": 0,
+                "citations_using_neither_count": 0,
+                "unregistered_evidence_ref_count": 1,
+                "duplicate_citation_count": 0,
+                "claim_text_not_found_count": 0,
+                "citation_evidence_missing_count": 0,
+            },
+            "sensitive_ref": "web:secret",
+            "sensitive_url": "https://secret.example",
+        })],
+    )
+    attempt = _extract_submission_attempts(trace)[0]
+    assert attempt["claim_count"] == 2
+    assert attempt["claims_using_evidence_refs_count"] == 1
+    assert attempt["claims_using_native_web_locators_count"] == 1
+    assert attempt["unregistered_evidence_ref_count"] == 1
+    blob = str(attempt)
+    assert "sensitive_ref" not in blob
+    assert "secret.example" not in blob
+
+
 def test_error_code_aggregation() -> None:
     attempts = [
         {"submission_error_codes": ["EVIDENCE_NOT_REGISTERED"]},

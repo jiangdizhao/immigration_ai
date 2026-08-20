@@ -44,6 +44,7 @@ Report by arm and by useful category, with counts as well as rates:
 
 - completion, accepted terminal runs, controlled incomplete submissions, failed runs without accepted submission, timeout, and error;
 - submission attempts, accepted attempts, attempt acceptance rate, missing submission, and continuation count;
+- content-safe terminal contract counts for claim/citation evidence forms, unregistered refs, duplicate citations, claim-text failures, and missing citation evidence;
 - postcondition pass/reject and rejection reason categories;
 - canonical local and native-web evidence counts, source authenticity, authority kind, binding status, controlling candidates, and suitable evidence counts where emitted;
 - provider calls, tool calls, tool rounds, native web calls/sources/citations, Flat-RAG calls, retries, and utility calls;

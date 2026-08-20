@@ -159,6 +159,149 @@ def _normalize_claim_spans(
     return normalized_claims, errors
 
 
+def _submission_contract_diagnostics(
+    args: dict[str, Any],
+    context: ToolExecutorContext,
+) -> dict[str, int]:
+    """Return content-safe structural counts for one submit attempt."""
+
+    claims = args.get("claims") if isinstance(args.get("claims"), list) else []
+    citations = args.get("citations") if isinstance(args.get("citations"), list) else []
+    claim_refs = [
+        claim.get("evidence_refs")
+        for claim in claims
+        if isinstance(claim, dict)
+    ]
+    claim_locators = [
+        claim.get("native_web_locators")
+        for claim in claims
+        if isinstance(claim, dict)
+    ]
+    claims_using_refs = sum(isinstance(refs, list) and bool(refs) for refs in claim_refs)
+    claims_using_locators = sum(
+        isinstance(locators, list) and bool(locators) for locators in claim_locators
+    )
+    citations_using_refs = sum(
+        isinstance(citation, dict) and bool(citation.get("evidence_ref"))
+        for citation in citations
+    )
+    citations_using_locators = sum(
+        isinstance(citation, dict) and bool(citation.get("native_web_locator"))
+        for citation in citations
+    )
+    unregistered_refs = 0
+    for refs in claim_refs:
+        if isinstance(refs, list):
+            unregistered_refs += sum(
+                isinstance(ref, str) and not context.registry.is_registered(ref)
+                for ref in refs
+            )
+    for citation in citations:
+        if isinstance(citation, dict):
+            ref = citation.get("evidence_ref")
+            if isinstance(ref, str) and not context.registry.is_registered(ref):
+                unregistered_refs += 1
+
+    seen_citations: set[tuple[str, str]] = set()
+    duplicate_citations = 0
+    for citation in citations:
+        if not isinstance(citation, dict):
+            continue
+        key = (
+            str(citation.get("evidence_ref") or ""),
+            repr(citation.get("native_web_locator") or ""),
+        )
+        if key in seen_citations:
+            duplicate_citations += 1
+        seen_citations.add(key)
+
+    return {
+        "claim_count": len(claims),
+        "claims_using_evidence_refs_count": claims_using_refs,
+        "claims_using_native_web_locators_count": claims_using_locators,
+        "claims_using_both_count": sum(
+            isinstance(refs, list) and bool(refs)
+            and isinstance(locators, list) and bool(locators)
+            for refs, locators in zip(claim_refs, claim_locators)
+        ),
+        "claims_using_neither_count": len(claims) - claims_using_refs - claims_using_locators + sum(
+            isinstance(refs, list) and bool(refs)
+            and isinstance(locators, list) and bool(locators)
+            for refs, locators in zip(claim_refs, claim_locators)
+        ),
+        "citation_count": len(citations),
+        "citations_using_evidence_ref_count": citations_using_refs,
+        "citations_using_native_web_locator_count": citations_using_locators,
+        "citations_using_both_count": sum(
+            isinstance(citation, dict)
+            and bool(citation.get("evidence_ref"))
+            and bool(citation.get("native_web_locator"))
+            for citation in citations
+        ),
+        "citations_using_neither_count": len(citations) - citations_using_refs - citations_using_locators + sum(
+            isinstance(citation, dict)
+            and bool(citation.get("evidence_ref"))
+            and bool(citation.get("native_web_locator"))
+            for citation in citations
+        ),
+        "unregistered_evidence_ref_count": unregistered_refs,
+        "duplicate_citation_count": duplicate_citations,
+        "claim_text_not_found_count": 0,
+        "citation_evidence_missing_count": sum(
+            isinstance(citation, dict)
+            and not citation.get("evidence_ref")
+            and not citation.get("native_web_locator")
+            for citation in citations
+        ),
+    }
+
+
+def _add_submission_error_diagnostics(
+    diagnostics: dict[str, int],
+    errors: list[SubmissionError],
+) -> dict[str, int]:
+    for error in errors:
+        if error.code == "CLAIM_TEXT_NOT_FOUND":
+            diagnostics["claim_text_not_found_count"] = max(
+                diagnostics["claim_text_not_found_count"], 1
+            )
+        elif error.code == "DUPLICATE_CITATION":
+            diagnostics["duplicate_citation_count"] = max(
+                diagnostics["duplicate_citation_count"], 1
+            )
+        elif error.code == "CITATION_EVIDENCE_MISSING":
+            diagnostics["citation_evidence_missing_count"] = max(
+                diagnostics["citation_evidence_missing_count"], 1
+            )
+    return diagnostics
+
+
+def _reject_model_canonical_refs(
+    *,
+    args: dict[str, Any],
+    context: ToolExecutorContext,
+) -> SubmissionError | None:
+    """Reject model-authored canonical refs when the context cannot produce them."""
+
+    if context.allow_model_canonical_refs:
+        return None
+    claims = args.get("claims") if isinstance(args.get("claims"), list) else []
+    for index, claim in enumerate(claims):
+        if isinstance(claim, dict) and claim.get("evidence_refs"):
+            return SubmissionError(
+                code="CANONICAL_EVIDENCE_REF_NOT_ALLOWED",
+                field=f"claims.{index}.evidence_refs",
+            )
+    citations = args.get("citations") if isinstance(args.get("citations"), list) else []
+    for index, citation in enumerate(citations):
+        if isinstance(citation, dict) and citation.get("evidence_ref"):
+            return SubmissionError(
+                code="CANONICAL_EVIDENCE_REF_NOT_ALLOWED",
+                field=f"citations.{index}.evidence_ref",
+            )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Phase-5 content-safe postcondition diagnostics
 #
@@ -305,6 +448,10 @@ class ToolExecutorContext:
     as_of_date: date | None = None
     corpus_version: str | None = None
     index_version: str | None = None
+    # Arm A exposes provider-native web locators but no custom canonical-ref
+    # producer. Keep model-authored canonical refs disabled in that context;
+    # resolved locator refs are created internally after same-request checks.
+    allow_model_canonical_refs: bool = True
     deadline_monotonic: float | None = None
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
@@ -488,15 +635,29 @@ class ToolExecutorService:
         """
         try:
             args = dict(tool_call.arguments)
+            contract_diagnostics = _submission_contract_diagnostics(args, context)
+            canonical_ref_error = _reject_model_canonical_refs(
+                args=args,
+                context=context,
+            )
+            if canonical_ref_error is not None:
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=[canonical_ref_error],
+                    contract_diagnostics=contract_diagnostics,
+                )
             normalized_claims, span_errors = _normalize_claim_spans(
                 draft=args.get("draft_markdown"),
                 claims=args.get("claims"),
             )
             if span_errors:
+                _add_submission_error_diagnostics(contract_diagnostics, span_errors)
                 return self._reject_submission(
                     tool_call=tool_call,
                     context=context,
                     errors=span_errors,
+                    contract_diagnostics=contract_diagnostics,
                 )
             args["claims"] = normalized_claims
 
@@ -513,6 +674,7 @@ class ToolExecutorService:
                     tool_call=tool_call,
                     context=context,
                     errors=[locator_error],
+                    contract_diagnostics=contract_diagnostics,
                 )
 
             try:
@@ -527,6 +689,7 @@ class ToolExecutorService:
                             field="submission",
                         )
                     ],
+                    contract_diagnostics=contract_diagnostics,
                 )
 
             if any(
@@ -551,6 +714,7 @@ class ToolExecutorService:
                             field="claims",
                         )
                     ],
+                    contract_diagnostics=contract_diagnostics,
                 )
 
             # Validate against registry
@@ -559,6 +723,10 @@ class ToolExecutorService:
 
             if not validation_result.valid:
                 # Invalid submission
+                _add_submission_error_diagnostics(
+                    contract_diagnostics,
+                    validation_result.errors,
+                )
                 errors = [
                     {"code": e.code, "field": e.field, "affected_claim_ids": e.affected_claim_ids}
                     for e in validation_result.errors
@@ -582,6 +750,7 @@ class ToolExecutorService:
                 rejected_data = self._rejection_data(
                     rejected=rejected,
                     context=context,
+                    contract_diagnostics=contract_diagnostics,
                 )
 
                 return build_tool_result(
@@ -630,6 +799,7 @@ class ToolExecutorService:
                 rejected_data = self._rejection_data(
                     rejected=rejected,
                     context=context,
+                    contract_diagnostics=contract_diagnostics,
                 )
                 # Phase-5: content-safe postcondition diagnostics explaining WHY.
                 rejected_data["postcondition_diagnostics"] = _postcondition_diagnostics(
@@ -657,7 +827,10 @@ class ToolExecutorService:
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="ok",
-                data=accepted.model_dump(mode="json"),
+                data={
+                    **accepted.model_dump(mode="json"),
+                    "terminal_contract_diagnostics": contract_diagnostics,
+                },
                 duration_ms=0,
             ), submission, _action
 
@@ -741,6 +914,7 @@ class ToolExecutorService:
         tool_call: ToolCallRequest,
         context: ToolExecutorContext,
         errors: list[SubmissionError],
+        contract_diagnostics: dict[str, int] | None = None,
     ) -> tuple[ToolResultEnvelope, AgentSubmissionV2 | None, TerminalSubmissionAction | None]:
         """Return a bounded structured rejection and consume one repair allowance."""
         action = context.terminal_policy.handle_invalid_submission(
@@ -761,7 +935,11 @@ class ToolExecutorService:
             build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="invalid_request",
-                data=self._rejection_data(rejected=rejected, context=context),
+                data=self._rejection_data(
+                    rejected=rejected,
+                    context=context,
+                    contract_diagnostics=contract_diagnostics,
+                ),
                 duration_ms=0,
                 error={
                     "code": "SUBMISSION_INVALID",
@@ -777,30 +955,36 @@ class ToolExecutorService:
         *,
         rejected: SubmitAnswerRejected,
         context: ToolExecutorContext,
+        contract_diagnostics: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         """Add genuine request-scoped evidence to a bounded repair response."""
         data = rejected.model_dump(mode="json")
+        if contract_diagnostics is not None:
+            data["terminal_contract_diagnostics"] = contract_diagnostics
         refs = context.registry.get_all_refs()
-        data["available_evidence_refs"] = refs
+        if context.allow_model_canonical_refs:
+            data["available_evidence_refs"] = refs
         web_evidence: list[dict[str, Any]] = []
         for ref in context.registry.get_refs_by_origin("openai_web_native"):
             try:
                 evidence = context.registry.resolve_evidence(ref)
             except Exception:
                 continue
-            web_evidence.append({
-                "evidence_ref": ref,
-                "url": evidence.url,
-                "title": evidence.title,
-                "search_call_id": evidence.search_call_id,
-                "provenance_complete": evidence.provenance_complete,
-                "native_web_citation": (
-                    evidence.native_web_citation.model_dump(mode="json")
-                    if evidence.native_web_citation is not None
-                    else None
-                ),
-            })
-        data["available_native_web_evidence"] = web_evidence
+            if context.allow_model_canonical_refs:
+                web_evidence.append({
+                    "evidence_ref": ref,
+                    "url": evidence.url,
+                    "title": evidence.title,
+                    "search_call_id": evidence.search_call_id,
+                    "provenance_complete": evidence.provenance_complete,
+                    "native_web_citation": (
+                        evidence.native_web_citation.model_dump(mode="json")
+                        if evidence.native_web_citation is not None
+                        else None
+                    ),
+                })
+        if context.allow_model_canonical_refs:
+            data["available_native_web_evidence"] = web_evidence
         data["repair_instruction"] = (
             "Use backend-verified available evidence for decisive claims. "
             "Controlling legal claims require suitable controlling authority; "
@@ -811,6 +995,14 @@ class ToolExecutorService:
             "verified evidence is unavailable, submit an evidence-insufficient or "
             "incomplete answer rather than inventing evidence."
         )
+        if not context.allow_model_canonical_refs:
+            data["repair_instruction"] = (
+                "This Arm-A run has no model-visible canonical evidence refs. "
+                "Use only provider-observed native_web_locators for web sources; "
+                "do not furnish evidence_refs or citation evidence_ref values. "
+                "The backend resolves observed locators in this request. If "
+                "suitable evidence is unavailable, submit an incomplete answer."
+            )
         return data
 
     def handle_missing_submission(

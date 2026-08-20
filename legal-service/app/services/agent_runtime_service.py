@@ -177,6 +177,7 @@ class AgentRuntimeService:
             registry=registry,
             as_of_date=request.as_of_date,
             deadline_monotonic=deadline.deadline_at,
+            allow_model_canonical_refs=request.experiment_arm != "A",
             flat_rag_search_fn=flat_rag_search_fn,
             db_session=db_session,
             privacy_guard=self._privacy_guard,

@@ -21,6 +21,7 @@ DEFAULT_MAX_TOOL_ROUNDS = 2
 DEFAULT_MAX_RETRIES = 1
 INVALID_REF_CODES = {
     "INVALID_EVIDENCE_REF_FORMAT",
+    "EVIDENCE_NOT_REGISTERED",
     "EVIDENCE_REF_NOT_REGISTERED",
     "NATIVE_WEB_LOCATOR_NOT_OBSERVED",
     "NATIVE_WEB_LOCATOR_AMBIGUOUS",
@@ -412,7 +413,13 @@ def _provider_failure_observed(row: dict[str, Any]) -> bool:
         return explicit_count > 0
     if row.get("provider_api_failure") is True:
         return True
-    return bool(row.get("provider_api_failure_codes"))
+    if row.get("provider_api_failure_codes"):
+        return True
+    return any(
+        str(call.get("status") or "") in {"timeout", "error"}
+        for call in row.get("provider_calls", [])
+        if isinstance(call, dict)
+    )
 
 
 def _failure_taxonomy(rows: list[dict[str, Any]]) -> dict[str, Any]:

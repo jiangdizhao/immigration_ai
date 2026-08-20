@@ -213,6 +213,35 @@ def test_a10_requires_explicit_adjudication_and_generic_error_is_not_a1():
     assert counts["A12"] == 0
 
 
+def test_registered_error_and_structured_provider_failure_taxonomy_mapping():
+    identity_failure = _accepted("stable", "luna_web", 1000)
+    identity_failure["submission_attempts"] = [{
+        "accepted": False,
+        "submission_error_codes": [
+            "EVIDENCE_NOT_REGISTERED",
+            "INVALID_EVIDENCE_REF_FORMAT",
+            "NATIVE_WEB_LOCATOR_NOT_OBSERVED",
+        ],
+    }]
+    provider_failure = _accepted("legal", "luna_web", 1000)
+    provider_failure["status"] = "error"
+    provider_failure["provider_calls"] = [{"status": "timeout"}]
+    report = analyze(MANIFEST, [identity_failure, provider_failure])
+    counts = report["failure_taxonomy"]["deterministic_counts"]
+    assert counts["A5"] == 1
+    assert counts["A1"] == 1
+
+
+def test_unrelated_postcondition_failure_is_not_a5():
+    row = _accepted("stable", "luna_web", 1000)
+    row["submission_attempts"] = [{
+        "accepted": False,
+        "submission_error_codes": ["EVIDENCE_POSTCONDITION_FAILED"],
+    }]
+    report = analyze(MANIFEST, [row])
+    assert report["failure_taxonomy"]["deterministic_counts"]["A5"] == 0
+
+
 def test_run_metrics_distinguish_accepted_run_from_attempt_acceptance():
     row = _accepted("stable", "luna_web", 1000)
     row["submission_attempts"] = [{"accepted": False}, {"accepted": True}]

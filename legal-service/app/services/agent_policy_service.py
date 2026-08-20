@@ -11,6 +11,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -203,6 +204,47 @@ WEB_SEARCH_TOOL = {
 }
 
 
+def build_submit_answer_tool(*, allow_canonical_refs: bool = True) -> dict[str, Any]:
+    """Build the model-facing terminal contract for an evidence context.
+
+    Arm A has only provider-native web discovery, so model-authored canonical
+    refs cannot be valid input there. NativeWebLocators remain available and
+    are deterministically promoted by the backend. Arm B and callers with
+    genuine custom evidence tools retain the canonical-ref fields.
+    """
+
+    tool = deepcopy(SUBMIT_ANSWER_TOOL)
+    if allow_canonical_refs:
+        return tool
+
+    claims = tool["parameters"]["properties"]["claims"]["items"]["properties"]
+    claims["evidence_refs"] = {
+        "type": "array",
+        "maxItems": 0,
+        "items": {"type": "string"},
+        "description": "Not available in Arm A; use native_web_locators for observed web sources.",
+    }
+    citations = tool["parameters"]["properties"]["citations"]["items"]["properties"]
+    citations.pop("evidence_ref", None)
+    tool["description"] = (
+        f"{tool['description']} Arm A evidence contract: do not furnish canonical "
+        "evidence_refs or citation evidence_ref values. For provider-native web "
+        "sources, use only observed native_web_locators; the backend resolves "
+        "them within this request."
+    )
+    return tool
+
+
+ARM_A_NATIVE_WEB_PROMPT_SUFFIX = """
+
+## Arm-A Evidence Contract
+- This run has provider-native web search but no custom tool that gives you canonical evidence refs.
+- Do not write or guess `web:<opaque>` or `exact:<opaque>` values in `evidence_refs` or citation `evidence_ref`.
+- For a provider source you observed in this request, use its observed HTTPS URL only as `native_web_locators: [{"url": "..."}]`.
+- The backend resolves that locator to a request-scoped canonical ref. Never use a URL in an evidence-ref field.
+"""
+
+
 @dataclass(slots=True)
 class AgentPolicy:
     """Policy configuration for a single agent execution."""
@@ -252,9 +294,15 @@ class AgentPolicyService:
             tools = self._build_default_tools(experiment_arm)
             model = settings.default_agent_model
 
+        system_prompt = LUNA_SYSTEM_PROMPT_V2
+        prompt_version = LUNA_PROMPT_VERSION
+        if mode == "default" and experiment_arm == "A":
+            system_prompt += ARM_A_NATIVE_WEB_PROMPT_SUFFIX
+            prompt_version = f"{LUNA_PROMPT_VERSION}.arm-a-native-locator"
+
         return AgentPolicy(
-            system_prompt=LUNA_SYSTEM_PROMPT_V2,
-            prompt_version=LUNA_PROMPT_VERSION,
+            system_prompt=system_prompt,
+            prompt_version=prompt_version,
             model=model,
             tools=tools,
             tool_choice="auto",
@@ -282,11 +330,18 @@ class AgentPolicyService:
             tools = [WEB_SEARCH_TOOL]
             if settings.flat_rag_tool_enabled:
                 tools.append(FLAT_RAG_SEARCH_TOOL)
-            tools.extend([DETERMINISTIC_UTILITY_TOOL, SUBMIT_ANSWER_TOOL])
+            tools.extend([
+                DETERMINISTIC_UTILITY_TOOL,
+                build_submit_answer_tool(allow_canonical_refs=True),
+            ])
             return tools
 
         # Arm A (default): web + utility + submit
-        return [WEB_SEARCH_TOOL, DETERMINISTIC_UTILITY_TOOL, SUBMIT_ANSWER_TOOL]
+        return [
+            WEB_SEARCH_TOOL,
+            DETERMINISTIC_UTILITY_TOOL,
+            build_submit_answer_tool(allow_canonical_refs=experiment_arm != "A"),
+        ]
 
     def get_tool_names(self, policy: AgentPolicy) -> list[str]:
         """Extract tool names from policy for observability."""

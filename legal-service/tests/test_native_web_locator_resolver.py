@@ -11,9 +11,9 @@ from app.services.native_web_locator_resolver import (
     normalize_source_url,
 )
 from app.services.request_evidence_registry import create_registry
-from app.services.agent_policy_service import SUBMIT_ANSWER_TOOL
+from app.services.agent_policy_service import SUBMIT_ANSWER_TOOL, AgentPolicyService
 from app.services.evidence_postcondition_service import evaluate_native_web_applicability
-from app.services.tool_executor_service import ToolExecutorContext, ToolExecutorService
+from app.services.tool_executor_service import ToolCallRequest, ToolExecutorContext, ToolExecutorService
 
 
 def _register(registry, url: str, call: str = "s1"):
@@ -102,6 +102,110 @@ def test_tool_schema_exposes_locators() -> None:
     assert "native_web_locator" in citations and "evidence_ref" in citations
 
 
+def test_arm_a_schema_is_native_locator_only_and_arm_b_keeps_canonical_refs() -> None:
+    arm_a = AgentPolicyService().build_policy(mode="default", experiment_arm="A")
+    arm_b = AgentPolicyService().build_policy(mode="default", experiment_arm="B")
+    arm_a_submit = next(tool for tool in arm_a.tools if tool.get("name") == "submit_answer")
+    arm_b_submit = next(tool for tool in arm_b.tools if tool.get("name") == "submit_answer")
+    arm_a_claims = arm_a_submit["parameters"]["properties"]["claims"]["items"]["properties"]
+    arm_a_citations = arm_a_submit["parameters"]["properties"]["citations"]["items"]["properties"]
+    arm_b_claims = arm_b_submit["parameters"]["properties"]["claims"]["items"]["properties"]
+    arm_b_citations = arm_b_submit["parameters"]["properties"]["citations"]["items"]["properties"]
+    assert arm_a_claims["evidence_refs"]["maxItems"] == 0
+    assert "native_web_locators" in arm_a_claims
+    assert "evidence_ref" not in arm_a_citations
+    assert "evidence_refs" in arm_b_claims
+    assert "evidence_ref" in arm_b_citations
+
+
+def test_arm_a_guessed_canonical_ref_is_rejected_without_ref_disclosure() -> None:
+    registry = create_registry("arm-a-contract")
+    context = ToolExecutorContext(
+        request_id="arm-a-contract",
+        registry=registry,
+        allow_model_canonical_refs=False,
+    )
+    result = ToolExecutorService().execute_tool(
+        ToolCallRequest(
+            call_id="submit-guessed-ref",
+            name="submit_answer",
+            arguments={
+                "schema_version": "agent_submission.v2",
+                "answer_class": "substantive_legal",
+                "draft_markdown": "A legal statement.",
+                "claims": [{
+                    "claim_id": "c1",
+                    "claim_type": "legal_rule",
+                    "materiality": "decisive",
+                    "text": "A legal statement.",
+                    "draft_start": 0,
+                    "draft_end": 18,
+                    "evidence_refs": ["web:guessed"],
+                }],
+                "citations": [],
+                "research_status": "complete",
+                "state_patch": [],
+            },
+        ),
+        context,
+    )
+    assert result.result.data["errors"][0]["code"] == "CANONICAL_EVIDENCE_REF_NOT_ALLOWED"
+    assert "available_evidence_refs" not in result.result.data
+    assert "guessed" not in str(result.result.data)
+    assert result.result.data["terminal_contract_diagnostics"]["unregistered_evidence_ref_count"] == 1
+
+
+def test_arm_a_observed_locator_still_resolves() -> None:
+    registry = create_registry("arm-a-locator")
+    ref = _register(registry, "https://example.gov.au/observed")
+    context = ToolExecutorContext(
+        request_id="arm-a-locator",
+        registry=registry,
+        allow_model_canonical_refs=False,
+    )
+    claim = {
+        "claim_id": "c1",
+        "claim_type": "current_fact",
+        "materiality": "decisive",
+        "text": "x",
+        "draft_start": 0,
+        "draft_end": 1,
+        "native_web_locators": [{"url": "https://example.gov.au/observed"}],
+    }
+    error = ToolExecutorService()._resolve_native_web_locators(
+        args={"claims": [claim], "citations": []}, context=context
+    )
+    assert error is None
+    assert claim["evidence_refs"] == [ref]
+
+
+def test_duplicate_citations_remain_a_strict_rejection() -> None:
+    registry = create_registry("duplicate-citation")
+    ref = _register(registry, "https://example.gov.au/citation")
+    result = ToolExecutorService().execute_tool(
+        ToolCallRequest(
+            call_id="duplicate-citation-submit",
+            name="submit_answer",
+            arguments={
+                "schema_version": "agent_submission.v2",
+                "answer_class": "general",
+                "draft_markdown": "Answer.",
+                "claims": [],
+                "citations": [
+                    {"evidence_ref": ref, "display_label": "Source"},
+                    {"evidence_ref": ref, "display_label": "Source"},
+                ],
+                "research_status": "not_required",
+                "state_patch": [],
+            },
+        ),
+        ToolExecutorContext(request_id="duplicate-citation", registry=registry),
+    )
+    assert result.result.status == "invalid_request"
+    assert result.result.data["errors"][0]["code"] == "DUPLICATE_CITATION"
+    assert result.result.data["terminal_contract_diagnostics"]["duplicate_citation_count"] == 1
+
+
 def test_tool_all_or_nothing() -> None:
     reg = create_registry("v212-e2e")
     _register(reg, "https://example.gov.au/ok")
@@ -146,7 +250,7 @@ def test_citation_neither_and_both() -> None:
     assert both is not None and both.code == "CITATION_EVIDENCE_AMBIGUOUS"
 
 
-def test_n1_applicability_no_citation() -> None:
+def test_n1_official_latest_url_without_version_metadata_is_unknown() -> None:
     ev = NativeWebEvidenceRef(
         evidence_origin="openai_web_native", evidence_ref="web:x", source_type="legislation",
         source_authenticity="canonical_official", authority_kind="statute",
@@ -158,7 +262,7 @@ def test_n1_applicability_no_citation() -> None:
         text=None, content_hash=None,
     )
     basis = evaluate_native_web_applicability(ev, date.today())
-    assert basis.basis == "official_current_latest"
+    assert basis.basis == "unknown"
 
 
 def test_malformed_evidence_refs_not_silently_repaired() -> None:
