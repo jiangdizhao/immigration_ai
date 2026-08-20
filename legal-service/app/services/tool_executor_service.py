@@ -219,6 +219,28 @@ def _submission_contract_diagnostics(
             duplicate_citations += 1
         seen_citations.add(key)
 
+    draft = args.get("draft_markdown") if isinstance(args.get("draft_markdown"), str) else ""
+    invalid_offsets = 0
+    empty_offset_spans = 0
+    offset_text_conflicts = 0
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        start = claim.get("draft_start")
+        end = claim.get("draft_end")
+        if not isinstance(start, int) or isinstance(start, bool) or not isinstance(end, int) or isinstance(end, bool):
+            invalid_offsets += 1
+            continue
+        if start == end:
+            empty_offset_spans += 1
+        elif start < 0 or end > len(draft) or start > end:
+            invalid_offsets += 1
+        elif isinstance(claim.get("text"), str) and (
+            " ".join(claim["text"].split())
+            != " ".join(draft[start:end].split())
+        ):
+            offset_text_conflicts += 1
+
     return {
         "claim_count": len(claims),
         "claims_using_evidence_refs_count": claims_using_refs,
@@ -257,6 +279,9 @@ def _submission_contract_diagnostics(
             and not citation.get("native_web_locator")
             for citation in citations
         ),
+        "invalid_offset_count": invalid_offsets,
+        "empty_offset_span_count": empty_offset_spans,
+        "text_offset_conflict_normalized_count": offset_text_conflicts,
     }
 
 
@@ -740,7 +765,10 @@ class ToolExecutorService:
 
             # Validate against registry
             validator = AgentSubmissionValidator(context.registry)
-            validation_result = validator.validate(submission)
+            validation_result = validator.validate(
+                submission,
+                allow_overlapping_claims=context.lightweight_submission,
+            )
 
             if not validation_result.valid:
                 # Invalid submission

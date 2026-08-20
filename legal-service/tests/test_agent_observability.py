@@ -365,7 +365,11 @@ def test_additive_query_response_compatibility() -> None:
 def test_new_execution_flags_do_not_activate_calls() -> None:
     from app.core.config import Settings
 
-    settings = Settings(_env_file=None, DATABASE_URL="sqlite://")
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="sqlite://",
+        FLAT_RAG_TOOL_ENABLED=False,
+    )
     assert settings.answer_engine == "v1"
     assert settings.web_search_enabled is False
     assert settings.exact_legal_lookup_enabled is False

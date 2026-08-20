@@ -26,7 +26,6 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import LegalSource, SourceChunk
@@ -253,13 +252,20 @@ def compute_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def derive_source_authenticity(url: str) -> SourceAuthenticity:
-    """Classify authenticity from an actual canonical-source URL only.
+def derive_source_authenticity(
+    url: str | None,
+    explicit: object = None,
+) -> SourceAuthenticity:
+    """Classify authenticity from optional URL metadata.
 
     The canonical database is authoritative storage, but that alone does not
     establish that every ingested source is an official publication.  Keep
     unknown hosts explicitly unverified rather than upgrading their status.
     """
+    if explicit in {"canonical_official", "official_copy", "verified_secondary_copy", "unverified"}:
+        return explicit  # type: ignore[return-value]
+    if not url:
+        return "unverified"
     host = (urlparse(url).hostname or "").lower()
     if host in {
         "legislation.gov.au",
@@ -281,82 +287,37 @@ def _usable_https_url(value: object) -> str | None:
     return None
 
 
-def _document_identity_from_split_title(title: str) -> str | None:
-    """Extract a parent document identity from a generic split-Schedule title.
-
-    This is document-structure parsing only.  It neither infers legal
-    relevance nor maps a particular Schedule to a hard-coded URL.
-    """
-    match = re.match(r"^\s*(.+?)\s+-\s+schedule\s+[0-9]+[a-z]?\b", title, re.I)
-    return match.group(1).strip() if match else None
-
-
 class CanonicalEvidenceService:
     """Constructs CanonicalLocalEvidenceRef from actual canonical data."""
 
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def _resolve_canonical_url(self, source: LegalSource) -> tuple[str, bool]:
-        """Resolve a canonical URL without inventing provenance.
-
-        A direct HTTPS URL is authoritative for that canonical row.  For a
-        split Schedule row without one, a URL may be inherited only where the
-        canonical database contains exactly one official HTTPS-bearing sibling
-        for the same parsed document identity, source type, and jurisdiction.
-        Authority labels are intentionally not an identity key: the corpus
-        records the Schedule PDFs as "Federal Register of Legislation" while
-        its same-document canonical compilation is labelled "Commonwealth of
-        Australia". Ambiguity or a missing sibling fails closed.
-        """
+    def _optional_canonical_url(self, source: LegalSource) -> str | None:
+        """Return direct URL metadata without making it local evidence identity."""
         direct_url = _usable_https_url(source.url)
         if direct_url:
-            return direct_url, True
+            return direct_url
 
         metadata = source.metadata_json or {}
         for field_name in ("canonical_url", "canonical_document_url"):
             metadata_url = _usable_https_url(metadata.get(field_name))
             if metadata_url:
-                return metadata_url, False
+                return metadata_url
+        return None
 
-        document_identity = _document_identity_from_split_title(source.title)
-        if document_identity is None:
-            raise CanonicalEvidenceError(
-                code="CANONICAL_URL_UNAVAILABLE",
-                message="Canonical source has no usable canonical URL",
-            )
-
-        try:
-            candidates = list(
-                self._db.scalars(
-                    select(LegalSource).where(
-                        LegalSource.id != source.id,
-                        LegalSource.status == source.status,
-                        LegalSource.source_type == source.source_type,
-                        LegalSource.jurisdiction == source.jurisdiction,
-                        LegalSource.title.ilike(f"{document_identity} - %"),
-                    )
-                )
-            )
-        except Exception as exc:
-            raise CanonicalEvidenceError(
-                code="CANONICAL_URL_RESOLUTION_FAILED",
-                message="Canonical document URL could not be resolved",
-            ) from exc
-
-        inherited_urls = {
-            url
-            for candidate in candidates
-            if _document_identity_from_split_title(candidate.title) is None
-            for url in [_usable_https_url(candidate.url)]
-            if url is not None and derive_source_authenticity(url) == "canonical_official"
-        }
-        if len(inherited_urls) == 1:
-            return inherited_urls.pop(), False
-
-        raise CanonicalEvidenceError(
-            code="CANONICAL_URL_UNAVAILABLE",
-            message="Canonical source has no usable canonical URL",
+    def _local_provenance_complete(
+        self,
+        *,
+        source: LegalSource,
+        chunk: SourceChunk | None,
+        exact_text: str,
+    ) -> bool:
+        """Local provenance is source/chunk/text traceability, not URL presence."""
+        return bool(
+            source.id
+            and exact_text.strip()
+            and (chunk is None or (chunk.id and str(chunk.source_id) == str(source.id)))
         )
 
     def build_evidence_from_chunk(
@@ -432,11 +393,17 @@ class CanonicalEvidenceService:
         court_level = normalize_court_level(source.source_type, source.metadata_json)
         binding_status = normalize_binding_status(authority_kind, court_level)
 
-        canonical_url, provenance_complete = self._resolve_canonical_url(source)
-        source_authenticity = derive_source_authenticity(canonical_url)
+        canonical_url = self._optional_canonical_url(source)
+        source_authenticity = derive_source_authenticity(
+            canonical_url,
+            explicit=(source.metadata_json or {}).get("source_authenticity"),
+        )
+        provenance_complete = self._local_provenance_complete(
+            source=source, chunk=None, exact_text=text_span
+        )
 
         # Document version: use if available, else "unknown"
-        document_version = source.document_version or "unknown"
+        document_version = source.document_version
 
         # Effective dates: only use if actually present
         effective_from = source.effective_date
@@ -501,11 +468,14 @@ class CanonicalEvidenceService:
         court_level = normalize_court_level(source.source_type, source.metadata_json)
         binding_status = normalize_binding_status(authority_kind, court_level)
 
-        canonical_url, provenance_complete = self._resolve_canonical_url(source)
-        source_authenticity = derive_source_authenticity(canonical_url)
+        canonical_url = self._optional_canonical_url(source)
+        source_authenticity = derive_source_authenticity(
+            canonical_url,
+            explicit=(source.metadata_json or {}).get("source_authenticity"),
+        )
 
         # Document version
-        document_version = source.document_version or "unknown"
+        document_version = source.document_version
 
         # Effective dates: only use if actually present
         effective_from = source.effective_date
@@ -521,6 +491,9 @@ class CanonicalEvidenceService:
 
         # Exact text from chunk
         exact_text = chunk.text
+        provenance_complete = self._local_provenance_complete(
+            source=source, chunk=chunk, exact_text=exact_text
+        )
 
         evidence = CanonicalLocalEvidenceRef(
             evidence_origin="canonical_local",

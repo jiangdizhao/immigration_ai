@@ -123,6 +123,8 @@ class ShadowRunResult:
     terminal_submission_missing: bool
     terminal_submission_continuation_count: int
     errors: list[str]
+    terminal_continuation_triggered: bool = False
+    terminal_tool_calls: list[ToolCallObservation] = field(default_factory=list)
     shadow_trace: dict[str, Any] | None = None
     checker_status: Literal["not_required", "completed", "failed"] = "not_required"
     checker_call_count: int = 0
@@ -204,12 +206,14 @@ class AgentRuntimeService:
         submission: AgentSubmissionV2 | None = None
         terminal_missing = False
         continuation_count = 0
+        terminal_continuation_triggered = False
         previous_response_id: str | None = None
         flat_rag_executed_count = 0
         flat_rag_denied_count = 0
         provider_retry_skipped_reason: str | None = None
         provider_call_observations: list[ProviderCallObservation] = []
         tool_call_observations: list[ToolCallObservation] = []
+        terminal_tool_call_observations: list[ToolCallObservation] = []
         total_provider_duration_ms = 0.0
         total_tool_duration_ms = 0.0
         checker_status: Literal["not_required", "completed", "failed"] = "not_required"
@@ -219,6 +223,7 @@ class AgentRuntimeService:
         checker_call_count = 0
         answer_agent_duration_ms = 0.0
         answer_provider_call_count = 0
+        terminal_phase = False
         prev_call_was_failed = False
         prev_call_was_missing_terminal = False
 
@@ -240,18 +245,25 @@ class AgentRuntimeService:
                     errors.append("Deadline exceeded before provider call")
                     break
 
-                # A provider continuation/retry cannot consume a fresh research
-                # budget.  If the shared answer/research stage is exhausted, stop.
                 research_remaining = _research_stage_remaining_ms()
-                if research_remaining <= 0:
-                    errors.append("Answer/research stage budget exceeded before provider call")
-                    break
+                if (
+                    research_remaining <= 0
+                    or tool_round_count >= budget.max_tool_rounds
+                    or provider_call_count >= budget.max_provider_calls - 1
+                ):
+                    terminal_phase = True
 
                 provider_call_count += 1
                 provider_tools = self._provider_tools_for_round(
                     policy.tools,
                     flat_rag_executed_count=flat_rag_executed_count,
                     max_flat_rag_calls=budget.max_flat_rag_calls,
+                    terminal_phase=terminal_phase,
+                )
+                call_timeout_ms = (
+                    remaining
+                    if terminal_phase
+                    else min(remaining, research_remaining)
                 )
 
                 try:
@@ -263,7 +275,7 @@ class AgentRuntimeService:
                         tool_choice=policy.tool_choice,
                         reasoning_effort=policy.reasoning_effort,
                         messages_history=messages,
-                        timeout_ms=min(remaining, research_remaining),
+                        timeout_ms=call_timeout_ms,
                         registry=registry,
                         previous_response_id=previous_response_id,
                     )
@@ -299,7 +311,7 @@ class AgentRuntimeService:
                 elif provider_call_count > 1:
                     call_kind = "continuation"
                 provider_call_observations.append(ProviderCallObservation(
-                    stage="answer_research",
+                    stage="terminal_synthesis" if terminal_phase else "answer_research",
                     call_index=provider_call_count,
                     call_kind=call_kind,
                     response_id=response.response_id or None,
@@ -311,11 +323,11 @@ class AgentRuntimeService:
                     reasoning_tokens=response.reasoning_tokens,
                     output_tokens=response.output_tokens,
                     duration_ms=response.duration_ms,
-                    timeout_allocated_ms=min(remaining, research_remaining),
+                    timeout_allocated_ms=call_timeout_ms,
                     remaining_deadline_before_call_ms=remaining,
-                    research_stage_remaining_before_ms=research_remaining,
+                    research_stage_remaining_before_ms=0 if terminal_phase else research_remaining,
                     absolute_remaining_after_ms=deadline.remaining_ms(),
-                    research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                    research_stage_remaining_after_ms=0 if terminal_phase else _research_stage_remaining_ms(),
                     returned_tool_call_count=len(response.tool_calls),
                     returned_tool_names=[tc.name for tc in response.tool_calls],
                     web_search_reported=any(tc.name == "web_search" for tc in response.tool_calls),
@@ -384,11 +396,10 @@ class AgentRuntimeService:
                             and flat_rag_executed_count >= budget.max_flat_rag_calls
                         )
                     ]
-                    research_round_available = bool(research_calls) and (
+                    research_round_available = (not terminal_phase) and bool(research_calls) and (
                         tool_round_count < budget.max_tool_rounds
                     )
-                    if research_round_available:
-                        tool_round_count += 1
+                    research_round_counted = False
 
                     tool_results_for_provider: list[dict[str, Any]] = []
                     terminal_failure = False
@@ -401,13 +412,23 @@ class AgentRuntimeService:
 
                         # Research tool execution also consumes the shared
                         # non-resetting answer/research stage budget.
-                        research_remaining = _research_stage_remaining_ms()
-                        if research_remaining <= 0:
-                            errors.append("Answer/research stage budget exceeded before tool execution")
-                            break
+                        research_remaining = (
+                            0.0 if terminal_phase else _research_stage_remaining_ms()
+                        )
+                        if not terminal_phase and research_remaining <= 0:
+                            terminal_phase = True
+                            research_round_available = False
+                            research_remaining = 0.0
 
                         # web_search is built-in, not a custom function — skip
                         if tc.name == "web_search":
+                            if (
+                                research_round_available
+                                and not research_round_counted
+                                and research_remaining > 0
+                            ):
+                                tool_round_count += 1
+                                research_round_counted = True
                             continue
 
                         if not research_round_available and tc.name != "submit_answer":
@@ -504,26 +525,52 @@ class AgentRuntimeService:
 
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
+                        if tc.name == "submit_answer":
+                            terminal_tool_call_observations.append(ToolCallObservation(
+                                tool_name="submit_answer",
+                                tool_call_id=tc.call_id,
+                                round_index=max(1, tool_round_count),
+                                status=result.result.status,
+                                duration_ms=result.duration_ms,
+                                remaining_deadline_before_call_ms=remaining,
+                                research_stage_remaining_before_ms=research_remaining,
+                                absolute_remaining_after_ms=deadline.remaining_ms(),
+                                research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                                result_count=None,
+                                governor_denied=False,
+                                is_retry=False,
+                            ))
+                        if (
+                            tc.name == "flat_rag_search"
+                            and not research_round_counted
+                            and result.result.status == "ok"
+                            and result.result.error is None
+                        ):
+                            tool_round_count += 1
+                            research_round_counted = True
 
-                        # Record tool-call diagnostic observation (content-free).
-                        tool_call_observations.append(ToolCallObservation(
-                            tool_name=tc.name,
-                            tool_call_id=tc.call_id,
-                            round_index=max(1, tool_round_count),
-                            status=result.result.status,
-                            duration_ms=result.duration_ms,
-                            remaining_deadline_before_call_ms=remaining,
-                            research_stage_remaining_before_ms=research_remaining,
-                            absolute_remaining_after_ms=deadline.remaining_ms(),
-                            research_stage_remaining_after_ms=_research_stage_remaining_ms(),
-                            result_count=(len(result.result.data.get("chunks", []))
-                                          if isinstance(result.result.data.get("chunks"), (list, tuple))
-                                          else (len(result.result.data.get("evidence_refs", []))
-                                                if isinstance(result.result.data.get("evidence_refs"), (list, tuple))
-                                                else None)),
-                            governor_denied=False,
-                            is_retry=False,
-                        ))
+                        # Record research/custom tool observations only. The
+                        # terminal action has its own submit counter and must
+                        # not appear as a research-round observation.
+                        if tc.name != "submit_answer":
+                            tool_call_observations.append(ToolCallObservation(
+                                tool_name=tc.name,
+                                tool_call_id=tc.call_id,
+                                round_index=max(1, tool_round_count),
+                                status=result.result.status,
+                                duration_ms=result.duration_ms,
+                                remaining_deadline_before_call_ms=remaining,
+                                research_stage_remaining_before_ms=research_remaining,
+                                absolute_remaining_after_ms=deadline.remaining_ms(),
+                                research_stage_remaining_after_ms=_research_stage_remaining_ms(),
+                                result_count=(len(result.result.data.get("chunks", []))
+                                              if isinstance(result.result.data.get("chunks"), (list, tuple))
+                                              else (len(result.result.data.get("evidence_refs", []))
+                                                    if isinstance(result.result.data.get("evidence_refs"), (list, tuple))
+                                                    else None)),
+                                governor_denied=False,
+                                is_retry=False,
+                            ))
                         total_tool_duration_ms += result.duration_ms
 
                         if tc.name == "flat_rag_search":
@@ -536,11 +583,13 @@ class AgentRuntimeService:
                                     terminal_failure = True
                                 else:
                                     submission_received = True
+                                    terminal_missing = False
                                     submission = result.submission
                                     break
                             elif result.submission_action is not None:
                                 if result.submission_action.can_continue:
                                     continuation_count += 1
+                                    terminal_continuation_triggered = True
                                 else:
                                     errors.append(f"Terminal submission failed: {result.submission_action.reason}")
                                     terminal_failure = True
@@ -578,6 +627,12 @@ class AgentRuntimeService:
                         break
                     if terminal_failure:
                         break
+                    if (
+                        not submission_received
+                        and (tool_round_count >= budget.max_tool_rounds
+                             or provider_call_count >= budget.max_provider_calls - 1)
+                    ):
+                        terminal_phase = True
                 else:
                     # No custom tool calls — provider returned text without submit_answer
                     terminal_missing = True
@@ -585,6 +640,8 @@ class AgentRuntimeService:
 
                     if action.can_continue:
                         continuation_count += 1
+                        terminal_continuation_triggered = True
+                        terminal_phase = True
                         messages.append({
                             "role": "user",
                             "content": action.continuation_message,
@@ -607,6 +664,7 @@ class AgentRuntimeService:
                 and submission is not None
                 and request.mode == "default"
                 and request.experiment_arm == "L"
+                and get_settings().compact_checker_enabled
                 and self._requires_checker(submission)
             ):
                 checker_remaining_before = deadline.remaining_ms()
@@ -737,6 +795,7 @@ class AgentRuntimeService:
             deadline_exceeded_stage="shadow_run" if deadline.remaining_ms() <= 0 else None,
             terminal_submission_missing=terminal_missing,
             terminal_submission_continuation_count=continuation_count,
+            terminal_continuation_triggered=terminal_continuation_triggered,
             answer_agent_latency_ms=answer_agent_duration_ms or total_duration,
             fact_check_latency_ms=checker_latency_ms,
             total_latency_ms=total_duration,
@@ -790,6 +849,8 @@ class AgentRuntimeService:
             provider_response_ids=provider_response_ids,
             terminal_submission_missing=terminal_missing,
             terminal_submission_continuation_count=continuation_count,
+            terminal_continuation_triggered=terminal_continuation_triggered,
+            terminal_tool_calls=terminal_tool_call_observations,
             errors=errors,
             shadow_trace=shadow_trace,
             checker_status=checker_status,
@@ -805,9 +866,12 @@ class AgentRuntimeService:
         *,
         flat_rag_executed_count: int,
         max_flat_rag_calls: int,
+        terminal_phase: bool = False,
     ) -> list[dict[str, Any]]:
         """Return continuation-visible tools after deterministic budgets apply."""
 
+        if terminal_phase:
+            return [tool for tool in tools if tool.get("name") == "submit_answer"]
         if flat_rag_executed_count < max_flat_rag_calls:
             return tools
         return [

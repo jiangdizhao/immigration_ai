@@ -97,6 +97,8 @@ class ShadowTrace:
     remaining_deadline_ms: float = 0.0
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = 0
+    terminal_continuation_triggered: bool = False
+    terminal_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     postcondition_status: str | None = None
     checker_status: str = "not_required"
     checker_call_count: int = 0
@@ -356,6 +358,10 @@ class ShadowAgentService:
             remaining_deadline_ms=deadline.remaining_ms(),
             terminal_submission_missing=result.terminal_submission_missing,
             terminal_submission_continuation_count=result.terminal_submission_continuation_count,
+            terminal_continuation_triggered=result.terminal_continuation_triggered,
+            terminal_tool_calls=[
+                tc.model_dump(mode="json") for tc in result.terminal_tool_calls
+            ],
             postcondition_status=(
                 "passed" if result.submission else None
             ),

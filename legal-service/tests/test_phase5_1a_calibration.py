@@ -31,8 +31,8 @@ def _settings(*, reasoning_effort: str | None = None) -> Settings:
 # --- A. Reason-effort configuration and flow ---
 
 
-def test_default_reasoning_effort_is_medium() -> None:
-    assert _settings().default_agent_reasoning_effort == "medium"
+def test_default_reasoning_effort_is_low() -> None:
+    assert _settings().default_agent_reasoning_effort == "low"
 
 
 def test_reasoning_effort_can_be_overridden_to_low() -> None:
@@ -53,11 +53,11 @@ def test_reasoning_effort_reaches_agent_policy() -> None:
     assert policy.tool_choice == "auto"
 
 
-def test_agent_policy_default_effort_is_medium_baseline() -> None:
+def test_agent_policy_default_effort_is_low_baseline() -> None:
     settings = _settings()
     with patch("app.services.agent_policy_service.get_settings", return_value=settings):
         policy = AgentPolicyService().build_policy(mode="default", experiment_arm="A")
-    assert policy.reasoning_effort == "medium"
+    assert policy.reasoning_effort == "low"
 
 
 async def test_responses_adapter_sends_reasoning_effort() -> None:

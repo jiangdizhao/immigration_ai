@@ -217,6 +217,7 @@ class AgentExecutionMetrics(StrictContract):
     deadline_exceeded_stage: str | None = Field(default=None, max_length=255)
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = Field(default=0, ge=0, le=1)
+    terminal_continuation_triggered: bool = False
     answer_agent_latency_ms: float = Field(default=0, ge=0)
     fact_check_latency_ms: float = Field(default=0, ge=0)
     total_latency_ms: float = Field(default=0, ge=0)

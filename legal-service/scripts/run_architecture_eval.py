@@ -258,7 +258,9 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
     text, state_patch contents, evidence refs, URLs, titles, queries, or PII.
     """
     tool_call_by_id: dict[str, dict[str, Any]] = {}
-    for call in getattr(trace, "tool_calls", []) or []:
+    all_tool_calls = list(getattr(trace, "tool_calls", []) or [])
+    all_tool_calls.extend(getattr(trace, "terminal_tool_calls", []) or [])
+    for call in all_tool_calls:
         call_id = call.get("tool_call_id")
         if call_id and call.get("tool_name") == "submit_answer":
             tool_call_by_id[call_id] = call
@@ -328,6 +330,9 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
             "duplicate_citation_count": contract_diagnostics.get("duplicate_citation_count"),
             "claim_text_not_found_count": contract_diagnostics.get("claim_text_not_found_count"),
             "citation_evidence_missing_count": contract_diagnostics.get("citation_evidence_missing_count"),
+            "invalid_offset_count": contract_diagnostics.get("invalid_offset_count"),
+            "empty_offset_span_count": contract_diagnostics.get("empty_offset_span_count"),
+            "text_offset_conflict_normalized_count": contract_diagnostics.get("text_offset_conflict_normalized_count"),
         })
     return attempts
 
@@ -485,6 +490,7 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "decisive_claim_count": len(decisive_claims),
         "repair_count": trace.terminal_submission_continuation_count,
         "terminal_submission_missing": trace.terminal_submission_missing,
+        "terminal_continuation_triggered": trace.terminal_continuation_triggered,
         "checker_status": trace.checker_status,
         "checker_call_count": trace.checker_call_count,
         "checker_dropped_claim_count": len(trace.checker_dropped_claim_ids),
@@ -591,6 +597,7 @@ async def _main_async(args: argparse.Namespace) -> int:
             "max_flat_rag_calls": settings.agent_max_flat_rag_calls,
             "retry_viability_threshold_ms": settings.agent_retry_viability_threshold_ms,
             "flat_rag_tool_enabled": settings.flat_rag_tool_enabled,
+            "compact_checker_enabled": settings.compact_checker_enabled,
         },
         "branch": branch,
         "git_sha": sha,

@@ -551,7 +551,8 @@ class TestTerminalSubmission:
         result = await runtime.run_shadow(
             make_runtime_request(user_text="Hello"), deadline=deadline, registry=registry,
         )
-        assert result.terminal_submission_missing is True
+        assert result.terminal_submission_missing is False
+        assert result.terminal_continuation_triggered is True
         assert result.terminal_submission_continuation_count == 1
         assert result.metrics.provider_api_call_count == 2
 
@@ -669,7 +670,11 @@ class TestPhase5ResourceGovernance:
                        registry=None, previous_response_id=None):
             self.call_count += 1
             if self.clock is not None:
-                self.clock.advance_ms(self.advance_ms_per_call)
+                if isinstance(self.advance_ms_per_call, list):
+                    advance_ms = self.advance_ms_per_call.pop(0) if self.advance_ms_per_call else 0.0
+                else:
+                    advance_ms = self.advance_ms_per_call
+                self.clock.advance_ms(advance_ms)
             if self.call_count <= len(self.responses):
                 return self.responses[self.call_count - 1]
             return ProviderResponse(
@@ -852,10 +857,8 @@ class TestPhase5ResourceGovernance:
         )
 
     async def test_answer_research_budget_is_non_resetting_across_calls(self):
-        """Multiple provider continuations triggered by a legitimate nonterminal
-        custom function call (deterministic_utility -> function output) share the
-        SAME non-resetting 32s research budget.  Once cumulative stage time
-        reaches 32s the loop stops; a later continuation is not started."""
+        """Research shares a non-resetting 32s budget, then terminal synthesis
+        uses the remaining absolute deadline."""
         clock = self._FakeClock(value=0.0)
         # Call 1 (stage 0s): emits deterministic_utility -> backend executes the
         # tool and appends a function_call_output -> provider continuation call 2.
@@ -866,8 +869,9 @@ class TestPhase5ResourceGovernance:
             responses=[
                 self._make_utility_call(call_id="util-call-1"),
                 self._make_utility_call(call_id="util-call-2"),
+                make_greeting_response(),
             ],
-            advance_ms_per_call=18000.0,
+            advance_ms_per_call=[18000.0, 18000.0, 0.0],
         )
         budget = ExecutionBudget(
             max_tool_rounds=2, max_provider_calls=3, max_retries=0,
@@ -882,29 +886,19 @@ class TestPhase5ResourceGovernance:
             deadline=deadline,
             registry=create_registry("stage-nonreset"),
         )
-        # Call 1 (stage 0) runs and executes the FIRST utility.  Call 2
-        # (continuation) starts at stage ~18s and requests a SECOND utility, but
-        # by the time it is about to execute, cumulative stage = ~36s > 32s, so
-        # the second utility MUST be denied and a third provider call never
-        # starts.  Only the first utility executes.
-        assert provider.call_count == 2
-        assert result.metrics.provider_api_call_count == 2
-        # Only the FIRST deterministic_utility executed; the second was blocked by
-        # the exhausted 32s answer/research stage.
+        # One research call, one denied post-boundary request, and one terminal
+        # synthesis call.
+        assert provider.call_count == 3
+        assert result.metrics.provider_api_call_count == 3
         assert result.metrics.utility_call_count == 1
         # Cumulative elapsed time exceeded the 32s stage but stayed within 40s.
         assert clock() >= 32.0
         assert clock() < 40.0
-        # No third provider call occurred.
-        assert provider.call_count == 2
-        # No provider call/tool received a fresh 32s stage budget (the loop
-        # stopped at stage exhaustion, not at the 40s absolute deadline).
+        assert result.metrics.submit_answer_call_count == 1
+        # No provider call/tool received a fresh 32s stage budget; terminal
+        # synthesis used the remaining absolute deadline.
         # The absolute 40s deadline was not reset.
-        errs_lower = " ".join(result.errors).lower()
-        assert any(k in errs_lower for k in (
-            "answer/research stage", "deadline exceeded", "max tool rounds",
-            "terminal submission",
-        ))
+        assert result.status == "completed"
 
     async def test_provider_continuation_blocked_after_stage_exhausted(self):
         """A provider continuation cannot start after the 32s answer/research
@@ -983,8 +977,9 @@ class TestPhase5ResourceGovernance:
             responses=[
                 self._make_utility_call(call_id="util-obs-1"),
                 self._make_utility_call(call_id="util-obs-2"),
+                make_greeting_response(),
             ],
-            advance_ms_per_call=18000.0,
+            advance_ms_per_call=[18000.0, 18000.0, 0.0],
         )
         budget = ExecutionBudget(
             max_tool_rounds=2, max_provider_calls=3, max_retries=0,
@@ -1001,18 +996,21 @@ class TestPhase5ResourceGovernance:
         )
         # Ordered provider observations.
         pcs = result.metrics.provider_calls
-        assert len(pcs) == 2
+        assert len(pcs) == 3
         assert pcs[0].call_index == 1
         assert pcs[0].call_kind == "initial"
         assert pcs[1].call_index == 2
         assert pcs[1].call_kind in ("continuation",)
+        assert pcs[2].call_index == 3
+        assert pcs[2].stage == "terminal_synthesis"
+        assert pcs[2].research_stage_remaining_before_ms == 0
         # Timeout allocation and stage remainders observable.
         assert pcs[0].timeout_allocated_ms == 32000
         assert pcs[0].research_stage_remaining_before_ms == 32000
         assert pcs[1].research_stage_remaining_before_ms < 32000
         # Tool observations ordered & timed.
         tcs = result.metrics.tool_calls
-        assert len(tcs) == 1  # only first utility executed; second denied by stage
+        assert len(tcs) == 2  # first utility executed; second was denied after the boundary
         assert tcs[0].tool_name == "deterministic_utility"
         assert tcs[0].governor_denied is False
         assert tcs[0].duration_ms >= 0

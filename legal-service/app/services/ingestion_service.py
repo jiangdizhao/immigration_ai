@@ -42,7 +42,12 @@ class IngestionService:
     def ingest_source_payload(self, db: Session, payload: dict[str, Any]) -> IngestionResult:
         self._validate_payload(payload)
 
-        existing = db.scalar(select(LegalSource).where(LegalSource.url == payload["url"]))
+        source_url = payload.get("url")
+        existing = (
+            db.scalar(select(LegalSource).where(LegalSource.url == source_url))
+            if source_url
+            else None
+        )
         if existing is not None:
             return IngestionResult(
                 path="",
@@ -60,7 +65,7 @@ class IngestionService:
             authority=payload["authority"],
             jurisdiction=payload.get("jurisdiction") or getattr(settings, "canonical_jurisdiction", "Cth"),
             citation_text=payload.get("citation_text"),
-            url=payload["url"],
+            url=source_url,
             effective_date=self._parse_date(payload.get("effective_date")),
             repeal_date=self._parse_date(payload.get("repeal_date")),
             document_version=payload.get("document_version"),
@@ -86,13 +91,18 @@ class IngestionService:
         )
 
     def _validate_payload(self, payload: dict[str, Any]) -> None:
-        required_fields = ["title", "source_type", "authority", "url", "sections"]
+        required_fields = ["title", "source_type", "authority", "sections"]
         missing = [field for field in required_fields if not payload.get(field)]
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
         if payload["source_type"] not in {"guidance", "legislation", "case"}:
             raise ValueError("source_type must be one of: guidance, legislation, case")
+
+        metadata = payload.get("metadata_json") or {}
+        evidence_origin = payload.get("evidence_origin") or metadata.get("evidence_origin")
+        if evidence_origin in {"openai_web_native", "fetched_web"} and not payload.get("url"):
+            raise ValueError("web-origin sources require a genuine url")
 
         sections = payload["sections"]
         if not isinstance(sections, list) or not sections:

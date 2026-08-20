@@ -21,7 +21,9 @@ class LegalSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     authority: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     jurisdiction: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     citation_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    url: Mapped[str] = mapped_column(String(1000), nullable=False, unique=True)
+    # Optional publication metadata. Local corpus identity is source/chunk/text
+    # provenance, not the existence of a web URL.
+    url: Mapped[str | None] = mapped_column(String(1000), nullable=True, unique=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     repeal_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     document_version: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -64,7 +64,12 @@ class AgentSubmissionValidator:
     def __init__(self, registry: RequestEvidenceRegistry) -> None:
         self._registry = registry
 
-    def validate(self, submission: AgentSubmissionV2) -> ValidationResult:
+    def validate(
+        self,
+        submission: AgentSubmissionV2,
+        *,
+        allow_overlapping_claims: bool = False,
+    ) -> ValidationResult:
         """Validate a submission.
 
         Returns ValidationResult with valid=True if all checks pass.
@@ -72,7 +77,11 @@ class AgentSubmissionValidator:
         result = ValidationResult(valid=True)
 
         # 1. Validate claim structure
-        self._validate_claims(submission, result)
+        self._validate_claims(
+            submission,
+            result,
+            allow_overlapping_claims=allow_overlapping_claims,
+        )
 
         # 2. Validate evidence refs are registered
         self._validate_evidence_refs(submission, result)
@@ -92,6 +101,8 @@ class AgentSubmissionValidator:
         self,
         submission: AgentSubmissionV2,
         result: ValidationResult,
+        *,
+        allow_overlapping_claims: bool = False,
     ) -> None:
         """Validate claim structure and spans."""
         draft_length = len(submission.draft_markdown)
@@ -134,13 +145,14 @@ class AgentSubmissionValidator:
                     )
 
             # Check for overlapping spans (decisive claims shouldn't overlap)
-            for start, end, other_id in seen_spans:
-                if claim.draft_start < end and claim.draft_end > start:
-                    result.add_error(
-                        code="CLAIM_SPAN_OVERLAP",
-                        field_path=f"claims.{claim.claim_id}",
-                        affected_claim_ids=[claim.claim_id, other_id],
-                    )
+            if not allow_overlapping_claims:
+                for start, end, other_id in seen_spans:
+                    if claim.draft_start < end and claim.draft_end > start:
+                        result.add_error(
+                            code="CLAIM_SPAN_OVERLAP",
+                            field_path=f"claims.{claim.claim_id}",
+                            affected_claim_ids=[claim.claim_id, other_id],
+                        )
 
             seen_spans.append((claim.draft_start, claim.draft_end, claim.claim_id))
 

@@ -297,6 +297,7 @@ class AgentObservabilityService:
         observation = self._require_turn()
         observation.metrics.terminal_submission_missing = missing
         observation.metrics.terminal_submission_continuation_count = continuation_count
+        observation.metrics.terminal_continuation_triggered = continuation_count > 0
 
     def record_political_gate(
         self,

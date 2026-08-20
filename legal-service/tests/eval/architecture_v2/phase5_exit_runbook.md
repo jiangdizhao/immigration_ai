@@ -47,6 +47,7 @@ export FLAT_RAG_TOOL_ENABLED=false
 export DEFAULT_AGENT_REASONING_EFFORT=low
 export AGENT_MAX_FLAT_RAG_CALLS=1
 export AGENT_RETRY_VIABILITY_THRESHOLD_MS=8000
+export COMPACT_CHECKER_ENABLED=false
 "$IMMIGRATION_AI_PYTHON" -m scripts.run_architecture_eval \
   --manifest tests/eval/architecture_v2/pilot_manifest.json \
   --stage stage_1 \
@@ -150,6 +151,7 @@ export FLAT_RAG_TOOL_ENABLED=true
 export DEFAULT_AGENT_REASONING_EFFORT=low
 export AGENT_MAX_FLAT_RAG_CALLS=1
 export AGENT_RETRY_VIABILITY_THRESHOLD_MS=8000
+export COMPACT_CHECKER_ENABLED=false
 "$IMMIGRATION_AI_PYTHON" -m scripts.run_architecture_eval \
   --manifest tests/eval/architecture_v2/pilot_manifest.json \
   --arms luna_default_local_web \

@@ -473,7 +473,7 @@ class TestCanonicalEvidenceProvenance:
 
     @staticmethod
     def _source(
-        *, source_id: str, title: str, url: str, authority: str = "Federal Register of Legislation"
+        *, source_id: str, title: str, url: str | None, authority: str = "Federal Register of Legislation"
     ) -> SimpleNamespace:
         return SimpleNamespace(
             id=source_id,
@@ -489,20 +489,14 @@ class TestCanonicalEvidenceProvenance:
             status="active",
         )
 
-    def test_split_schedule_inherits_only_a_unique_same_document_url(self):
+    def test_url_less_split_schedule_builds_local_evidence(self):
         from app.services.canonical_evidence_service import CanonicalEvidenceService
         from app.services.request_evidence_registry import RequestEvidenceRegistry
 
         schedule_source = self._source(
             source_id="schedule-source",
             title="MIGRATION REGULATIONS 1994 - SCHEDULE 2 Provisions",
-            url="",
-        )
-        parent_source = self._source(
-            source_id="parent-source",
-            title="Migration Regulations 1994 - selected provisions",
-            url="https://www.legislation.gov.au/F1996B03551/latest/text",
-            authority="Commonwealth of Australia",
+            url=None,
         )
         chunk = SimpleNamespace(
             id="schedule-chunk",
@@ -513,12 +507,8 @@ class TestCanonicalEvidenceProvenance:
             text="Exact local Schedule text.",
         )
 
-        class FakeDb:
-            def scalars(self, _statement):
-                return [parent_source]
-
         registry = RequestEvidenceRegistry(request_id="partial-provenance")
-        evidence, evidence_ref = CanonicalEvidenceService(FakeDb())._build_from_loaded(
+        evidence, evidence_ref = CanonicalEvidenceService(object())._build_from_loaded(
             source=schedule_source,
             chunk=chunk,
             tool_call_id="call-1",
@@ -529,21 +519,22 @@ class TestCanonicalEvidenceProvenance:
         assert evidence.evidence_ref == evidence_ref
         assert evidence.canonical_source_id == "schedule-source"
         assert evidence.canonical_chunk_id == "schedule-chunk"
-        assert evidence.canonical_url == parent_source.url
+        assert evidence.canonical_url is None
+        assert evidence.provenance_complete is True
+        assert evidence.source_authenticity == "unverified"
+        assert evidence.document_version is None
         assert evidence.content_hash == hashlib.sha256(chunk.text.encode()).hexdigest()
-        assert not evidence.provenance_complete
         assert registry.resolve_evidence(evidence_ref).canonical_chunk_id == "schedule-chunk"
 
-    def test_ambiguous_parent_urls_fail_closed(self):
+    def test_ambiguous_parent_urls_do_not_invalidate_local_chunk(self):
         from app.services.canonical_evidence_service import (
-            CanonicalEvidenceError,
             CanonicalEvidenceService,
         )
 
         schedule_source = self._source(
             source_id="schedule-source",
             title="Migration Regulations 1994 - Schedule 1 Classes",
-            url="",
+            url=None,
         )
         first_parent = self._source(
             source_id="parent-a",
@@ -556,14 +547,23 @@ class TestCanonicalEvidenceProvenance:
             url="https://www.legislation.gov.au/F1996B03551/other",
         )
 
-        class FakeDb:
-            def scalars(self, _statement):
-                return [first_parent, second_parent]
-
-        with pytest.raises(CanonicalEvidenceError) as exc_info:
-            CanonicalEvidenceService(FakeDb())._resolve_canonical_url(schedule_source)
-
-        assert exc_info.value.code == "CANONICAL_URL_UNAVAILABLE"
+        chunk = SimpleNamespace(
+            id="schedule-chunk",
+            source_id="schedule-source",
+            section_ref="3001",
+            heading="Additional criteria",
+            chunk_index=1,
+            text="Exact local Schedule text.",
+        )
+        evidence, _ = CanonicalEvidenceService(object())._build_from_loaded(
+            source=schedule_source,
+            chunk=chunk,
+            tool_call_id="call-ambiguous",
+            registry=None,
+            provision_override=None,
+        )
+        assert evidence.canonical_url is None
+        assert evidence.canonical_chunk_id == "schedule-chunk"
 
 
 class TestAuthorityKindNormalization:

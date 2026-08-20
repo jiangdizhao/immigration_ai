@@ -71,11 +71,11 @@ class CanonicalLocalEvidenceRef(EvidenceRefBase):
     canonical_source_id: str = Field(min_length=1, max_length=255)
     canonical_chunk_id: str | None = Field(default=None, min_length=1, max_length=255)
     document_id: str = Field(min_length=1, max_length=500)
-    document_version: str = Field(min_length=1, max_length=255)
+    document_version: str | None = Field(default=None, min_length=1, max_length=255)
     provision_or_span: str = Field(min_length=1, max_length=1000)
     effective_from: date | None = None
     effective_to: date | None = None
-    canonical_url: str = Field(pattern=r"^https://", max_length=2000)
+    canonical_url: str | None = Field(default=None, pattern=r"^https://", max_length=2000)
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     text: str = Field(min_length=1, max_length=20000)
 
