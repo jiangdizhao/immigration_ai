@@ -321,6 +321,10 @@ class ShadowAgentService:
             tool_call_count=result.metrics.tool_call_count,
             tool_round_count=result.metrics.tool_round_count,
             web_search_call_count=result.metrics.web_search_call_count,
+            search_privacy_violation_count=result.metrics.search_privacy_violation_count,
+            search_privacy_violation_categories=dict(
+                result.metrics.search_privacy_violation_categories
+            ),
             native_web_search_call_count=result.metrics.native_web_search_call_count,
             native_web_source_count=result.metrics.native_web_source_count,
             native_web_citation_count=result.metrics.native_web_citation_count,

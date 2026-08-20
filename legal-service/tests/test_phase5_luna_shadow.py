@@ -1140,6 +1140,27 @@ class TestPIIGuard:
         result = guard.check_query("Client name is John Smith visa application")
         assert result.allowed is False
 
+    def test_schedule_criteria_are_not_phones(self):
+        for q in (
+            "Schedule 3 criteria 3001 3002 3003 3004",
+            "Migration Regulations Schedule 3 3001 3002 3003",
+            "visa subclass 400 482 186 494",
+            "Schedule 2 criterion 820.211 and Schedule 3 criteria 3001 3002",
+            "Migration Act sections 100, 101, 102 of 1958",
+        ):
+            assert SearchPrivacyGuard().check_query(q).allowed is True
+
+    def test_real_phone_pii_still_blocked(self):
+        for q in (
+            "Call 0401 234 567",
+            "Phone (02) 9876 5432",
+            "Contact +61 2 9876 5432",
+            "Call +44 20 7946 0958",
+        ):
+            result = SearchPrivacyGuard().check_query(q)
+            assert result.allowed is False
+            assert result.violation_categories.get("phone", 0) >= 1
+
 
 # ---------------------------------------------------------------------------
 # Tests: Arm A and Arm B tools
@@ -2018,7 +2039,11 @@ class TestNativeEvidenceFlow:
         assert first.result.data["errors"][0]["code"] == "INVALID_EVIDENCE_REF_FORMAT"
         assert first.result.data["available_evidence_refs"] == [ref]
         assert first.result.data["available_native_web_evidence"][0]["evidence_ref"] == ref
-        assert "native_web_citation is non-null" in first.result.data["repair_instruction"]
+        repair = first.result.data.get("repair_instruction", "")
+        assert "native_web_locators" in repair
+        assert "controlling" in repair
+        assert "exact-text" in repair or "exact text" in repair
+        assert "native_web_citation is non-null" not in repair
 
         repaired = dict(base_arguments)
         repaired["claims"] = [dict(base_arguments["claims"][0], evidence_refs=[ref])]

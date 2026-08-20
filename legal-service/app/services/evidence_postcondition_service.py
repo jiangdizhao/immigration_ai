@@ -31,7 +31,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from app.schemas.agent import AgentClaim, AgentSubmissionV2
@@ -49,6 +49,13 @@ from app.services.request_evidence_registry import (
 logger = logging.getLogger(__name__)
 
 PostconditionStatus = Literal["passed", "failed", "not_required"]
+
+
+def _increment_count(counter: dict[str, Any], key: Any) -> None:
+    """Increment a content-free category counter (diagnostics only)."""
+    label = str(key)
+    counter[label] = counter.get(label, 0) + 1
+
 
 # Claim types that require evidence for decisive materiality
 EVIDENCE_REQUIRED_CLAIM_TYPES = {
@@ -117,7 +124,7 @@ def evaluate_native_web_applicability(
             basis="explicit_metadata",
         )
 
-    if not evidence.provenance_complete or evidence.native_web_citation is None:
+    if not evidence.provenance_complete:
         return NativeWebApplicability(applicable=False, basis="unknown")
     if as_of_date is None:
         return NativeWebApplicability(applicable=False, basis="unknown")
@@ -172,6 +179,11 @@ class ClaimEvaluation:
     status: Literal["supported", "insufficient", "not_required", "invalid_ref"]
     reasons: list[str] = field(default_factory=list)
     evidence_refs: list[str] = field(default_factory=list)
+    # Phase-5 content-safe classification of evidence attached to this claim.
+    # Counts ONLY (authenticity/authority-kind/binding-status/type/native
+    # applicability basis); never refs, URLs, titles, or text.  This is
+    # diagnostic observability only and does not affect acceptance.
+    evidence_classification: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -311,6 +323,17 @@ class EvidencePostconditionService:
         reasons: list[str] = []
         valid_evidence_count = 0
         controlling_evidence_count = 0
+        # Phase-5 content-safe aggregate classification of attached evidence.
+        evidence_classification: dict[str, Any] = {
+            "evidence_count": len(claim.evidence_refs),
+            "source_authenticity_counts": {},
+            "authority_kind_counts": {},
+            "binding_status_counts": {},
+            "evidence_type_counts": {},
+            "native_applicability_basis_counts": {},
+            "controlling_candidate_count": 0,
+            "suitable_evidence_count": 0,
+        }
 
         for ref in claim.evidence_refs:
             try:
@@ -345,6 +368,27 @@ class EvidencePostconditionService:
             # when the exact span is sufficient for this bounded claim.
             reasons.extend(suitability["reasons"])
 
+            # Content-safe evidence classification (counts only; no
+            # refs/URLs/titles/text).  Distinguishes source-selection from
+            # normalization/attachment defects without changing acceptance.
+            _increment_count(evidence_classification["source_authenticity_counts"], evidence.source_authenticity)
+            _increment_count(evidence_classification["authority_kind_counts"], evidence.authority_kind)
+            _increment_count(evidence_classification["binding_status_counts"], evidence.binding_status)
+            _increment_count(evidence_classification["evidence_type_counts"], evidence.evidence_origin)
+            if isinstance(evidence, NativeWebEvidenceRef):
+                _increment_count(
+                    evidence_classification["native_applicability_basis_counts"],
+                    evaluate_native_web_applicability(evidence, as_of_date).basis,
+                )
+            if (
+                evidence.source_authenticity in {"canonical_official", "official_copy"}
+                and evidence.authority_kind in {"statute", "delegated_legislation", "binding_precedent"}
+                and evidence.binding_status == "binding"
+            ):
+                evidence_classification["controlling_candidate_count"] += 1
+            if suitability.get("suitable"):
+                evidence_classification["suitable_evidence_count"] += 1
+
         if claim.claim_type in ("legal_rule", "legal_application") and controlling_evidence_count == 0:
             reasons.append(
                 "Decisive legal claims require controlling binding legal authority"
@@ -356,6 +400,7 @@ class EvidencePostconditionService:
                 status="insufficient",
                 reasons=reasons,
                 evidence_refs=claim.evidence_refs,
+                evidence_classification=evidence_classification,
             )
 
         if valid_evidence_count > 0:
@@ -366,6 +411,7 @@ class EvidencePostconditionService:
                 status="supported",
                 reasons=reasons,
                 evidence_refs=claim.evidence_refs,
+                evidence_classification=evidence_classification,
             )
         else:
             return ClaimEvaluation(
@@ -375,6 +421,7 @@ class EvidencePostconditionService:
                 status="insufficient",
                 reasons=reasons or ["No suitable evidence found"],
                 evidence_refs=claim.evidence_refs,
+                evidence_classification=evidence_classification,
             )
 
     def _evaluate_evidence_suitability(

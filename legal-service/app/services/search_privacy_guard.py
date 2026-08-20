@@ -44,8 +44,16 @@ _EMAIL_PATTERN: Pattern[str] = re.compile(
 )
 
 # Phone number (Australian and international)
+# Generic international phones require an explicit "+" prefix.  Arbitrary
+# grouped digit sequences (visa subclasses, Schedule criteria, clause numbers)
+# are NOT phone numbers.
+# Australian mobile: 04XX XXX XXX / 04XXXXXXXX
+# Australian landline: 0[2-478] XXXX XXXX or (0[2-478]) XXXX XXXX
+# +61 Australian: +61 X XXXX XXXX (leading +, spacing-tolerant)
+# Generic international: literal +<1-3 digits> + groups (leading + only)
+# Bare grouped digits without "+" are never phone numbers.
 _PHONE_PATTERN: Pattern[str] = re.compile(
-    r"\b(?:\+?61\s*[2-478](?:\s*\d){7,8}|\+?\d{1,3}[\s-]?\d{3,4}[\s-]?\d{3,4}[\s-]?\d{3,4}|0\s*[2-478]\s*\d{4}\s*\d{4})\b"
+    r"(?:\b04\d{2}(?:\s*\d{3}){2}|\b0\s*[2-478]\s*\d{4}\s*\d{4}|\(0\s*[2-478]\)\s*\d{4}\s*\d{4}|\+61[\s-]?\s*[2-478]\s*(?:\d\s*){7,8}|\+\d{1,3}\s*\(?\d{1,4}\)?(?:[\s-]\d{1,4}){2,5})\b"
 )
 
 # Date of birth patterns (various formats)

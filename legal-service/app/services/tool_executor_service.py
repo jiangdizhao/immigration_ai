@@ -30,6 +30,10 @@ from app.schemas.tools import (
 )
 from app.services.agent_submission_validator import AgentSubmissionValidator
 from app.services.evidence_postcondition_service import EvidencePostconditionService
+from app.services.native_web_locator_resolver import (
+    LOCATOR_SCHEMA_INVALID,
+    NativeWebLocatorResolver,
+)
 from app.services.request_evidence_registry import RequestEvidenceRegistry
 from app.services.search_privacy_guard import SearchPrivacyGuard
 from app.services.terminal_submission_policy import (
@@ -42,6 +46,17 @@ from app.tools.base import ToolExecutionError, build_tool_result
 from app.tools.deterministic_utility import execute_utility
 
 logger = logging.getLogger(__name__)
+
+
+def _dedup_ordered(refs: list[str]) -> list[str]:
+    """Deduplicate canonical refs preserving first-occurrence order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for ref in refs:
+        if ref not in seen:
+            seen.add(ref)
+            out.append(ref)
+    return out
 
 
 def _find_claim_text_spans(*, draft: str, claim_text: str) -> list[tuple[int, int]]:
@@ -142,6 +157,121 @@ def _normalize_claim_spans(
         normalized_claims.append(claim)
 
     return normalized_claims, errors
+
+
+# ---------------------------------------------------------------------------
+# Phase-5 content-safe postcondition diagnostics
+#
+# Maps the deterministic evidence-postcondition reasons to STABLE, content-free
+# reason categories.  These categories explain WHY a submission was rejected
+# without exposing claim text, URLs, raw evidence refs, source titles, search
+# queries, or PII.  The categories are derived only from the typed
+# ClaimEvaluation reasons produced by EvidencePostconditionService, never from
+# raw model or evidence content.
+#
+# This mapping is EXHAUSTIVE over the deterministic reason strings currently
+# generated in evidence_postcondition_service.py; expected current reasons must
+# not fall into OTHER (OTHER is reserved for genuinely novel/unknown reasons).
+# ---------------------------------------------------------------------------
+
+_POSTCONDITION_REASON_CODES: dict[str, str] = {
+    # --- evidence-requirement / suitability ---
+    "No evidence refs for decisive claim": "NO_EVIDENCE",
+    "No suitable evidence found": "NO_SUITABLE_EVIDENCE",
+    "Evidence ref not registered": "EVIDENCE_REF_NOT_REGISTERED",
+    "Research marked complete despite unresolved cross-references": "UNRESOLVED_CROSS_REFERENCE",
+    # --- controlling authority ---
+    "Decisive legal claims require controlling binding legal authority": "NO_CONTROLLING_AUTHORITY",
+    "Legal claims require verified official evidence": "UNVERIFIED_SOURCE",
+    "Evidence is not binding legal authority": "NON_BINDING_AUTHORITY",
+    "Evidence authority kind is not controlling law": "NON_CONTROLLING_AUTHORITY_KIND",
+    "Official guidance is supplementary, not controlling": "SUPPLEMENTARY_GUIDANCE_ONLY",
+    # --- native web / LightRAG ---
+    "Native web evidence lacks exact text/hash": "NATIVE_WEB_NO_EXACT_TEXT",
+    "Native evidence applicability basis": "NATIVE_WEB_APPLICABILITY",
+    "LightRAG relationship alone cannot support legal claims": "DERIVED_RELATIONSHIP_ONLY",
+    "Official guidance is non-binding": "SUPPLEMENTARY_GUIDANCE_ONLY",
+    # --- provenance / version / effective interval ---
+    "Evidence provenance incomplete": "PROVENANCE_INCOMPLETE",
+    "Evidence has no applicable document version": "NO_DOCUMENT_VERSION",
+    "Evidence has no effective interval for claim date": "NO_EFFECTIVE_INTERVAL",
+    "Evidence not yet effective as of claim date": "NOT_YET_EFFECTIVE",
+    "Evidence no longer effective as of claim date": "NO_LONGER_EFFECTIVE",
+    "Complete legal claims require an applicable effective interval": "NO_APPLICABLE_INTERVAL",
+    "Current facts require verified evidence": "CURRENT_FACT_UNVERIFIED",
+    "Canonical evidence has no document version": "NO_DOCUMENT_VERSION",
+    "Current evidence has no document version": "NO_DOCUMENT_VERSION",
+    "Canonical evidence has no effective interval": "NO_EFFECTIVE_INTERVAL",
+    "Current evidence has no effective interval": "NO_EFFECTIVE_INTERVAL",
+    # --- supporting / informational reasons (not failures) ---
+    "Supporting claim; evidence optional": "SUPPORTING_CLAIM_OPTIONAL",
+    "Applicability unknown": "APPLICABILITY_UNKNOWN",
+}
+
+
+def _reason_category(reason: str) -> str:
+    """Map a postcondition reason string to a stable content-free code."""
+    for prefix, code in _POSTCONDITION_REASON_CODES.items():
+        if prefix in reason:
+            return code
+    return "OTHER"
+
+
+def _postcondition_diagnostics(postcondition_result: Any) -> dict[str, Any]:
+    """Build content-safe diagnostics from a postcondition result.
+
+    Returns ONLY structural, non-sensitive metadata:
+    - evaluated_claim_count: number of claims evaluated by the postcondition
+    - insufficient_claim_count: claims with status == "insufficient"
+    - invalid_ref_claim_count: claims with status == "invalid_ref"
+    - claim_status_counts: stable claim status -> count (never claim text)
+    - affected_claim_ids: claim IDs (IDs only, allowed by existing policy)
+    - postcondition_reason_categories: stable reason-category code -> count
+    - claim_evidence_classification: per-claim content-safe evidence counts:
+      source_authenticity_counts, authority_kind_counts, binding_status_counts,
+      evidence_type_counts, native_applicability_basis_counts,
+      controlling_candidate_count, suitable_evidence_count,
+      evidence_count (from the typed ClaimEvaluation.evidence_classification).
+
+    Structured from the typed ClaimEvaluation objects.  Never exposes claim
+    text, URLs, raw evidence refs, source titles, search queries, or PII.
+    """
+    evaluations = list(getattr(postcondition_result, "claim_evaluations", []) or [])
+
+    claim_status_counts: dict[str, int] = {}
+    reason_counts: dict[str, int] = {}
+    affected: list[str] = []
+    per_claim: dict[str, dict[str, Any]] = {}
+
+    for evaluation in evaluations:
+        status = str(getattr(evaluation, "status", "unknown") or "unknown")
+        claim_status_counts[status] = claim_status_counts.get(status, 0) + 1
+        claim_id = str(getattr(evaluation, "claim_id", "") or "")
+        if status in ("insufficient", "invalid_ref") and claim_id:
+            affected.append(claim_id)
+            for reason in list(getattr(evaluation, "reasons", []) or []):
+                category = _reason_category(str(reason))
+                reason_counts[category] = reason_counts.get(category, 0) + 1
+            # Content-safe per-claim evidence classification (counts only).
+            classification = dict(
+                getattr(evaluation, "evidence_classification", None) or {}
+            )
+            if claim_id and classification:
+                per_claim[claim_id] = classification
+
+    return {
+        "evaluated_claim_count": len(evaluations),
+        "insufficient_claim_count": sum(
+            1 for e in evaluations if getattr(e, "status", None) == "insufficient"
+        ),
+        "invalid_ref_claim_count": sum(
+            1 for e in evaluations if getattr(e, "status", None) == "invalid_ref"
+        ),
+        "claim_status_counts": claim_status_counts,
+        "affected_claim_ids": affected,
+        "postcondition_reason_categories": reason_counts,
+        "claim_evidence_classification": per_claim,
+    }
 
 
 @dataclass(slots=True)
@@ -370,6 +500,21 @@ class ToolExecutorService:
                 )
             args["claims"] = normalized_claims
 
+            # v2.1.2: resolve transient NativeWebLocators (same-request
+            # provider-observed URLs) into canonical web:<opaque> refs BEFORE
+            # canonical AgentSubmissionV2 construction.  This is deterministic
+            # canonicalization, not a terminal-summission correction.
+            locator_error = self._resolve_native_web_locators(
+                args=args,
+                context=context,
+            )
+            if locator_error is not None:
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=[locator_error],
+                )
+
             try:
                 submission = AgentSubmissionV2(**args)
             except (TypeError, ValueError):
@@ -486,6 +631,10 @@ class ToolExecutorService:
                     rejected=rejected,
                     context=context,
                 )
+                # Phase-5: content-safe postcondition diagnostics explaining WHY.
+                rejected_data["postcondition_diagnostics"] = _postcondition_diagnostics(
+                    postcondition_result
+                )
 
                 return build_tool_result(
                     tool_call_id=tool_call.call_id,
@@ -521,6 +670,70 @@ class ToolExecutorService:
                 duration_ms=0,
                 error={"code": "SUBMIT_ANSWER_ERROR", "message": str(exc)},
             ), None, None
+
+    def _resolve_native_web_locators(
+        self,
+        *,
+        args: dict[str, Any],
+        context: ToolExecutorContext,
+    ) -> SubmissionError | None:
+        """Resolve transient NativeWebLocators into canonical web:<opaque> refs.
+
+        Deterministic same-request canonicalization performed BEFORE canonical
+        AgentSubmissionV2 construction and validation.  NOT a correction; does
+        not consume the repair allowance.
+        """
+        resolver = NativeWebLocatorResolver(context.registry)
+        claims = args.get("claims")
+        if isinstance(claims, list):
+            for i, claim in enumerate(claims):
+                if not isinstance(claim, dict):
+                    continue
+                locators = claim.get("native_web_locators")
+                if not locators:
+                    continue
+                # evidence_refs absent -> treat as [] for locator merge;
+                # present-but-not-list -> never silently repair.
+                existing = claim.get("evidence_refs")
+                if existing is None:
+                    existing = []
+                elif not isinstance(existing, list):
+                    return SubmissionError(code="SUBMISSION_SCHEMA_INVALID",
+                                           field=f"claims.{i}.evidence_refs")
+                resolution = resolver.resolve(locators)
+                if resolution.schema_invalid_count > 0:
+                    return SubmissionError(code=LOCATOR_SCHEMA_INVALID,
+                                           field=f"claims.{i}.native_web_locators")
+                if resolution.rejected or resolution.resolved_count != len(locators):
+                    codes = resolution.rejection_codes or ["NATIVE_WEB_LOCATOR_NOT_OBSERVED"]
+                    return SubmissionError(code=codes[0], field=f"claims.{i}.native_web_locators")
+                resolved_refs = list(resolution.resolved.values())
+                claim["evidence_refs"] = _dedup_ordered(list(existing) + resolved_refs)
+                del claim["native_web_locators"]
+
+        citations = args.get("citations")
+        if isinstance(citations, list):
+            for i, citation in enumerate(citations):
+                if not isinstance(citation, dict):
+                    continue
+                has_ref = bool(citation.get("evidence_ref"))
+                has_locator = bool(citation.get("native_web_locator"))
+                if not has_ref and not has_locator:
+                    return SubmissionError(code="CITATION_EVIDENCE_MISSING", field=f"citations.{i}")
+                if has_ref and has_locator:
+                    return SubmissionError(code="CITATION_EVIDENCE_AMBIGUOUS", field=f"citations.{i}")
+                if not has_locator:
+                    continue
+                res = resolver.resolve([citation.get("native_web_locator")])
+                if res.schema_invalid_count > 0:
+                    return SubmissionError(code=LOCATOR_SCHEMA_INVALID,
+                                           field=f"citations.{i}.native_web_locator")
+                if res.rejected or res.resolved_count != 1:
+                    codes = res.rejection_codes or ["NATIVE_WEB_LOCATOR_NOT_OBSERVED"]
+                    return SubmissionError(code=codes[0], field=f"citations.{i}.native_web_locator")
+                citation["evidence_ref"] = list(res.resolved.values())[0]
+                del citation["native_web_locator"]
+        return None
 
     def _reject_submission(
         self,
@@ -589,10 +802,14 @@ class ToolExecutorService:
             })
         data["available_native_web_evidence"] = web_evidence
         data["repair_instruction"] = (
-            "For decisive current claims, use only an available evidence ref whose "
-            "native_web_citation is non-null. If no such ref is available, submit "
-            "a clearly evidence-insufficient/incomplete answer with no unsupported "
-            "decisive current claims; do not treat a URL or source-only ref as proof."
+            "Use backend-verified available evidence for decisive claims. "
+            "Controlling legal claims require suitable controlling authority; "
+            "source-only native web evidence does not become exact-text evidence. "
+            "You may supply a provider-observed same-request URL via "
+            "native_web_locators for built-in web_search sources; the backend "
+            "verifies and converts it to a canonical web:<opaque> ref. If suitable "
+            "verified evidence is unavailable, submit an evidence-insufficient or "
+            "incomplete answer rather than inventing evidence."
         )
         return data
 

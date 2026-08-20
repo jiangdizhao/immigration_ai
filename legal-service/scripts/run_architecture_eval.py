@@ -176,6 +176,10 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
             1 for item in native_web_evidence
             if isinstance(item, dict) and item.get("native_web_citation") is not None
         )
+        # Phase-5: content-safe postcondition diagnostics (counts, stable
+        # reason categories, and per-claim evidence classification; never
+        # claim text/URLs/refs/titles/queries/PII).
+        diagnostics = data.get("postcondition_diagnostics") or {}
         attempts.append({
             "attempt_index": len(attempts) + 1,
             "tool_call_id": call_id,
@@ -188,6 +192,13 @@ def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
             "available_evidence_ref_count": len(available_evidence_refs),
             "available_native_web_evidence_count": len(native_web_evidence),
             "available_native_web_cited_evidence_count": native_cited,
+            "evaluated_claim_count": diagnostics.get("evaluated_claim_count"),
+            "insufficient_claim_count": diagnostics.get("insufficient_claim_count"),
+            "invalid_ref_claim_count": diagnostics.get("invalid_ref_claim_count"),
+            "claim_status_counts": diagnostics.get("claim_status_counts"),
+            "affected_claim_ids": diagnostics.get("affected_claim_ids"),
+            "postcondition_reason_categories": diagnostics.get("postcondition_reason_categories"),
+            "claim_evidence_classification": diagnostics.get("claim_evidence_classification"),
         })
     return attempts
 
