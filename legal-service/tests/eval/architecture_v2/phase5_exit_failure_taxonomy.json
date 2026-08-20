@@ -1,0 +1,26 @@
+{
+  "schema_version": "architecture_eval.phase5_exit_failure_taxonomy.v1",
+  "frozen_at": "2026-08-20",
+  "classification_policy": "Use deterministic trace fields for objective signals. A1-A5 and A9 are automatic only where structured telemetry supports them. A1 requires explicit provider/API evidence. A6-A8 and A10-A12 require evaluator adjudication or explicit review codes. Never classify from question-specific regexes.",
+  "categories": [
+    {"code": "A1", "name": "provider_api_transient_failure", "automatic": true, "description": "Provider/API transient failure only when explicit provider/API telemetry supports it; generic status=error is not sufficient."},
+    {"code": "A2", "name": "deadline_exhaustion", "automatic": true, "description": "Timeout or an emitted deadline-exceeded stage."},
+    {"code": "A3", "name": "missing_submit_answer", "automatic": true, "description": "No accepted terminal submission after the bounded continuation allowance."},
+    {"code": "A4", "name": "privacy_guard_or_adjudicated_leakage_signal", "automatic": true, "description": "Search-privacy guard violation or separately adjudicated leakage signal; guard violation alone is not proof of leakage."},
+    {"code": "A5", "name": "evidence_identity_or_locator_failure", "automatic": true, "description": "Invalid, unregistered, unobserved, ambiguous, guessed, or cross-request evidence identity signal."},
+    {"code": "A6", "name": "poor_source_selection", "automatic": false, "description": "The selected source is not fit for the proposition despite a usable authoritative path."},
+    {"code": "A7", "name": "source_normalization_or_classification_defect", "automatic": false, "description": "Backend source metadata or authority classification is wrong or incomplete."},
+    {"code": "A8", "name": "wrong_claim_to_source_attachment", "automatic": false, "description": "The claim is attached to evidence that does not entail or apply to it."},
+    {"code": "A9", "name": "exact_version_applicability_unavailable", "automatic": true, "description": "The postcondition correctly identifies unavailable exact text, document version, or effective interval."},
+    {"code": "A10", "name": "postcondition_potentially_too_strict", "automatic": false, "description": "Evaluator/legal adjudication concludes that the evidence postcondition is too strict; the A9 pattern alone is insufficient."},
+    {"code": "A11", "name": "luna_reasoning_or_content_error", "automatic": false, "description": "The answer materially misstates, omits, or misapplies the legally relevant issue after evidence review."},
+    {"code": "A12", "name": "expected_phase5_capability_limitation", "automatic": false, "description": "Evaluator-assigned expected Phase-5 capability limitation. Bounded-loop violations remain a separate hard-gate metric."}
+  ],
+  "hard_gate_mapping": {
+    "cross_request_evidence_use": ["A5"],
+    "guessed_or_invalid_canonical_evidence_ref": ["A5"],
+    "privacy_leakage": [],
+    "unbounded_retry_or_tool_loop": [],
+    "unsupported_decisive_legal_claim_accepted": ["A8", "A11"]
+  }
+}

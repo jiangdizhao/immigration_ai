@@ -1,7 +1,7 @@
-"""Phase 5 A/B engineering pilot runner.
+"""Phase 5 A/B engineering and exit-pilot runner.
 
-This runner implements only the Phase 5 evaluation subset required by the
-v2.1.1 migration plan:
+This runner implements the frozen Phase 5 A/B arms required by the v2.1.2
+exit-pilot package:
 
 - Arm A / luna_web: Luna + provider-native web search + utility + submit_answer
 - Arm B / luna_flat_web: Arm A + the existing Phase-4B FlatRagSearchTool
@@ -33,6 +33,16 @@ PHASE5_ARMS = {
     "luna_web": "A",
     "luna_flat_web": "B",
 }
+STATEFUL_MANUAL_EXECUTION_MODE = "stateful_manual"
+EXPECTED_STAGE_ARMS = {
+    "stage_1": frozenset({"luna_web"}),
+    "stage_2": frozenset({"luna_flat_web"}),
+    "stage_3": frozenset({"luna_web", "luna_flat_web"}),
+}
+
+
+def is_stateful_manual_case(case: dict[str, Any]) -> bool:
+    return str(case.get("execution_mode") or "single_turn") == STATEFUL_MANUAL_EXECUTION_MODE
 
 
 def parse_arms(value: str) -> list[str]:
@@ -46,6 +56,18 @@ def parse_arms(value: str) -> list[str]:
             f"unsupported: {','.join(unsupported)}"
         )
     return arms
+
+
+def validate_stage_arms(stage: str | None, arms: list[str]) -> None:
+    expected = EXPECTED_STAGE_ARMS.get(stage or "")
+    if expected is None:
+        return
+    if len(arms) != len(expected) or frozenset(arms) != expected:
+        expected_names = ",".join(sorted(expected))
+        actual_names = ",".join(arms)
+        raise ValueError(
+            f"{stage} requires exactly arms {expected_names}; received {actual_names}"
+        )
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -63,7 +85,20 @@ def load_manifest(path: Path) -> dict[str, Any]:
             raise ValueError("each case requires case_id and question")
         if case_id in seen:
             raise ValueError(f"duplicate case_id: {case_id}")
+        execution_mode = str(item.get("execution_mode") or "single_turn")
+        if execution_mode not in {"single_turn", STATEFUL_MANUAL_EXECUTION_MODE}:
+            raise ValueError(f"unsupported execution_mode for {case_id}: {execution_mode}")
         seen.add(case_id)
+    case_ids = {str(item["case_id"]) for item in cases}
+    for stage_name, stage in (data.get("stages") or {}).items():
+        if not isinstance(stage, dict):
+            raise ValueError(f"stage must be an object: {stage_name}")
+        stage_case_ids = stage.get("case_ids") or []
+        unknown = {str(case_id) for case_id in stage_case_ids} - case_ids
+        if unknown:
+            raise ValueError(
+                f"stage {stage_name} contains unknown case ids: {','.join(sorted(unknown))}"
+            )
     return data
 
 
@@ -72,14 +107,54 @@ def select_cases(
     *,
     case_ids: list[str] | None = None,
     limit: int | None = None,
+    stage: str | None = None,
 ) -> list[dict[str, Any]]:
-    cases = list(manifest["cases"])
+    all_cases = list(manifest["cases"])
+    cases = list(all_cases)
+    if stage:
+        stages = manifest.get("stages") or {}
+        stage_config = stages.get(stage)
+        if not isinstance(stage_config, dict):
+            raise ValueError(f"unknown stage: {stage}")
+        stage_case_ids = stage_config.get("case_ids")
+        if isinstance(stage_case_ids, list):
+            wanted = {str(case_id) for case_id in stage_case_ids}
+            cases = [case for case in cases if case["case_id"] in wanted]
+        elif stage == "stage_3" and stage_config.get("selection"):
+            stage_one = stages.get("stage_1") or {}
+            excluded = {str(case_id) for case_id in stage_one.get("case_ids", [])}
+            cases = [
+                case for case in all_cases
+                if case["case_id"] not in excluded and not is_stateful_manual_case(case)
+            ]
+        else:
+            raise ValueError(f"stage has no executable case selection: {stage}")
+    elif not case_ids:
+        cases = [case for case in all_cases if not is_stateful_manual_case(case)]
     if case_ids:
         wanted = set(case_ids)
+        unknown = wanted - {case["case_id"] for case in all_cases}
+        if unknown:
+            raise ValueError(f"unknown case ids: {','.join(sorted(unknown))}")
+        stateful = {
+            case["case_id"] for case in all_cases
+            if case["case_id"] in wanted and is_stateful_manual_case(case)
+        }
+        if stateful:
+            raise ValueError(
+                "stateful_manual cases require the manual/stateful harness: "
+                f"{','.join(sorted(stateful))}"
+            )
         cases = [case for case in cases if case["case_id"] in wanted]
         missing = wanted - {case["case_id"] for case in cases}
         if missing:
             raise ValueError(f"unknown case ids: {','.join(sorted(missing))}")
+    if stage in {"stage_1", "stage_2"}:
+        stateful = [case["case_id"] for case in cases if is_stateful_manual_case(case)]
+        if stateful:
+            raise ValueError(
+                f"{stage} contains stateful_manual cases: {','.join(sorted(stateful))}"
+            )
     if limit is not None:
         if limit < 1:
             raise ValueError("--limit must be at least 1")
@@ -107,6 +182,35 @@ def _case_as_of_date(case: dict[str, Any]) -> date:
     if value:
         return date.fromisoformat(str(value))
     return datetime.now(timezone.utc).date()
+
+
+def _execution_provenance(
+    *,
+    manifest: dict[str, Any],
+    cases: list[dict[str, Any]],
+    arms: list[str],
+) -> dict[str, Any]:
+    automated_case_ids = {
+        str(case["case_id"])
+        for case in manifest["cases"]
+        if not is_stateful_manual_case(case)
+    }
+    selected_case_ids = {str(case["case_id"]) for case in cases}
+    complete_automated = (
+        selected_case_ids == automated_case_ids
+        and frozenset(arms) == frozenset(PHASE5_ARMS)
+        and len(arms) == len(PHASE5_ARMS)
+    )
+    return {
+        "manifest_defines_complete_pilot_scope": bool(manifest.get("complete_pilot", False)),
+        "selected_case_count": len(cases),
+        "automated_case_count": len(automated_case_ids),
+        "stateful_manual_case_count": len(manifest["cases"]) - len(automated_case_ids),
+        "execution_completion_status": (
+            "complete_automated_pilot" if complete_automated else "partial_or_staged_execution"
+        ),
+        "execution_covers_complete_automated_pilot": complete_automated,
+    }
 
 
 class _CountingOpenAIResponsesAdapter:
@@ -313,6 +417,16 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
     return {
         "case_id": case["case_id"],
         "category": case.get("category"),
+        "manifest_metadata": {
+            "expected_answer_class": case.get("expected_answer_class"),
+            "substantive_legal": case.get("substantive_legal"),
+            "web_expected": case.get("web_expected"),
+            "exact_expected": case.get("exact_expected"),
+            "clarification_acceptable": case.get("clarification_acceptable"),
+            "evaluation_tags": list(case.get("evaluation_tags") or []),
+            "turn_count": len(case.get("turns") or [{"role": "user"}]),
+            "execution_mode": case.get("execution_mode") or "single_turn",
+        },
         "arm": arm_name,
         "experiment_arm": arm_code,
         "status": trace.status,
@@ -401,14 +515,19 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 async def _main_async(args: argparse.Namespace) -> int:
+    from app.core.config import get_settings
+
     branch, sha = current_git_identity()
+    settings = get_settings()
     manifest_path = Path(args.manifest)
     manifest = load_manifest(manifest_path)
     arms = parse_arms(args.arms)
+    validate_stage_arms(args.stage, arms)
     cases = select_cases(
         manifest,
         case_ids=args.case_id,
         limit=args.limit,
+        stage=args.stage,
     )
 
     output_dir = Path(args.output)
@@ -417,8 +536,30 @@ async def _main_async(args: argparse.Namespace) -> int:
     run_manifest = {
         "schema_version": "architecture_eval.phase5_ab.v1",
         "source_manifest": str(manifest_path),
+        "manifest_version": manifest.get("manifest_version"),
         "manifest_scope": manifest.get("scope"),
+        # Backward-compatible source-manifest metadata. This does not describe
+        # whether this selected execution completed the full automated pilot.
         "complete_pilot": bool(manifest.get("complete_pilot", False)),
+        "complete_pilot_semantics": "source_manifest_scope_only",
+        **_execution_provenance(
+            manifest=manifest,
+            cases=cases,
+            arms=arms,
+        ),
+        "stage": args.stage,
+        "evaluation_config": {
+            "default_agent_model": settings.default_agent_model,
+            "reasoning_effort": settings.default_agent_reasoning_effort,
+            "turn_deadline_ms": settings.default_turn_deadline_ms,
+            "answer_research_target_ms": settings.default_answer_research_target_ms,
+            "max_provider_calls": settings.agent_max_provider_calls,
+            "max_tool_rounds": settings.agent_max_tool_rounds,
+            "max_retries": settings.agent_max_retries,
+            "max_flat_rag_calls": settings.agent_max_flat_rag_calls,
+            "retry_viability_threshold_ms": settings.agent_retry_viability_threshold_ms,
+            "flat_rag_tool_enabled": settings.flat_rag_tool_enabled,
+        },
         "branch": branch,
         "git_sha": sha,
         "arms": arms,
@@ -448,8 +589,16 @@ async def _main_async(args: argparse.Namespace) -> int:
 
     summary = summarize(results)
     summary["git_sha"] = sha
+    summary["stage"] = args.stage
+    summary["manifest_version"] = manifest.get("manifest_version")
     summary["manifest_scope"] = manifest.get("scope")
+    summary.update(_execution_provenance(
+        manifest=manifest,
+        cases=cases,
+        arms=arms,
+    ))
     summary["complete_pilot"] = bool(manifest.get("complete_pilot", False))
+    summary["complete_pilot_semantics"] = "source_manifest_scope_only"
     (output_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -466,6 +615,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True)
     parser.add_argument("--case-id", action="append", default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--stage", default=None)
     return parser
 
 
