@@ -136,6 +136,78 @@ class _CountingOpenAIResponsesAdapter:
         return int(self.adapter.pilot_web_search_call_count)
 
 
+def _extract_submission_attempts(trace: Any) -> list[dict[str, Any]]:
+    """Content-safe terminal submission diagnostics for evaluation.
+
+    Correlates trace.tool_calls (observability) with trace.tool_outputs
+    (ToolResultEnvelope) by tool_call_id for submit_answer only.
+
+    Exposes only content-free structural metadata.  Never exposes draft/claim
+    text, state_patch contents, evidence refs, URLs, titles, queries, or PII.
+    """
+    tool_call_by_id: dict[str, dict[str, Any]] = {}
+    for call in getattr(trace, "tool_calls", []) or []:
+        call_id = call.get("tool_call_id")
+        if call_id and call.get("tool_name") == "submit_answer":
+            tool_call_by_id[call_id] = call
+
+    attempts: list[dict[str, Any]] = []
+    for output in getattr(trace, "tool_outputs", []) or []:
+        if not isinstance(output, dict):
+            continue
+        call_id = output.get("tool_call_id")
+        if call_id is None:
+            continue
+        call_id = str(call_id)
+        call = tool_call_by_id.get(call_id)
+        if call is None:
+            continue
+
+        data = output.get("data") or {}
+        error = output.get("error") or {}
+        submission_error_codes = [
+            str(e.get("code")) for e in data.get("errors", [])
+            if isinstance(e, dict) and e.get("code")
+        ]
+        accepted = data.get("accepted") is True
+        available_evidence_refs = data.get("available_evidence_refs") or []
+        native_web_evidence = data.get("available_native_web_evidence") or []
+        native_cited = sum(
+            1 for item in native_web_evidence
+            if isinstance(item, dict) and item.get("native_web_citation") is not None
+        )
+        attempts.append({
+            "attempt_index": len(attempts) + 1,
+            "tool_call_id": call_id,
+            "round_index": call.get("round_index"),
+            "status": output.get("status"),
+            "tool_error_code": error.get("code") if isinstance(error, dict) else None,
+            "submission_error_codes": submission_error_codes,
+            "postcondition_status": data.get("postcondition_status"),
+            "accepted": accepted,
+            "available_evidence_ref_count": len(available_evidence_refs),
+            "available_native_web_evidence_count": len(native_web_evidence),
+            "available_native_web_cited_evidence_count": native_cited,
+        })
+    return attempts
+
+
+def _submission_error_code_counts(attempts: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for attempt in attempts:
+        for code in attempt.get("submission_error_codes") or []:
+            counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
+def _aggregate_submission_errors(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        for code, count in (row.get("submission_error_codes") or {}).items():
+            counts[code] = counts.get(code, 0) + int(count)
+    return counts
+
+
 async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
     from app.core.config import get_settings
     from app.db.session import SessionLocal
@@ -225,6 +297,7 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
     submission = trace.submission
     claims = list(submission.claims) if submission else []
     decisive_claims = [claim for claim in claims if claim.materiality == "decisive"]
+    submission_attempts = _extract_submission_attempts(trace)
 
     return {
         "case_id": case["case_id"],
@@ -256,6 +329,8 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
             1 for ref in trace.evidence_refs if ref.startswith("exact:")
         ),
         "citation_count": len(trace.citations),
+        "submission_attempts": submission_attempts,
+        "submission_error_codes": _submission_error_code_counts(submission_attempts),
         "claim_count": len(claims),
         "decisive_claim_count": len(decisive_claims),
         "repair_count": trace.terminal_submission_continuation_count,
@@ -305,6 +380,10 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "native_web_evidence": sum(
                 int(row.get("native_web_evidence_count") or 0) for row in rows
             ),
+            "submission_attempt_count": sum(
+                len(row.get("submission_attempts") or []) for row in rows
+            ),
+            "submission_error_code_counts": _aggregate_submission_errors(rows),
             "average_duration_ms": round(sum(durations) / len(durations), 3),
         }
     return {"by_arm": by_arm, "total_runs": len(results)}
