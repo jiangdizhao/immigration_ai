@@ -16,6 +16,7 @@ from typing import Any, Iterable
 
 
 PHASE5_ARMS = ("luna_web", "luna_flat_web")
+KNOWN_EVALUATION_ARMS = PHASE5_ARMS + ("luna_default_local_web",)
 DEFAULT_MAX_PROVIDER_CALLS = 3
 DEFAULT_MAX_TOOL_ROUNDS = 2
 DEFAULT_MAX_RETRIES = 1
@@ -318,6 +319,33 @@ def _arm_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             str(row.get("postcondition_status") or "") == "passed" for row in rows
         ),
         "postcondition_rejected": sum(_postcondition_rejected(row) for row in rows),
+        "integrity_accepted_runs": sum(
+            row.get("status") == "completed"
+            or row.get("checker_status") in {"completed", "failed"}
+            for row in rows
+        ),
+        "checker_completed_runs": sum(
+            row.get("checker_status") == "completed" for row in rows
+        ),
+        "checker_failed_runs": sum(
+            row.get("checker_status") == "failed" for row in rows
+        ),
+        "checker_dropped_claims": sum(
+            _int(row.get("checker_dropped_claim_count")) or 0 for row in rows
+        ),
+        "checker_dependency_dropped_claims": sum(
+            _int(row.get("checker_dependency_dropped_claim_count")) or 0
+            for row in rows
+        ),
+        "final_surviving_claim_count": sum(
+            _int(row.get("claim_count")) or 0 for row in rows
+        ),
+        "final_surviving_material_claim_count": sum(
+            _int(row.get("decisive_claim_count")) or 0 for row in rows
+        ),
+        "checker_latency_ms": sum(
+            _number(row.get("checker_latency_ms")) or 0.0 for row in rows
+        ),
         "provider_calls": sum(_int(row.get("provider_call_count")) or 0 for row in rows),
         "tool_calls": sum(_int(row.get("tool_call_count")) or 0 for row in rows),
         "tool_rounds": sum(_int(row.get("tool_round_count")) or 0 for row in rows),
@@ -359,7 +387,7 @@ def _case_category_rows(
     return {
         category: {
             arm: _arm_metrics([row for row in category_rows if row.get("arm") == arm])
-            for arm in PHASE5_ARMS
+            for arm in KNOWN_EVALUATION_ARMS
             if any(row.get("arm") == arm for row in category_rows)
         }
         for category, category_rows in sorted(grouped.items())
@@ -503,7 +531,7 @@ def _validate_result_rows(manifest: dict[str, Any], rows: list[dict[str, Any]]) 
         arm = str(row.get("arm") or "")
         if case_id not in cases:
             raise ExitAnalysisError(f"results contain unknown case id: {case_id}")
-        if arm not in PHASE5_ARMS:
+        if arm not in KNOWN_EVALUATION_ARMS:
             raise ExitAnalysisError(f"results contain unknown arm: {arm}")
         if str(cases[case_id].get("execution_mode") or "single_turn") == "stateful_manual":
             raise ExitAnalysisError(f"stateful_manual case cannot be automated: {case_id}")
@@ -528,13 +556,14 @@ def _coverage(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str,
     }
     analyzed = {
         arm: {str(row["case_id"]) for row in rows if row.get("arm") == arm}
-        for arm in PHASE5_ARMS
+        for arm in KNOWN_EVALUATION_ARMS
     }
     missing = {
         "arm_a": sorted(automated - analyzed["luna_web"]),
         "arm_b": sorted(automated - analyzed["luna_flat_web"]),
     }
     paired = analyzed["luna_web"] & analyzed["luna_flat_web"]
+    revised_default = analyzed["luna_default_local_web"]
     complete = not missing["arm_a"] and not missing["arm_b"] and paired == automated
     return {
         "automated_expected_case_count": len(automated),
@@ -545,6 +574,8 @@ def _coverage(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str,
         "missing_arm_a_case_ids": missing["arm_a"],
         "missing_arm_b_case_ids": missing["arm_b"],
         "paired_automated_case_count": len(paired),
+        "revised_default_local_web_analyzed_case_count": len(revised_default),
+        "missing_revised_default_local_web_case_ids": sorted(automated - revised_default),
         "coverage_status": "complete" if complete else "incomplete",
     }
 
@@ -570,6 +601,12 @@ def _ab_comparison(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "postcondition_pass_delta_b_minus_a": int(arm_b.get("postcondition_status") == "passed") - int(arm_a.get("postcondition_status") == "passed"),
             "postcondition_reject_delta_b_minus_a": int(_postcondition_rejected(arm_b)) - int(_postcondition_rejected(arm_a)),
             "controlled_incomplete_delta_b_minus_a": metrics_b["controlled_incomplete_submission_count"] - metrics_a["controlled_incomplete_submission_count"],
+            "checker_completed_delta_b_minus_a": metrics_b["checker_completed_runs"] - metrics_a["checker_completed_runs"],
+            "checker_dropped_claim_delta_b_minus_a": metrics_b["checker_dropped_claims"] - metrics_a["checker_dropped_claims"],
+            "checker_dependency_drop_delta_b_minus_a": metrics_b["checker_dependency_dropped_claims"] - metrics_a["checker_dependency_dropped_claims"],
+            "checker_latency_delta_ms_b_minus_a": round(
+                metrics_b["checker_latency_ms"] - metrics_a["checker_latency_ms"], 3
+            ),
             "latency_delta_ms_b_minus_a": round(latency_b - latency_a, 3) if latency_a is not None and latency_b is not None else None,
             "provider_call_delta_b_minus_a": (_int(arm_b.get("provider_call_count")) or 0) - (_int(arm_a.get("provider_call_count")) or 0),
             "tool_call_delta_b_minus_a": (_int(arm_b.get("tool_call_count")) or 0) - (_int(arm_a.get("tool_call_count")) or 0),
@@ -601,7 +638,7 @@ def analyze(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, A
     _validate_result_rows(manifest, rows)
     by_arm = {
         arm: _arm_metrics([row for row in rows if row.get("arm") == arm])
-        for arm in PHASE5_ARMS
+        for arm in KNOWN_EVALUATION_ARMS
     }
     return {
         "schema_version": "architecture_eval.phase5_exit_analysis.v1",

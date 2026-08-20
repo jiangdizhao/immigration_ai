@@ -117,7 +117,8 @@ def test_stage_one_provenance_is_not_a_completed_full_pilot():
     )
     assert provenance["manifest_defines_complete_pilot_scope"] is True
     assert provenance["selected_case_count"] == 8
-    assert provenance["execution_covers_complete_automated_pilot"] is False
+    assert provenance["execution_covers_complete_revised_default"] is False
+    assert provenance["execution_covers_complete_historical_ab"] is False
     assert provenance["execution_completion_status"] == "partial_or_staged_execution"
 
 

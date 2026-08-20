@@ -18,7 +18,7 @@ from typing import Any, Literal
 from app.core.config import get_settings
 from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V2, LUNA_PROMPT_VERSION
 
-ExperimentArm = Literal["A", "B", "C", "D"] | None
+ExperimentArm = Literal["A", "B", "L", "C", "D"] | None
 ReasoningEffort = Literal["none", "low", "medium", "high"]
 
 
@@ -82,6 +82,12 @@ SUBMIT_ANSWER_TOOL = {
                                 "required": ["url"],
                                 "additionalProperties": False,
                             },
+                        },
+                        "depends_on": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 30,
+                            "description": "Claim IDs of material premises required by this claim",
                         },
                     },
                     "required": ["claim_id", "claim_type", "materiality", "text", "draft_start", "draft_end"],
@@ -325,8 +331,11 @@ class AgentPolicyService:
         """
         settings = get_settings()
 
-        if experiment_arm == "B":
-            # Arm B: web + flat RAG + utility + submit
+        if experiment_arm in {"B", "L"}:
+            # Arm B and revised Default local+web arm L: web + local retrieval
+            # + utility + submit. The implementation is shared; the arm names
+            # preserve historical B results while making the revised target
+            # explicit.
             tools = [WEB_SEARCH_TOOL]
             if settings.flat_rag_tool_enabled:
                 tools.append(FLAT_RAG_SEARCH_TOOL)

@@ -169,7 +169,7 @@ class DeterministicUtilityOutput(StrictContract):
 class SubmitAnswerAccepted(StrictContract):
     accepted: Literal[True]
     submission_id: str = Field(min_length=1, max_length=255)
-    postcondition_status: Literal["passed", "not_required"]
+    postcondition_status: Literal["passed", "not_required", "integrity_passed"]
     errors: list[dict[str, Any]] = Field(default_factory=list, max_length=0)
 
 

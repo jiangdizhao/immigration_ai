@@ -32,6 +32,7 @@ APPROVED_BRANCHES = {
 PHASE5_ARMS = {
     "luna_web": "A",
     "luna_flat_web": "B",
+    "luna_default_local_web": "L",
 }
 STATEFUL_MANUAL_EXECUTION_MODE = "stateful_manual"
 EXPECTED_STAGE_ARMS = {
@@ -52,7 +53,7 @@ def parse_arms(value: str) -> list[str]:
     unsupported = [arm for arm in arms if arm not in PHASE5_ARMS]
     if unsupported:
         raise ValueError(
-            "Phase 5 runner supports only luna_web,luna_flat_web; "
+            "Phase 5 runner supports only luna_web,luna_flat_web,luna_default_local_web; "
             f"unsupported: {','.join(unsupported)}"
         )
     return arms
@@ -196,10 +197,14 @@ def _execution_provenance(
         if not is_stateful_manual_case(case)
     }
     selected_case_ids = {str(case["case_id"]) for case in cases}
-    complete_automated = (
+    complete_revised_default = (
         selected_case_ids == automated_case_ids
-        and frozenset(arms) == frozenset(PHASE5_ARMS)
-        and len(arms) == len(PHASE5_ARMS)
+        and arms == ["luna_default_local_web"]
+    )
+    complete_historical_ab = (
+        selected_case_ids == automated_case_ids
+        and frozenset(arms) == frozenset({"luna_web", "luna_flat_web"})
+        and len(arms) == 2
     )
     return {
         "manifest_defines_complete_pilot_scope": bool(manifest.get("complete_pilot", False)),
@@ -207,9 +212,12 @@ def _execution_provenance(
         "automated_case_count": len(automated_case_ids),
         "stateful_manual_case_count": len(manifest["cases"]) - len(automated_case_ids),
         "execution_completion_status": (
-            "complete_automated_pilot" if complete_automated else "partial_or_staged_execution"
+            "complete_revised_default" if complete_revised_default
+            else "complete_historical_ab" if complete_historical_ab
+            else "partial_or_staged_execution"
         ),
-        "execution_covers_complete_automated_pilot": complete_automated,
+        "execution_covers_complete_revised_default": complete_revised_default,
+        "execution_covers_complete_historical_ab": complete_historical_ab,
     }
 
 
@@ -371,9 +379,9 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
             "errors": [],
         }
 
-    if arm_code == "B" and not settings.flat_rag_tool_enabled:
+    if arm_code in {"B", "L"} and not settings.flat_rag_tool_enabled:
         raise RuntimeError(
-            "Arm B requires FLAT_RAG_TOOL_ENABLED=true; refusing to silently run Arm B as Arm A"
+            "Local-retrieval arms require FLAT_RAG_TOOL_ENABLED=true; refusing to run without local retrieval"
         )
 
     provider = _CountingOpenAIResponsesAdapter()
@@ -400,7 +408,7 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
     flat_rag_call_count = 0
     flat_rag_search_fn = None
     try:
-        if arm_code == "B":
+        if arm_code in {"B", "L"}:
             db = SessionLocal()
             flat_tool = FlatRagSearchTool(db)
 
@@ -477,6 +485,12 @@ async def run_case_arm(case: dict[str, Any], arm_name: str) -> dict[str, Any]:
         "decisive_claim_count": len(decisive_claims),
         "repair_count": trace.terminal_submission_continuation_count,
         "terminal_submission_missing": trace.terminal_submission_missing,
+        "checker_status": trace.checker_status,
+        "checker_dropped_claim_count": len(trace.checker_dropped_claim_ids),
+        "checker_dependency_dropped_claim_count": len(
+            trace.checker_dependency_dropped_claim_ids
+        ),
+        "checker_latency_ms": round(trace.checker_latency_ms, 3),
         "total_duration_ms": round(trace.total_duration_ms, 3),
         "remaining_deadline_ms": round(trace.remaining_deadline_ms, 3),
         "provider_calls": trace.provider_calls,

@@ -1191,9 +1191,25 @@ class TestExperimentArms:
         assert "submit_answer" in tool_names
         assert "lightrag_search" not in tool_names
 
+    def test_revised_default_local_web_tools(self):
+        from app.core.config import Settings
+        settings = Settings(
+            DATABASE_URL="postgresql://test",
+            OPENAI_API_KEY="test",
+            FLAT_RAG_TOOL_ENABLED=True,
+        )
+        with patch("app.services.agent_policy_service.get_settings", return_value=settings):
+            policy = AgentPolicyService().build_policy(
+                mode="default", experiment_arm="L"
+            )
+        tool_names = AgentPolicyService().get_tool_names(policy)
+        assert "web_search" in tool_names
+        assert "flat_rag_search" in tool_names
+        assert "lightrag_search" not in tool_names
+
     def test_no_lightrag(self):
         policy_service = AgentPolicyService()
-        for arm in [None, "A", "B"]:
+        for arm in [None, "A", "B", "L"]:
             policy = policy_service.build_policy(mode="default", experiment_arm=arm)
             assert "lightrag_search" not in policy_service.get_tool_names(policy)
 

@@ -6,6 +6,11 @@ This matrix applies to paired `luna_web` (Arm A) and `luna_flat_web` (Arm B)
 runs from `pilot_manifest.json`. It is an evaluation contract, not a serving
 policy and not a legal answer key.
 
+Those arms remain historical comparison artifacts. The revised v2.1.3 Default
+target is the explicitly named `luna_default_local_web` arm, which uses the
+existing local retrieval tool plus native web search and must be analyzed as a
+separate mode rather than silently relabeling historical Arm A.
+
 ## Baseline
 
 - Target answer model: GPT-5.6 Luna.

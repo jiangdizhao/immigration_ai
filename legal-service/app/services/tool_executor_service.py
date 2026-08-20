@@ -630,8 +630,9 @@ class ToolExecutorService:
     ) -> tuple[ToolResultEnvelope, AgentSubmissionV2 | None, TerminalSubmissionAction | None]:
         """Execute submit_answer terminal tool.
 
-        Validates the submission against the evidence registry and
-        evidence postcondition. Records terminal submission state.
+        Validates mechanical submission/evidence integrity and records semantic
+        evidence diagnostics for the compact checker. It does not make semantic
+        evidence suitability a terminal integrity rejection.
         """
         try:
             args = dict(tool_call.arguments)
@@ -769,49 +770,30 @@ class ToolExecutorService:
             )
 
             if postcondition_result.status == "failed":
-                # Evidence postcondition failed
-                errors = [
-                    SubmissionError(
-                        code="EVIDENCE_POSTCONDITION_FAILED",
-                        field="claims",
-                        affected_claim_ids=[
-                            e.claim_id for e in postcondition_result.claim_evaluations
-                            if e.status in ("insufficient", "invalid_ref")
-                        ],
-                    )
-                ]
-                _action = context.terminal_policy.handle_invalid_submission(
-                    context.terminal_record,
-                    errors=["Evidence postcondition failed"],
-                    deadline_remaining_ms=(
-                        context.deadline_monotonic
-                        and max(0.0, (context.deadline_monotonic - time.monotonic()) * 1000.0)
-                    ),
+                # v2.1.3: semantic evidence suitability is checker input, not
+                # terminal integrity rejection. Schema, identity, spans, and
+                # citation validation already passed above.
+                _action = context.terminal_policy.handle_valid_submission(
+                    context.terminal_record
                 )
-
-                rejected = SubmitAnswerRejected(
-                    accepted=False,
-                    submission_id=None,
-                    postcondition_status="failed",
-                    errors=errors,
+                accepted = SubmitAnswerAccepted(
+                    accepted=True,
+                    submission_id=str(uuid4()),
+                    postcondition_status="integrity_passed",
+                    errors=[],
                 )
-
-                rejected_data = self._rejection_data(
-                    rejected=rejected,
-                    context=context,
-                    contract_diagnostics=contract_diagnostics,
-                )
-                # Phase-5: content-safe postcondition diagnostics explaining WHY.
-                rejected_data["postcondition_diagnostics"] = _postcondition_diagnostics(
-                    postcondition_result
-                )
-
                 return build_tool_result(
                     tool_call_id=tool_call.call_id,
-                    status="invalid_request",
-                    data=rejected_data,
+                    status="ok",
+                    data={
+                        **accepted.model_dump(mode="json"),
+                        "terminal_contract_diagnostics": contract_diagnostics,
+                        "postcondition_diagnostics": _postcondition_diagnostics(
+                            postcondition_result
+                        ),
+                        "semantic_review_required": True,
+                    },
                     duration_ms=0,
-                    error={"code": "EVIDENCE_POSTCONDITION_FAILED", "message": "Evidence postcondition failed"},
                 ), submission, _action
 
             # Valid submission

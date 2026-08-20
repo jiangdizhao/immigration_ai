@@ -22,6 +22,7 @@ from app.schemas.agent import (
     ToolCallObservation,
 )
 from app.schemas.tools import ToolResultEnvelope
+from app.core.config import get_settings
 from app.services.agent_observability_service import (
     AbsoluteTurnDeadline,
     AgentObservabilityService,
@@ -37,6 +38,7 @@ from app.services.tool_executor_service import (
 )
 from app.tools.base import build_tool_result
 from app.services.web_evidence_normalizer import WebEvidenceNormalizer
+from app.services.compact_checker_service import CompactCheckerService
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +124,10 @@ class ShadowRunResult:
     terminal_submission_continuation_count: int
     errors: list[str]
     shadow_trace: dict[str, Any] | None = None
+    checker_status: Literal["not_required", "completed", "failed"] = "not_required"
+    checker_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_latency_ms: float = 0.0
 
 
 class AgentRuntimeService:
@@ -204,6 +210,12 @@ class AgentRuntimeService:
         tool_call_observations: list[ToolCallObservation] = []
         total_provider_duration_ms = 0.0
         total_tool_duration_ms = 0.0
+        checker_status: Literal["not_required", "completed", "failed"] = "not_required"
+        checker_dropped_claim_ids: list[str] = []
+        checker_dependency_dropped_claim_ids: list[str] = []
+        checker_latency_ms = 0.0
+        answer_agent_duration_ms = 0.0
+        answer_provider_call_count = 0
         prev_call_was_failed = False
         prev_call_was_missing_terminal = False
 
@@ -525,6 +537,78 @@ class AgentRuntimeService:
             if not submission_received and not terminal_missing:
                 errors.append("No response from provider")
 
+            # v2.1.3: one evidence-only semantic checker after the bounded
+            # answer/research stage. It has no research tools and shares the
+            # original absolute deadline.
+            answer_provider_call_count = provider_call_count
+            answer_agent_duration_ms = (time.perf_counter() - start_time) * 1000.0
+            if (
+                submission_received
+                and submission is not None
+                and request.mode == "default"
+                and request.experiment_arm == "L"
+                and self._requires_checker(submission)
+            ):
+                checker_remaining_before = deadline.remaining_ms()
+                checker = await CompactCheckerService().run(
+                    provider=self._provider,
+                    submission=submission,
+                    request=request,
+                    registry=registry,
+                    deadline=deadline,
+                    checker_target_ms=budget.checker_target_ms,
+                    model=get_settings().legal_fact_check_model,
+                    reasoning_effort=get_settings().default_agent_reasoning_effort,
+                )
+                checker_status = checker.status
+                checker_latency_ms = checker.duration_ms
+                checker_dropped_claim_ids = checker.dropped_claim_ids
+                checker_dependency_dropped_claim_ids = checker.dependency_dropped_claim_ids
+                if checker.provider_response is not None:
+                    provider_call_count += 1
+                    response = checker.provider_response
+                    remaining_before_checker = max(0.0, checker_remaining_before)
+                    provider_call_observations.append(ProviderCallObservation(
+                        stage="fact_check",
+                        call_index=provider_call_count,
+                        call_kind="initial",
+                        response_id=response.response_id or None,
+                        previous_response_id=None,
+                        model=response.model,
+                        effort=response.effort or "low",
+                        input_tokens=response.input_tokens,
+                        cached_input_tokens=response.cached_input_tokens,
+                        reasoning_tokens=response.reasoning_tokens,
+                        output_tokens=response.output_tokens,
+                        duration_ms=response.duration_ms,
+                        timeout_allocated_ms=min(
+                            remaining_before_checker,
+                            float(budget.checker_target_ms),
+                        ),
+                        remaining_deadline_before_call_ms=remaining_before_checker,
+                        research_stage_remaining_before_ms=0,
+                        absolute_remaining_after_ms=deadline.remaining_ms(),
+                        research_stage_remaining_after_ms=0,
+                        returned_tool_call_count=len(response.tool_calls),
+                        returned_tool_names=[tc.name for tc in response.tool_calls],
+                        web_search_reported=False,
+                        native_web_search_call_count=0,
+                        native_web_source_count=0,
+                        native_web_citation_count=0,
+                        input_items_count=0,
+                        input_char_count=0,
+                        function_output_count=0,
+                        tool_definitions_count=1,
+                        status=response.status,
+                        is_retry=False,
+                    ))
+                    total_provider_duration_ms += response.duration_ms
+                if checker.status == "completed":
+                    submission = checker.submission
+                else:
+                    submission = None
+                    errors.append(f"Compact checker failed: {checker.error or 'unknown error'}")
+
         except TurnDeadlineExceeded as exc:
             errors.append(f"Deadline exceeded at stage: {exc.stage}")
         except Exception as exc:
@@ -534,7 +618,7 @@ class AgentRuntimeService:
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
         metrics = AgentExecutionMetrics(
-            logical_llm_stage_count=1,
+            logical_llm_stage_count=1 + int(checker_status != "not_required"),
             provider_api_call_count=provider_call_count,
             tool_call_count=len(tool_outputs),
             tool_round_count=tool_round_count,
@@ -563,7 +647,7 @@ class AgentRuntimeService:
             flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
             submit_answer_call_count=1 if submission_received else 0,
-            retry_count=max(0, provider_call_count - 1),
+            retry_count=max(0, answer_provider_call_count - 1),
             turn_deadline_ms=deadline.turn_deadline_ms,
             backend_total_latency_ms=total_duration,
             pre_agent_latency_ms=0,
@@ -571,8 +655,8 @@ class AgentRuntimeService:
             deadline_exceeded_stage="shadow_run" if deadline.remaining_ms() <= 0 else None,
             terminal_submission_missing=terminal_missing,
             terminal_submission_continuation_count=continuation_count,
-            answer_agent_latency_ms=total_duration,
-            fact_check_latency_ms=0,
+            answer_agent_latency_ms=answer_agent_duration_ms or total_duration,
+            fact_check_latency_ms=checker_latency_ms,
             total_latency_ms=total_duration,
             metrics_complete=True,
             flat_rag_denied_call_count=flat_rag_denied_count,
@@ -626,6 +710,18 @@ class AgentRuntimeService:
             terminal_submission_continuation_count=continuation_count,
             errors=errors,
             shadow_trace=shadow_trace,
+            checker_status=checker_status,
+            checker_dropped_claim_ids=checker_dropped_claim_ids,
+            checker_dependency_dropped_claim_ids=checker_dependency_dropped_claim_ids,
+            checker_latency_ms=checker_latency_ms,
+        )
+
+    @staticmethod
+    def _requires_checker(submission: AgentSubmissionV2) -> bool:
+        return submission.answer_class == "substantive_legal" or any(
+            claim.materiality == "decisive"
+            and claim.claim_type in {"legal_rule", "legal_application"}
+            for claim in submission.claims
         )
 
     @staticmethod

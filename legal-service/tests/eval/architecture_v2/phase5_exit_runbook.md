@@ -11,6 +11,11 @@ The manifest contains 39 cases: 35 automated single-turn cases and 4
 `stateful_manual` cases. The automated runner excludes the four stateful cases;
 they remain available for the restricted manual/stateful review slice.
 
+The historical `luna_web`/`luna_flat_web` outputs remain preserved for
+comparison. The revised v2.1.3 Default target is named
+`luna_default_local_web` and exposes the existing local retrieval tool plus
+native web search; it is not a silent reinterpretation of historical Arm A.
+
 ## Local Validation
 
 Focused evaluation tests:
@@ -130,6 +135,25 @@ export IMMIGRATION_AI_PYTHON=/home/rico/anaconda3/envs/torch/bin/python
   --results artifacts/eval/phase5-exit/stage2-arm-b/results.jsonl \
   --results artifacts/eval/phase5-exit/stage3-remaining-ab/results.jsonl \
   --output artifacts/eval/phase5-exit/final-analysis.json
+```
+
+## Revised Default Evaluation
+
+After the revised integrity/checker implementation is authorized and validated,
+use the named local-plus-web Default arm. This command is not executed as part
+of the implementation task.
+
+```bash
+cd /home/rico/immigration_ai/legal-service
+export IMMIGRATION_AI_PYTHON=/home/rico/anaconda3/envs/torch/bin/python
+export FLAT_RAG_TOOL_ENABLED=true
+export DEFAULT_AGENT_REASONING_EFFORT=low
+export AGENT_MAX_FLAT_RAG_CALLS=1
+export AGENT_RETRY_VIABILITY_THRESHOLD_MS=8000
+"$IMMIGRATION_AI_PYTHON" -m scripts.run_architecture_eval \
+  --manifest tests/eval/architecture_v2/pilot_manifest.json \
+  --arms luna_default_local_web \
+  --output artifacts/eval/phase5-exit/revised-default-local-web
 ```
 
 ## Manual Review

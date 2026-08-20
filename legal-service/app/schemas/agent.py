@@ -22,6 +22,7 @@ class AgentClaim(StrictContract):
     draft_start: int = Field(ge=0)
     draft_end: int = Field(ge=0)
     evidence_refs: list[str] = Field(default_factory=list, max_length=30)
+    depends_on: list[str] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def validate_draft_span(self):
@@ -29,6 +30,10 @@ class AgentClaim(StrictContract):
             raise ValueError("draft_end must be greater than or equal to draft_start")
         if len(set(self.evidence_refs)) != len(self.evidence_refs):
             raise ValueError("evidence_refs must not contain duplicates")
+        if self.claim_id in self.depends_on:
+            raise ValueError("claim must not depend on itself")
+        if len(set(self.depends_on)) != len(self.depends_on):
+            raise ValueError("depends_on must not contain duplicates")
         return self
 
 
@@ -104,7 +109,7 @@ class AgentRuntimeRequest(StrictContract):
     # CompactMatterStateV2 is deliberately not implemented until Phase 3.
     matter_state: dict[str, Any]
     execution_budget: ExecutionBudget
-    experiment_arm: Literal["A", "B", "C", "D"] | None = None
+    experiment_arm: Literal["A", "B", "L", "C", "D"] | None = None
 
 
 class DeadlineCheckpoint(StrictContract):

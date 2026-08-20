@@ -1,8 +1,9 @@
-"""Phase 4B — Evidence postcondition service.
+"""Evidence suitability diagnostics for the v2.1.3 checker.
 
-Deterministic evidence/applicability postcondition for agent submissions.
+This service classifies evidence suitability and applicability for checker input
+and evaluation diagnostics. It is not a universal terminal admission gate.
 
-For substantive legal submissions:
+For substantive legal submissions, it reports:
 - Every decisive legal rule/application claim must have suitable evidence
 - Every change-sensitive current factual claim must have suitable current evidence
 

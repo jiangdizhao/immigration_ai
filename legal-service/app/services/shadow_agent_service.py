@@ -98,6 +98,10 @@ class ShadowTrace:
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = 0
     postcondition_status: str | None = None
+    checker_status: str = "not_required"
+    checker_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_latency_ms: float = 0.0
     errors: list[str] = field(default_factory=list)
     created_at: str | None = None
     completed_at: str | None = None
@@ -131,7 +135,7 @@ class ShadowAgentService:
         matter_state: dict[str, Any] | None = None,
         matter_id: str | None = None,
         turn_id: str | None = None,
-        experiment_arm: Literal["A", "B"] | None = None,
+        experiment_arm: Literal["A", "B", "L"] | None = None,
         flat_rag_search_fn: Any = None,
         db_session_factory: Any = None,
         # Inherited from request acceptance
@@ -241,6 +245,15 @@ class ShadowAgentService:
             except Exception:
                 logger.warning("Could not create DB session for shadow run", exc_info=True)
 
+        # Revised v2.1.3 Default arm: use the existing local retrieval tool
+        # alongside native web search when the caller supplied a DB factory.
+        # Historical A/B callers may continue injecting their own function.
+        if experiment_arm == "L" and flat_rag_search_fn is None and db_session is not None:
+            from app.tools.flat_rag_search import FlatRagSearchTool
+
+            flat_tool = FlatRagSearchTool(db_session)
+            flat_rag_search_fn = flat_tool.search
+
         # Execute shadow run
         created_at = time.perf_counter()
         result = None
@@ -345,6 +358,12 @@ class ShadowAgentService:
             postcondition_status=(
                 "passed" if result.submission else None
             ),
+            checker_status=result.checker_status,
+            checker_dropped_claim_ids=list(result.checker_dropped_claim_ids),
+            checker_dependency_dropped_claim_ids=list(
+                result.checker_dependency_dropped_claim_ids
+            ),
+            checker_latency_ms=result.checker_latency_ms,
             errors=result.errors,
             created_at=str(created_at),
             completed_at=str(completed_at),
