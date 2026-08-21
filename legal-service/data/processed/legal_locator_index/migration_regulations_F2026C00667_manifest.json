@@ -1,0 +1,18 @@
+{
+  "compilation_number": "288",
+  "counts_by_type": {
+    "regulation": 397,
+    "schedule3_criterion": 5,
+    "schedule4_pic": 46,
+    "schedule8_condition": 101
+  },
+  "document_family": "Migration Regulations 1994",
+  "document_version": "F2026C00667",
+  "effective_date": "2026-07-01",
+  "record_count": 549,
+  "schema_version": 1,
+  "source_files": [
+    "F2026C00667VOL01.pdf",
+    "F2026C00667VOL03.pdf"
+  ]
+}
