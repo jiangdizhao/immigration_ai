@@ -135,11 +135,9 @@ class ExactLegalSourceService:
         """
         start_time = time.monotonic()
 
-        # Load coverage report
         try:
             coverage = self._get_coverage()
         except CoverageReportError as exc:
-            # Fail safely: return unknown coverage
             return self._build_error_output(
                 request=request,
                 coverage_status="unknown",
@@ -148,14 +146,10 @@ class ExactLegalSourceService:
                 index_version="unknown",
             )
 
-        # Determine target family from request
         family_id = self._determine_family(request)
-
-        # Check coverage gating
         coverage_status, gap_reason = get_coverage_for_lookup(coverage, family_id)
 
         if coverage_status == "absent":
-            # Honest gap result: no local results for absent families
             return self._build_gap_output(
                 request=request,
                 coverage=coverage,
@@ -166,7 +160,6 @@ class ExactLegalSourceService:
             )
 
         if coverage_status == "unknown":
-            # Unknown family: return honest unknown
             return self._build_gap_output(
                 request=request,
                 coverage=coverage,
@@ -176,10 +169,6 @@ class ExactLegalSourceService:
                 duration_ms=(time.monotonic() - start_time) * 1000,
             )
 
-        # Family is available (complete or partial): perform lookup
-        # Note: available_partial still allows local search, but gaps are preserved
-
-        # Find matching chunks
         matches = self._find_matches(
             request=request,
             family_id=family_id,
@@ -187,7 +176,6 @@ class ExactLegalSourceService:
             tool_call_id=tool_call_id,
         )
 
-        # Extract and resolve cross-references if requested
         resolved_refs: list[tuple[str, list[str]]] = []
         unresolved_refs: list[UnresolvedCrossReference] = []
 
@@ -201,10 +189,6 @@ class ExactLegalSourceService:
             )
 
         duration_ms = (time.monotonic() - start_time) * 1000
-
-        # Build output, then attach unresolved dependencies to every evidence
-        # ref issued by this lookup.  The registry is request-scoped and this
-        # is used only by the deterministic submission postcondition.
         output = self._build_output(
             request=request,
             coverage=coverage,
@@ -224,14 +208,11 @@ class ExactLegalSourceService:
 
     def _determine_family(self, request: ExactLegalLookupRequest) -> str | None:
         """Determine target source family from request."""
-        # Schedule takes precedence
         if request.schedule:
             schedule_family = classify_schedule_family(request.schedule)
             if schedule_family:
                 return schedule_family
 
-        # Named document/schedule locators may arrive in document_id or query.
-        # This is syntax-level locator handling, not semantic routing.
         locator_text = " ".join(
             value for value in (request.document_id, request.query) if value
         )
@@ -242,9 +223,6 @@ class ExactLegalSourceService:
                 for item in locators
                 if item.locator.locator_type == "schedule"
             ]
-            # A named schedule is a precise legal locator.  Do not map an
-            # unknown Schedule to another covered family merely because the
-            # surrounding text also mentions the Regulations.
             if schedule_locators:
                 for locator in schedule_locators:
                     family = classify_schedule_family(locator.target_provision or "")
@@ -258,7 +236,6 @@ class ExactLegalSourceService:
             if "migration regulations" in doc_lower:
                 return "migration_regulations"
 
-        # Source types hint
         if request.source_types:
             for st in request.source_types:
                 st_lower = st.lower()
@@ -273,7 +250,6 @@ class ExactLegalSourceService:
                 if "guidance" in st_lower:
                     return "home_affairs_guidance"
 
-        # Case citation indicates court decisions
         if request.case_citation:
             return "court_decisions"
 
@@ -290,7 +266,6 @@ class ExactLegalSourceService:
         """Find matching chunks in canonical corpus."""
         matches: list[tuple[CanonicalLocalEvidenceRef, str, str]] = []
 
-        # Build query based on request locators
         stmt = (
             select(SourceChunk)
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
@@ -305,7 +280,6 @@ class ExactLegalSourceService:
             return []
         stmt = stmt.where(family_condition)
 
-        # Filter by schedule/provision
         conditions = []
 
         schedule_scope = request.schedule or self._schedule_from_family_id(family_id)
@@ -313,7 +287,6 @@ class ExactLegalSourceService:
             conditions.append(self._schedule_chunk_condition(schedule_scope))
 
         if request.provision:
-            # Match provision in section_ref or text
             provision_pattern = f"%{request.provision}%"
             conditions.append(
                 or_(
@@ -323,12 +296,10 @@ class ExactLegalSourceService:
             )
 
         if request.subclass:
-            # Match subclass in text (for Schedule 2)
             subclass_pattern = f"%{request.subclass}%"
             conditions.append(SourceChunk.text.ilike(subclass_pattern))
 
         if request.query:
-            # Text search for query
             query_pattern = f"%{request.query}%"
             conditions.append(
                 or_(
@@ -358,19 +329,14 @@ class ExactLegalSourceService:
             )
 
         if conditions:
-            # Distinct locator fields narrow a lookup together.  Combining
-            # them with OR can return a chunk from the wrong source family
-            # merely because it happens to contain a requested provision.
             stmt = stmt.where(and_(*conditions))
 
-        # Execute query
         try:
             chunks = list(self._db.scalars(stmt))
         except Exception as exc:
             logger.error("Exact lookup query failed: %s", exc)
             return []
 
-        # Convert to evidence refs
         for chunk in chunks:
             try:
                 evidence, ref = self._evidence_service.build_evidence_from_chunk(
@@ -379,7 +345,6 @@ class ExactLegalSourceService:
                     tool_call_id=tool_call_id,
                     registry=registry,
                 )
-                # Determine match type
                 match_type = self._classify_match_type(request, chunk)
                 matches.append((evidence, ref or "", match_type))
             except Exception as exc:
@@ -395,6 +360,12 @@ class ExactLegalSourceService:
         return rf"(^|[^[:alnum:]])schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
 
     @staticmethod
+    def _schedule_header_pattern(schedule: str) -> str:
+        """Return an anchored page-heading pattern for one Schedule."""
+        normalized = schedule.strip().upper()
+        return rf"^[[:space:]]*schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
+
+    @staticmethod
     def _schedule_from_family_id(family_id: str | None) -> str | None:
         if not family_id or not family_id.startswith("migration_regulations_schedule_"):
             return None
@@ -407,26 +378,23 @@ class ExactLegalSourceService:
 
     @classmethod
     def _schedule_chunk_condition(cls, schedule: str):
-        """Match a structural Schedule page in both legacy and volume-based corpora.
+        """Match structural Schedule ownership in legacy and volume corpora.
 
-        Older corpora stored each Schedule as a separate LegalSource whose title
-        named the Schedule.  Current Federal Register compilations are ingested
-        as multi-volume sources (for example F2026C00667VOL02/VOL03), so source
-        title alone is no longer a Schedule boundary.  PDF page headings are
-        copied onto every SourceChunk generated from that page; use those
-        structural headings first, retain the legacy title match, and allow an
-        anchored page-text header as a conservative fallback.
+        Legacy corpora use one source per Schedule, so the source title is the
+        structural boundary.  Current official compilations are ingested by
+        volume/page: the PDF page heading is copied to every chunk derived from
+        that page.  Only an anchored page heading is therefore authoritative
+        for Schedule ownership.  Chunk body text is deliberately not used when
+        a heading exists because split chunks can begin with cross-references to
+        another Schedule.
         """
-        normalized = schedule.strip().upper()
-        locator_pattern = cls._schedule_locator_pattern(normalized)
-        page_header_pattern = (
-            rf"(^|[[:cntrl:]])[[:space:]]*schedule[[:space:]]+"
-            rf"{re.escape(normalized)}([^[:alnum:]]|$)"
-        )
+        locator_pattern = cls._schedule_locator_pattern(schedule)
+        header_pattern = cls._schedule_header_pattern(schedule)
+        missing_heading = or_(SourceChunk.heading.is_(None), SourceChunk.heading == "")
         return or_(
             LegalSource.title.op("~*")(locator_pattern),
-            SourceChunk.heading.op("~*")(locator_pattern),
-            SourceChunk.text.op("~*")(page_header_pattern),
+            SourceChunk.heading.op("~*")(header_pattern),
+            and_(missing_heading, SourceChunk.text.op("~*")(header_pattern)),
         )
 
     @staticmethod
@@ -444,11 +412,10 @@ class ExactLegalSourceService:
         """Return the deterministic canonical-source scope for a family.
 
         The coverage report authorizes a family, not the entire corpus.  A
-        Schedule family is now scoped in two stages: first to the Migration
-        Regulations source family, then to structural Schedule page headings in
-        ``_find_matches``.  This supports both old schedule-per-source corpora
-        and current official multi-volume compilations without treating an
-        ordinary cross-reference as a Schedule boundary.
+        Schedule family is scoped first to Migration Regulations sources and
+        then, in ``_find_matches``, to the page's structural Schedule heading.
+        This preserves the existing exact-lookup architecture while supporting
+        both legacy schedule-per-source and current official volume corpora.
         """
         if family_id is None:
             return None
@@ -486,7 +453,6 @@ class ExactLegalSourceService:
         if request.query:
             if request.query.lower() in chunk.text.lower():
                 return "exact"
-            # Check normalized (case-insensitive, whitespace-normalized)
             normalized_query = re.sub(r"\s+", " ", request.query.lower().strip())
             normalized_text = re.sub(r"\s+", " ", chunk.text.lower())
             if normalized_query in normalized_text:
@@ -511,18 +477,14 @@ class ExactLegalSourceService:
         seen_locators: set[str] = set()
 
         for evidence, ref, _ in matches:
-            # Extract cross-references from evidence text
             refs = extract_cross_references(evidence.text)
 
             for xref in refs:
                 locator = xref.locator
-
-                # Deduplicate
                 if locator.normalized in seen_locators:
                     continue
                 seen_locators.add(locator.normalized)
 
-                # Try to resolve
                 resolution = self._resolve_cross_reference(
                     locator=locator,
                     coverage=coverage,
@@ -533,7 +495,6 @@ class ExactLegalSourceService:
                 if resolution is not None:
                     resolved.append((locator.surface_form, resolution))
                 else:
-                    # Determine why unresolved
                     family_id = classify_locator_family(locator)
                     cov_status, gap = get_coverage_for_lookup(coverage, family_id)
 
@@ -569,21 +530,17 @@ class ExactLegalSourceService:
         Returns list of evidence refs if resolved, None otherwise.
         NEVER resolves to a "similar" provision; exact match only.
         """
-        # Ambiguous locators cannot be resolved
         if locator.is_ambiguous:
             return None
 
-        # Determine target family
         family_id = classify_locator_family(locator)
         if family_id is None:
             return None
 
-        # Check coverage
         cov_status, _ = get_coverage_for_lookup(coverage, family_id)
         if cov_status not in ("available_complete", "available_partial"):
             return None
 
-        # Try to find exact provision match
         stmt = (
             select(SourceChunk)
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
@@ -597,7 +554,6 @@ class ExactLegalSourceService:
             return None
         stmt = stmt.where(family_condition)
 
-        # Build exact match conditions
         if locator.locator_type == "schedule":
             stmt = stmt.where(self._schedule_chunk_condition(locator.target_provision or ""))
         elif locator.locator_type in ("regulation", "subregulation"):
@@ -624,7 +580,6 @@ class ExactLegalSourceService:
         if not chunks:
             return None
 
-        # Build evidence refs
         refs: list[str] = []
         for chunk in chunks:
             try:
@@ -655,7 +610,6 @@ class ExactLegalSourceService:
         duration_ms: float,
     ) -> ExactLegalLookupOutput:
         """Build the final lookup output."""
-        # Convert matches to schema
         exact_matches = [
             ExactLegalMatch(
                 canonical_evidence_ref=evidence.model_copy(
@@ -666,16 +620,12 @@ class ExactLegalSourceService:
             for evidence, ref, match_type in matches
         ]
 
-        # Convert resolved cross-refs
         resolved_cross_refs = [
             ResolvedCrossReference(locator=locator, evidence_refs=refs)
             for locator, refs in resolved_refs
         ]
-
-        # Convert unresolved cross-refs (surface forms only for output)
         unresolved_cross_refs = [u.locator.surface_form for u in unresolved_refs]
 
-        # Get family name for coverage output
         family_name = family_id or "unknown"
         if family_id:
             info = coverage.get_family(family_id)

@@ -42,15 +42,11 @@ def test_url_userinfo_and_port_hardening() -> None:
     reg = create_registry("v212-hard")
     _register(reg, "https://example.gov.au/page")
     r = NativeWebLocatorResolver(reg)
-    # userinfo must become a deterministic rejected locator, not an exception.
     userinfo = r.resolve([NativeWebLocator(url="https://u:p@example.gov.au/page")])
     assert userinfo.resolved_count == 0
     assert "NATIVE_WEB_LOCATOR_NOT_OBSERVED" in userinfo.rejection_codes
-    # non-default port must not match.
     assert r.resolve([NativeWebLocator(url="https://example.gov.au:8443/page")]).resolved_count == 0
-    # explicit :443 is equivalent.
     assert r.resolve([NativeWebLocator(url="https://example.gov.au:443/page")]).resolved_count == 1
-    # malformed port fails safely as unobserved.
     malformed = r.resolve([NativeWebLocator(url="https://example.gov.au:99999/page")])
     assert malformed.resolved_count == 0
     assert "NATIVE_WEB_LOCATOR_NOT_OBSERVED" in malformed.rejection_codes
@@ -250,40 +246,39 @@ def test_citation_neither_and_both() -> None:
     assert both is not None and both.code == "CITATION_EVIDENCE_AMBIGUOUS"
 
 
-def test_n1_official_latest_url_without_version_metadata_is_unknown() -> None:
+def test_n1_official_latest_url_without_version_metadata_uses_current_endpoint_basis() -> None:
+    now = datetime.now(timezone.utc)
     ev = NativeWebEvidenceRef(
         evidence_origin="openai_web_native", evidence_ref="web:x", source_type="legislation",
         source_authenticity="canonical_official", authority_kind="statute",
         jurisdiction="Cth", binding_status="binding", court_or_tribunal_level=None,
-        retrieved_at=datetime.now(timezone.utc), provenance_complete=True,
+        retrieved_at=now, provenance_complete=True,
         search_call_id="s", url="https://www.legislation.gov.au/C2026C00001/latest",
         title="t", native_web_citation=None, canonical_source_id=None,
         document_version=None, effective_from=None, effective_to=None,
         text=None, content_hash=None,
     )
-    basis = evaluate_native_web_applicability(ev, date.today())
-    assert basis.basis == "unknown"
+    basis = evaluate_native_web_applicability(ev, now.date())
+    assert basis.basis == "official_current_latest"
+    assert basis.applicable is True
 
 
 def test_malformed_evidence_refs_not_silently_repaired() -> None:
-    """A non-list evidence_refs must be rejected, never silently repaired."""
     reg = create_registry("v212-malrefs")
     _register(reg, "https://example.gov.au/ok")
     ctx = ToolExecutorContext(request_id="v212-malrefs-ctx", registry=reg)
     claim = {"claim_id": "c1", "claim_type": "current_fact", "materiality": "decisive",
              "text": "x", "draft_start": 0, "draft_end": 1,
-             "evidence_refs": "web:bad",  # malformed, not a list
+             "evidence_refs": "web:bad",
              "native_web_locators": [{"url": "https://example.gov.au/ok"}]}
     err = ToolExecutorService()._resolve_native_web_locators(
         args={"claims": [claim], "citations": []}, context=ctx)
     assert err is not None and err.code == "SUBMISSION_SCHEMA_INVALID"
     assert err.field == "claims.0.evidence_refs"
-    # Not silently reconstructed into a list.
     assert claim.get("evidence_refs") == "web:bad"
 
 
 def test_absent_evidence_refs_treated_as_empty_for_merge() -> None:
-    """evidence_refs absent -> treated as [] and locators merge cleanly."""
     reg = create_registry("v212-absentrefs")
     ref = _register(reg, "https://example.gov.au/ok")
     ctx = ToolExecutorContext(request_id="v212-absentrefs-ctx", registry=reg)
@@ -297,7 +292,6 @@ def test_absent_evidence_refs_treated_as_empty_for_merge() -> None:
 
 
 def test_valid_evidence_refs_plus_locator_merge_dedupe() -> None:
-    """Valid list refs + resolved locator merge and deduplicate correctly."""
     reg = create_registry("v212-merge")
     ref = _register(reg, "https://example.gov.au/page")
     ctx = ToolExecutorContext(request_id="v212-merge-ctx", registry=reg)
@@ -308,12 +302,11 @@ def test_valid_evidence_refs_plus_locator_merge_dedupe() -> None:
     err = ToolExecutorService()._resolve_native_web_locators(
         args={"claims": [claim], "citations": []}, context=ctx)
     assert err is None
-    assert claim["evidence_refs"] == ["exact:existing", ref]  # deduped, order preserved
+    assert claim["evidence_refs"] == ["exact:existing", ref]
     assert "native_web_locators" not in claim
 
 
 def test_oversized_locator_rejected_as_schema_invalid() -> None:
-    """>2000-char URL is deterministic schema-invalid, not silently normalized."""
     reg = create_registry("v212-big")
     ctx = ToolExecutorContext(request_id="v212-big-ctx", registry=reg)
     big_url = "https://example.gov.au/" + ("a" * 2100)
@@ -328,7 +321,6 @@ def test_oversized_locator_rejected_as_schema_invalid() -> None:
 
 
 def test_extra_property_locator_rejected() -> None:
-    """A locator with an unexpected property fails deterministically."""
     reg = create_registry("v212-extra")
     _register(reg, "https://example.gov.au/page")
     ctx = ToolExecutorContext(request_id="v212-extra-ctx", registry=reg)
@@ -342,7 +334,6 @@ def test_extra_property_locator_rejected() -> None:
 
 
 def test_valid_observed_locator_still_resolves() -> None:
-    """A valid observed locator still resolves (no regression)."""
     reg = create_registry("v212-obs")
     ref = _register(reg, "https://example.gov.au/ok")
     ctx = ToolExecutorContext(request_id="v212-obs-ctx", registry=reg)
@@ -356,7 +347,6 @@ def test_valid_observed_locator_still_resolves() -> None:
 
 
 def test_unobserved_valid_locator_not_observed() -> None:
-    """A valid but unobserved URL still yields NATIVE_WEB_LOCATOR_NOT_OBSERVED."""
     reg = create_registry("v212-unobs")
     _register(reg, "https://example.gov.au/real")
     ctx = ToolExecutorContext(request_id="v212-unobs-ctx", registry=reg)
@@ -369,7 +359,6 @@ def test_unobserved_valid_locator_not_observed() -> None:
 
 
 def test_ambiguous_valid_locator_ambiguous() -> None:
-    """A valid but ambiguous locator still yields NATIVE_WEB_LOCATOR_AMBIGUOUS."""
     reg = create_registry("v212-amb")
     _register(reg, "https://example.gov.au/p", call="a")
     _register(reg, "https://example.gov.au/p", call="b")
@@ -383,7 +372,6 @@ def test_ambiguous_valid_locator_ambiguous() -> None:
 
 
 def test_citation_path_enforces_transient_schema() -> None:
-    """Citation native_web_locator must also enforce the transient schema."""
     reg = create_registry("v212-cite-schema")
     _register(reg, "https://example.gov.au/cite")
     ctx = ToolExecutorContext(request_id="v212-cite-schema-ctx", registry=reg)
@@ -402,7 +390,6 @@ def test_citation_path_enforces_transient_schema() -> None:
 
 
 def test_provider_schema_enforces_max_length() -> None:
-    """The provider-facing schema carries maxLength=2000 on both locators."""
     claims_items = SUBMIT_ANSWER_TOOL["parameters"]["properties"]["claims"]["items"]["properties"]
     assert claims_items["native_web_locators"]["items"]["properties"]["url"].get("maxLength") == 2000
     citations_items = SUBMIT_ANSWER_TOOL["parameters"]["properties"]["citations"]["items"]["properties"]

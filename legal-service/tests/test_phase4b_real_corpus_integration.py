@@ -79,13 +79,7 @@ def _has_exact_schedule_locator(value: str | None, schedule: str) -> bool:
 
 
 def _has_structural_schedule_header(value: str | None, schedule: str) -> bool:
-    """Return whether a page/chunk header itself identifies this Schedule.
-
-    The official compilation can mention another Schedule later in the same
-    heading or page (for example a Schedule 13 heading referring to Schedule 1).
-    Such a cross-reference must not be mistaken for the structural identity of
-    the current page.
-    """
+    """Return whether a page heading itself identifies this Schedule."""
     return bool(
         re.search(
             rf"(?i)^\s*schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
@@ -99,17 +93,14 @@ def _chunk_is_structurally_in_schedule(
     chunk: SourceChunk,
     schedule: str,
 ) -> bool:
-    """Accept both legacy schedule-per-source and current volume-based corpora."""
+    """Accept legacy source boundaries or the page heading copied to the chunk."""
     if _has_exact_schedule_locator(source.title, schedule):
         return True
     if _has_structural_schedule_header(chunk.heading, schedule):
         return True
-    return bool(
-        re.search(
-            rf"(?im)^\s*schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
-            chunk.text or "",
-        )
-    )
+    if not chunk.heading:
+        return _has_structural_schedule_header(chunk.text, schedule)
+    return False
 
 
 @pytest.mark.parametrize("schedule", ["1", "2", "3", "8", "10", "13", "7A", "6D"])
@@ -258,8 +249,6 @@ def test_schedule_two_cross_references_are_resolved_or_explicitly_unresolved(
     elif "migration act" in text_lower:
         query_text = expected_surface = "Migration Act"
     else:
-        # The parser retains the actual surface form while resolving it to the
-        # Migration Act document family, so use the source text for lookup.
         query_text, expected_surface = "the Act", "the Act"
     output, registry = _lookup(
         db,
