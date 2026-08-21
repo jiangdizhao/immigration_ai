@@ -69,10 +69,26 @@ def _lookup(
 
 
 def _has_exact_schedule_locator(value: str | None, schedule: str) -> bool:
-    """Return whether text names exactly this Schedule locator."""
+    """Return whether a legacy schedule-specific source title names this Schedule."""
     return bool(
         re.search(
             rf"(?i)(?<![A-Z0-9])schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
+            value or "",
+        )
+    )
+
+
+def _has_structural_schedule_header(value: str | None, schedule: str) -> bool:
+    """Return whether a page/chunk header itself identifies this Schedule.
+
+    The official compilation can mention another Schedule later in the same
+    heading or page (for example a Schedule 13 heading referring to Schedule 1).
+    Such a cross-reference must not be mistaken for the structural identity of
+    the current page.
+    """
+    return bool(
+        re.search(
+            rf"(?i)^\s*schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
             value or "",
         )
     )
@@ -86,7 +102,7 @@ def _chunk_is_structurally_in_schedule(
     """Accept both legacy schedule-per-source and current volume-based corpora."""
     if _has_exact_schedule_locator(source.title, schedule):
         return True
-    if _has_exact_schedule_locator(chunk.heading, schedule):
+    if _has_structural_schedule_header(chunk.heading, schedule):
         return True
     return bool(
         re.search(
