@@ -308,8 +308,9 @@ class ExactLegalSourceService:
         # Filter by schedule/provision
         conditions = []
 
-        if request.schedule:
-            conditions.append(self._schedule_title_condition(request.schedule))
+        schedule_scope = request.schedule or self._schedule_from_family_id(family_id)
+        if schedule_scope:
+            conditions.append(self._schedule_chunk_condition(schedule_scope))
 
         if request.provision:
             # Match provision in section_ref or text
@@ -337,7 +338,17 @@ class ExactLegalSourceService:
             )
 
         if request.document_id:
-            conditions.append(LegalSource.title.ilike(f"%{request.document_id}%"))
+            doc_lower = request.document_id.lower()
+            document_id_is_family_locator = (
+                (family_id == "migration_act" and "migration act" in doc_lower)
+                or (
+                    family_id == "migration_regulations"
+                    and "migration regulations" in doc_lower
+                )
+                or self._schedule_from_family_id(family_id) is not None
+            )
+            if not document_id_is_family_locator:
+                conditions.append(LegalSource.title.ilike(f"%{request.document_id}%"))
 
         if request.source_types:
             conditions.append(
@@ -378,33 +389,71 @@ class ExactLegalSourceService:
         return matches
 
     @staticmethod
-    def _schedule_title_condition(schedule: str):
-        """Match one Schedule locator, never a numeric/alphanumeric prefix.
+    def _schedule_locator_pattern(schedule: str) -> str:
+        """Return an exact Schedule locator pattern with alphanumeric boundaries."""
+        normalized = schedule.strip().upper()
+        return rf"(^|[^[:alnum:]])schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
 
-        PostgreSQL's case-insensitive POSIX regexp makes the terminating
-        legal-locator boundary explicit: Schedule 1 cannot match Schedule 10
-        or 13, and Schedule 7A cannot match a longer alphanumeric suffix.
+    @staticmethod
+    def _schedule_from_family_id(family_id: str | None) -> str | None:
+        if not family_id or not family_id.startswith("migration_regulations_schedule_"):
+            return None
+        return family_id.removeprefix("migration_regulations_schedule_").upper()
+
+    @classmethod
+    def _schedule_title_condition(cls, schedule: str):
+        """Legacy exact Schedule locator match for schedule-specific source titles."""
+        return LegalSource.title.op("~*")(cls._schedule_locator_pattern(schedule))
+
+    @classmethod
+    def _schedule_chunk_condition(cls, schedule: str):
+        """Match a structural Schedule page in both legacy and volume-based corpora.
+
+        Older corpora stored each Schedule as a separate LegalSource whose title
+        named the Schedule.  Current Federal Register compilations are ingested
+        as multi-volume sources (for example F2026C00667VOL02/VOL03), so source
+        title alone is no longer a Schedule boundary.  PDF page headings are
+        copied onto every SourceChunk generated from that page; use those
+        structural headings first, retain the legacy title match, and allow an
+        anchored page-text header as a conservative fallback.
         """
         normalized = schedule.strip().upper()
-        pattern = rf"(^|[^[:alnum:]])schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
-        return LegalSource.title.op("~*")(pattern)
+        locator_pattern = cls._schedule_locator_pattern(normalized)
+        page_header_pattern = (
+            rf"(^|[[:cntrl:]])[[:space:]]*schedule[[:space:]]+"
+            rf"{re.escape(normalized)}([^[:alnum:]]|$)"
+        )
+        return or_(
+            LegalSource.title.op("~*")(locator_pattern),
+            SourceChunk.heading.op("~*")(locator_pattern),
+            SourceChunk.text.op("~*")(page_header_pattern),
+        )
+
+    @staticmethod
+    def _migration_regulations_source_condition():
+        return and_(
+            LegalSource.source_type.in_(["legislation", "regulation", "regulations"]),
+            or_(
+                LegalSource.title.ilike("%Migration Regulations%"),
+                LegalSource.document_version.ilike("F%"),
+            ),
+        )
 
     @staticmethod
     def _family_source_condition(family_id: str | None):
         """Return the deterministic canonical-source scope for a family.
 
-        The coverage report authorizes a family, not the entire corpus.  The
-        title/version locators below are document-identity mechanics; they do
-        not infer legal relevance or replace a missing source with a similar
-        one. Migration Act and Regulations compilation identifiers are kept
-        as a fallback because the canonical corpus stores some volumes under
-        their official compilation IDs rather than a descriptive title.
+        The coverage report authorizes a family, not the entire corpus.  A
+        Schedule family is now scoped in two stages: first to the Migration
+        Regulations source family, then to structural Schedule page headings in
+        ``_find_matches``.  This supports both old schedule-per-source corpora
+        and current official multi-volume compilations without treating an
+        ordinary cross-reference as a Schedule boundary.
         """
         if family_id is None:
             return None
         if family_id.startswith("migration_regulations_schedule_"):
-            suffix = family_id.removeprefix("migration_regulations_schedule_")
-            return ExactLegalSourceService._schedule_title_condition(suffix)
+            return ExactLegalSourceService._migration_regulations_source_condition()
         if family_id == "migration_act":
             return and_(
                 LegalSource.source_type.in_(["legislation", "act", "statute"]),
@@ -414,13 +463,7 @@ class ExactLegalSourceService:
                 ),
             )
         if family_id == "migration_regulations":
-            return and_(
-                LegalSource.source_type.in_(["legislation", "regulation", "regulations"]),
-                or_(
-                    LegalSource.title.ilike("%Migration Regulations%"),
-                    LegalSource.document_version.ilike("F%"),
-                ),
-            )
+            return ExactLegalSourceService._migration_regulations_source_condition()
         if family_id == "home_affairs_guidance":
             return LegalSource.source_type.in_(["official_guidance", "guidance", "policy"])
         if family_id == "art_tribunal_material":
@@ -556,7 +599,7 @@ class ExactLegalSourceService:
 
         # Build exact match conditions
         if locator.locator_type == "schedule":
-            stmt = stmt.where(self._schedule_title_condition(locator.target_provision or ""))
+            stmt = stmt.where(self._schedule_chunk_condition(locator.target_provision or ""))
         elif locator.locator_type in ("regulation", "subregulation"):
             stmt = stmt.where(
                 SourceChunk.section_ref.ilike(f"%{locator.target_provision}%")

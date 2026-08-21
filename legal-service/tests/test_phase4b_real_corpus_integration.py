@@ -68,12 +68,30 @@ def _lookup(
     return output, registry
 
 
-def _has_exact_schedule_locator(title: str, schedule: str) -> bool:
-    """Return whether a source title names exactly this Schedule locator."""
+def _has_exact_schedule_locator(value: str | None, schedule: str) -> bool:
+    """Return whether text names exactly this Schedule locator."""
     return bool(
         re.search(
             rf"(?i)(?<![A-Z0-9])schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
-            title,
+            value or "",
+        )
+    )
+
+
+def _chunk_is_structurally_in_schedule(
+    source: LegalSource,
+    chunk: SourceChunk,
+    schedule: str,
+) -> bool:
+    """Accept both legacy schedule-per-source and current volume-based corpora."""
+    if _has_exact_schedule_locator(source.title, schedule):
+        return True
+    if _has_exact_schedule_locator(chunk.heading, schedule):
+        return True
+    return bool(
+        re.search(
+            rf"(?im)^\s*schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
+            chunk.text or "",
         )
     )
 
@@ -99,9 +117,10 @@ def test_schedule_lookup_returns_registered_real_canonical_rows(
         evidence = match.canonical_evidence_ref
         assert registry.resolve_evidence(evidence.evidence_ref) == evidence
         source = db.get(LegalSource, evidence.canonical_source_id)
+        chunk = db.get(SourceChunk, evidence.canonical_chunk_id)
         assert source is not None
-        assert _has_exact_schedule_locator(source.title, schedule)
-        assert db.get(SourceChunk, evidence.canonical_chunk_id) is not None
+        assert chunk is not None
+        assert _chunk_is_structurally_in_schedule(source, chunk, schedule)
         assert evidence.authority_kind == "delegated_legislation"
 
 
@@ -130,14 +149,22 @@ def test_schedule_lookup_never_crosses_schedule_locator_families(
     )
 
     assert output.matches
-    titles = [
-        db.get(LegalSource, match.canonical_evidence_ref.canonical_source_id).title
-        for match in output.matches
-    ]
-    assert all(_has_exact_schedule_locator(title, requested) for title in titles)
+    resolved_rows: list[tuple[LegalSource, SourceChunk]] = []
+    for match in output.matches:
+        evidence = match.canonical_evidence_ref
+        source = db.get(LegalSource, evidence.canonical_source_id)
+        chunk = db.get(SourceChunk, evidence.canonical_chunk_id)
+        assert source is not None and chunk is not None
+        resolved_rows.append((source, chunk))
+
+    assert all(
+        _chunk_is_structurally_in_schedule(source, chunk, requested)
+        for source, chunk in resolved_rows
+    )
     for wrong_schedule in forbidden:
         assert not any(
-            _has_exact_schedule_locator(title, wrong_schedule) for title in titles
+            _chunk_is_structurally_in_schedule(source, chunk, wrong_schedule)
+            for source, chunk in resolved_rows
         )
 
 
@@ -196,13 +223,14 @@ def test_schedule_two_cross_references_are_resolved_or_explicitly_unresolved(
     schedule_two_chunk = db.scalar(
         select(SourceChunk)
         .join(LegalSource, LegalSource.id == SourceChunk.source_id)
-        .where(LegalSource.title.ilike("%Schedule 2%"))
+        .where(ExactLegalSourceService._family_source_condition("migration_regulations_schedule_2"))
+        .where(ExactLegalSourceService._schedule_chunk_condition("2"))
         .where(
             SourceChunk.text.ilike("%Schedule 3%")
             | SourceChunk.text.ilike("%Migration Act%")
             | SourceChunk.text.ilike("%the Act%")
         )
-        .order_by(SourceChunk.chunk_index)
+        .order_by(LegalSource.title, SourceChunk.chunk_index)
         .limit(1)
     )
     if schedule_two_chunk is None:
