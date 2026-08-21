@@ -81,15 +81,15 @@ SCHEDULE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Regulation references: "regulation 2.07", "reg 2.07", "r 2.07"
+# Regulation references: "regulation 2.07", "reg 1.15F", "r 2.07(5)"
 REGULATION_RE = re.compile(
-    r"\b(?:regulation|reg\.?|r)\s+(\d{1,2}\.\d{1,3}(?:\([0-9A-Za-z]+\))?)\b",
+    r"\b(?:regulation|reg\.?|r)\s+(\d{1,2}\.\d{1,3}[A-Z]{0,3}(?:\([0-9A-Za-z]+\))?)\b",
     re.IGNORECASE,
 )
 
-# Subregulation references: "subregulation 2.07(5)", "subreg 2.07(5)"
+# Subregulation references: "subregulation 2.07(5)", "subreg 1.15F(2)"
 SUBREGULATION_RE = re.compile(
-    r"\b(?:subregulation|subreg\.?|sub\s*r)\s+(\d{1,2}\.\d{1,3}\([0-9A-Za-z]+\))\b",
+    r"\b(?:subregulation|subreg\.?|sub\s*r)\s+(\d{1,2}\.\d{1,3}[A-Z]{0,3}\([0-9A-Za-z]+\))\b",
     re.IGNORECASE,
 )
 
