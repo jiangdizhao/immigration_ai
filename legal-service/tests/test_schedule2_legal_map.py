@@ -16,6 +16,10 @@ from app.schedule.schemas import ScheduleClause
 
 
 COMPILATION = "F2026C00667"
+CLAUSE_485_212_TEXT = (
+    "See regulation 1.15F and Schedule 3 criterion 3001. "
+    "Schedule 3 also applies. Section 48 of the Act may be relevant."
+)
 
 
 def _row(
@@ -63,8 +67,8 @@ def _locator(locator_type: str, provision: str, schedule: str | None) -> LegalLo
     )
 
 
-def _fixture_graph() -> Schedule2Graph:
-    rows = [
+def _fixture_rows() -> list[ScheduleClause]:
+    return [
         _row(
             "485.211",
             subclass="485",
@@ -81,10 +85,7 @@ def _fixture_graph() -> Schedule2Graph:
         _row(
             "485.212",
             subclass="485",
-            text=(
-                "See regulation 1.15F and Schedule 3 criterion 3001. "
-                "Schedule 3 also applies. Section 48 of the Act may be relevant."
-            ),
+            text=CLAUSE_485_212_TEXT,
             start=30,
         ),
         _row(
@@ -94,15 +95,21 @@ def _fixture_graph() -> Schedule2Graph:
             start=40,
         ),
     ]
-    locators = [
+
+
+def _fixture_locators() -> list[LegalLocatorRecord]:
+    return [
         _locator("regulation", "1.15F", None),
         _locator("schedule3_criterion", "3001", "3"),
         _locator("schedule4_pic", "4005", "4"),
         _locator("schedule8_condition", "8501", "8"),
     ]
+
+
+def _fixture_graph() -> Schedule2Graph:
     return build_schedule2_graph(
-        rows,
-        locator_records=locators,
+        _fixture_rows(),
+        locator_records=_fixture_locators(),
         compilation_number=COMPILATION,
     )
 
@@ -146,49 +153,17 @@ def test_graph_uses_only_navigation_relations_and_resolves_local_locator_availab
     assert by_id["external:instrument:F2026L00001"].local_available is False
 
 
-def test_graph_build_is_deterministic_across_input_order() -> None:
+def test_graph_build_is_deterministic_across_input_and_locator_order() -> None:
     first = _fixture_graph()
-    rows = [
-        _row("500.211", subclass="500", text="See Instrument F2026L00001.", start=40),
-        _row(
-            "485.212",
-            subclass="485",
-            text="See regulation 1.15F and Schedule 3 criterion 3001. Schedule 3 also applies.",
-            start=30,
-        ),
-        _row(
-            "485.211",
-            subclass="485",
-            text="The applicant must satisfy PIC 4005 and visa condition 8501.",
-            start=20,
-            source_file="F2026C00667VOL03.pdf",
-        ),
-        _row(
-            "485.211",
-            subclass="485",
-            text="The applicant must satisfy Public Interest Criterion 4005 and condition 8501.",
-            start=10,
-        ),
-    ]
-    locators = [
-        _locator("schedule8_condition", "8501", "8"),
-        _locator("schedule4_pic", "4005", "4"),
-        _locator("schedule3_criterion", "3001", "3"),
-        _locator("regulation", "1.15F", None),
-    ]
     second = build_schedule2_graph(
-        rows,
-        locator_records=locators,
+        list(reversed(_fixture_rows())),
+        locator_records=list(reversed(_fixture_locators())),
         compilation_number=COMPILATION,
     )
 
-    # The second fixture intentionally omits one non-identity Act sentence, so
-    # compare the deterministic node identities and structural ordering rather
-    # than the reference-edge set.
-    assert [node.id for node in first.nodes] == [node.id for node in second.nodes]
-    assert [node.id for node in first.nodes if node.node_type == "clause"] == [
-        node.id for node in second.nodes if node.node_type == "clause"
-    ]
+    assert [node.to_dict() for node in first.nodes] == [node.to_dict() for node in second.nodes]
+    assert [edge.to_dict() for edge in first.edges] == [edge.to_dict() for edge in second.edges]
+    assert first.manifest == second.manifest
 
 
 def test_write_load_and_read_only_queries(tmp_path: Path) -> None:
