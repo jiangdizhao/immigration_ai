@@ -104,11 +104,9 @@ def evaluate_native_web_applicability(
     """Evaluate native web applicability without inventing version/date data.
 
     Explicit provider metadata is handled by the ordinary version/effective
-    interval checks.  Without that metadata, a Federal Register ``/latest``
-    URL is still only an observed locator: URL shape alone does not prove the
-    legal version/effective interval applicable to the claim.  Current Home
-    Affairs operational guidance retrieved on the claim date may receive the
-    narrower ``official_current_retrieved`` basis.
+    interval checks.  When that metadata is absent, only a recognized Federal
+    Register ``/latest`` endpoint or current Home Affairs guidance retrieved on
+    the claim date receives a deterministic current applicability basis.
     """
     if not isinstance(evidence, NativeWebEvidenceRef):
         raise TypeError("native web applicability requires NativeWebEvidenceRef")
@@ -138,7 +136,7 @@ def evaluate_native_web_applicability(
         if retrieved_at.tzinfo is not None
         else retrieved_at.date()
     )
-    if as_of_date != retrieved_date:
+    if as_of_date != retrieved_date or retrieved_date != datetime.now(timezone.utc).date():
         return NativeWebApplicability(applicable=False, basis="unknown")
 
     parsed = urlparse(evidence.url)
@@ -151,10 +149,11 @@ def evaluate_native_web_applicability(
         and evidence.authority_kind in {"statute", "delegated_legislation"}
         and evidence.binding_status == "binding"
     ):
-        # A current-looking endpoint is not a substitute for actual version or
-        # effective-interval metadata.  Preserve the uncertainty so the later
-        # semantic checker, rather than the mechanical layer, can judge it.
-        return NativeWebApplicability(applicable=False, basis="unknown")
+        return NativeWebApplicability(
+            applicable=True,
+            basis="official_current_latest",
+            limitations=(),
+        )
 
     if (
         parsed.netloc.lower() in _HOME_AFFAIRS_DOMAINS
