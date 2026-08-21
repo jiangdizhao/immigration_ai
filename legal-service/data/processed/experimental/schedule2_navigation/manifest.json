@@ -1,0 +1,85 @@
+{
+  "accepted_structural_provision_count": 2461,
+  "ambiguous_candidate_count": 0,
+  "ambiguous_external_target_count": 96,
+  "canonical_provision_count": 2461,
+  "compilation": "F2026C00667",
+  "conflicting_candidate_count": 0,
+  "conflicting_ownership_count": 0,
+  "document_family": "Migration Regulations 1994",
+  "duplicate_occurrence_count": 0,
+  "edge_count": 10365,
+  "explicit_clause_heading_count": 576,
+  "external_locator_count": 287,
+  "generated_artifact_sha256": {
+    "edges": "7cd373c3b84ae85703aa5710316e04120ead122eb85e385fcba4226247f86b3c",
+    "nodes": "bf3d15c8fd03773dbbf6812ae844b976f1a5ebd80aad6ee3045bbfda5a8fd50b"
+  },
+  "graph_kind": "experimental_schedule2_legal_navigation_sidecar",
+  "locator_index_sha256": "48011996cf260aea63d8d965ba6f750010ae0794472522903f0a4678f3a27beb",
+  "locator_manifest_identity": {
+    "compilation_number": "288",
+    "document_family": "Migration Regulations 1994",
+    "document_version": "F2026C00667",
+    "effective_date": "2026-07-01",
+    "record_count": 549
+  },
+  "locator_resolution_counts": {
+    "ambiguous": 96,
+    "resolved_local": 171,
+    "unresolved_external": 20
+  },
+  "node_count": 2833,
+  "node_type_counts": {
+    "external_locator": 287,
+    "provision": 2461,
+    "subclass": 85
+  },
+  "positive_only_semantics": true,
+  "rejected_candidate_count": 0,
+  "rejected_candidate_reason_counts": {},
+  "relation_counts": {
+    "CONTAINS": 2461,
+    "NEXT_CLAUSE": 2376,
+    "PREVIOUS_CLAUSE": 2376,
+    "REFERENCES": 110,
+    "REFERENCES_ACT": 129,
+    "REFERENCES_CONDITION": 636,
+    "REFERENCES_PIC": 1973,
+    "REFERENCES_REGULATION": 198,
+    "REFERENCES_SCHEDULE": 65,
+    "REFERENCES_SCHEDULE3_CRITERION": 41
+  },
+  "schedule2_pages_processed": 576,
+  "schema_version": 1,
+  "serving_path_integrated": false,
+  "source_documents_processed": 2,
+  "source_files": [
+    {
+      "document_version": "F2026C00667",
+      "embedded_content_hash": "331e90080ab71f0e6d0c7b0b886fa468c6dc66e007ce19b2c1a96893713e8acd",
+      "page_count": 452,
+      "pdf_file": "data/acquired/legislation/migration_regulations_1994_schedules_updates/F2026C00667VOL02.pdf",
+      "pdf_sha256": "280721908aa698d08481b6c13448124423d494d4ae82df928e2c87fd24af0c56",
+      "source_file": "data/raw/legislation/migration_regulations_1994_F2026C00667/F2026C00667VOL02.json",
+      "source_sha256": "daf17a5b7d8da8b82931c7446969d74dfbc2f53bd9f8b12dfd6c1e4aca3da32c",
+      "volume": 2
+    },
+    {
+      "document_version": "F2026C00667",
+      "embedded_content_hash": "9ce8882b99955fb40004e8d361580a69dc212ef29bc7f6732177808728c0ef5f",
+      "page_count": 417,
+      "pdf_file": "data/acquired/legislation/migration_regulations_1994_schedules_updates/F2026C00667VOL03.pdf",
+      "pdf_sha256": "855198a66a622772b324259a14cddefa51eb12865995354bc4fdb37c74d544b4",
+      "source_file": "data/raw/legislation/migration_regulations_1994_F2026C00667/F2026C00667VOL03.json",
+      "source_sha256": "accecf0a2e5331d5e6ba3405d5d7c4f63e0b42751fc6c61e8bed80e9ef923d01",
+      "volume": 3
+    }
+  ],
+  "source_occurrence_count": 2461,
+  "source_pages_processed": 869,
+  "source_representation": "tracked_raw_json_page_sections",
+  "structural_anomaly_count": 0,
+  "subclass_count": 85,
+  "unresolved_external_target_count": 20
+}
