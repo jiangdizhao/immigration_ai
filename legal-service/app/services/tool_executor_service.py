@@ -23,7 +23,9 @@ from uuid import uuid4
 from app.schemas.agent import AgentSubmissionV2
 from app.schemas.tools import (
     DeterministicUtilityRequest,
+    ExactLegalLookupBatchRequest,
     SubmissionError,
+    Schedule2NavigationBatchRequest,
     SubmitAnswerAccepted,
     SubmitAnswerRejected,
     ToolResultEnvelope,
@@ -513,6 +515,14 @@ class ToolExecutorContext:
     flat_rag_search_fn: Any = None
     # DB session for tools that need it (injected)
     db_session: Any = None
+    # Experimental Arm-N research adapters.  Both are request-local and
+    # navigation never receives or writes to the evidence registry.
+    schedule2_navigation_map: Any = None
+    exact_legal_lookup_service: Any = None
+    schedule2_navigation_call_count: int = 0
+    exact_legal_lookup_call_count: int = 0
+    schedule2_navigation_denied_call_count: int = 0
+    exact_legal_lookup_denied_call_count: int = 0
 
 
 class ToolExecutorService:
@@ -543,6 +553,10 @@ class ToolExecutorService:
                 result = self._execute_deterministic_utility(tool_call, context)
             elif tool_call.name == "flat_rag_search":
                 result = self._execute_flat_rag_search(tool_call, context)
+            elif tool_call.name == "schedule2_navigation":
+                result = self._execute_schedule2_navigation(tool_call, context)
+            elif tool_call.name == "exact_legal_lookup":
+                result = self._execute_exact_legal_lookup(tool_call, context)
             elif tool_call.name == "submit_answer":
                 result, submission, submission_action = self._execute_submit_answer(tool_call, context)
             else:
@@ -586,6 +600,138 @@ class ToolExecutorService:
             submission_action=submission_action,
         )
 
+    @staticmethod
+    def _budget_denied(
+        *, tool_call: ToolCallRequest, code: str, message: str, data: dict[str, Any]
+    ) -> ToolResultEnvelope:
+        return build_tool_result(
+            tool_call_id=tool_call.call_id,
+            status="partial",
+            data=data,
+            duration_ms=0,
+            error={"code": code, "message": message},
+        )
+
+    def _execute_schedule2_navigation(
+        self,
+        tool_call: ToolCallRequest,
+        context: ToolExecutorContext,
+    ) -> ToolResultEnvelope:
+        if context.schedule2_navigation_call_count >= 1:
+            context.schedule2_navigation_denied_call_count += 1
+            return self._budget_denied(
+                tool_call=tool_call,
+                code="SCHEDULE2_NAVIGATION_BUDGET_EXHAUSTED",
+                message="Schedule-2 navigation is limited to one invocation per turn.",
+                data={"navigation_only": True, "results": [], "denied_reason": "PER_TURN_LIMIT"},
+            )
+        context.schedule2_navigation_call_count += 1
+        if context.schedule2_navigation_map is None:
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="unavailable",
+                data={"navigation_only": True, "results": [], "evidence_refs": []},
+                duration_ms=0,
+                error={"code": "SCHEDULE2_NAVIGATION_NOT_AVAILABLE", "message": "Schedule-2 navigation is not available in this configuration"},
+            )
+        try:
+            request = Schedule2NavigationBatchRequest(**tool_call.arguments)
+            from app.services.schedule2_navigation_service import Schedule2NavigationService
+
+            data = Schedule2NavigationService(context.schedule2_navigation_map).query(request)
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="ok",
+                data=data,
+                duration_ms=0,
+            )
+        except Exception as exc:
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="invalid_request",
+                data={"navigation_only": True, "results": [], "evidence_refs": []},
+                duration_ms=0,
+                error={"code": "INVALID_SCHEDULE2_NAVIGATION_REQUEST", "message": str(exc)},
+            )
+
+    def _execute_exact_legal_lookup(
+        self,
+        tool_call: ToolCallRequest,
+        context: ToolExecutorContext,
+    ) -> ToolResultEnvelope:
+        if context.exact_legal_lookup_call_count >= 1:
+            context.exact_legal_lookup_denied_call_count += 1
+            return self._budget_denied(
+                tool_call=tool_call,
+                code="EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
+                message="Exact legal lookup is limited to one invocation per turn.",
+                data={"lookups": [], "denied_reason": "PER_TURN_LIMIT"},
+            )
+        context.exact_legal_lookup_call_count += 1
+        if context.exact_legal_lookup_service is None and context.db_session is None:
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="unavailable",
+                data={"lookups": []},
+                duration_ms=0,
+                error={"code": "EXACT_LEGAL_LOOKUP_NOT_AVAILABLE", "message": "Exact legal lookup requires the request database context"},
+            )
+        try:
+            try:
+                batch = ExactLegalLookupBatchRequest(**tool_call.arguments)
+            except Exception as exc:
+                return build_tool_result(
+                    tool_call_id=tool_call.call_id,
+                    status="invalid_request",
+                    data={"lookups": []},
+                    duration_ms=0,
+                    error={"code": "INVALID_EXACT_LEGAL_LOOKUP_REQUEST", "message": str(exc)},
+                )
+            if context.as_of_date is None:
+                return build_tool_result(
+                    tool_call_id=tool_call.call_id,
+                    status="unavailable",
+                    data={"lookups": []},
+                    duration_ms=0,
+                    error={"code": "EXACT_LOOKUP_DATE_UNAVAILABLE", "message": "The request as-of date is unavailable"},
+                )
+            if context.exact_legal_lookup_service is None:
+                from app.services.exact_legal_source_service import ExactLegalSourceService
+
+                service = ExactLegalSourceService(context.db_session)
+            else:
+                service = context.exact_legal_lookup_service
+            lookups = []
+            for index, item in enumerate(batch.requests):
+                request_data = item.model_dump(mode="python")
+                request_data["as_of_date"] = context.as_of_date
+                from app.schemas.tools import ExactLegalLookupRequest
+
+                output = service.lookup(
+                    ExactLegalLookupRequest(**request_data),
+                    registry=context.registry,
+                    # Keep each batched lookup's registry outcome isolated.
+                    # The outer tool call remains the model-visible identity;
+                    # this deterministic suffix is backend-only provenance.
+                    tool_call_id=f"{tool_call.call_id}:locator:{index}",
+                )
+                lookups.append(output.model_dump(mode="json"))
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="ok",
+                data={"lookups": lookups},
+                duration_ms=0,
+            )
+        except Exception as exc:
+            logger.exception("Exact legal lookup failed")
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="error",
+                data={"lookups": []},
+                duration_ms=0,
+                error={"code": "EXACT_LEGAL_LOOKUP_ERROR", "message": str(exc)},
+            )
+
     def _execute_deterministic_utility(
         self,
         tool_call: ToolCallRequest,
@@ -615,7 +761,7 @@ class ToolExecutorService:
         tool_call: ToolCallRequest,
         context: ToolExecutorContext,
     ) -> ToolResultEnvelope:
-        """Execute flat_rag_search tool (Arm B only)."""
+        """Execute the existing flat_rag_search tool when injected."""
         if context.flat_rag_search_fn is None:
             return build_tool_result(
                 tool_call_id=tool_call.call_id,

@@ -18,7 +18,7 @@ from typing import Any, Literal
 from app.core.config import get_settings
 from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V2, LUNA_PROMPT_VERSION
 
-ExperimentArm = Literal["A", "B", "L", "C", "D"] | None
+ExperimentArm = Literal["A", "B", "L", "N", "C", "D"] | None
 ReasoningEffort = Literal["none", "low", "medium", "high"]
 
 
@@ -203,6 +203,90 @@ FLAT_RAG_SEARCH_TOOL = {
     },
 }
 
+SCHEDULE2_NAVIGATION_TOOL = {
+    "type": "function",
+    "name": "schedule2_navigation",
+    "description": (
+        "Read-only structural navigation over the experimental Schedule-2 sidecar. "
+        "Returns explicit clause/reference targets and local resolution metadata "
+        "as navigation hints only. It never returns legal evidence and cannot "
+        "establish eligibility, applicability, or a pathway. Use exact_legal_lookup "
+        "to obtain genuine source evidence for a target."
+    ),
+    "strict": True,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "requests": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "enum": ["subclass_map", "provision_context", "follow_references"],
+                        },
+                        "subclass": {"anyOf": [{"type": "string", "maxLength": 20}, {"type": "null"}]},
+                        "provision_ref": {"anyOf": [{"type": "string", "maxLength": 255}, {"type": "null"}]},
+                        "max_targets": {"type": "integer", "minimum": 1, "maximum": 30},
+                    },
+                    "required": ["operation", "subclass", "provision_ref", "max_targets"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["requests"],
+        "additionalProperties": False,
+    },
+}
+
+EXACT_LEGAL_LOOKUP_TOOL = {
+    "type": "function",
+    "name": "exact_legal_lookup",
+    "description": (
+        "Look up exact local legal source content for up to 8 known locators. "
+        "The backend owns the request date, database session, and opaque evidence "
+        "refs. Preserve available_complete, available_partial, absent, unknown, "
+        "and unresolved cross-reference states; local absence never proves that "
+        "law does not exist. Returned evidence_refs are genuine request-scoped "
+        "refs and may be used in submit_answer."
+    ),
+    "strict": True,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "requests": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"anyOf": [{"type": "string", "maxLength": 2000}, {"type": "null"}]},
+                        "document_id": {"anyOf": [{"type": "string", "maxLength": 500}, {"type": "null"}]},
+                        "source_types": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                        "schedule": {"anyOf": [{"type": "string", "maxLength": 100}, {"type": "null"}]},
+                        "provision": {"anyOf": [{"type": "string", "maxLength": 255}, {"type": "null"}]},
+                        "case_citation": {"anyOf": [{"type": "string", "maxLength": 500}, {"type": "null"}]},
+                        "subclass": {"anyOf": [{"type": "string", "maxLength": 50}, {"type": "null"}]},
+                        "follow_cross_references": {"type": "boolean"},
+                        "max_hits": {"type": "integer", "minimum": 1, "maximum": 20},
+                    },
+                    "required": [
+                        "query", "document_id", "source_types", "schedule", "provision",
+                        "case_citation", "subclass", "follow_cross_references", "max_hits",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["requests"],
+        "additionalProperties": False,
+    },
+}
+
 # OpenAI built-in web search tool reference
 WEB_SEARCH_TOOL = {
     "type": "web_search",
@@ -352,10 +436,11 @@ class AgentPolicyService:
         Arm A: web_search + deterministic_utility + native-locator submit
         Arm B: historical web_search + flat_rag_search + utility + submit
         Arm L: revised web_search + flat_rag_search + lightweight submit
+        Arm N: Arm-L research baseline + bounded Schedule-2 navigation and exact lookup
         """
         settings = get_settings()
 
-        if experiment_arm in {"B", "L"}:
+        if experiment_arm in {"B", "L", "N"}:
             # Arm B and revised Default local+web arm L: web + local retrieval
             # + utility + submit. The implementation is shared; the arm names
             # preserve historical B results while making the revised target
@@ -363,10 +448,12 @@ class AgentPolicyService:
             tools = [WEB_SEARCH_TOOL]
             if settings.flat_rag_tool_enabled:
                 tools.append(FLAT_RAG_SEARCH_TOOL)
+            if experiment_arm == "N":
+                tools.extend([SCHEDULE2_NAVIGATION_TOOL, EXACT_LEGAL_LOOKUP_TOOL])
             tools.extend([
                 DETERMINISTIC_UTILITY_TOOL,
                 build_submit_answer_tool(
-                    allow_canonical_refs=experiment_arm == "B",
+                    allow_canonical_refs=experiment_arm in {"B", "N"},
                     lightweight_claims=experiment_arm == "L",
                 ),
             ])

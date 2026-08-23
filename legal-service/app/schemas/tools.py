@@ -78,6 +78,58 @@ class ExactLegalLookupRequest(StrictContract):
         return self
 
 
+class ExactLegalLookupBatchItem(StrictContract):
+    """Model-supplied locator for the bounded Arm-N exact lookup batch.
+
+    The request date is deliberately backend-owned.  The tool executor adds
+    the current request's ``as_of_date`` before constructing the existing
+    ``ExactLegalLookupRequest`` used by ``ExactLegalSourceService``.
+    """
+
+    query: str | None = Field(default=None, max_length=2000)
+    document_id: str | None = Field(default=None, max_length=500)
+    source_types: list[str] = Field(default_factory=list, max_length=20)
+    schedule: str | None = Field(default=None, max_length=100)
+    provision: str | None = Field(default=None, max_length=255)
+    case_citation: str | None = Field(default=None, max_length=500)
+    subclass: str | None = Field(default=None, max_length=50)
+    follow_cross_references: bool = True
+    max_hits: int = Field(default=8, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def validate_locator(self):
+        if not any(
+            [self.query, self.document_id, self.schedule, self.provision, self.case_citation, self.subclass]
+        ):
+            raise ValueError("at least one query or locator field is required")
+        return self
+
+
+class ExactLegalLookupBatchRequest(StrictContract):
+    requests: list[ExactLegalLookupBatchItem] = Field(min_length=1, max_length=8)
+
+
+class Schedule2NavigationRequest(StrictContract):
+    """One read-only structural query against the Schedule-2 sidecar."""
+
+    operation: Literal["subclass_map", "provision_context", "follow_references"]
+    subclass: str | None = Field(default=None, max_length=20)
+    provision_ref: str | None = Field(default=None, max_length=255)
+    max_targets: int = Field(default=20, ge=1, le=30)
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.operation == "subclass_map" and not self.subclass:
+            raise ValueError("subclass_map requires subclass")
+        if self.operation != "subclass_map" and not self.provision_ref:
+            raise ValueError(f"{self.operation} requires provision_ref")
+        return self
+
+
+class Schedule2NavigationBatchRequest(StrictContract):
+    requests: list[Schedule2NavigationRequest] = Field(min_length=1, max_length=8)
+
+
 class ExactLegalMatch(StrictContract):
     canonical_evidence_ref: CanonicalLocalEvidenceRef
     match_type: Literal["exact", "normalized", "fuzzy"]

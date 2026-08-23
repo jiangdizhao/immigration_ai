@@ -81,6 +81,8 @@ class ShadowTrace:
     native_web_search_call_count: int = 0
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
+    exact_lookup_call_count: int = 0
+    schedule2_navigation_call_count: int = 0
     # Phase 5.1A: configured/default reasoning effort used for this run (content-free
     # calibration metadata).
     reasoning_effort: str | None = None
@@ -138,7 +140,7 @@ class ShadowAgentService:
         matter_state: dict[str, Any] | None = None,
         matter_id: str | None = None,
         turn_id: str | None = None,
-        experiment_arm: Literal["A", "B", "L"] | None = None,
+        experiment_arm: Literal["A", "B", "L", "N"] | None = None,
         flat_rag_search_fn: Any = None,
         db_session_factory: Any = None,
         # Inherited from request acceptance
@@ -157,8 +159,8 @@ class ShadowAgentService:
             matter_state: Compact matter state snapshot (immutable copy)
             matter_id: Matter identifier for trace
             turn_id: Turn identifier for trace
-            experiment_arm: A or B
-            flat_rag_search_fn: Flat RAG function (Arm B only)
+            experiment_arm: experimental Luna arm (A, B, L, or N)
+            flat_rag_search_fn: Flat RAG function (Arm L/N when available)
             db_session_factory: Callable to create a fresh DB session
             deadline: Absolute deadline from request acceptance (REQUIRED)
             execution_budget: Execution budget from request acceptance (REQUIRED)
@@ -251,7 +253,7 @@ class ShadowAgentService:
         # Revised v2.1.3 Default arm: use the existing local retrieval tool
         # alongside native web search when the caller supplied a DB factory.
         # Historical A/B callers may continue injecting their own function.
-        if experiment_arm == "L" and flat_rag_search_fn is None and db_session is not None:
+        if experiment_arm in {"L", "N"} and flat_rag_search_fn is None and db_session is not None:
             from app.tools.flat_rag_search import FlatRagSearchTool
 
             flat_tool = FlatRagSearchTool(db_session)
@@ -344,6 +346,8 @@ class ShadowAgentService:
             native_web_search_call_count=result.metrics.native_web_search_call_count,
             native_web_source_count=result.metrics.native_web_source_count,
             native_web_citation_count=result.metrics.native_web_citation_count,
+            exact_lookup_call_count=result.metrics.exact_lookup_call_count,
+            schedule2_navigation_call_count=result.metrics.schedule2_navigation_call_count,
             reasoning_effort=(
                 result.metrics.provider_calls[0].effort
                 if result.metrics.provider_calls else None

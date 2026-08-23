@@ -109,7 +109,7 @@ class AgentRuntimeRequest(StrictContract):
     # CompactMatterStateV2 is deliberately not implemented until Phase 3.
     matter_state: dict[str, Any]
     execution_budget: ExecutionBudget
-    experiment_arm: Literal["A", "B", "L", "C", "D"] | None = None
+    experiment_arm: Literal["A", "B", "L", "N", "C", "D"] | None = None
 
 
 class DeadlineCheckpoint(StrictContract):
@@ -162,6 +162,7 @@ class ProviderCallObservation(StrictContract):
 class ToolCallObservation(StrictContract):
     tool_name: Literal[
         "web_search",
+        "schedule2_navigation",
         "exact_legal_lookup",
         "lightrag_search",
         "flat_rag_search",
@@ -203,6 +204,9 @@ class AgentExecutionMetrics(StrictContract):
     search_privacy_violation_count: int = Field(default=0, ge=0)
     search_privacy_violation_categories: dict[str, int] = Field(default_factory=dict)
     exact_lookup_call_count: int = Field(default=0, ge=0)
+    schedule2_navigation_call_count: int = Field(default=0, ge=0)
+    exact_lookup_denied_call_count: int = Field(default=0, ge=0)
+    schedule2_navigation_denied_call_count: int = Field(default=0, ge=0)
     lightrag_call_count: int = Field(default=0, ge=0)
     flat_rag_call_count: int = Field(default=0, ge=0)
     utility_call_count: int = Field(default=0, ge=0)

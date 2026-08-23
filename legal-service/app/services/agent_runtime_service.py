@@ -167,6 +167,8 @@ class AgentRuntimeService:
         registry: RequestEvidenceRegistry,
         flat_rag_search_fn: Any = None,
         db_session: Any = None,
+        schedule2_navigation_map: Any = None,
+        exact_legal_lookup_service: Any = None,
     ) -> ShadowRunResult:
         """Execute one shadow Luna agent run."""
         start_time = time.perf_counter()
@@ -192,7 +194,22 @@ class AgentRuntimeService:
             db_session=db_session,
             privacy_guard=self._privacy_guard,
             web_normalizer=self._web_normalizer,
+            schedule2_navigation_map=schedule2_navigation_map,
+            exact_legal_lookup_service=exact_legal_lookup_service,
         )
+        if request.mode == "default" and request.experiment_arm == "N":
+            # Arm N is evaluation-only.  Loading the tracked sidecar here keeps
+            # the navigation adapter read-only and request-local; a missing or
+            # malformed artifact becomes a deterministic unavailable tool result.
+            if tool_context.schedule2_navigation_map is None:
+                try:
+                    from app.legal_map_experimental.schedule2_navigation_sidecar import (
+                        Schedule2NavigationMap,
+                    )
+
+                    tool_context.schedule2_navigation_map = Schedule2NavigationMap.from_files()
+                except Exception:
+                    logger.warning("Schedule-2 navigation sidecar unavailable for Arm N", exc_info=True)
 
         # Build initial input for first call
         messages: list[dict[str, Any]] = [
@@ -567,8 +584,18 @@ class AgentRuntimeService:
                                               if isinstance(result.result.data.get("chunks"), (list, tuple))
                                               else (len(result.result.data.get("evidence_refs", []))
                                                     if isinstance(result.result.data.get("evidence_refs"), (list, tuple))
-                                                    else None)),
-                                governor_denied=False,
+                                                    else (len(result.result.data.get("results", []))
+                                                          if isinstance(result.result.data.get("results"), (list, tuple))
+                                                          else (len(result.result.data.get("lookups", []))
+                                                                if isinstance(result.result.data.get("lookups"), (list, tuple))
+                                                                else None)))),
+                                governor_denied=(
+                                    result.result.error is not None
+                                    and result.result.error.code in {
+                                        "SCHEDULE2_NAVIGATION_BUDGET_EXHAUSTED",
+                                        "EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
+                                    }
+                                ),
                                 is_retry=False,
                             ))
                         total_tool_duration_ms += result.duration_ms
@@ -781,7 +808,10 @@ class AgentRuntimeService:
             search_privacy_violation_categories=self._merge_category_counts(
                 [pc.search_privacy_violation_categories for pc in provider_call_observations]
             ),
-            exact_lookup_call_count=0,
+            exact_lookup_call_count=tool_context.exact_legal_lookup_call_count,
+            schedule2_navigation_call_count=tool_context.schedule2_navigation_call_count,
+            exact_lookup_denied_call_count=tool_context.exact_legal_lookup_denied_call_count,
+            schedule2_navigation_denied_call_count=tool_context.schedule2_navigation_denied_call_count,
             lightrag_call_count=0,
             flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),

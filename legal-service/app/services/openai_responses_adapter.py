@@ -6,7 +6,8 @@ for GPT-5.6 Luna shadow execution.
 Supports:
 - tool_choice=auto
 - built-in web_search (provider-native, NOT a custom function)
-- custom function tools (deterministic_utility, flat_rag_search, submit_answer)
+- custom function tools (navigation, exact lookup, deterministic utility,
+  flat RAG, submit_answer)
 - native citation annotations from assistant message output_text
 - PII inspection of generated search-action queries (retroactive gate)
 - Responses continuation via previous_response_id
