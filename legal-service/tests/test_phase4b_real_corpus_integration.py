@@ -79,10 +79,10 @@ def _has_exact_schedule_locator(value: str | None, schedule: str) -> bool:
 
 
 def _has_structural_schedule_header(value: str | None, schedule: str) -> bool:
-    """Return whether a page heading itself identifies this Schedule."""
+    """Return whether a persisted page heading identifies this Schedule."""
     return bool(
         re.search(
-            rf"(?i)^\s*schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
+            rf"(?i)(?<![A-Z0-9])schedule\s+{re.escape(schedule)}(?![A-Z0-9])",
             value or "",
         )
     )
@@ -173,6 +173,108 @@ def test_schedule_lookup_never_crosses_schedule_locator_families(
             _chunk_is_structurally_in_schedule(source, chunk, wrong_schedule)
             for source, chunk in resolved_rows
         )
+
+
+@pytest.mark.parametrize(
+    ("schedule", "provision", "subclass"),
+    [
+        ("3", "3001", None),
+        ("3", "3003", None),
+        ("3", "3004", None),
+        ("2", "485.211", "485"),
+    ],
+)
+def test_official_volume_schedule_provisions_resolve_with_structural_scope(
+    canonical_read_only_db, schedule: str, provision: str, subclass: str | None
+):
+    db, _ = canonical_read_only_db
+    fields = {
+        "schedule": schedule,
+        "provision": provision,
+        "subclass": subclass,
+        "source_types": ["legislation"],
+        "as_of_date": date(2026, 7, 1),
+        "max_hits": 8,
+    }
+    output, _ = _lookup(
+        db,
+        request=ExactLegalLookupRequest(
+            **{key: value for key, value in fields.items() if value is not None}
+        ),
+        call_id=f"volume-schedule-{schedule}-{provision}",
+    )
+
+    assert output.matches
+    for match in output.matches:
+        evidence = match.canonical_evidence_ref
+        source = db.get(LegalSource, evidence.canonical_source_id)
+        chunk = db.get(SourceChunk, evidence.canonical_chunk_id)
+        assert source is not None and chunk is not None
+        assert source.document_version == "F2026C00667"
+        assert _chunk_is_structurally_in_schedule(source, chunk, schedule)
+        assert provision in chunk.text or provision in (chunk.section_ref or "")
+
+
+def test_schedule_scope_does_not_use_cross_schedule_body_references() -> None:
+    source = LegalSource(
+        title="Migration Regulations 1994 - F2026C00667 Volume 2",
+        source_type="legislation",
+        document_version="F2026C00667",
+        status="active",
+    )
+    wrong_schedule_chunk = SourceChunk(
+        source_id=source.id,
+        section_ref="page_1",
+        heading="Schedule 2 Provisions with respect to the grant of Subclasses of visas",
+        text="This Schedule 2 provision refers to Schedule 3 criterion 3001.",
+    )
+    assert not _chunk_is_structurally_in_schedule(source, wrong_schedule_chunk, "3")
+    assert _chunk_is_structurally_in_schedule(source, wrong_schedule_chunk, "2")
+
+    wrong_provision_chunk = SourceChunk(
+        source_id=source.id,
+        section_ref="page_2",
+        heading="Schedule 3 Additional criteria",
+        text="This Schedule 3 text cross-references Schedule 2 provision 485.211.",
+    )
+    assert not _chunk_is_structurally_in_schedule(source, wrong_provision_chunk, "2")
+    assert _chunk_is_structurally_in_schedule(source, wrong_provision_chunk, "3")
+
+
+@pytest.mark.parametrize(
+    ("schedule", "provision", "forbidden_schedule", "subclass"),
+    [("3", "3001", "2", None), ("2", "485.211", "3", "485")],
+)
+def test_schedule_provision_lookup_excludes_other_schedule_headings(
+    canonical_read_only_db,
+    schedule: str,
+    provision: str,
+    forbidden_schedule: str,
+    subclass: str | None,
+):
+    db, _ = canonical_read_only_db
+    fields = {
+        "schedule": schedule,
+        "provision": provision,
+        "subclass": subclass,
+        "source_types": ["legislation"],
+        "as_of_date": date(2026, 7, 1),
+        "max_hits": 8,
+    }
+    output, _ = _lookup(
+        db,
+        request=ExactLegalLookupRequest(
+            **{key: value for key, value in fields.items() if value is not None}
+        ),
+        call_id=f"volume-schedule-negative-{schedule}-{provision}",
+    )
+
+    assert output.matches
+    for match in output.matches:
+        chunk = db.get(SourceChunk, match.canonical_evidence_ref.canonical_chunk_id)
+        assert chunk is not None
+        assert _has_structural_schedule_header(chunk.heading, schedule)
+        assert not _has_structural_schedule_header(chunk.heading, forbidden_schedule)
 
 
 @pytest.mark.parametrize(

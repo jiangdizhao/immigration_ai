@@ -361,9 +361,16 @@ class ExactLegalSourceService:
 
     @staticmethod
     def _schedule_header_pattern(schedule: str) -> str:
-        """Return an anchored page-heading pattern for one Schedule."""
+        """Return a structural page-heading pattern for one Schedule.
+
+        Official multi-volume compilations copy page headings into each chunk,
+        but the Schedule marker is not consistently placed at the beginning
+        of that heading.  This pattern is used only against
+        ``SourceChunk.heading``; body text retains the stricter anchored
+        fallback below so cross-references cannot establish ownership.
+        """
         normalized = schedule.strip().upper()
-        return rf"^[[:space:]]*schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
+        return rf"(^|[^[:alnum:]])schedule[[:space:]]+{re.escape(normalized)}([^[:alnum:]]|$)"
 
     @staticmethod
     def _schedule_from_family_id(family_id: str | None) -> str | None:
@@ -383,9 +390,10 @@ class ExactLegalSourceService:
         Legacy corpora use one source per Schedule, so the source title is the
         structural boundary.  Current official compilations are ingested by
         volume/page: the PDF page heading is copied to every chunk derived from
-        that page.  Only an anchored page heading is therefore authoritative
-        for Schedule ownership.  Chunk body text is deliberately not used when
-        a heading exists because split chunks can begin with cross-references to
+        that page.  The Schedule marker can occur at either edge of that
+        structural heading, so the persisted heading is authoritative for
+        volume ownership.  Chunk body text is deliberately not used when a
+        heading exists because split chunks can begin with cross-references to
         another Schedule.
         """
         locator_pattern = cls._schedule_locator_pattern(schedule)
