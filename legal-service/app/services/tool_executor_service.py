@@ -714,48 +714,62 @@ class ToolExecutorService:
                 service = ExactLegalSourceService(context.db_session)
             else:
                 service = context.exact_legal_lookup_service
-            context.exact_lookup_requested_locator_count += len(batch.requests)
             lookups = []
             for index, item in enumerate(batch.requests):
                 from app.services.exact_lookup_locator_normalizer import (
-                    normalize_exact_lookup_request,
+                    expand_exact_lookup_item,
                 )
 
-                normalized = normalize_exact_lookup_request(
+                normalized_items = expand_exact_lookup_item(
                     item,
                     as_of_date=context.as_of_date,
                 )
-                output = service.lookup(
-                    normalized.request,
-                    registry=context.registry,
-                    # Keep each batched lookup's registry outcome isolated.
-                    # The outer tool call remains the model-visible identity;
-                    # this deterministic suffix is backend-only provenance.
-                    tool_call_id=f"{tool_call.call_id}:locator:{index}",
-                )
-                if output.matches:
-                    context.exact_lookup_resolved_locator_count += 1
-                else:
-                    context.exact_lookup_unresolved_locator_count += 1
-                context.exact_lookup_unresolved_cross_reference_count += len(
-                    output.unresolved_cross_references
-                )
-                request_trace = dict(normalized.trace)
-                request_trace.update({
-                    "request_index": index,
-                    "tool_call_id": tool_call.call_id,
-                    "as_of_date": context.as_of_date.isoformat(),
-                    "result": {
-                        "coverage": output.coverage.model_dump(mode="json"),
-                        "matches_count": len(output.matches),
-                        "resolved_cross_references_count": len(output.resolved_cross_references),
-                        "unresolved_cross_references_count": len(output.unresolved_cross_references),
-                        "corpus_version": output.corpus_version,
-                        "index_version": output.index_version,
-                    },
-                })
-                context.exact_lookup_requests.append(request_trace)
-                lookups.append(output.model_dump(mode="json"))
+                for expanded_index, normalized in enumerate(normalized_items):
+                    context.exact_lookup_requested_locator_count += 1
+                    output = service.lookup(
+                        normalized.request,
+                        registry=context.registry,
+                        # Keep each batched lookup's registry outcome isolated.
+                        # The outer tool call remains the model-visible identity;
+                        # this deterministic suffix is backend-only provenance.
+                        tool_call_id=(
+                            f"{tool_call.call_id}:locator:{index}"
+                            if len(normalized_items) == 1
+                            else f"{tool_call.call_id}:locator:{index}:{expanded_index}"
+                        ),
+                    )
+                    # These counters describe requested canonical locators, not
+                    # cross-reference state.  A successful locator with an
+                    # unresolved dependency remains resolved here.
+                    if output.matches:
+                        context.exact_lookup_resolved_locator_count += 1
+                    else:
+                        context.exact_lookup_unresolved_locator_count += 1
+                    context.exact_lookup_unresolved_cross_reference_count += len(
+                        output.unresolved_cross_references
+                    )
+                    request_trace = dict(normalized.trace)
+                    request_trace.update({
+                        "request_index": index,
+                        "expanded_index": expanded_index,
+                        "tool_call_id": tool_call.call_id,
+                        "registry_tool_call_id": (
+                            f"{tool_call.call_id}:locator:{index}"
+                            if len(normalized_items) == 1
+                            else f"{tool_call.call_id}:locator:{index}:{expanded_index}"
+                        ),
+                        "as_of_date": context.as_of_date.isoformat(),
+                        "result": {
+                            "coverage": output.coverage.model_dump(mode="json"),
+                            "matches_count": len(output.matches),
+                            "resolved_cross_references_count": len(output.resolved_cross_references),
+                            "unresolved_cross_references_count": len(output.unresolved_cross_references),
+                            "corpus_version": output.corpus_version,
+                            "index_version": output.index_version,
+                        },
+                    })
+                    context.exact_lookup_requests.append(request_trace)
+                    lookups.append(output.model_dump(mode="json"))
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="ok",

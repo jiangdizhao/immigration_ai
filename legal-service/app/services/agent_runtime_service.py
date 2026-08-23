@@ -92,7 +92,7 @@ class ProviderInterface:
         user_text: str,
         model: str,
         tools: list[dict[str, Any]],
-        tool_choice: Literal["auto"] = "auto",
+        tool_choice: str | dict[str, Any] = "auto",
         reasoning_effort: str | None = None,
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,
@@ -289,7 +289,16 @@ class AgentRuntimeService:
                         user_text="",
                         model=policy.model,
                         tools=provider_tools,
-                        tool_choice=policy.tool_choice,
+                        # Preserve bounded auto-selection during research. In
+                        # terminal-only synthesis the only exposed function is
+                        # submit_answer, so use the Responses API's explicit
+                        # function choice to enforce the existing terminal
+                        # contract without adding a provider call or stage.
+                        tool_choice=(
+                            {"type": "function", "name": "submit_answer"}
+                            if terminal_phase
+                            else policy.tool_choice
+                        ),
                         reasoning_effort=policy.reasoning_effort,
                         messages_history=messages,
                         timeout_ms=call_timeout_ms,

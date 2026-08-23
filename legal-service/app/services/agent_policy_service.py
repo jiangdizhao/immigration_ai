@@ -246,7 +246,14 @@ EXACT_LEGAL_LOOKUP_TOOL = {
     "type": "function",
     "name": "exact_legal_lookup",
     "description": (
-        "Look up exact local legal source content for up to 8 known locators. "
+        "Look up exact local legal source content for up to 8 known legal locators "
+        "in one bounded invocation. Use this only for locators already known from "
+        "the question, navigation, or other research; put each distinct provision "
+        "in its own request item. Do not retry this tool after its one invocation; "
+        "use discovery tools for unknown or open-world targets. The backend accepts "
+        "canonical forms such as Schedule 3/3, criterion 3001, regulation/reg 1.03, "
+        "Migration Act s 48, PIC 4019, and visa condition 8101, and performs only "
+        "bounded deterministic normalization. "
         "The backend owns the request date, database session, and opaque evidence "
         "refs. Preserve available_complete, available_partial, absent, unknown, "
         "and unresolved cross-reference states; local absence never proves that "

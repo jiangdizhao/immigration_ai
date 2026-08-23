@@ -26,7 +26,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from openai import OpenAI
 
@@ -87,7 +87,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
         user_text: str,
         model: str,
         tools: list[dict[str, Any]],
-        tool_choice: Literal["auto"] = "auto",
+        tool_choice: str | dict[str, Any] = "auto",
         reasoning_effort: str | None = None,
         messages_history: list[dict[str, Any]] | None = None,
         timeout_ms: float,

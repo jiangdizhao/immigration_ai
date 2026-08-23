@@ -283,6 +283,46 @@ def test_navigation_style_locator_is_normalized_before_exact_service_and_traced(
     assert context.registry.entry_count == 1
 
 
+def test_compound_exact_locator_expands_inside_one_invocation():
+    exact = FakeExactLookup()
+    context = _context(exact=exact)
+    result = ToolExecutorService().execute_tool(
+        _call("exact_legal_lookup", {
+            "requests": [{
+                "query": None,
+                "document_id": None,
+                "source_types": ["regulations"],
+                "source_type": None,
+                "locator_type": "schedule3_criterion",
+                "locator": None,
+                "target_document": "Schedule 3",
+                "node_type": None,
+                "provision_ref": None,
+                "schedule": "Schedule 3",
+                "provision": "3003 and 3004",
+                "case_citation": None,
+                "subclass": None,
+                "follow_cross_references": False,
+                "max_hits": 8,
+            }],
+        }),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert len(result.result.data["lookups"]) == 2
+    assert [request.provision for request in exact.requests] == ["3003", "3004"]
+    assert all(request.schedule == "3" for request in exact.requests)
+    assert context.exact_lookup_requested_locator_count == 2
+    assert context.exact_lookup_resolved_locator_count == 2
+    assert context.exact_lookup_unresolved_locator_count == 0
+    assert [trace["expanded_index"] for trace in context.exact_lookup_requests] == [0, 1]
+    assert all(
+        context.registry.resolve(ref).tool_name == "exact_legal_lookup"
+        for ref in context.registry.get_all_refs()
+    )
+
+
 @pytest.mark.parametrize(
     ("coverage_status", "gap_reason", "unresolved"),
     [

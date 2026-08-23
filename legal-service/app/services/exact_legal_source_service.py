@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, not_, or_, select, true
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import LegalSource, SourceChunk
@@ -271,7 +271,13 @@ class ExactLegalSourceService:
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
             .options(joinedload(SourceChunk.source))
             .where(LegalSource.status == "active")
-            .order_by(LegalSource.title.asc(), SourceChunk.chunk_index.asc(), SourceChunk.id.asc())
+            .order_by(
+                LegalSource.effective_date.desc().nullslast(),
+                LegalSource.document_version.desc().nullslast(),
+                LegalSource.title.asc(),
+                SourceChunk.chunk_index.asc(),
+                SourceChunk.id.asc(),
+            )
             .limit(request.max_hits)
         )
 
@@ -279,6 +285,7 @@ class ExactLegalSourceService:
         if family_condition is None:
             return []
         stmt = stmt.where(family_condition)
+        stmt = stmt.where(self._authoritative_source_condition(family_id, request.as_of_date))
 
         conditions = []
 
@@ -287,17 +294,15 @@ class ExactLegalSourceService:
             conditions.append(self._schedule_chunk_condition(schedule_scope))
 
         if request.provision:
-            provision_pattern = f"%{request.provision}%"
             conditions.append(
-                or_(
-                    SourceChunk.section_ref.ilike(provision_pattern),
-                    SourceChunk.text.ilike(provision_pattern),
+                self._provision_structure_condition(
+                    request.provision,
+                    family_id=family_id,
                 )
             )
 
         if request.subclass:
-            subclass_pattern = f"%{request.subclass}%"
-            conditions.append(SourceChunk.text.ilike(subclass_pattern))
+            conditions.append(self._subclass_structure_condition(request.subclass))
 
         if request.query:
             query_pattern = f"%{request.query}%"
@@ -344,6 +349,7 @@ class ExactLegalSourceService:
                     chunk_id=str(chunk.id),
                     tool_call_id=tool_call_id,
                     registry=registry,
+                    provision_override=request.provision,
                 )
                 match_type = self._classify_match_type(request, chunk)
                 matches.append((evidence, ref or "", match_type))
@@ -412,6 +418,172 @@ class ExactLegalSourceService:
             or_(
                 LegalSource.title.ilike("%Migration Regulations%"),
                 LegalSource.document_version.ilike("F%"),
+            ),
+        )
+
+    @classmethod
+    def _authoritative_source_condition(cls, family_id: str | None, as_of_date):
+        """Prefer the newest applicable active compilation deterministically.
+
+        The database may retain historical rows for rollback.  Exact lookup
+        must not combine active compilations merely because both rows satisfy a
+        broad family predicate.  The coverage report remains the corpus
+        contract; this date/version guard is the defensive SQL boundary when
+        more than one active row is present.
+        """
+        if not family_id or (
+            family_id != "migration_regulations"
+            and not family_id.startswith("migration_regulations_schedule_")
+        ):
+            if as_of_date is None:
+                return true()
+            return or_(
+                LegalSource.effective_date.is_(None),
+                LegalSource.effective_date <= as_of_date,
+            )
+
+        family_condition = cls._migration_regulations_source_condition()
+        date_filters = []
+        if as_of_date is not None:
+            date_filters = [
+                or_(LegalSource.effective_date.is_(None), LegalSource.effective_date <= as_of_date),
+                or_(LegalSource.repeal_date.is_(None), LegalSource.repeal_date >= as_of_date),
+            ]
+        applicable = and_(LegalSource.status == "active", family_condition, *date_filters)
+        latest_effective_date = (
+            select(func.max(LegalSource.effective_date))
+            .where(applicable)
+            .scalar_subquery()
+        )
+        latest_version = (
+            select(func.max(LegalSource.document_version))
+            .where(applicable)
+            .scalar_subquery()
+        )
+        current_filters = []
+        if as_of_date is not None:
+            current_filters = [
+                or_(LegalSource.effective_date.is_(None), LegalSource.effective_date <= as_of_date),
+                or_(LegalSource.repeal_date.is_(None), LegalSource.repeal_date >= as_of_date),
+            ]
+        return and_(
+            *current_filters,
+            or_(
+                LegalSource.effective_date == latest_effective_date,
+                and_(
+                    latest_effective_date.is_(None),
+                    LegalSource.document_version == latest_version,
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _provision_structure_condition(provision: str, *, family_id: str | None):
+        """Require a provision marker in the structural page prefix/heading.
+
+        Body-wide substring matching admits contents, endnotes, and unrelated
+        cross-references.  Official compilation ingestion preserves the page
+        heading and the structural header at the start of each chunk, which is
+        the bounded ownership signal used here.  Full chunk text remains the
+        evidence; only the ownership predicate is narrowed.
+        """
+        normalized = re.sub(r"(?:\([0-9A-Z]+\))+$", "", provision.strip().upper())
+        token = re.escape(normalized)
+        exact_pattern = rf"(^|[^[:alnum:]]){token}([^[:alnum:]]|$)"
+        labeled_pattern = (
+            rf"(^|[^[:alnum:]])(?:regulation|subregulation|reg|"
+            rf"clause|criterion|criteria|condition|item|section|s\.)[[:space:]]+{token}"
+            rf"([^[:alnum:]]|$)"
+        )
+        # A provision can begin after the carried page heading when the
+        # ingestion chunk contains the end of the preceding provision.  Keep
+        # the ownership window bounded while covering that legitimate case.
+        prefix = func.left(SourceChunk.text, 500 if family_id == "migration_act" else 1200)
+        heading = func.coalesce(SourceChunk.heading, "")
+        if family_id == "migration_act":
+            # Act page headers carry an explicit Section marker.  Bare numbers
+            # in Act volume headers are page numbers and contents entries, not
+            # structural ownership.
+            structural = or_(
+                heading.op("~*")(labeled_pattern),
+                prefix.op("~*")(labeled_pattern),
+            )
+            act_header_pattern = rf"(^|[^[:alnum:]])Section[[:space:]]+{token}([^[:alnum:]]|$)"
+            act_block_start = (
+                select(func.min(SourceChunk.chunk_index))
+                .where(
+                    SourceChunk.source_id == LegalSource.id,
+                    or_(
+                        heading.op("~")(act_header_pattern),
+                        func.left(SourceChunk.text, 500).op("~")(act_header_pattern),
+                    ),
+                )
+                .correlate_except(SourceChunk)
+                .scalar_subquery()
+            )
+            structural = and_(structural, SourceChunk.chunk_index >= act_block_start)
+        else:
+            structural = or_(
+                heading.op("~*")(exact_pattern),
+                heading.op("~*")(labeled_pattern),
+                prefix.op("~*")(labeled_pattern),
+                # Schedule criteria, PICs, conditions, and table items are
+                # often bare numeric markers in the structural prefix.
+                prefix.op("~*")(exact_pattern),
+            )
+        # The current official compilation stores generic Regulations in
+        # Volume 1.  Volumes 2/3 repeat regulation numbers only as
+        # cross-references from Schedule provisions.  Keep those references
+        # out of an unscoped regulation lookup without changing the
+        # schedule-specific path below.
+        if family_id == "migration_regulations":
+            structural = and_(
+                structural,
+                LegalSource.title.ilike("%Volume 1%"),
+            )
+        noise = or_(
+            heading.ilike("%contents%"),
+            heading.ilike("%endnote%"),
+            heading.ilike("%amendment history%"),
+            prefix.ilike("%contents%"),
+            prefix.ilike("%endnote%"),
+        )
+        return and_(structural, not_(noise))
+
+    @staticmethod
+    def _subclass_structure_condition(subclass: str):
+        token = re.escape(str(subclass).strip())
+        pattern = rf"(^|[^[:alnum:]])subclass[[:space:]]+{token}([^[:alnum:]]|$)"
+        clause_pattern = rf"(^|[^[:alnum:]])(clause|part)[[:space:]]+{token}\.[0-9]"
+        start_pattern = rf"(^|[^[:alnum:]])Subclass[[:space:]]+{token}([^[:alnum:]]|$)"
+        start_clause_pattern = rf"(^|[^[:alnum:]])(Clause|Part)[[:space:]]+{token}\.[0-9]"
+        prefix = func.left(SourceChunk.text, 500)
+        heading = func.coalesce(SourceChunk.heading, "")
+        # A subclass number is mentioned throughout other provisions.  Find
+        # the first operative Clause/Part page for that subclass in the source
+        # and retain continuation chunks from that point onward.  The bounded
+        # provision predicate applied by the caller still selects only the
+        # requested provision; the block lookup's max_hits keeps its result at
+        # the start of the owning block.
+        owning_block_start = (
+            select(func.min(SourceChunk.chunk_index))
+            .where(
+                SourceChunk.source_id == LegalSource.id,
+                SourceChunk.text.op("~")(start_pattern),
+                SourceChunk.text.op("~")(start_clause_pattern),
+            )
+            .correlate_except(SourceChunk)
+            .scalar_subquery()
+        )
+        return and_(
+            SourceChunk.chunk_index >= owning_block_start,
+            not_(
+                or_(
+                    heading.ilike("%contents%"),
+                    heading.ilike("%endnote%"),
+                    prefix.ilike("%contents%"),
+                    prefix.ilike("%endnote%"),
+                )
             ),
         )
 
@@ -554,25 +726,35 @@ class ExactLegalSourceService:
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
             .options(joinedload(SourceChunk.source))
             .where(LegalSource.status == "active")
-            .order_by(LegalSource.title.asc(), SourceChunk.chunk_index.asc(), SourceChunk.id.asc())
+            .order_by(
+                LegalSource.effective_date.desc().nullslast(),
+                LegalSource.document_version.desc().nullslast(),
+                LegalSource.title.asc(),
+                SourceChunk.chunk_index.asc(),
+                SourceChunk.id.asc(),
+            )
             .limit(3)
         )
         family_condition = self._family_source_condition(family_id)
         if family_condition is None:
             return None
         stmt = stmt.where(family_condition)
+        stmt = stmt.where(self._authoritative_source_condition(family_id, None))
 
         if locator.locator_type == "schedule":
             stmt = stmt.where(self._schedule_chunk_condition(locator.target_provision or ""))
         elif locator.locator_type in ("regulation", "subregulation"):
             stmt = stmt.where(
-                SourceChunk.section_ref.ilike(f"%{locator.target_provision}%")
+                self._provision_structure_condition(
+                    locator.target_provision or "",
+                    family_id=family_id,
+                )
             )
         elif locator.locator_type == "clause":
             stmt = stmt.where(
-                or_(
-                    SourceChunk.section_ref.ilike(f"%{locator.target_provision}%"),
-                    SourceChunk.heading.ilike(f"%clause {locator.target_provision}%"),
+                self._provision_structure_condition(
+                    locator.target_provision or "",
+                    family_id=family_id,
                 )
             )
         elif locator.locator_type == "act":
@@ -596,6 +778,7 @@ class ExactLegalSourceService:
                     chunk_id=str(chunk.id),
                     tool_call_id=tool_call_id,
                     registry=registry,
+                    provision_override=locator.target_provision,
                 )
                 if ref:
                     refs.append(ref)

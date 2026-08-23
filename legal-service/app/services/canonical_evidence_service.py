@@ -328,6 +328,7 @@ class CanonicalEvidenceService:
         tool_call_id: str,
         registry: RequestEvidenceRegistry | None = None,
         provision_override: str | None = None,
+        tool_name: str = "exact_legal_lookup",
     ) -> tuple[CanonicalLocalEvidenceRef, str | None]:
         """Build canonical evidence from an actual source chunk.
 
@@ -357,6 +358,7 @@ class CanonicalEvidenceService:
             tool_call_id=tool_call_id,
             registry=registry,
             provision_override=provision_override,
+            tool_name=tool_name,
         )
 
     def build_evidence_from_source(
@@ -367,6 +369,7 @@ class CanonicalEvidenceService:
         registry: RequestEvidenceRegistry | None = None,
         text_span: str | None = None,
         provision: str | None = None,
+        tool_name: str = "exact_legal_lookup",
     ) -> tuple[CanonicalLocalEvidenceRef, str | None]:
         """Build canonical evidence from source without specific chunk.
 
@@ -440,7 +443,7 @@ class CanonicalEvidenceService:
             registered_ref = registry.register_canonical_evidence(
                 evidence=evidence,
                 tool_call_id=tool_call_id,
-                tool_name="exact_legal_lookup",
+                tool_name=tool_name,
             )
             # Update evidence with actual registered ref
             evidence = evidence.model_copy(update={"evidence_ref": registered_ref})
@@ -455,6 +458,7 @@ class CanonicalEvidenceService:
         tool_call_id: str,
         registry: RequestEvidenceRegistry | None,
         provision_override: str | None,
+        tool_name: str = "exact_legal_lookup",
     ) -> tuple[CanonicalLocalEvidenceRef, str | None]:
         """Build evidence from already-loaded source and chunk."""
         # Normalize metadata
@@ -523,7 +527,7 @@ class CanonicalEvidenceService:
             registered_ref = registry.register_canonical_evidence(
                 evidence=evidence,
                 tool_call_id=tool_call_id,
-                tool_name="exact_legal_lookup",
+                tool_name=tool_name,
             )
             evidence = evidence.model_copy(update={"evidence_ref": registered_ref})
 

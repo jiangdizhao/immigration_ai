@@ -131,6 +131,7 @@ class FlatRagSearchTool:
                     chunk_id=str(chunk.id),
                     tool_call_id=tool_call_id,
                     registry=registry,
+                    tool_name="flat_rag_search",
                 )
 
                 normalized_chunks.append({

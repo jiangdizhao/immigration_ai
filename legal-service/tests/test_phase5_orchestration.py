@@ -15,6 +15,7 @@ class FakeProvider:
     def __init__(self, responses: list[ProviderResponse]):
         self.responses = list(responses)
         self.seen_tools: list[list[str]] = []
+        self.seen_tool_choices: list[object] = []
         self.call_count = 0
 
     async def call(self, **kwargs):
@@ -23,6 +24,7 @@ class FakeProvider:
             str(tool.get("name") or tool.get("type"))
             for tool in kwargs["tools"]
         ])
+        self.seen_tool_choices.append(kwargs["tool_choice"])
         return self.responses.pop(0)
 
 
@@ -366,5 +368,6 @@ def test_last_viable_continuation_transitions_to_terminal_only_tools():
     result = asyncio.run(execute())
     assert result.status == "completed"
     assert provider.seen_tools[2] == ["submit_answer"]
+    assert provider.seen_tool_choices[2] == {"type": "function", "name": "submit_answer"}
     assert result.metrics.tool_round_count == 1
     assert result.metrics.submit_answer_call_count == 1

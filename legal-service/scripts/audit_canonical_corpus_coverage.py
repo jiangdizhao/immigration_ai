@@ -171,6 +171,9 @@ def _safe_metadata(value: Any) -> dict[str, Any]:
         "schedule_no",
         "schedule_number",
         "source_family",
+        "contains",
+        "compilation_id",
+        "volume",
     }
     return {str(key): item for key, item in value.items() if isinstance(key, str) and key in allowed}
 
@@ -225,6 +228,52 @@ def _structured_family(source: SourceSnapshot | Any) -> str | None:
             if family_id:
                 return family_id
     return None
+
+
+def _schedule_families_for_source(source: SourceSnapshot | Any) -> list[str]:
+    """Return all represented Schedule families for a compilation volume.
+
+    Current official compilations are split by volume, not by Schedule. A
+    volume may therefore contribute to multiple coverage families. This is
+    metadata classification only and never infers legal applicability.
+    """
+    if not _is_migration_regulations(source):
+        return []
+    metadata = _metadata_for(source)
+    contains = _metadata_text(metadata).lower()
+    volume = _safe_text(metadata.get("volume"))
+    schedules: set[str] = set()
+    if volume:
+        if volume == "1":
+            schedules.add("1")
+        if volume in {"2", "3"}:
+            schedules.add("2")
+    elif re.search(r"\bschedule\s+1\b", contains):
+        schedules.add("1")
+    elif re.search(r"\bschedule\s+2\b", contains):
+        schedules.add("2")
+    if volume == "3" or (not volume and re.search(r"schedules?\s+3\s+to\s+5", contains)):
+        schedules.update({"3", "4", "5"})
+    if (not volume and re.search(r"\bschedule\s+6d\b", contains)) or volume == "3":
+        schedules.add("6d")
+    if (not volume and re.search(r"\bschedule\s+7a\b", contains)) or volume == "3":
+        schedules.add("7a")
+    if (not volume and re.search(r"schedules?\s+8\s+to\s+10", contains)) or volume == "3":
+        schedules.update({"8", "9", "10"})
+    if (not volume and re.search(r"\bschedule\s+13\b", contains)) or volume == "3":
+        schedules.add("13")
+    return [f"migration_regulations_schedule_{value}" for value in sorted(schedules)]
+
+
+def _family_ids_for_source(source: SourceSnapshot | Any) -> list[str]:
+    """Classify one source into all conservative represented families."""
+    primary = _classify_source(source)
+    if not _is_migration_regulations(source):
+        return [primary] if primary else []
+    schedule_families = _schedule_families_for_source(source)
+    if primary and primary.startswith("migration_regulations_schedule_"):
+        return [primary]
+    return list(dict.fromkeys((["migration_regulations"] if primary else []) + schedule_families))
 
 
 def _classify_source(source: SourceSnapshot | Any) -> str | None:
@@ -346,23 +395,24 @@ def _build_family_records(
     )
     classified_source_ids: set[str] = set()
     for source in sorted(sources, key=_source_sort_key):
-        family_id = _classify_source(source)
-        if family_id is None:
+        family_ids = _family_ids_for_source(source)
+        if not family_ids:
             continue
         classified_source_ids.add(_safe_text(source.id))
-        family = families[family_id]
-        family["sources"].append(source)
         source_chunks = chunks_by_source.get(_safe_text(source.id), [])
-        family["chunk_count"] += len(source_chunks)
-        version = _safe_text(source.document_version)
-        if version:
-            family["versions"].add(version)
-        if source.effective_date is None:
-            family["all_have_effective_date"] = False
-        if not _is_canonical_url(source.url):
-            family["all_have_url"] = False
-        if any(_safe_text(chunk.section_ref) or _safe_text(chunk.heading) for chunk in source_chunks):
-            family["any_provision_boundaries"] = True
+        for family_id in family_ids:
+            family = families[family_id]
+            family["sources"].append(source)
+            family["chunk_count"] += len(source_chunks)
+            version = _safe_text(source.document_version)
+            if version:
+                family["versions"].add(version)
+            if source.effective_date is None:
+                family["all_have_effective_date"] = False
+            if not _is_canonical_url(source.url):
+                family["all_have_url"] = False
+            if any(_safe_text(chunk.section_ref) or _safe_text(chunk.heading) for chunk in source_chunks):
+                family["any_provision_boundaries"] = True
 
     # Case rows are decision records. Add a bounded pseudo-source only when a
     # classified LegalSource does not already represent that primary source.
@@ -701,11 +751,17 @@ def _load_audit_snapshot(session_factory: Callable[[], Session] = SessionLocal) 
             )
             for row in case_rows
         )
+        migration_versions = sorted({
+            source.document_version
+            for source in sources
+            if source.document_version and _is_migration_regulations(source)
+        })
         return AuditSnapshot(
             sources=sources,
             chunks=chunks,
             cases=cases,
             index_inventory=_index_inventory(),
+            corpus_version=migration_versions[-1] if migration_versions else None,
             table_counts_before=counts_before,
             table_counts_after=counts_after,
         )

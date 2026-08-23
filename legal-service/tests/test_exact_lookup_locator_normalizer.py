@@ -12,7 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from app.services.exact_lookup_locator_normalizer import normalize_exact_lookup_request
+from app.services.exact_lookup_locator_normalizer import (
+    expand_exact_lookup_item,
+    normalize_exact_lookup_request,
+)
 
 
 AS_OF = date(2026, 8, 23)
@@ -125,3 +128,94 @@ def test_validated_index_contains_generic_regression_target_without_8101_patch()
     )
     assert normalized.request.schedule == target["schedule_no"]
     assert normalized.request.provision == target["provision_ref"]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("3", "3"),
+        ("Schedule 3", "3"),
+        ("schedule 3", "3"),
+    ],
+)
+def test_equivalent_schedule_forms_share_one_canonical_request(value, expected):
+    normalized = normalize_exact_lookup_request(
+        {"schedule": value, "provision": "criterion 3001", "query": "unrelated prose"},
+        as_of_date=AS_OF,
+    )
+    assert normalized.request.schedule == expected
+    assert normalized.request.provision == "3001"
+    assert normalized.request.query is None
+    assert normalized.request.source_types == ["legislation"]
+
+
+@pytest.mark.parametrize(
+    ("locator", "locator_type", "expected_document", "expected_provision"),
+    [
+        ("reg 1.03", None, "Migration Regulations 1994", "1.03"),
+        ("regulation 1.03(2)", None, "Migration Regulations 1994", "1.03(2)"),
+        ("s 48", None, "Migration Act 1958", "48"),
+        ("Migration Act s 48(1)(a)", None, "Migration Act 1958", "48(1)(A)"),
+        ("PIC 4019", "schedule4_pic", None, "4019"),
+        ("Public Interest Criterion 4019", None, None, "4019"),
+        ("visa condition 8101", None, None, "8101"),
+    ],
+)
+def test_supported_locator_aliases_and_nested_suffixes_are_preserved(
+    locator, locator_type, expected_document, expected_provision
+):
+    payload = {"locator": locator}
+    if locator_type:
+        payload["locator_type"] = locator_type
+    normalized = normalize_exact_lookup_request(payload, as_of_date=AS_OF)
+    assert normalized.request.document_id == expected_document
+    assert normalized.request.provision == expected_provision
+    assert normalized.request.query is None
+
+
+@pytest.mark.parametrize("value", ["3003; 3004", "3003, 3004", "3003 and 3004"])
+def test_compound_provisions_expand_only_into_bounded_canonical_items(value):
+    expanded = expand_exact_lookup_item(
+        {"schedule": "Schedule 3", "provision": value},
+        as_of_date=AS_OF,
+    )
+    assert [item.request.schedule for item in expanded] == ["3", "3"]
+    assert [item.request.provision for item in expanded] == ["3003", "3004"]
+
+
+def test_nested_provision_is_not_split_as_compound():
+    expanded = expand_exact_lookup_item(
+        {"schedule": "2", "provision": "485.211(2)"},
+        as_of_date=AS_OF,
+    )
+    assert len(expanded) == 1
+    assert expanded[0].request.provision == "485.211(2)"
+
+
+@pytest.mark.parametrize(
+    ("locator_type", "provision", "expected"),
+    [
+        ("schedule3_criterion", "Schedule 3 criterion 3001", "3001"),
+        ("regulation", "reg 1.03", "1.03"),
+        ("schedule4_pic", "Public Interest Criterion 4019", "4019"),
+        ("schedule8_condition", "visa condition 8101", "8101"),
+        ("act_section", "section 48", "48"),
+    ],
+)
+def test_typed_provision_aliases_share_one_canonical_value(locator_type, provision, expected):
+    normalized = normalize_exact_lookup_request(
+        {"locator_type": locator_type, "provision": provision},
+        as_of_date=AS_OF,
+    )
+    assert normalized.request.provision == expected
+
+
+def test_schedule_compound_locator_text_expands_and_preserves_schedule():
+    expanded = expand_exact_lookup_item(
+        {"locator": "Schedule 3 criteria 3003 and 3004"},
+        as_of_date=AS_OF,
+    )
+    assert [(item.request.schedule, item.request.provision) for item in expanded] == [
+        ("3", "3003"),
+        ("3", "3004"),
+    ]

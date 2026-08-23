@@ -1,8 +1,8 @@
 {
   "schema_version": "canonical_corpus_coverage.v1",
-  "audit_time_utc": "2026-08-18T05:32:03.723968+00:00",
-  "corpus_version": null,
-  "index_version": "sha256:d2b8b90e6173418535380ef785689bff9da092b29eb0b56950f6c7014714cee9",
+  "audit_time_utc": "2026-08-23T07:27:59.839315+00:00",
+  "corpus_version": "F2026C00667",
+  "index_version": "sha256:36bc23ce59242a964bf8a94ed1da0ad1c2cbbafde51e14b9baa86580a7aa6cf8",
   "source_families": [
     {
       "family_id": "art_tribunal_material",
@@ -142,27 +142,27 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 5,
-      "chunk_count": 5612,
+      "chunk_count": 5799,
       "versions": [
-        "F2026C00266"
+        "F2026C00667"
       ],
       "effective_date_metadata_complete": false,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
       "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL",
       "sample_source_ids": [
-        "124a9716-17c9-4782-be35-a544873a7ced",
-        "202969c6-cbc6-4d6b-9767-ae5eeed7f8a0",
+        "17760cfa-4748-4306-bfd3-2593197a0403",
+        "32a78a21-892d-4319-aa64-545693e4bb64",
         "371f8654-a10f-403c-8cd5-160846920634",
-        "56afe479-6a16-4d91-b943-5074fcc604cf",
-        "7e92c4d0-18ec-4032-89a0-6a0281880ac2"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be",
+        "cf0639a8-b8e2-45d5-b686-84ea16de1b56"
       ],
       "sample_titles": [
-        "F2026C00266VOL03",
-        "F2026C00266VOL01",
+        "Migration Regulations 1994 - F2026C00667 Volume 1",
+        "Migration Regulations 1994 - F2026C00667 Volume 4",
         "Migration Regulations 1994 - selected cancellation and response provisions",
-        "F2026C00266VOL02",
-        "F2026C00266VOL04"
+        "Migration Regulations 1994 - F2026C00667 Volume 3",
+        "Migration Regulations 1994 - F2026C00667 Volume 2"
       ],
       "sample_canonical_urls": [
         "https://www.legislation.gov.au/F1996B03551/latest"
@@ -174,17 +174,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 434,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 2007,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "05afa32b-ef21-49e0-8a72-719425ed18ab"
+        "17760cfa-4748-4306-bfd3-2593197a0403"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 1 Classes of visa"
+        "Migration Regulations 1994 - F2026C00667 Volume 1"
       ],
       "sample_canonical_urls": []
     },
@@ -194,17 +196,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 7,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "b8885ff7-f5f6-4fda-b80b-fd37c5c140d9"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 10 Prescribed forms"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -214,17 +218,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 348,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "26343b32-6c63-4f0e-b244-1dc4ebd9ba50"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 13 Transitional arrangements"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -233,18 +239,22 @@
       "family": "Migration Regulations — Schedule 2",
       "available": true,
       "coverage_status": "available_partial",
-      "source_count": 1,
-      "chunk_count": 1771,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "source_count": 2,
+      "chunk_count": 2471,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "cebc6631-7dc6-42e2-a685-5f5c4785a349"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be",
+        "cf0639a8-b8e2-45d5-b686-84ea16de1b56"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 2 Provisions with respect to the grant of Subclasses of visas"
+        "Migration Regulations 1994 - F2026C00667 Volume 3",
+        "Migration Regulations 1994 - F2026C00667 Volume 2"
       ],
       "sample_canonical_urls": []
     },
@@ -254,17 +264,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 9,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "2496d7c3-455e-45f8-ba41-c50d808ddf4f"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 3 Additional criteria applicable to unlawful non-citizens and certain bridging visa holders"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -274,17 +286,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 43,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "1743a7b2-0317-4801-8927-581f8bba7d1e"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 4 Public interest criteria and related provisions"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -294,17 +308,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 9,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "0d8440ce-bd1b-4359-ac0c-c11d67f9666c"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 5 Special return criteria"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -314,17 +330,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 17,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "3934de50-5a56-4e19-8d8a-c776fe215f2f"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 6D General points test for General Skilled Migration visas mentioned in subregulation 2.26AC(1)"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -334,17 +352,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 21,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "0fa4b6df-4089-4e68-af8e-6c14fbabb0e2"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 7A Business innovation and investment points test--attributes and points (Business Skills (Provisional) (Class EB) visas)"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -354,17 +374,19 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 92,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "4df85b2e-c0ff-40a5-a1bb-99d7d0ce2852"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 8 Visa conditions"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     },
@@ -374,21 +396,23 @@
       "available": true,
       "coverage_status": "available_partial",
       "source_count": 1,
-      "chunk_count": 17,
-      "versions": [],
-      "effective_date_metadata_complete": false,
+      "chunk_count": 1082,
+      "versions": [
+        "F2026C00667"
+      ],
+      "effective_date_metadata_complete": true,
       "provision_boundaries_available": true,
       "canonical_urls_available": false,
-      "gap_reason": "Some sources missing effective_date; Some sources missing canonical URL; No document versions recorded",
+      "gap_reason": "Some sources missing canonical URL",
       "sample_source_ids": [
-        "63023ed4-df7a-48b9-b002-3471798fbc13"
+        "7de2ee78-2f85-4fd3-9043-2a91f3da37be"
       ],
       "sample_titles": [
-        "MIGRATION REGULATIONS 1994 - SCHEDULE 9 Special entry and clearance arrangements"
+        "Migration Regulations 1994 - F2026C00667 Volume 3"
       ],
       "sample_canonical_urls": []
     }
   ],
-  "overall_input_fingerprint": "97de547fba37e32d5dc01686ad2402d67524893240d1e45866bee6d70f5fa9d0",
-  "report_hash": "4bc69d3af4b3c410469698d87fb51d7e7a507bd2b28311052c5241977e712ed9"
+  "overall_input_fingerprint": "6fd2fc7f2142f156687f2e0a9c1bc56edec1aa65905ea8643d3bddbc98f1c843",
+  "report_hash": "f450d7b43a20f01f98f8a51c94099ce2b70cf58f00dab66b1cd65a09bbd8bdab"
 }
