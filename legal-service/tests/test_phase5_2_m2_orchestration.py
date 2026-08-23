@@ -156,10 +156,12 @@ def _mixed_output(*, registry, tool_call_id: str) -> ExactLegalLookupOutput:
 class ExactBackend:
     def __init__(self, output_factory=None) -> None:
         self.calls: list[str] = []
+        self.requests = []
         self.output_factory = output_factory
 
     def lookup(self, request, *, registry, tool_call_id):
         self.calls.append(tool_call_id)
+        self.requests.append(request)
         if self.output_factory is not None:
             return self.output_factory(registry=registry, tool_call_id=tool_call_id)
         return _canonical_output(registry=registry, tool_call_id=tool_call_id)
@@ -328,6 +330,12 @@ def test_graph_exact_answer_uses_same_registered_evidence_and_one_llm_stage():
     assert result.metrics.exact_lookup_requested_locator_count == 1
     assert result.metrics.exact_lookup_resolved_locator_count == 1
     assert result.metrics.exact_lookup_unresolved_locator_count == 0
+    assert exact.requests[0].schedule == "2"
+    assert exact.requests[0].provision == "485.211"
+    assert exact.requests[0].query is None
+    assert result.metrics.exact_lookup_requests[0]["normalized_request"]["schedule"] == "2"
+    assert result.metrics.exact_lookup_requests[0]["result"]["matches_count"] == 1
+    assert result.shadow_trace["exact_lookup_requests"][0]["normalized_request"]["provision"] == "485.211"
     assert result.metrics.logical_llm_stage_count == 1
     assert result.metrics.provider_api_call_count == 2
     assert all("s2x:" not in citation.evidence_ref for citation in result.submission.citations)

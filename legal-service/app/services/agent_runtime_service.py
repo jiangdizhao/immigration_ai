@@ -815,6 +815,7 @@ class AgentRuntimeService:
             exact_lookup_unresolved_cross_reference_count=(
                 tool_context.exact_lookup_unresolved_cross_reference_count
             ),
+            exact_lookup_requests=tool_context.exact_lookup_requests,
             schedule2_navigation_call_count=tool_context.schedule2_navigation_call_count,
             schedule2_navigation_target_count=tool_context.schedule2_navigation_target_count,
             exact_lookup_denied_call_count=tool_context.exact_legal_lookup_denied_call_count,
@@ -872,6 +873,7 @@ class AgentRuntimeService:
             "total_duration_ms": total_duration,
             "remaining_deadline_ms": deadline.remaining_ms(),
             "pii_violation_count": pii_violation_count,
+            "exact_lookup_requests": tool_context.exact_lookup_requests,
         }
 
         return ShadowRunResult(

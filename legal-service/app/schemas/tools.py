@@ -89,6 +89,15 @@ class ExactLegalLookupBatchItem(StrictContract):
     query: str | None = Field(default=None, max_length=2000)
     document_id: str | None = Field(default=None, max_length=500)
     source_types: list[str] = Field(default_factory=list, max_length=20)
+    # Optional structured metadata emitted by the navigation/model adapter.
+    # These fields are normalized into the existing ExactLegalLookupRequest;
+    # they are not a second exact-lookup contract.
+    source_type: str | None = Field(default=None, max_length=100)
+    locator_type: str | None = Field(default=None, max_length=100)
+    locator: str | None = Field(default=None, max_length=2000)
+    target_document: str | None = Field(default=None, max_length=500)
+    node_type: str | None = Field(default=None, max_length=100)
+    provision_ref: str | None = Field(default=None, max_length=255)
     schedule: str | None = Field(default=None, max_length=100)
     provision: str | None = Field(default=None, max_length=255)
     case_citation: str | None = Field(default=None, max_length=500)
@@ -99,7 +108,20 @@ class ExactLegalLookupBatchItem(StrictContract):
     @model_validator(mode="after")
     def validate_locator(self):
         if not any(
-            [self.query, self.document_id, self.schedule, self.provision, self.case_citation, self.subclass]
+            [
+                self.query,
+                self.document_id,
+                self.source_type,
+                self.locator_type,
+                self.locator,
+                self.target_document,
+                self.node_type,
+                self.provision_ref,
+                self.schedule,
+                self.provision,
+                self.case_citation,
+                self.subclass,
+            ]
         ):
             raise ValueError("at least one query or locator field is required")
         return self

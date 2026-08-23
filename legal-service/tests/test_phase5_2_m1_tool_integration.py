@@ -116,9 +116,11 @@ def _exact_output(*, registry, tool_call_id: str) -> ExactLegalLookupOutput:
 class FakeExactLookup:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.requests = []
 
     def lookup(self, request, *, registry, tool_call_id):
         self.calls.append(tool_call_id)
+        self.requests.append(request)
         return _exact_output(registry=registry, tool_call_id=tool_call_id)
 
 
@@ -242,6 +244,43 @@ def test_exact_lookup_batch_registers_genuine_refs_and_caps():
     )
     assert invalid.result.status == "invalid_request"
     assert invalid.result.error.code == "INVALID_EXACT_LEGAL_LOOKUP_REQUEST"
+
+
+def test_navigation_style_locator_is_normalized_before_exact_service_and_traced():
+    exact = FakeExactLookup()
+    context = _context(exact=exact)
+    result = ToolExecutorService().execute_tool(
+        _call("exact_legal_lookup", {
+            "requests": [{
+                "query": None,
+                "document_id": None,
+                "source_types": [],
+                "source_type": None,
+                "locator_type": "schedule3_criterion",
+                "locator": "Schedule 3 criterion 3001",
+                "target_document": "Schedule 3",
+                "node_type": "external_locator",
+                "provision_ref": "3001",
+                "schedule": None,
+                "provision": None,
+                "case_citation": None,
+                "subclass": None,
+                "follow_cross_references": True,
+                "max_hits": 8,
+            }],
+        }),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert exact.requests[0].schedule == "3"
+    assert exact.requests[0].provision == "3001"
+    assert exact.requests[0].query is None
+    trace = context.exact_lookup_requests[0]
+    assert trace["normalized_locator_type"] == "schedule3_criterion"
+    assert trace["normalized_request"]["schedule"] == "3"
+    assert trace["result"]["matches_count"] == 1
+    assert context.registry.entry_count == 1
 
 
 @pytest.mark.parametrize(

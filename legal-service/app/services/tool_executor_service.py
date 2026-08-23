@@ -526,6 +526,9 @@ class ToolExecutorContext:
     exact_lookup_resolved_locator_count: int = 0
     exact_lookup_unresolved_locator_count: int = 0
     exact_lookup_unresolved_cross_reference_count: int = 0
+    # Safe request/result trace for evaluation diagnostics.  The normalizer
+    # excludes raw free-form query text and provider reasoning from this data.
+    exact_lookup_requests: list[dict[str, Any]] = field(default_factory=list)
     schedule2_navigation_denied_call_count: int = 0
     exact_legal_lookup_denied_call_count: int = 0
 
@@ -714,12 +717,16 @@ class ToolExecutorService:
             context.exact_lookup_requested_locator_count += len(batch.requests)
             lookups = []
             for index, item in enumerate(batch.requests):
-                request_data = item.model_dump(mode="python")
-                request_data["as_of_date"] = context.as_of_date
-                from app.schemas.tools import ExactLegalLookupRequest
+                from app.services.exact_lookup_locator_normalizer import (
+                    normalize_exact_lookup_request,
+                )
 
+                normalized = normalize_exact_lookup_request(
+                    item,
+                    as_of_date=context.as_of_date,
+                )
                 output = service.lookup(
-                    ExactLegalLookupRequest(**request_data),
+                    normalized.request,
                     registry=context.registry,
                     # Keep each batched lookup's registry outcome isolated.
                     # The outer tool call remains the model-visible identity;
@@ -733,6 +740,21 @@ class ToolExecutorService:
                 context.exact_lookup_unresolved_cross_reference_count += len(
                     output.unresolved_cross_references
                 )
+                request_trace = dict(normalized.trace)
+                request_trace.update({
+                    "request_index": index,
+                    "tool_call_id": tool_call.call_id,
+                    "as_of_date": context.as_of_date.isoformat(),
+                    "result": {
+                        "coverage": output.coverage.model_dump(mode="json"),
+                        "matches_count": len(output.matches),
+                        "resolved_cross_references_count": len(output.resolved_cross_references),
+                        "unresolved_cross_references_count": len(output.unresolved_cross_references),
+                        "corpus_version": output.corpus_version,
+                        "index_version": output.index_version,
+                    },
+                })
+                context.exact_lookup_requests.append(request_trace)
                 lookups.append(output.model_dump(mode="json"))
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
