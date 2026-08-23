@@ -82,7 +82,12 @@ class ShadowTrace:
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
     exact_lookup_call_count: int = 0
+    exact_lookup_requested_locator_count: int = 0
+    exact_lookup_resolved_locator_count: int = 0
+    exact_lookup_unresolved_locator_count: int = 0
+    exact_lookup_unresolved_cross_reference_count: int = 0
     schedule2_navigation_call_count: int = 0
+    schedule2_navigation_target_count: int = 0
     # Phase 5.1A: configured/default reasoning effort used for this run (content-free
     # calibration metadata).
     reasoning_effort: str | None = None
@@ -347,7 +352,14 @@ class ShadowAgentService:
             native_web_source_count=result.metrics.native_web_source_count,
             native_web_citation_count=result.metrics.native_web_citation_count,
             exact_lookup_call_count=result.metrics.exact_lookup_call_count,
+            exact_lookup_requested_locator_count=result.metrics.exact_lookup_requested_locator_count,
+            exact_lookup_resolved_locator_count=result.metrics.exact_lookup_resolved_locator_count,
+            exact_lookup_unresolved_locator_count=result.metrics.exact_lookup_unresolved_locator_count,
+            exact_lookup_unresolved_cross_reference_count=(
+                result.metrics.exact_lookup_unresolved_cross_reference_count
+            ),
             schedule2_navigation_call_count=result.metrics.schedule2_navigation_call_count,
+            schedule2_navigation_target_count=result.metrics.schedule2_navigation_target_count,
             reasoning_effort=(
                 result.metrics.provider_calls[0].effort
                 if result.metrics.provider_calls else None

@@ -809,7 +809,14 @@ class AgentRuntimeService:
                 [pc.search_privacy_violation_categories for pc in provider_call_observations]
             ),
             exact_lookup_call_count=tool_context.exact_legal_lookup_call_count,
+            exact_lookup_requested_locator_count=tool_context.exact_lookup_requested_locator_count,
+            exact_lookup_resolved_locator_count=tool_context.exact_lookup_resolved_locator_count,
+            exact_lookup_unresolved_locator_count=tool_context.exact_lookup_unresolved_locator_count,
+            exact_lookup_unresolved_cross_reference_count=(
+                tool_context.exact_lookup_unresolved_cross_reference_count
+            ),
             schedule2_navigation_call_count=tool_context.schedule2_navigation_call_count,
+            schedule2_navigation_target_count=tool_context.schedule2_navigation_target_count,
             exact_lookup_denied_call_count=tool_context.exact_legal_lookup_denied_call_count,
             schedule2_navigation_denied_call_count=tool_context.schedule2_navigation_denied_call_count,
             lightrag_call_count=0,

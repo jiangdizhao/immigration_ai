@@ -520,7 +520,12 @@ class ToolExecutorContext:
     schedule2_navigation_map: Any = None
     exact_legal_lookup_service: Any = None
     schedule2_navigation_call_count: int = 0
+    schedule2_navigation_target_count: int = 0
     exact_legal_lookup_call_count: int = 0
+    exact_lookup_requested_locator_count: int = 0
+    exact_lookup_resolved_locator_count: int = 0
+    exact_lookup_unresolved_locator_count: int = 0
+    exact_lookup_unresolved_cross_reference_count: int = 0
     schedule2_navigation_denied_call_count: int = 0
     exact_legal_lookup_denied_call_count: int = 0
 
@@ -639,6 +644,11 @@ class ToolExecutorService:
             from app.services.schedule2_navigation_service import Schedule2NavigationService
 
             data = Schedule2NavigationService(context.schedule2_navigation_map).query(request)
+            context.schedule2_navigation_target_count += sum(
+                len(item.get("edges", [])) + len(item.get("targets", []))
+                for item in data.get("results", [])
+                if isinstance(item, dict)
+            )
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="ok",
@@ -701,6 +711,7 @@ class ToolExecutorService:
                 service = ExactLegalSourceService(context.db_session)
             else:
                 service = context.exact_legal_lookup_service
+            context.exact_lookup_requested_locator_count += len(batch.requests)
             lookups = []
             for index, item in enumerate(batch.requests):
                 request_data = item.model_dump(mode="python")
@@ -714,6 +725,13 @@ class ToolExecutorService:
                     # The outer tool call remains the model-visible identity;
                     # this deterministic suffix is backend-only provenance.
                     tool_call_id=f"{tool_call.call_id}:locator:{index}",
+                )
+                if output.matches:
+                    context.exact_lookup_resolved_locator_count += 1
+                else:
+                    context.exact_lookup_unresolved_locator_count += 1
+                context.exact_lookup_unresolved_cross_reference_count += len(
+                    output.unresolved_cross_references
                 )
                 lookups.append(output.model_dump(mode="json"))
             return build_tool_result(

@@ -354,6 +354,19 @@ ARM_L_LIGHTWEIGHT_PROMPT_SUFFIX = """
 - Include depends_on claim IDs for material conclusions and keep claim locations addressable in the draft.
 """
 
+ARM_N_RESEARCH_PROMPT_SUFFIX = """
+
+## Arm-N Bounded Research Policy
+- These research tools are optional and remain under your semantic control. Do not use legal tools for greetings, stable general knowledge, unrelated questions, or simple procedures unless the question genuinely needs research.
+- Use `schedule2_navigation` only when a Schedule-2 subclass/provision is materially relevant and structural cross-references may affect the answer. Its nodes, edges, relation names, local-availability flags, and provenance are navigation hints only—not legal evidence, authority, eligibility, applicability, or a conclusion. Do not cite graph output or mechanically search every graph target.
+- When navigation or other research identifies a known material legal locator, normally prefer one bounded `exact_legal_lookup` batch for canonical local source text. Use `native web_search` for current, external, open-world, amendment/transitional, case/tribunal, guidance, instrument, or locally unresolved material. Use `flat_rag_search` only as supplementary local discovery when useful; it is not mandatory for every legal question.
+- Choose tools dynamically. There is no mandatory sequence and no separate research plan. Keep related research actions in the same coherent answer/research stage and respect the available caps.
+
+## Arm-N Coverage Closure
+- Before `submit_answer` on a substantive legal turn, review material branches exposed by your own research. For each branch, reason internally whether it is RESOLVED by genuine request-scoped evidence, NOT MATERIAL to the user's question, or UNRESOLVED because sufficient evidence was not obtained within the available limits.
+- If a materially relevant branch remains UNRESOLVED, set `research_status` to `incomplete` and state the limitation accurately. Use `complete` only when the material branches you identified are adequately resolved. Do not silently treat missing local coverage or navigation metadata as proof that law does not exist.
+"""
+
 
 @dataclass(slots=True)
 class AgentPolicy:
@@ -412,6 +425,9 @@ class AgentPolicyService:
         elif mode == "default" and experiment_arm == "L":
             system_prompt += ARM_L_LIGHTWEIGHT_PROMPT_SUFFIX
             prompt_version = f"{LUNA_PROMPT_VERSION}.arm-l-lightweight"
+        elif mode == "default" and experiment_arm == "N":
+            system_prompt += ARM_N_RESEARCH_PROMPT_SUFFIX
+            prompt_version = f"{LUNA_PROMPT_VERSION}.arm-n-research"
 
         return AgentPolicy(
             system_prompt=system_prompt,
