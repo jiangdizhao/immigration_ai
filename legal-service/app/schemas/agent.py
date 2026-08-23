@@ -208,6 +208,8 @@ class AgentExecutionMetrics(StrictContract):
     exact_lookup_resolved_locator_count: int = Field(default=0, ge=0)
     exact_lookup_unresolved_locator_count: int = Field(default=0, ge=0)
     exact_lookup_unresolved_cross_reference_count: int = Field(default=0, ge=0)
+    exact_invalid_empty_request_count: int = Field(default=0, ge=0)
+    exact_no_usable_locator_count: int = Field(default=0, ge=0)
     exact_lookup_requests: list[dict[str, Any]] = Field(default_factory=list, max_length=160)
     schedule2_navigation_call_count: int = Field(default=0, ge=0)
     schedule2_navigation_target_count: int = Field(default=0, ge=0)

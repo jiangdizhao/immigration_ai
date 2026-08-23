@@ -108,7 +108,8 @@ class ExactLegalLookupBatchItem(StrictContract):
     @model_validator(mode="after")
     def validate_locator(self):
         if not any(
-            [
+            isinstance(value, str) and value.strip()
+            for value in [
                 self.query,
                 self.document_id,
                 self.source_type,

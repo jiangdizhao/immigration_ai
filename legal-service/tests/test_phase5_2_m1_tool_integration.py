@@ -246,6 +246,107 @@ def test_exact_lookup_batch_registers_genuine_refs_and_caps():
     assert invalid.result.error.code == "INVALID_EXACT_LEGAL_LOOKUP_REQUEST"
 
 
+def test_exact_lookup_skips_empty_items_and_preserves_valid_batch_entries():
+    exact = FakeExactLookup()
+    context = _context(exact=exact)
+    valid = {
+        "query": "485.211",
+        "schedule": "2",
+        "provision": "485.211",
+        "subclass": "485",
+        "follow_cross_references": True,
+        "max_hits": 8,
+    }
+    empty = {
+        "query": None,
+        "document_id": None,
+        "source_types": [],
+        "source_type": None,
+        "locator_type": None,
+        "locator": None,
+        "target_document": None,
+        "node_type": None,
+        "provision_ref": None,
+        "schedule": None,
+        "provision": None,
+        "case_citation": None,
+        "subclass": None,
+        "follow_cross_references": True,
+        "max_hits": 8,
+    }
+    result = ToolExecutorService().execute_tool(
+        _call("exact_legal_lookup", {"requests": [empty, valid]}),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert result.result.data["skipped_empty_locator_count"] == 1
+    assert len(result.result.data["lookups"]) == 1
+    assert len(exact.calls) == 1
+    assert context.exact_invalid_empty_request_count == 1
+
+
+def test_all_empty_exact_lookup_is_bounded_and_deterministic():
+    context = _context(exact=FakeExactLookup())
+    result = ToolExecutorService().execute_tool(
+        _call("exact_legal_lookup", {"requests": [{"query": None}]}),
+        context,
+    )
+
+    assert result.result.status == "partial"
+    assert result.result.error.code == "EXACT_NO_USABLE_LOCATOR"
+    assert result.result.data["lookups"] == []
+    assert context.exact_legal_lookup_call_count == 1
+    assert context.exact_legal_lookup_denied_call_count == 0
+
+
+def test_second_exact_call_is_removed_from_next_provider_tool_set():
+    from app.services.agent_runtime_service import AgentRuntimeService
+
+    tools = [{"name": "exact_legal_lookup"}, {"name": "flat_rag_search"}, {"name": "submit_answer"}]
+    remaining = AgentRuntimeService._provider_tools_for_round(
+        tools,
+        flat_rag_executed_count=0,
+        max_flat_rag_calls=1,
+        exact_legal_lookup_used=True,
+    )
+    assert [tool["name"] for tool in remaining] == ["flat_rag_search", "submit_answer"]
+
+
+def test_arm_n_terminal_normalization_allows_nested_claim_spans_and_deduplicates_lists():
+    context = _context()
+    context.allow_model_canonical_refs = True
+    context.allow_overlapping_claims = True
+    draft = "Alpha beta"
+    result = ToolExecutorService().execute_tool(
+        _call("submit_answer", {
+            "schema_version": "agent_submission.v2",
+            "answer_class": "general",
+            "draft_markdown": draft,
+            "claims": [
+                {
+                    "claim_id": "c1", "claim_type": "general", "materiality": "supporting",
+                    "text": "Alpha beta", "draft_start": 0, "draft_end": len(draft),
+                    "evidence_refs": [], "depends_on": [],
+                },
+                {
+                    "claim_id": "c2", "claim_type": "general", "materiality": "supporting",
+                    "text": "beta", "draft_start": 6, "draft_end": len(draft),
+                    "evidence_refs": [], "depends_on": ["c1", "c1"],
+                },
+            ],
+            "citations": [],
+            "research_status": "not_required",
+            "state_patch": [],
+        }),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert result.submission is not None
+    assert result.submission.claims[1].depends_on == ["c1"]
+
+
 def test_navigation_style_locator_is_normalized_before_exact_service_and_traced():
     exact = FakeExactLookup()
     context = _context(exact=exact)

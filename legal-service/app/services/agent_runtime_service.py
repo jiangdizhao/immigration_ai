@@ -190,6 +190,7 @@ class AgentRuntimeService:
             deadline_monotonic=deadline.deadline_at,
             allow_model_canonical_refs=request.experiment_arm not in {"A", "L"},
             lightweight_submission=request.experiment_arm == "L",
+            allow_overlapping_claims=request.experiment_arm == "N",
             flat_rag_search_fn=flat_rag_search_fn,
             db_session=db_session,
             privacy_guard=self._privacy_guard,
@@ -275,6 +276,7 @@ class AgentRuntimeService:
                     policy.tools,
                     flat_rag_executed_count=flat_rag_executed_count,
                     max_flat_rag_calls=budget.max_flat_rag_calls,
+                    exact_legal_lookup_used=tool_context.exact_legal_lookup_call_count >= 1,
                     terminal_phase=terminal_phase,
                 )
                 call_timeout_ms = (
@@ -551,6 +553,18 @@ class AgentRuntimeService:
 
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
+                        if tc.name == "exact_legal_lookup" and result.result.error is not None:
+                            if result.result.error.code in {
+                                "EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
+                                "EXACT_NO_USABLE_LOCATOR",
+                            }:
+                                # Exact lookup is one-shot. Once the call is
+                                # denied or has no usable identity, close
+                                # research for the next provider continuation
+                                # so the model can only submit the bounded
+                                # answer and cannot reopen exact research.
+                                terminal_phase = True
+                                research_round_available = False
                         if tc.name == "submit_answer":
                             terminal_tool_call_observations.append(ToolCallObservation(
                                 tool_name="submit_answer",
@@ -824,6 +838,8 @@ class AgentRuntimeService:
             exact_lookup_unresolved_cross_reference_count=(
                 tool_context.exact_lookup_unresolved_cross_reference_count
             ),
+            exact_invalid_empty_request_count=tool_context.exact_invalid_empty_request_count,
+            exact_no_usable_locator_count=tool_context.exact_no_usable_locator_count,
             exact_lookup_requests=tool_context.exact_lookup_requests,
             schedule2_navigation_call_count=tool_context.schedule2_navigation_call_count,
             schedule2_navigation_target_count=tool_context.schedule2_navigation_target_count,
@@ -883,6 +899,8 @@ class AgentRuntimeService:
             "remaining_deadline_ms": deadline.remaining_ms(),
             "pii_violation_count": pii_violation_count,
             "exact_lookup_requests": tool_context.exact_lookup_requests,
+            "exact_invalid_empty_request_count": tool_context.exact_invalid_empty_request_count,
+            "exact_no_usable_locator_count": tool_context.exact_no_usable_locator_count,
         }
 
         return ShadowRunResult(
@@ -914,6 +932,7 @@ class AgentRuntimeService:
         *,
         flat_rag_executed_count: int,
         max_flat_rag_calls: int,
+        exact_legal_lookup_used: bool = False,
         terminal_phase: bool = False,
     ) -> list[dict[str, Any]]:
         """Return continuation-visible tools after deterministic budgets apply."""
@@ -921,11 +940,15 @@ class AgentRuntimeService:
         if terminal_phase:
             return [tool for tool in tools if tool.get("name") == "submit_answer"]
         if flat_rag_executed_count < max_flat_rag_calls:
-            return tools
-        return [
-            tool for tool in tools
-            if tool.get("name") != "flat_rag_search"
-        ]
+            filtered = list(tools)
+        else:
+            filtered = [
+                tool for tool in tools
+                if tool.get("name") != "flat_rag_search"
+            ]
+        if exact_legal_lookup_used:
+            filtered = [tool for tool in filtered if tool.get("name") != "exact_legal_lookup"]
+        return filtered
 
     @staticmethod
     def _requires_checker(submission: AgentSubmissionV2) -> bool:

@@ -86,6 +86,8 @@ class ShadowTrace:
     exact_lookup_resolved_locator_count: int = 0
     exact_lookup_unresolved_locator_count: int = 0
     exact_lookup_unresolved_cross_reference_count: int = 0
+    exact_invalid_empty_request_count: int = 0
+    exact_no_usable_locator_count: int = 0
     schedule2_navigation_call_count: int = 0
     schedule2_navigation_target_count: int = 0
     # Phase 5.1A: configured/default reasoning effort used for this run (content-free
@@ -358,6 +360,8 @@ class ShadowAgentService:
             exact_lookup_unresolved_cross_reference_count=(
                 result.metrics.exact_lookup_unresolved_cross_reference_count
             ),
+            exact_invalid_empty_request_count=result.metrics.exact_invalid_empty_request_count,
+            exact_no_usable_locator_count=result.metrics.exact_no_usable_locator_count,
             schedule2_navigation_call_count=result.metrics.schedule2_navigation_call_count,
             schedule2_navigation_target_count=result.metrics.schedule2_navigation_target_count,
             reasoning_effort=(

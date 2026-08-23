@@ -35,6 +35,7 @@ from app.services.evidence_postcondition_service import EvidencePostconditionSer
 from app.services.native_web_locator_resolver import (
     LOCATOR_SCHEMA_INVALID,
     NativeWebLocatorResolver,
+    validate_locator_object,
 )
 from app.services.request_evidence_registry import RequestEvidenceRegistry
 from app.services.search_privacy_guard import SearchPrivacyGuard
@@ -59,6 +60,36 @@ def _dedup_ordered(refs: list[str]) -> list[str]:
             seen.add(ref)
             out.append(ref)
     return out
+
+
+_EXACT_IDENTITY_FIELDS = (
+    "query",
+    "document_id",
+    "locator_type",
+    "locator",
+    "target_document",
+    "node_type",
+    "provision_ref",
+    "schedule",
+    "provision",
+    "case_citation",
+    "subclass",
+)
+
+
+def _has_usable_exact_locator(value: Any) -> bool:
+    """Return whether a raw model item contains legal locator identity.
+
+    Advisory fields such as ``source_types`` and ``source_type`` do not make an
+    exact request usable. Whitespace-only strings are treated as empty. This
+    boundary check intentionally does not invent identity from free-form text.
+    """
+    if not isinstance(value, dict):
+        return False
+    return any(
+        isinstance(value.get(field), str) and value[field].strip()
+        for field in _EXACT_IDENTITY_FIELDS
+    )
 
 
 def _find_claim_text_spans(*, draft: str, claim_text: str) -> list[tuple[int, int]]:
@@ -163,6 +194,139 @@ def _normalize_claim_spans(
         normalized_claims.append(claim)
 
     return normalized_claims, errors
+
+
+def _normalize_recoverable_submission_fields(args: dict[str, Any]) -> None:
+    """Normalize duplicate list bookkeeping without inventing evidence.
+
+    Repeating the same request-scoped ref or dependency is mechanically
+    recoverable and carries no additional meaning. Unknown refs, spans, claim
+    IDs, and locator observations are deliberately untouched and remain hard
+    validation failures.
+    """
+    claims = args.get("claims")
+    if not isinstance(claims, list):
+        return
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        for field_name in ("evidence_refs", "depends_on"):
+            values = claim.get(field_name)
+            if isinstance(values, list) and all(isinstance(value, str) for value in values):
+                claim[field_name] = _dedup_ordered(values)
+
+
+def _reconcile_submission_evidence(
+    args: dict[str, Any],
+    context: ToolExecutorContext,
+) -> dict[str, int]:
+    """Drop invalid evidence only when genuine request evidence survives.
+
+    Model-authored refs and locators are never made authoritative here. A ref
+    survives only when the request registry already contains it; a locator
+    survives only when the native resolver can map it to an observed ref. If a
+    material claim would otherwise be left with no valid evidence, its original
+    invalid value is retained so the established validator rejects it.
+    """
+    claims = args.get("claims") if isinstance(args.get("claims"), list) else []
+    resolver = NativeWebLocatorResolver(context.registry)
+    removed_refs = 0
+    removed_locators = 0
+
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+
+        refs = claim.get("evidence_refs")
+        registered_refs: list[str] = []
+        invalid_refs: list[Any] = []
+        if isinstance(refs, list):
+            for ref in refs:
+                if isinstance(ref, str) and context.registry.is_registered(ref):
+                    registered_refs.append(ref)
+                else:
+                    invalid_refs.append(ref)
+
+        locators = claim.get("native_web_locators")
+        observed_locators: list[Any] = []
+        if isinstance(locators, list):
+            resolution = resolver.resolve(locators)
+            for locator in locators:
+                validated, invalid_code = validate_locator_object(locator)
+                if invalid_code is None and validated.url in resolution.resolved:
+                    observed_locators.append(locator)
+
+        if invalid_refs and registered_refs:
+            claim["evidence_refs"] = _dedup_ordered(registered_refs)
+            removed_refs += len(invalid_refs)
+        elif invalid_refs and not registered_refs and claim.get("materiality") != "decisive":
+            # Supporting claims do not carry the decisive-evidence contract;
+            # remove model-authored refs rather than allowing them to poison an
+            # otherwise valid submission. Decisive claims intentionally retain
+            # their invalid refs so the existing hard rejection remains active.
+            del claim["evidence_refs"]
+            removed_refs += len(invalid_refs)
+
+        if isinstance(locators, list) and observed_locators:
+            if len(observed_locators) != len(locators):
+                claim["native_web_locators"] = observed_locators
+                removed_locators += len(locators) - len(observed_locators)
+        elif isinstance(locators, list) and registered_refs:
+            # Genuine registered refs already support this claim; discard only
+            # unobserved/malformed transient locators.
+            del claim["native_web_locators"]
+            removed_locators += len(locators)
+        elif isinstance(locators, list) and not observed_locators and claim.get("materiality") != "decisive":
+            del claim["native_web_locators"]
+            removed_locators += len(locators)
+        elif locators is not None and registered_refs:
+            del claim["native_web_locators"]
+            removed_locators += 1
+
+    # A citation has only one evidence slot. Remove an invalid citation only
+    # after another genuine request-scoped ref/observed locator remains in the
+    # submission; otherwise leave it for the existing hard rejection path.
+    citations = args.get("citations") if isinstance(args.get("citations"), list) else []
+    valid_submission_evidence = any(
+        isinstance(claim, dict)
+        and isinstance(claim.get("evidence_refs"), list)
+        and any(
+            isinstance(ref, str) and context.registry.is_registered(ref)
+            for ref in claim["evidence_refs"]
+        )
+        for claim in claims
+    )
+    citation_states: list[tuple[Any, bool, bool]] = []
+    for citation in citations:
+        if not isinstance(citation, dict):
+            citation_states.append((citation, False, False))
+            continue
+        ref = citation.get("evidence_ref")
+        locator = citation.get("native_web_locator")
+        valid_ref = isinstance(ref, str) and context.registry.is_registered(ref)
+        observed_locator = False
+        if locator is not None:
+            resolution = resolver.resolve([locator])
+            observed_locator = resolution.resolved_count == 1 and not resolution.rejected
+        if valid_ref or observed_locator:
+            valid_submission_evidence = True
+        citation_states.append((citation, valid_ref, observed_locator))
+
+    retained_citations: list[Any] = []
+    for citation, valid_ref, observed_locator in citation_states:
+        if valid_ref or observed_locator or not valid_submission_evidence:
+            retained_citations.append(citation)
+        else:
+            if isinstance(citation, dict):
+                ref = citation.get("evidence_ref")
+                locator = citation.get("native_web_locator")
+                removed_refs += int(isinstance(ref, str))
+                removed_locators += int(locator is not None)
+    args["citations"] = retained_citations
+    return {
+        "submission_invalid_evidence_refs_removed": removed_refs,
+        "submission_unobserved_locators_removed": removed_locators,
+    }
 
 
 def _submission_contract_diagnostics(
@@ -497,6 +661,7 @@ class ToolExecutorContext:
     # resolved locator refs are created internally after same-request checks.
     allow_model_canonical_refs: bool = True
     lightweight_submission: bool = False
+    allow_overlapping_claims: bool = False
     deadline_monotonic: float | None = None
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
@@ -526,6 +691,8 @@ class ToolExecutorContext:
     exact_lookup_resolved_locator_count: int = 0
     exact_lookup_unresolved_locator_count: int = 0
     exact_lookup_unresolved_cross_reference_count: int = 0
+    exact_invalid_empty_request_count: int = 0
+    exact_no_usable_locator_count: int = 0
     # Safe request/result trace for evaluation diagnostics.  The normalizer
     # excludes raw free-form query text and provider reasoning from this data.
     exact_lookup_requests: list[dict[str, Any]] = field(default_factory=list)
@@ -690,8 +857,37 @@ class ToolExecutorService:
                 error={"code": "EXACT_LEGAL_LOOKUP_NOT_AVAILABLE", "message": "Exact legal lookup requires the request database context"},
             )
         try:
+            raw_requests = tool_call.arguments.get("requests")
+            if not isinstance(raw_requests, list):
+                raw_requests = []
+            usable_requests = []
+            skipped_empty_count = 0
+            for raw_item in raw_requests:
+                if _has_usable_exact_locator(raw_item):
+                    usable_requests.append(raw_item)
+                else:
+                    skipped_empty_count += 1
+            if skipped_empty_count:
+                context.exact_invalid_empty_request_count += skipped_empty_count
+                context.exact_no_usable_locator_count += 1
+            if not usable_requests:
+                return build_tool_result(
+                    tool_call_id=tool_call.call_id,
+                    status="partial",
+                    data={
+                        "lookups": [],
+                        "skipped_empty_locator_count": skipped_empty_count,
+                        "denied_reason": "NO_USABLE_EXACT_LOCATOR",
+                    },
+                    duration_ms=0,
+                    warnings=["EXACT_INVALID_EMPTY_LOCATOR"] if skipped_empty_count else [],
+                    error={
+                        "code": "EXACT_NO_USABLE_LOCATOR",
+                        "message": "No usable legal locator was supplied; no exact retrieval was performed",
+                    },
+                )
             try:
-                batch = ExactLegalLookupBatchRequest(**tool_call.arguments)
+                batch = ExactLegalLookupBatchRequest(requests=usable_requests)
             except Exception as exc:
                 return build_tool_result(
                     tool_call_id=tool_call.call_id,
@@ -715,15 +911,36 @@ class ToolExecutorService:
             else:
                 service = context.exact_legal_lookup_service
             lookups = []
+            skipped_normalization_count = 0
             for index, item in enumerate(batch.requests):
                 from app.services.exact_lookup_locator_normalizer import (
                     expand_exact_lookup_item,
                 )
 
-                normalized_items = expand_exact_lookup_item(
-                    item,
-                    as_of_date=context.as_of_date,
-                )
+                try:
+                    normalized_items = expand_exact_lookup_item(
+                        item,
+                        as_of_date=context.as_of_date,
+                    )
+                except ValueError as exc:
+                    # Some structurally non-empty model objects still lose all
+                    # legal identity during bounded normalization (for example,
+                    # a locator type with no provision or target). Treat only
+                    # that deterministic empty outcome as a skipped locator;
+                    # preserve all other malformed-request failures.
+                    if "at least one query or locator field is required" not in str(exc):
+                        raise
+                    skipped_normalization_count += 1
+                    context.exact_invalid_empty_request_count += 1
+                    context.exact_no_usable_locator_count += 1
+                    context.exact_lookup_requests.append({
+                        "normalization_status": "skipped_empty",
+                        "request_index": index,
+                        "expanded_index": 0,
+                        "tool_call_id": tool_call.call_id,
+                        "result": {"error_code": "EXACT_NO_USABLE_LOCATOR"},
+                    })
+                    continue
                 for expanded_index, normalized in enumerate(normalized_items):
                     context.exact_lookup_requested_locator_count += 1
                     output = service.lookup(
@@ -770,11 +987,33 @@ class ToolExecutorService:
                     })
                     context.exact_lookup_requests.append(request_trace)
                     lookups.append(output.model_dump(mode="json"))
+            if not lookups and skipped_normalization_count:
+                return build_tool_result(
+                    tool_call_id=tool_call.call_id,
+                    status="partial",
+                    data={
+                        "lookups": [],
+                        "skipped_empty_locator_count": skipped_empty_count,
+                        "skipped_normalization_count": skipped_normalization_count,
+                        "denied_reason": "NO_USABLE_EXACT_LOCATOR",
+                    },
+                    duration_ms=0,
+                    warnings=["EXACT_INVALID_EMPTY_LOCATOR"],
+                    error={
+                        "code": "EXACT_NO_USABLE_LOCATOR",
+                        "message": "No usable legal locator remained after deterministic normalization",
+                    },
+                )
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
                 status="ok",
-                data={"lookups": lookups},
+                data={
+                    "lookups": lookups,
+                    "skipped_empty_locator_count": skipped_empty_count,
+                    "skipped_normalization_count": skipped_normalization_count,
+                },
                 duration_ms=0,
+                warnings=["EXACT_INVALID_EMPTY_LOCATOR"] if skipped_empty_count else [],
             )
         except Exception as exc:
             logger.exception("Exact legal lookup failed")
@@ -879,7 +1118,10 @@ class ToolExecutorService:
         """
         try:
             args = dict(tool_call.arguments)
+            _normalize_recoverable_submission_fields(args)
+            reconciliation = _reconcile_submission_evidence(args, context)
             contract_diagnostics = _submission_contract_diagnostics(args, context)
+            contract_diagnostics.update(reconciliation)
             if context.lightweight_submission:
                 _strip_lightweight_evidence_bookkeeping(args)
             canonical_ref_error = _reject_model_canonical_refs(
@@ -967,7 +1209,15 @@ class ToolExecutorService:
             validator = AgentSubmissionValidator(context.registry)
             validation_result = validator.validate(
                 submission,
-                allow_overlapping_claims=context.lightweight_submission,
+                # Nested/overlapping addressable spans are a mechanical shape
+                # emitted by the answer model, not a semantic contradiction.
+                # Keep the established lightweight Arm-L behavior and apply the
+                # same safe normalization to Arm-N; impossible spans remain
+                # rejected by the validator and AgentSubmissionV2 schema.
+                allow_overlapping_claims=(
+                    context.lightweight_submission
+                    or context.allow_overlapping_claims
+                ),
             )
 
             if not validation_result.valid:

@@ -217,6 +217,113 @@ def test_tool_all_or_nothing() -> None:
     assert err is not None and err.code == "NATIVE_WEB_LOCATOR_NOT_OBSERVED"
 
 
+def _submit_with_evidence(*, evidence_refs, native_web_locators=None, citations=None, materiality="decisive"):
+    draft = "The observed source supports this current fact."
+    claim = {
+        "claim_id": "c1",
+        "claim_type": "current_fact",
+        "materiality": materiality,
+        "text": draft,
+        "draft_start": 0,
+        "draft_end": len(draft),
+        "evidence_refs": list(evidence_refs),
+        "depends_on": [],
+    }
+    if native_web_locators is not None:
+        claim["native_web_locators"] = native_web_locators
+    return ToolCallRequest(
+        call_id="submit-reconcile",
+        name="submit_answer",
+        arguments={
+            "schema_version": "agent_submission.v2",
+            "answer_class": "substantive_legal",
+            "draft_markdown": draft,
+            "claims": [claim],
+            "citations": citations or [],
+            "research_status": "incomplete",
+            "state_patch": [],
+        },
+    )
+
+
+def test_submit_reconciles_mixed_registered_and_fabricated_refs() -> None:
+    registry = create_registry("reconcile-mixed-ref")
+    valid_ref = _register(registry, "https://example.gov.au/valid")
+    context = ToolExecutorContext(request_id="reconcile-mixed-ref", registry=registry)
+    result = ToolExecutorService().execute_tool(
+        _submit_with_evidence(
+            evidence_refs=[valid_ref, "web:model-fabricated"],
+            citations=[
+                {"evidence_ref": valid_ref, "display_label": "Observed source"},
+                {"evidence_ref": "web:model-fabricated", "display_label": "Fabricated source"},
+            ],
+        ),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert result.submission is not None
+    assert result.submission.claims[0].evidence_refs == [valid_ref]
+    assert [citation.evidence_ref for citation in result.submission.citations] == [valid_ref]
+    assert result.result.data["terminal_contract_diagnostics"]["submission_invalid_evidence_refs_removed"] >= 2
+    assert not context.registry.is_registered("web:model-fabricated")
+
+
+def test_submit_reconciles_observed_and_unobserved_native_locators() -> None:
+    registry = create_registry("reconcile-mixed-locator")
+    valid_ref = _register(registry, "https://example.gov.au/valid")
+    context = ToolExecutorContext(request_id="reconcile-mixed-locator", registry=registry)
+    result = ToolExecutorService().execute_tool(
+        _submit_with_evidence(
+            evidence_refs=[valid_ref],
+            native_web_locators=[
+                {"url": "https://example.gov.au/valid"},
+                {"url": "https://example.gov.au/not-observed"},
+            ],
+            citations=[{"evidence_ref": valid_ref, "display_label": "Observed source"}],
+        ),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert result.submission is not None
+    assert result.submission.claims[0].evidence_refs == [valid_ref]
+    assert result.result.data["terminal_contract_diagnostics"]["submission_unobserved_locators_removed"] == 1
+
+
+def test_submit_keeps_all_invalid_material_evidence_on_hard_rejection_path() -> None:
+    registry = create_registry("reconcile-invalid-only")
+    context = ToolExecutorContext(request_id="reconcile-invalid-only", registry=registry)
+    result = ToolExecutorService().execute_tool(
+        _submit_with_evidence(
+            evidence_refs=["web:model-fabricated"],
+            native_web_locators=[{"url": "https://example.gov.au/not-observed"}],
+        ),
+        context,
+    )
+
+    assert result.result.status == "invalid_request"
+    codes = {error["code"] for error in result.result.data["errors"]}
+    assert "EVIDENCE_NOT_REGISTERED" in codes or "NATIVE_WEB_LOCATOR_NOT_OBSERVED" in codes
+
+
+def test_submit_drops_all_invalid_evidence_from_supporting_claim() -> None:
+    registry = create_registry("reconcile-supporting-invalid")
+    context = ToolExecutorContext(request_id="reconcile-supporting-invalid", registry=registry)
+    result = ToolExecutorService().execute_tool(
+        _submit_with_evidence(
+            evidence_refs=["web:model-fabricated"],
+            materiality="supporting",
+        ),
+        context,
+    )
+
+    assert result.result.status == "ok"
+    assert result.submission is not None
+    assert result.submission.claims[0].evidence_refs == []
+    assert not context.registry.is_registered("web:model-fabricated")
+
+
 def test_tool_dedup() -> None:
     reg = create_registry("v212-dedup")
     ref = _register(reg, "https://example.gov.au/dup")
