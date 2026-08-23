@@ -5,7 +5,7 @@ These repository instructions govern every change that can affect the customer a
 ### Architecture precedence and change control
 
 - `doc/local-codex-specs/v2.1.3/` is the governing implementation package wherever it conflicts with v2.1.2, v2.1.1, or older implementation guidance. `immigration_ai_new_architecture_proposal_2026_08_15.docx` remains the frozen architectural foundation; explicit v2.1.3 corrections control serving, evidence gates, checker behavior, mode separation, and migration where wording differs.
-- The current user-approved implementation branch is `phase5.1-luna-calibration`. The stable/integration branch is `phase1-local-production-simulation`; the immutable recovery branch is `phase1-local-production-simulation-backup`.
+- The current user-approved experimental implementation branch for Phase 5.2 is `phase5.2-navigation-research-integration`. The validated Phase-5.1 control branch is `phase5.1-luna-calibration`. The stable/integration branch is `phase1-local-production-simulation`; the immutable recovery branch is `phase1-local-production-simulation-backup`.
 - Implement architecture changes only on the user-approved implementation branch. Never implement directly on the stable/integration branch or modify the immutable recovery branch.
 - Before architecture-affecting edits, verify branch, HEAD, clean worktree, ancestry, stable/recovery SHA, merge-base, and the prior approved checkpoint. Do not auto-merge or rebase stable changes into the implementation branch.
 - Never force-push, rewrite, delete, rebase, merge, deploy, modify a backup branch, infer AWS topology, alter database data, or apply migrations without explicit authorization.
@@ -44,6 +44,9 @@ These repository instructions govern every change that can affect the customer a
 - Missing local evidence must be reported honestly and does not invalidate genuine web evidence. Never fabricate or silently download a missing source during a customer query or merely to satisfy a test.
 - Native web evidence is not backend-held exact source text unless a separately approved fetch actually obtained that text.
 - LightRAG/graph relationships are derived navigation and relationship-discovery data, never legal authority. Do not promote LightRAG into the serving path without the required isolated evaluation and approval.
+- For Phase 5.2 experimental Arm N only, the validated Schedule-2 navigation sidecar may be exposed to the shadow/evaluation Luna runtime as a bounded navigation tool. Its nodes, edges, locators, and resolution metadata are navigation hints only: they MUST NOT create evidence refs, support displayed citations, or independently support a decisive legal claim.
+- When an Arm N navigation target is materially relevant, genuine support must come through the existing exact/local legal evidence path or genuine same-request native web evidence. The existing `ExactLegalSourceService` may be exposed through a thin bounded Arm N tool adapter; do not build a second exact-lookup engine or weaken `RequestEvidenceRegistry` identity rules.
+- Arm L remains the unchanged Phase-5.1 control for the Phase-5.2 experiment. Phase 5.2 does not authorize LightRAG integration, compact-checker redesign/activation, Premium changes, or promotion of Arm N into the customer-serving path.
 - Deterministic utilities may calculate an evidenced or user-supplied rule but must not choose the applicable legal rule, deadline, start date, fee, eligibility branch, or current policy.
 - Do not force legal tools for general conversation or stable knowledge. Validate legal-research recall, unnecessary research on stable/general turns, and correct current-information tool use separately.
 
@@ -170,8 +173,9 @@ Use the corrected v2.1.3 revision-stage names in implementation plans and checkp
 
 ### Current checkpoint notes
 
-- Current implementation branch: `phase5.1-luna-calibration`.
+- Current experimental implementation branch: `phase5.2-navigation-research-integration`; current Phase-5.1 control branch: `phase5.1-luna-calibration`.
 - Approved Phase-5.1 reliability checkpoint before checker acceptance: `f216911a14b6d0ead482b1ede85f971f64a3285d` (`feat: stabilize revised default luna runtime`).
+- Phase 5.2 is an evaluation-only navigation/exact-lookup integration. Arm N must remain non-serving until its A/B validation and a separate user approval; Arm L remains the unchanged control.
 - Current approved low-cost answer model: `gpt-5.6-luna`.
 - Current approved compact-checker model: `gpt-5.6-luna`.
 - Current approved Premium target model: `gpt-5.6-sol`.
