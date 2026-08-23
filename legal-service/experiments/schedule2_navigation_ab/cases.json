@@ -1,0 +1,21 @@
+{
+  "schema_version": "schedule2_navigation_ab.cases.v1",
+  "cases": [
+    {"case_id": "s2ab-001", "question": "For a Bridging A visa applicant, what other provisions and external instruments should be checked before answering a question about the primary criteria?", "starting_subclass": "010", "starting_provision": "010.1"},
+    {"case_id": "s2ab-002", "question": "A Bridging A applicant asks about conditions and related criteria. Which explicitly linked legal branches should the researcher inspect?", "starting_subclass": "010", "starting_provision": "010.211"},
+    {"case_id": "s2ab-003", "question": "What cross-referenced legal material should be checked alongside the Bridging A grant criteria?", "starting_subclass": "010", "starting_provision": "010.511"},
+    {"case_id": "s2ab-004", "question": "For a Bridging visa E matter, which related provisions and external legal materials should a researcher trace from the starting clause?", "starting_subclass": "050", "starting_provision": "050.211"},
+    {"case_id": "s2ab-005", "question": "A Bridging visa F question may involve several public-interest and legislative references. What should be retrieved for verification?", "starting_subclass": "050", "starting_provision": "050.511"},
+    {"case_id": "s2ab-006", "question": "Which explicit cross-references should be followed when researching conditions connected with this Bridging visa provision?", "starting_subclass": "050", "starting_provision": "050.611"},
+    {"case_id": "s2ab-007", "question": "For a Partner visa matter, what related legal sources should be located before assessing the starting clause?", "starting_subclass": "100", "starting_provision": "100.221"},
+    {"case_id": "s2ab-008", "question": "A Parent visa applicant asks a difficult criteria question. Which explicit source branches should the research process inspect?", "starting_subclass": "103", "starting_provision": "103.211"},
+    {"case_id": "s2ab-009", "question": "For an Employer Nomination Scheme matter, what external references should be checked from the starting Schedule-2 provision?", "starting_subclass": "186", "starting_provision": "186.212"},
+    {"case_id": "s2ab-010", "question": "A Business Innovation and Investment applicant asks about a demanding criteria issue. Which linked sources should be traced?", "starting_subclass": "188", "starting_provision": "188.111"},
+    {"case_id": "s2ab-011", "question": "For a Skilled Independent visa question, what explicit legal references should be retrieved before giving an answer?", "starting_subclass": "189", "starting_provision": "189.212"},
+    {"case_id": "s2ab-012", "question": "A Regional visa applicant asks about a complex criterion. Which linked provisions or external sources should the researcher inspect?", "starting_subclass": "191", "starting_provision": "191.111"},
+    {"case_id": "s2ab-013", "question": "For a Temporary Work International Relations matter, identify the explicit source branches that require follow-up research from this clause.", "starting_subclass": "403", "starting_provision": "403.241"},
+    {"case_id": "s2ab-014", "question": "A Student visa applicant asks a difficult primary-criteria question. Which explicit legal references should be followed from the starting provision?", "starting_subclass": "500", "starting_provision": "500.211"},
+    {"case_id": "s2ab-015", "question": "For a Partner visa matter, what explicit source links should be retrieved and verified before answering the question?", "starting_subclass": "820", "starting_provision": "820.211"},
+    {"case_id": "s2ab-016", "question": "A Business Innovation and Investment applicant asks about a complex requirement. Which cross-referenced sources should be checked from this clause?", "starting_subclass": "888", "starting_provision": "888.111"}
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "schedule2_navigation_ab.results.v1",
+  "mode": "live",
+  "case_count": 16,
+  "arms": [
+    "baseline",
+    "navigation"
+  ],
+  "same_research_configuration": true,
+  "automatic_legal_quality_scoring": false,
+  "scoring_fields": [
+    "relevant_legal_branches_found",
+    "missed_explicit_schedule2_references",
+    "unsupported_material_legal_claims",
+    "latency_ms"
+  ],
+  "by_arm": {
+    "baseline": {
+      "runs": 16,
+      "average_latency_ms": 19609.951,
+      "total_tool_call_count": 22,
+      "manual_scoring_required": true
+    },
+    "navigation": {
+      "runs": 16,
+      "average_latency_ms": 16819.006,
+      "total_tool_call_count": 16,
+      "manual_scoring_required": true
+    }
+  },
+  "sidecar_manifest": "/home/rico/immigration_ai/legal-service/data/processed/experimental/schedule2_navigation/manifest.json",
+  "run_id": "cc4af6d8-da60-4b60-952d-f9a44b8cc867"
+}
