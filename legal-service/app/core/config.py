@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     legal_fact_check_model: str = Field(
         default="gpt-5.6-luna", alias="LEGAL_FACT_CHECK_MODEL"
     )
+    compact_checker_model: str = Field(
+        default="gpt-5.6-luna", alias="COMPACT_CHECKER_MODEL"
+    )
+    compact_checker_reasoning_effort: Literal["none", "low", "medium", "high"] = Field(
+        default="low", alias="COMPACT_CHECKER_REASONING_EFFORT"
+    )
     agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
     agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
     agent_max_provider_calls: int = Field(
