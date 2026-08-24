@@ -38,7 +38,14 @@ from app.services.tool_executor_service import (
 )
 from app.tools.base import build_tool_result
 from app.services.web_evidence_normalizer import WebEvidenceNormalizer
-from app.services.compact_checker_service import CompactCheckerService
+from app.services.compact_checker_contract_service import (
+    build_phase6_checker_input,
+    evaluate_phase6_checker_gate,
+)
+from app.services.phase6_compact_checker_service import (
+    PHASE6_CHECKER_TOOL_NAME,
+    Phase6CheckerService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +133,26 @@ class ShadowRunResult:
     terminal_continuation_triggered: bool = False
     terminal_tool_calls: list[ToolCallObservation] = field(default_factory=list)
     shadow_trace: dict[str, Any] | None = None
-    checker_status: Literal["not_required", "completed", "failed"] = "not_required"
+    checker_status: Literal["not_required", "skipped", "completed", "failed"] = "not_required"
     checker_call_count: int = 0
+    checker_provider_call_count: int = 0
+    checker_result_tool_call_count: int = 0
     checker_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_keep_claim_ids: list[str] = field(default_factory=list)
+    checker_flagged_claim_ids: list[str] = field(default_factory=list)
+    checker_blocked_claim_ids: list[str] = field(default_factory=list)
+    checker_dependency_blocked_claim_ids: list[str] = field(default_factory=list)
+    checker_material_omission_suspected: bool = False
+    checker_material_omission_evidence_refs: list[str] = field(default_factory=list)
+    checker_filter_plan_safe_to_apply: bool | None = None
+    checker_model: str | None = None
+    checker_reasoning_effort: str | None = None
+    checker_remaining_budget_before_ms: float = 0.0
+    checker_remaining_budget_after_ms: float = 0.0
+    checker_timeout_allocated_ms: float = 0.0
+    checker_error_code: str | None = None
+    checker_skip_reason: str | None = None
     checker_latency_ms: float = 0.0
 
 
@@ -234,9 +257,25 @@ class AgentRuntimeService:
         terminal_tool_call_observations: list[ToolCallObservation] = []
         total_provider_duration_ms = 0.0
         total_tool_duration_ms = 0.0
-        checker_status: Literal["not_required", "completed", "failed"] = "not_required"
+        checker_status: Literal["not_required", "skipped", "completed", "failed"] = "not_required"
+        checker_provider_call_count = 0
+        checker_result_tool_call_count = 0
         checker_dropped_claim_ids: list[str] = []
         checker_dependency_dropped_claim_ids: list[str] = []
+        checker_keep_claim_ids: list[str] = []
+        checker_flagged_claim_ids: list[str] = []
+        checker_blocked_claim_ids: list[str] = []
+        checker_dependency_blocked_claim_ids: list[str] = []
+        checker_material_omission_suspected = False
+        checker_material_omission_evidence_refs: list[str] = []
+        checker_filter_plan_safe_to_apply: bool | None = None
+        checker_model: str | None = None
+        checker_reasoning_effort: str | None = None
+        checker_remaining_budget_before_ms = 0.0
+        checker_remaining_budget_after_ms = 0.0
+        checker_timeout_allocated_ms = 0.0
+        checker_error_code: str | None = None
+        checker_skip_reason: str | None = None
         checker_latency_ms = 0.0
         checker_call_count = 0
         answer_agent_duration_ms = 0.0
@@ -704,99 +743,154 @@ class AgentRuntimeService:
             if not submission_received and not terminal_missing:
                 errors.append("No response from provider")
 
-            # v2.1.3: one evidence-only semantic checker after the bounded
-            # answer/research stage. It has no research tools and shares the
-            # original absolute deadline.
+            # Phase 6 M3: one evidence-only semantic checker after the bounded
+            # answer/research stage. This is Default L/N shadow telemetry only;
+            # the accepted submission is never replaced by the preview plan.
             answer_provider_call_count = provider_call_count
             answer_agent_duration_ms = (time.perf_counter() - start_time) * 1000.0
             if (
                 submission_received
                 and submission is not None
                 and request.mode == "default"
-                and request.experiment_arm == "L"
+                and request.experiment_arm in {"L", "N"}
                 and get_settings().compact_checker_enabled
-                and self._requires_checker(submission)
             ):
-                checker_remaining_before = deadline.remaining_ms()
-                checker = await CompactCheckerService().run(
-                    provider=self._provider,
-                    submission=submission,
-                    request=request,
-                    registry=registry,
-                    deadline=deadline,
-                    checker_target_ms=budget.checker_target_ms,
-                    model=get_settings().legal_fact_check_model,
-                    reasoning_effort=get_settings().default_agent_reasoning_effort,
-                )
-                checker_status = checker.status
-                checker_latency_ms = checker.duration_ms
-                checker_dropped_claim_ids = checker.dropped_claim_ids
-                checker_dependency_dropped_claim_ids = checker.dependency_dropped_claim_ids
-                if checker.provider_response is not None:
-                    provider_call_count += 1
-                    response = checker.provider_response
-                    checker_call_count = sum(
-                        getattr(call, "name", None) == "submit_compact_checker_result"
-                        for call in response.tool_calls
-                    )
-                    for checker_call in response.tool_calls:
-                        if checker_call.name != "submit_compact_checker_result":
-                            continue
-                        tool_call_observations.append(ToolCallObservation(
-                            tool_name="submit_compact_checker_result",
-                            tool_call_id=checker_call.call_id,
-                            round_index=max(1, tool_round_count),
-                            status="ok" if response.status == "ok" else response.status,
-                            duration_ms=response.duration_ms,
-                            remaining_deadline_before_call_ms=max(0.0, checker_remaining_before),
-                            research_stage_remaining_before_ms=0,
-                            absolute_remaining_after_ms=deadline.remaining_ms(),
-                            research_stage_remaining_after_ms=0,
-                            result_count=1,
-                            governor_denied=False,
-                            is_retry=False,
-                        ))
-                    remaining_before_checker = max(0.0, checker_remaining_before)
-                    provider_call_observations.append(ProviderCallObservation(
-                        stage="fact_check",
-                        call_index=provider_call_count,
-                        call_kind="initial",
-                        response_id=response.response_id or None,
-                        previous_response_id=None,
-                        model=response.model,
-                        effort=response.effort or "low",
-                        input_tokens=response.input_tokens,
-                        cached_input_tokens=response.cached_input_tokens,
-                        reasoning_tokens=response.reasoning_tokens,
-                        output_tokens=response.output_tokens,
-                        duration_ms=response.duration_ms,
-                        timeout_allocated_ms=min(
-                            remaining_before_checker,
-                            float(budget.checker_target_ms),
-                        ),
-                        remaining_deadline_before_call_ms=remaining_before_checker,
-                        research_stage_remaining_before_ms=0,
-                        absolute_remaining_after_ms=deadline.remaining_ms(),
-                        research_stage_remaining_after_ms=0,
-                        returned_tool_call_count=len(response.tool_calls),
-                        returned_tool_names=[tc.name for tc in response.tool_calls],
-                        web_search_reported=False,
-                        native_web_search_call_count=0,
-                        native_web_source_count=0,
-                        native_web_citation_count=0,
-                        input_items_count=0,
-                        input_char_count=0,
-                        function_output_count=0,
-                        tool_definitions_count=1,
-                        status=response.status,
-                        is_retry=False,
-                    ))
-                    total_provider_duration_ms += response.duration_ms
-                if checker.status == "completed":
-                    submission = checker.submission
-                else:
-                    submission = None
-                    errors.append(f"Compact checker failed: {checker.error or 'unknown error'}")
+                settings = get_settings()
+                checker_gate = evaluate_phase6_checker_gate(submission)
+                if checker_gate.checker_required:
+                    checker_model = settings.compact_checker_model
+                    checker_reasoning_effort = settings.compact_checker_reasoning_effort
+                    checker_remaining_before = deadline.remaining_ms()
+                    checker_remaining_budget_before_ms = checker_remaining_before
+                    checker_reserve = float(settings.compact_checker_post_reserve_ms)
+                    checker_minimum = float(settings.compact_checker_min_start_budget_ms)
+                    checker_target = min(8000.0, float(budget.checker_target_ms))
+                    available_for_checker = checker_remaining_before - checker_reserve
+                    if (
+                        checker_remaining_before < checker_minimum + checker_reserve
+                        or available_for_checker < checker_minimum
+                    ):
+                        checker_status = "skipped"
+                        checker_skip_reason = "insufficient_remaining_budget"
+                        checker_error_code = checker_skip_reason
+                        checker_remaining_budget_after_ms = deadline.remaining_ms()
+                    else:
+                        checker_timeout = min(checker_target, available_for_checker)
+                        checker_timeout_allocated_ms = checker_timeout
+                        try:
+                            checker_input = build_phase6_checker_input(
+                                request=request,
+                                submission=submission,
+                                registry=registry,
+                                compact_matter_facts=request.matter_state,
+                                additional_relevant_evidence_refs=None,
+                            )
+                        except Exception:
+                            checker_status = "failed"
+                            checker_error_code = "packet_build_failure"
+                            checker_remaining_budget_after_ms = deadline.remaining_ms()
+                        else:
+                            checker = await Phase6CheckerService().run(
+                                checker_input=checker_input,
+                                provider=self._provider,
+                                deadline=deadline,
+                                checker_target_ms=max(1, int(checker_timeout)),
+                                model=checker_model,
+                                reasoning_effort=checker_reasoning_effort,
+                                registry=registry,
+                            )
+                            checker_status = checker.status
+                            checker_latency_ms = checker.duration_ms
+                            checker_provider_call_count = checker.provider_call_count
+                            checker_call_count = checker.provider_call_count
+                            checker_result_tool_call_count = sum(
+                                name == PHASE6_CHECKER_TOOL_NAME
+                                for name in checker.returned_tool_names
+                            )
+                            checker_remaining_budget_after_ms = deadline.remaining_ms()
+                            checker_error_code = checker.error_code
+                            provider_call_count += checker.provider_call_count
+                            if checker.provider_response_id:
+                                provider_response_ids.append(checker.provider_response_id)
+                            if checker.provider_call_count:
+                                provider_call_observations.append(ProviderCallObservation(
+                                    stage="phase6_checker",
+                                    call_index=provider_call_count,
+                                    call_kind="initial",
+                                    response_id=checker.provider_response_id,
+                                    previous_response_id=None,
+                                    model=checker.model,
+                                    effort=checker.reasoning_effort,
+                                    input_tokens=checker.input_tokens,
+                                    cached_input_tokens=checker.cached_input_tokens,
+                                    reasoning_tokens=checker.reasoning_tokens,
+                                    output_tokens=checker.output_tokens,
+                                    duration_ms=checker.provider_duration_ms,
+                                    timeout_allocated_ms=checker.timeout_allocated_ms,
+                                    remaining_deadline_before_call_ms=checker_remaining_before,
+                                    research_stage_remaining_before_ms=0,
+                                    absolute_remaining_after_ms=checker_remaining_budget_after_ms,
+                                    research_stage_remaining_after_ms=0,
+                                    returned_tool_call_count=checker.returned_tool_call_count,
+                                    returned_tool_names=list(checker.returned_tool_names),
+                                    web_search_reported=False,
+                                    native_web_search_call_count=checker.native_web_search_call_count,
+                                    native_web_source_count=checker.native_web_source_count,
+                                    native_web_citation_count=checker.native_web_citation_count,
+                                    input_items_count=0,
+                                    input_char_count=0,
+                                    function_output_count=0,
+                                    tool_definitions_count=1,
+                                    status=checker.provider_status or "error",
+                                    is_retry=False,
+                                ))
+                                total_provider_duration_ms += checker.provider_duration_ms
+                            for returned_tool_name in checker.returned_tool_names:
+                                if returned_tool_name != PHASE6_CHECKER_TOOL_NAME:
+                                    continue
+                                tool_call_observations.append(ToolCallObservation(
+                                    tool_name=PHASE6_CHECKER_TOOL_NAME,
+                                    tool_call_id=None,
+                                    round_index=max(1, tool_round_count),
+                                    status=(checker.provider_status or "error"),
+                                    duration_ms=checker.provider_duration_ms,
+                                    remaining_deadline_before_call_ms=max(
+                                        0.0, checker_remaining_before
+                                    ),
+                                    research_stage_remaining_before_ms=0,
+                                    absolute_remaining_after_ms=checker_remaining_budget_after_ms,
+                                    research_stage_remaining_after_ms=0,
+                                    result_count=1 if checker.status == "completed" else 0,
+                                    governor_denied=False,
+                                    is_retry=False,
+                                ))
+                            if checker.checker_result is not None:
+                                checker_result = checker.checker_result
+                                checker_keep_claim_ids = [
+                                    d.claim_id for d in checker_result.decisions if d.verdict == "KEEP"
+                                ]
+                                checker_flagged_claim_ids = [
+                                    d.claim_id for d in checker_result.decisions if d.verdict == "FLAG"
+                                ]
+                                checker_blocked_claim_ids = [
+                                    d.claim_id for d in checker_result.decisions if d.verdict == "BLOCK"
+                                ]
+                                checker_material_omission_suspected = (
+                                    checker_result.material_omission_suspected
+                                )
+                                checker_material_omission_evidence_refs = list(
+                                    checker_result.material_omission_evidence_refs
+                                )
+                            if checker.filter_plan is not None:
+                                checker_filter_plan_safe_to_apply = checker.filter_plan.safe_to_apply
+                                checker_dependency_blocked_claim_ids = list(
+                                    checker.filter_plan.dependency_blocked_claim_ids
+                                )
+                                checker_dependency_dropped_claim_ids = list(
+                                    checker.filter_plan.dependency_blocked_claim_ids
+                                )
+                            if checker.status == "failed" and checker_error_code is None:
+                                checker_error_code = "checker_failed"
 
         except TurnDeadlineExceeded as exc:
             errors.append(f"Deadline exceeded at stage: {exc.stage}")
@@ -807,9 +901,9 @@ class AgentRuntimeService:
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
         metrics = AgentExecutionMetrics(
-            logical_llm_stage_count=1 + int(checker_status != "not_required"),
+            logical_llm_stage_count=1 + int(checker_provider_call_count > 0),
             provider_api_call_count=provider_call_count,
-            tool_call_count=len(tool_outputs) + checker_call_count,
+            tool_call_count=len(tool_outputs) + checker_result_tool_call_count,
             tool_round_count=tool_round_count,
             web_search_call_count=sum(1 for t in tool_outputs if "web_search" in str(t.data)),
             # Phase 5.1A: aggregate actual provider-native built-in web_search usage
@@ -850,12 +944,21 @@ class AgentRuntimeService:
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
             submit_answer_call_count=1 if submission_received else 0,
             checker_call_count=checker_call_count,
+            checker_provider_call_count=checker_provider_call_count,
+            checker_result_tool_call_count=checker_result_tool_call_count,
+            checker_keep_count=len(checker_keep_claim_ids),
+            checker_flag_count=len(checker_flagged_claim_ids),
+            checker_block_count=len(checker_blocked_claim_ids),
+            checker_dependency_block_count=len(checker_dependency_blocked_claim_ids),
             retry_count=max(0, answer_provider_call_count - 1),
             turn_deadline_ms=deadline.turn_deadline_ms,
             backend_total_latency_ms=total_duration,
             pre_agent_latency_ms=0,
             remaining_deadline_before_call_ms=deadline.remaining_ms(),
-            deadline_exceeded_stage="shadow_run" if deadline.remaining_ms() <= 0 else None,
+            deadline_exceeded_stage=(
+                "phase6_checker" if checker_provider_call_count and deadline.remaining_ms() <= 0
+                else "shadow_run" if deadline.remaining_ms() <= 0 else None
+            ),
             terminal_submission_missing=terminal_missing,
             terminal_submission_continuation_count=continuation_count,
             terminal_continuation_triggered=terminal_continuation_triggered,
@@ -871,10 +974,10 @@ class AgentRuntimeService:
             tool_calls=tool_call_observations,
         )
 
-        if deadline.remaining_ms() <= 0:
-            status = "timeout"
-        elif submission_received and submission is not None:
+        if submission_received and submission is not None:
             status = "completed"
+        elif deadline.remaining_ms() <= 0:
+            status = "timeout"
         elif errors:
             status = "error"
         else:
@@ -901,6 +1004,26 @@ class AgentRuntimeService:
             "exact_lookup_requests": tool_context.exact_lookup_requests,
             "exact_invalid_empty_request_count": tool_context.exact_invalid_empty_request_count,
             "exact_no_usable_locator_count": tool_context.exact_no_usable_locator_count,
+            "checker_status": checker_status,
+            "checker_call_count": checker_call_count,
+            "checker_provider_call_count": checker_provider_call_count,
+            "checker_result_tool_call_count": checker_result_tool_call_count,
+            "checker_keep_claim_ids": list(checker_keep_claim_ids),
+            "checker_flagged_claim_ids": list(checker_flagged_claim_ids),
+            "checker_blocked_claim_ids": list(checker_blocked_claim_ids),
+            "checker_dependency_blocked_claim_ids": list(checker_dependency_blocked_claim_ids),
+            "checker_material_omission_suspected": checker_material_omission_suspected,
+            "checker_material_omission_evidence_ref_count": len(
+                checker_material_omission_evidence_refs
+            ),
+            "checker_filter_plan_safe_to_apply": checker_filter_plan_safe_to_apply,
+            "checker_model": checker_model,
+            "checker_reasoning_effort": checker_reasoning_effort,
+            "checker_remaining_budget_before_ms": checker_remaining_budget_before_ms,
+            "checker_remaining_budget_after_ms": checker_remaining_budget_after_ms,
+            "checker_timeout_allocated_ms": checker_timeout_allocated_ms,
+            "checker_error_code": checker_error_code,
+            "checker_skip_reason": checker_skip_reason,
         }
 
         return ShadowRunResult(
@@ -921,8 +1044,24 @@ class AgentRuntimeService:
             shadow_trace=shadow_trace,
             checker_status=checker_status,
             checker_call_count=checker_call_count,
+            checker_provider_call_count=checker_provider_call_count,
+            checker_result_tool_call_count=checker_result_tool_call_count,
             checker_dropped_claim_ids=checker_dropped_claim_ids,
             checker_dependency_dropped_claim_ids=checker_dependency_dropped_claim_ids,
+            checker_keep_claim_ids=checker_keep_claim_ids,
+            checker_flagged_claim_ids=checker_flagged_claim_ids,
+            checker_blocked_claim_ids=checker_blocked_claim_ids,
+            checker_dependency_blocked_claim_ids=checker_dependency_blocked_claim_ids,
+            checker_material_omission_suspected=checker_material_omission_suspected,
+            checker_material_omission_evidence_refs=checker_material_omission_evidence_refs,
+            checker_filter_plan_safe_to_apply=checker_filter_plan_safe_to_apply,
+            checker_model=checker_model,
+            checker_reasoning_effort=checker_reasoning_effort,
+            checker_remaining_budget_before_ms=checker_remaining_budget_before_ms,
+            checker_remaining_budget_after_ms=checker_remaining_budget_after_ms,
+            checker_timeout_allocated_ms=checker_timeout_allocated_ms,
+            checker_error_code=checker_error_code,
+            checker_skip_reason=checker_skip_reason,
             checker_latency_ms=checker_latency_ms,
         )
 
@@ -949,14 +1088,6 @@ class AgentRuntimeService:
         if exact_legal_lookup_used:
             filtered = [tool for tool in filtered if tool.get("name") != "exact_legal_lookup"]
         return filtered
-
-    @staticmethod
-    def _requires_checker(submission: AgentSubmissionV2) -> bool:
-        return submission.answer_class == "substantive_legal" or any(
-            claim.materiality == "decisive"
-            and claim.claim_type in {"legal_rule", "legal_application"}
-            for claim in submission.claims
-        )
 
     @staticmethod
     def _merge_category_counts(counts: list[dict[str, int]]) -> dict[str, int]:

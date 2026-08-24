@@ -169,6 +169,7 @@ class ToolCallObservation(StrictContract):
         "deterministic_utility",
         "submit_answer",
         "submit_compact_checker_result",
+        "submit_phase6_checker_result",
     ]
     tool_call_id: str | None = Field(default=None, max_length=255)
     round_index: int = Field(ge=1)
@@ -220,6 +221,12 @@ class AgentExecutionMetrics(StrictContract):
     utility_call_count: int = Field(default=0, ge=0)
     submit_answer_call_count: int = Field(default=0, ge=0)
     checker_call_count: int = Field(default=0, ge=0)
+    checker_provider_call_count: int = Field(default=0, ge=0, le=1)
+    checker_result_tool_call_count: int = Field(default=0, ge=0)
+    checker_keep_count: int = Field(default=0, ge=0)
+    checker_flag_count: int = Field(default=0, ge=0)
+    checker_block_count: int = Field(default=0, ge=0)
+    checker_dependency_block_count: int = Field(default=0, ge=0)
     retry_count: int = Field(default=0, ge=0)
     turn_deadline_ms: int = Field(ge=1)
     backend_total_latency_ms: float = Field(default=0, ge=0)

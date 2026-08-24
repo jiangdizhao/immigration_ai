@@ -279,7 +279,7 @@ def test_substantive_arm_l_finishes_with_checker_disabled():
     assert provider.call_count == 1
 
 
-def test_checker_implementation_remains_available_when_explicitly_enabled():
+def test_isolated_supporting_claim_does_not_start_phase6_checker_when_enabled():
     draft = "Safe context. Legal claim."
     substantive = ProviderResponse(
         response_id="response-legal-enabled",
@@ -306,31 +306,11 @@ def test_checker_implementation_remains_available_when_explicitly_enabled():
             },
         )],
     )
-    checker = ProviderResponse(
-        response_id="response-checker-enabled",
-        model="gpt-5.6-luna",
-        status="ok",
-        tool_calls=[ToolCallRequest(
-            call_id="checker-enabled",
-            name="submit_compact_checker_result",
-            arguments={
-                "schema_version": "compact_checker.result.v1",
-                "decisions": [{
-                    "claim_id": "c1",
-                    "decision": "keep",
-                    "reason_code": "supported_current",
-                    "supporting_evidence_refs": [],
-                    "qualification": None,
-                    "original_claim_sha256": None,
-                }],
-                "escalate": False,
-            },
-        )],
-    )
-    result = _run(FakeProvider([substantive, checker]), checker_enabled=True)
+    result = _run(FakeProvider([substantive]), checker_enabled=True)
     assert result.status == "completed"
-    assert result.checker_status == "completed"
-    assert result.checker_call_count == 1
+    assert result.checker_status == "not_required"
+    assert result.checker_call_count == 0
+    assert result.metrics.provider_api_call_count == 1
 
 
 def test_last_viable_continuation_transitions_to_terminal_only_tools():

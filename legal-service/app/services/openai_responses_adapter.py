@@ -180,11 +180,20 @@ class OpenAIResponsesAdapter(ProviderInterface):
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "input_tokens", None) if usage else None
             output_tokens = getattr(usage, "output_tokens", None) if usage else None
+            input_details = getattr(usage, "input_tokens_details", None) if usage else None
+            output_details = getattr(usage, "output_tokens_details", None) if usage else None
+            cached_input_tokens = (
+                getattr(input_details, "cached_tokens", None) if input_details else None
+            )
+            reasoning_tokens = (
+                getattr(output_details, "reasoning_tokens", None) if output_details else None
+            )
 
             return ProviderResponse(
                 response_id=response_id, model=model, status="ok",
                 text=text_output, tool_calls=custom_tool_calls,
-                input_tokens=input_tokens, output_tokens=output_tokens,
+                input_tokens=input_tokens, cached_input_tokens=cached_input_tokens,
+                reasoning_tokens=reasoning_tokens, output_tokens=output_tokens,
                 duration_ms=duration_ms, raw_response=response,
                 pii_violation_count=ctx.pii_violation_count,
                 search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),

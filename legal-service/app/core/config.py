@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     compact_checker_reasoning_effort: Literal["none", "low", "medium", "high"] = Field(
         default="low", alias="COMPACT_CHECKER_REASONING_EFFORT"
     )
+    compact_checker_min_start_budget_ms: int = Field(
+        default=3000, ge=1, alias="COMPACT_CHECKER_MIN_START_BUDGET_MS"
+    )
+    compact_checker_post_reserve_ms: int = Field(
+        default=1000, ge=0, alias="COMPACT_CHECKER_POST_RESERVE_MS"
+    )
     agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
     agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
     agent_max_provider_calls: int = Field(

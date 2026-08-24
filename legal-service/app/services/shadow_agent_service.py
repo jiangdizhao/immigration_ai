@@ -111,8 +111,24 @@ class ShadowTrace:
     postcondition_status: str | None = None
     checker_status: str = "not_required"
     checker_call_count: int = 0
+    checker_provider_call_count: int = 0
+    checker_result_tool_call_count: int = 0
     checker_dropped_claim_ids: list[str] = field(default_factory=list)
     checker_dependency_dropped_claim_ids: list[str] = field(default_factory=list)
+    checker_keep_claim_ids: list[str] = field(default_factory=list)
+    checker_flagged_claim_ids: list[str] = field(default_factory=list)
+    checker_blocked_claim_ids: list[str] = field(default_factory=list)
+    checker_dependency_blocked_claim_ids: list[str] = field(default_factory=list)
+    checker_material_omission_suspected: bool = False
+    checker_material_omission_evidence_ref_count: int = 0
+    checker_filter_plan_safe_to_apply: bool | None = None
+    checker_model: str | None = None
+    checker_reasoning_effort: str | None = None
+    checker_remaining_budget_before_ms: float = 0.0
+    checker_remaining_budget_after_ms: float = 0.0
+    checker_timeout_allocated_ms: float = 0.0
+    checker_error_code: str | None = None
+    checker_skip_reason: str | None = None
     checker_latency_ms: float = 0.0
     errors: list[str] = field(default_factory=list)
     created_at: str | None = None
@@ -387,10 +403,30 @@ class ShadowAgentService:
             ),
             checker_status=result.checker_status,
             checker_call_count=result.checker_call_count,
+            checker_provider_call_count=result.checker_provider_call_count,
+            checker_result_tool_call_count=result.checker_result_tool_call_count,
             checker_dropped_claim_ids=list(result.checker_dropped_claim_ids),
             checker_dependency_dropped_claim_ids=list(
                 result.checker_dependency_dropped_claim_ids
             ),
+            checker_keep_claim_ids=list(result.checker_keep_claim_ids),
+            checker_flagged_claim_ids=list(result.checker_flagged_claim_ids),
+            checker_blocked_claim_ids=list(result.checker_blocked_claim_ids),
+            checker_dependency_blocked_claim_ids=list(
+                result.checker_dependency_blocked_claim_ids
+            ),
+            checker_material_omission_suspected=result.checker_material_omission_suspected,
+            checker_material_omission_evidence_ref_count=len(
+                result.checker_material_omission_evidence_refs
+            ),
+            checker_filter_plan_safe_to_apply=result.checker_filter_plan_safe_to_apply,
+            checker_model=result.checker_model,
+            checker_reasoning_effort=result.checker_reasoning_effort,
+            checker_remaining_budget_before_ms=result.checker_remaining_budget_before_ms,
+            checker_remaining_budget_after_ms=result.checker_remaining_budget_after_ms,
+            checker_timeout_allocated_ms=result.checker_timeout_allocated_ms,
+            checker_error_code=result.checker_error_code,
+            checker_skip_reason=result.checker_skip_reason,
             checker_latency_ms=result.checker_latency_ms,
             errors=result.errors,
             created_at=str(created_at),

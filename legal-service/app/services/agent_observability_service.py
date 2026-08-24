@@ -265,7 +265,11 @@ class AgentObservabilityService:
         )
         observation.metrics.tool_calls.append(call)
         observation.metrics.tool_call_count = len(observation.metrics.tool_calls)
-        if call.tool_name not in {"submit_answer", "submit_compact_checker_result"}:
+        if call.tool_name not in {
+            "submit_answer",
+            "submit_compact_checker_result",
+            "submit_phase6_checker_result",
+        }:
             observation.metrics.tool_round_count = max(
                 observation.metrics.tool_round_count, round_index
             )
@@ -277,6 +281,7 @@ class AgentObservabilityService:
             "deterministic_utility": "utility_call_count",
             "submit_answer": "submit_answer_call_count",
             "submit_compact_checker_result": "checker_call_count",
+            "submit_phase6_checker_result": "checker_result_tool_call_count",
         }
         counter_name = counter_by_tool[call.tool_name]
         setattr(observation.metrics, counter_name, getattr(observation.metrics, counter_name) + 1)

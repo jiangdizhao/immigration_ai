@@ -151,6 +151,17 @@ class Phase6CheckerRunResult:
     provider_call_count: int
     provider_response_id: str | None = None
     provider_status: str | None = None
+    provider_duration_ms: float = 0.0
+    timeout_allocated_ms: float = 0.0
+    input_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    output_tokens: int | None = None
+    native_web_search_call_count: int = 0
+    native_web_source_count: int = 0
+    native_web_citation_count: int = 0
+    returned_tool_call_count: int = 0
+    returned_tool_names: list[str] = field(default_factory=list)
     error_code: str | None = None
     error: str | None = None
 
@@ -164,7 +175,9 @@ def _failure(
     error_code: str,
     error: str,
     provider_response: Any | None = None,
+    timeout_allocated_ms: float = 0.0,
 ) -> Phase6CheckerRunResult:
+    returned_tools = list(getattr(provider_response, "tool_calls", []) or [])
     return Phase6CheckerRunResult(
         status="failed",
         checker_result=None,
@@ -175,6 +188,21 @@ def _failure(
         provider_call_count=provider_call_count,
         provider_response_id=getattr(provider_response, "response_id", None),
         provider_status=getattr(provider_response, "status", None),
+        provider_duration_ms=float(getattr(provider_response, "duration_ms", 0.0) or 0.0),
+        timeout_allocated_ms=timeout_allocated_ms,
+        input_tokens=getattr(provider_response, "input_tokens", None),
+        cached_input_tokens=getattr(provider_response, "cached_input_tokens", None),
+        reasoning_tokens=getattr(provider_response, "reasoning_tokens", None),
+        output_tokens=getattr(provider_response, "output_tokens", None),
+        native_web_search_call_count=int(
+            getattr(provider_response, "native_web_search_call_count", 0) or 0
+        ),
+        native_web_source_count=int(getattr(provider_response, "native_web_source_count", 0) or 0),
+        native_web_citation_count=int(
+            getattr(provider_response, "native_web_citation_count", 0) or 0
+        ),
+        returned_tool_call_count=len(returned_tools),
+        returned_tool_names=[str(getattr(tool, "name", "")) for tool in returned_tools],
         error_code=error_code,
         error=error,
     )
@@ -339,6 +367,7 @@ class Phase6CheckerService:
         checker_target_ms: int,
         model: str,
         reasoning_effort: str | None,
+        registry: Any | None = None,
     ) -> Phase6CheckerRunResult:
         started = time.perf_counter()
         remaining = deadline.remaining_ms()
@@ -393,25 +422,43 @@ class Phase6CheckerService:
                     {"role": "user", "content": packet_json},
                 ],
                 timeout_ms=timeout_ms,
-                registry=None,
+                registry=registry,
                 previous_response_id=None,
             )
         except TimeoutError as exc:
             return _failure(
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="provider_timeout", error=str(exc),
+                timeout_allocated_ms=timeout_ms,
             )
         except Exception as exc:
             return _failure(
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="provider_exception", error=str(exc),
+                timeout_allocated_ms=timeout_ms,
             )
 
+        if deadline.remaining_ms() <= 0:
+            return _failure(
+                started=started, model=model, reasoning_effort=reasoning_effort,
+                provider_call_count=1, error_code="deadline_exhausted",
+                error="checker deadline exhausted after provider call",
+                provider_response=response, timeout_allocated_ms=timeout_ms,
+            )
+        native_search_count = int(getattr(response, "native_web_search_call_count", 0) or 0)
+        if native_search_count > 0:
+            return _failure(
+                started=started, model=model, reasoning_effort=reasoning_effort,
+                provider_call_count=1, error_code="unexpected_checker_research_activity",
+                error="checker provider reported native web research activity",
+                provider_response=response, timeout_allocated_ms=timeout_ms,
+            )
         if getattr(response, "status", None) != "ok":
             return _failure(
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="provider_status_not_ok",
                 error="checker provider response was not ok", provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
         response_text = getattr(response, "text", None)
         if response_text is not None and (
@@ -422,6 +469,7 @@ class Phase6CheckerService:
                 provider_call_count=1, error_code="ordinary_prose_present",
                 error="checker response must contain only the structured result tool call",
                 provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
         tool_calls = list(getattr(response, "tool_calls", []) or [])
         if len(tool_calls) != 1:
@@ -429,6 +477,7 @@ class Phase6CheckerService:
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="result_tool_call_count_invalid",
                 error="checker must return exactly one result tool call", provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
         tool_call = tool_calls[0]
         if getattr(tool_call, "name", None) != PHASE6_CHECKER_TOOL_NAME:
@@ -436,6 +485,7 @@ class Phase6CheckerService:
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="wrong_result_tool",
                 error="checker returned an unrelated tool", provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
         arguments = getattr(tool_call, "arguments", None)
         if not isinstance(arguments, dict):
@@ -443,6 +493,7 @@ class Phase6CheckerService:
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="malformed_result_arguments",
                 error="checker result arguments must be a JSON object", provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
         try:
             checker_result = Phase6CheckerResult(**arguments)
@@ -452,6 +503,7 @@ class Phase6CheckerService:
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="invalid_checker_result",
                 error=str(exc), provider_response=response,
+                timeout_allocated_ms=timeout_ms,
             )
 
         return Phase6CheckerRunResult(
@@ -464,4 +516,19 @@ class Phase6CheckerService:
             provider_call_count=1,
             provider_response_id=getattr(response, "response_id", None),
             provider_status=getattr(response, "status", None),
+            provider_duration_ms=float(getattr(response, "duration_ms", 0.0) or 0.0),
+            timeout_allocated_ms=timeout_ms,
+            input_tokens=getattr(response, "input_tokens", None),
+            cached_input_tokens=getattr(response, "cached_input_tokens", None),
+            reasoning_tokens=getattr(response, "reasoning_tokens", None),
+            output_tokens=getattr(response, "output_tokens", None),
+            native_web_search_call_count=int(
+                getattr(response, "native_web_search_call_count", 0) or 0
+            ),
+            native_web_source_count=int(getattr(response, "native_web_source_count", 0) or 0),
+            native_web_citation_count=int(
+                getattr(response, "native_web_citation_count", 0) or 0
+            ),
+            returned_tool_call_count=len(tool_calls),
+            returned_tool_names=[str(getattr(tool, "name", "")) for tool in tool_calls],
         )
