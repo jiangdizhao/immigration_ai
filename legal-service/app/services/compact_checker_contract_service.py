@@ -361,10 +361,35 @@ def validate_phase6_checker_result(
     omission_refs = set(result.material_omission_evidence_refs)
     if not omission_refs.issubset(packet_evidence_refs):
         raise Phase6CheckerContractError("omission signal used evidence outside the packet")
+    claims_by_id = {claim.claim_id: claim for claim in checker_input.material_claims}
+
+    def permitted_evidence_refs(claim_id: str) -> set[str]:
+        permitted: set[str] = set()
+        pending = [claim_id]
+        visited: set[str] = set()
+        while pending:
+            current_id = pending.pop()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            claim = claims_by_id.get(current_id)
+            if claim is None:
+                continue
+            permitted.update(claim.evidence_refs)
+            pending.extend(claim.depends_on)
+        return permitted
+
     for decision in result.decisions:
         unknown_refs = set(decision.supporting_evidence_refs) - packet_evidence_refs
         if unknown_refs:
             raise Phase6CheckerContractError("checker used evidence outside the packet")
+        unsupported_refs = set(decision.supporting_evidence_refs) - permitted_evidence_refs(
+            decision.claim_id
+        )
+        if unsupported_refs:
+            raise Phase6CheckerContractError(
+                "checker used evidence outside the claim dependency scope"
+            )
         if decision.verdict == Phase6CheckerVerdict.BLOCK:
             if Phase6CheckerReasonCode.CONTRADICTED_BY_APPLICABLE_EVIDENCE not in decision.reason_codes:
                 raise Phase6CheckerContractError("BLOCK lacks contradiction reason")

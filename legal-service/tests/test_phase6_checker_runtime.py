@@ -73,7 +73,8 @@ class ShadowCheckerProvider:
     def __init__(self, *, verdict: str = "KEEP", omission: bool = False, native_search: bool = False,
                  checker_error: Exception | None = None, with_evidence: bool = False,
                  answer_class: str = "substantive_legal", checker_tool_name: str =
-                 "submit_phase6_checker_result", checker_result_calls: int = 1):
+                 "submit_phase6_checker_result", checker_result_calls: int = 1,
+                 native_source_count: int = 0, native_citation_count: int = 0):
         self.verdict = verdict
         self.omission = omission
         self.native_search = native_search
@@ -82,6 +83,8 @@ class ShadowCheckerProvider:
         self.answer_class = answer_class
         self.checker_tool_name = checker_tool_name
         self.checker_result_calls = checker_result_calls
+        self.native_source_count = native_source_count
+        self.native_citation_count = native_citation_count
         self.calls: list[dict] = []
         self.call_count = 0
         self.evidence_ref: str | None = None
@@ -158,6 +161,8 @@ class ShadowCheckerProvider:
             output_tokens=30,
             duration_ms=4.0,
             native_web_search_call_count=1 if self.native_search else 0,
+            native_web_source_count=self.native_source_count,
+            native_web_citation_count=self.native_citation_count,
         )
 
 
@@ -187,7 +192,11 @@ def _run(provider: ShadowCheckerProvider, *, arm: str = "L", deadline=None,
 
 @pytest.mark.parametrize("arm", ["L", "N"])
 def test_default_l_and_n_valid_phase6_checker_runs_once_and_preserves_answer(arm: str) -> None:
-    provider = ShadowCheckerProvider()
+    # Revised Arm L deliberately strips model-authored evidence bookkeeping;
+    # FLAG is the valid evidence-insufficient outcome for that packet. Arm N
+    # retains server-issued evidence refs and exercises KEEP.
+    expected_verdict = "FLAG" if arm == "L" else "KEEP"
+    provider = ShadowCheckerProvider(verdict=expected_verdict, with_evidence=arm == "N")
     result = _run(provider, arm=arm)
     assert result.status == "completed"
     assert result.checker_status == "completed"
@@ -199,7 +208,8 @@ def test_default_l_and_n_valid_phase6_checker_runs_once_and_preserves_answer(arm
     assert result.submission.claims[0].claim_id == "c1"
     assert result.metrics.logical_llm_stage_count == 2
     assert result.metrics.provider_api_call_count == 2
-    assert result.metrics.checker_keep_count == 1
+    assert result.metrics.checker_keep_count == (1 if expected_verdict == "KEEP" else 0)
+    assert result.metrics.checker_flag_count == (1 if expected_verdict == "FLAG" else 0)
     assert result.metrics.tool_calls[-1].tool_name == "submit_phase6_checker_result"
 
 
@@ -214,6 +224,11 @@ def test_block_and_omission_are_telemetry_only() -> None:
     assert result.checker_blocked_claim_ids == ["c1"]
     assert result.checker_material_omission_suspected is True
     assert result.checker_filter_plan_safe_to_apply is True
+    assert result.checker_call_count == 1
+    assert result.checker_provider_call_count == 1
+    assert result.checker_result_tool_call_count == 1
+    assert result.checker_dropped_claim_ids == []
+    assert result.checker_dependency_dropped_claim_ids == []
     assert result.submission is not None
     assert result.submission.draft_markdown == "Legal claim."
     assert result.submission.claims[0].claim_id == "c1"
@@ -226,6 +241,8 @@ def test_checker_failure_preserves_answer_without_retry_or_legacy_fallback() -> 
     assert result.checker_status == "failed"
     assert result.checker_error_code == "provider_timeout"
     assert result.checker_provider_call_count == 1
+    assert result.checker_result_tool_call_count == 0
+    assert result.checker_call_count == 0
     assert provider.call_count == 2
     assert result.submission is not None
     assert result.submission.draft_markdown == "Legal claim."
@@ -234,6 +251,20 @@ def test_checker_failure_preserves_answer_without_retry_or_legacy_fallback() -> 
 
 def test_unexpected_checker_native_search_is_rejected_and_answer_survives() -> None:
     provider = ShadowCheckerProvider(native_search=True)
+    result = _run(provider)
+    assert result.status == "completed"
+    assert result.checker_status == "failed"
+    assert result.checker_error_code == "unexpected_checker_research_activity"
+    assert result.submission is not None
+    assert result.submission.draft_markdown == "Legal claim."
+
+
+@pytest.mark.parametrize("provider_kwargs", [
+    {"native_source_count": 1},
+    {"native_citation_count": 1},
+])
+def test_unexpected_checker_native_sources_or_citations_are_rejected(provider_kwargs: dict) -> None:
+    provider = ShadowCheckerProvider(**provider_kwargs)
     result = _run(provider)
     assert result.status == "completed"
     assert result.checker_status == "failed"

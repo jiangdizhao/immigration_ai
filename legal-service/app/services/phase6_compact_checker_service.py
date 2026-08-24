@@ -111,6 +111,7 @@ The answer/research stage is already complete. You may use ONLY the supplied Pha
 For every supplied claim return exactly one structured verdict.
 
 KEEP: The existing proposition is adequately supported and applicable on the supplied evidence. KEEP uses exactly the SUPPORTED reason code.
+KEEP must cite at least one supplied evidence ref relevant to that claim or its explicit dependencies.
 
 FLAG: There is a material weakness, uncertainty, applicability issue, authority problem, possible staleness, insufficiency, or overstatement, but the supplied evidence does not justify destructive intervention. When uncertain, use FLAG rather than BLOCK.
 
@@ -368,6 +369,8 @@ class Phase6CheckerService:
         model: str,
         reasoning_effort: str | None,
         registry: Any | None = None,
+        post_checker_reserve_ms: float = 0.0,
+        minimum_checker_start_budget_ms: float = 0.0,
     ) -> Phase6CheckerRunResult:
         started = time.perf_counter()
         remaining = deadline.remaining_ms()
@@ -389,6 +392,24 @@ class Phase6CheckerService:
                 error_code="invalid_checker_target",
                 error="checker_target_ms must be positive",
             )
+        if post_checker_reserve_ms < 0:
+            return _failure(
+                started=started,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                provider_call_count=0,
+                error_code="invalid_checker_reserve",
+                error="post_checker_reserve_ms must not be negative",
+            )
+        if minimum_checker_start_budget_ms < 0:
+            return _failure(
+                started=started,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                provider_call_count=0,
+                error_code="invalid_checker_minimum_budget",
+                error="minimum_checker_start_budget_ms must not be negative",
+            )
 
         packet_json = json.dumps(
             checker_input.model_dump(mode="json"),
@@ -408,7 +429,26 @@ class Phase6CheckerService:
                 error_code="deadline_exhausted",
                 error="checker deadline exhausted before provider call",
             )
-        timeout_ms = min(remaining, float(checker_target_ms))
+        provider_available = remaining - float(post_checker_reserve_ms)
+        if provider_available <= 0:
+            return _failure(
+                started=started,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                provider_call_count=0,
+                error_code="insufficient_post_checker_reserve",
+                error="remaining checker budget must preserve the post-checker reserve",
+            )
+        if provider_available < float(minimum_checker_start_budget_ms):
+            return _failure(
+                started=started,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                provider_call_count=0,
+                error_code="insufficient_checker_viability",
+                error="remaining checker budget is below the minimum useful start budget",
+            )
+        timeout_ms = min(float(checker_target_ms), provider_available)
         try:
             response = await provider.call(
                 system_prompt=PHASE6_CHECKER_SYSTEM_PROMPT,
@@ -446,7 +486,9 @@ class Phase6CheckerService:
                 provider_response=response, timeout_allocated_ms=timeout_ms,
             )
         native_search_count = int(getattr(response, "native_web_search_call_count", 0) or 0)
-        if native_search_count > 0:
+        native_source_count = int(getattr(response, "native_web_source_count", 0) or 0)
+        native_citation_count = int(getattr(response, "native_web_citation_count", 0) or 0)
+        if native_search_count > 0 or native_source_count > 0 or native_citation_count > 0:
             return _failure(
                 started=started, model=model, reasoning_effort=reasoning_effort,
                 provider_call_count=1, error_code="unexpected_checker_research_activity",

@@ -776,7 +776,6 @@ class AgentRuntimeService:
                         checker_remaining_budget_after_ms = deadline.remaining_ms()
                     else:
                         checker_timeout = min(checker_target, available_for_checker)
-                        checker_timeout_allocated_ms = checker_timeout
                         try:
                             checker_input = build_phase6_checker_input(
                                 request=request,
@@ -790,6 +789,7 @@ class AgentRuntimeService:
                             checker_error_code = "packet_build_failure"
                             checker_remaining_budget_after_ms = deadline.remaining_ms()
                         else:
+                            checker_timeout_allocated_ms = checker_timeout
                             checker = await Phase6CheckerService().run(
                                 checker_input=checker_input,
                                 provider=self._provider,
@@ -798,15 +798,21 @@ class AgentRuntimeService:
                                 model=checker_model,
                                 reasoning_effort=checker_reasoning_effort,
                                 registry=registry,
+                                post_checker_reserve_ms=checker_reserve,
+                                minimum_checker_start_budget_ms=checker_minimum,
                             )
                             checker_status = checker.status
                             checker_latency_ms = checker.duration_ms
                             checker_provider_call_count = checker.provider_call_count
-                            checker_call_count = checker.provider_call_count
+                            checker_timeout_allocated_ms = checker.timeout_allocated_ms
                             checker_result_tool_call_count = sum(
                                 name == PHASE6_CHECKER_TOOL_NAME
                                 for name in checker.returned_tool_names
                             )
+                            # Preserve the historical checker_call_count
+                            # result-tool meaning; provider attempts are tracked
+                            # separately by checker_provider_call_count.
+                            checker_call_count = checker_result_tool_call_count
                             checker_remaining_budget_after_ms = deadline.remaining_ms()
                             checker_error_code = checker.error_code
                             provider_call_count += checker.provider_call_count

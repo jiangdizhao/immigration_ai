@@ -186,6 +186,26 @@ def _result(
     }
 
 
+def _multi_result(decisions: list[dict]) -> Phase6CheckerResult:
+    return Phase6CheckerResult(
+        schema_version="phase6_checker.result.v1",
+        decisions=decisions,
+    )
+
+
+def _decision(claim_id: str, verdict: str, refs: list[str] | None = None) -> dict:
+    return {
+        "claim_id": claim_id,
+        "verdict": verdict,
+        "reason_codes": {
+            "KEEP": ["SUPPORTED"],
+            "FLAG": ["INSUFFICIENT_SUPPORT"],
+            "BLOCK": ["CONTRADICTED_BY_APPLICABLE_EVIDENCE"],
+        }[verdict],
+        "supporting_evidence_refs": refs or [],
+    }
+
+
 class FakeProvider(ProviderInterface):
     def __init__(self, response: ProviderResponse | None = None, error: Exception | None = None):
         self.response = response
@@ -293,6 +313,90 @@ def test_text_grounded_block_result_is_completed() -> None:
     assert outcome.filter_plan.directly_blocked_claim_ids == ["c1"]
 
 
+def test_keep_requires_supporting_evidence() -> None:
+    with pytest.raises(ValidationError):
+        Phase6CheckerResult(**_multi_result([_decision("c1", "KEEP")]).model_dump(
+            mode="python"
+        ))
+
+
+def test_keep_own_evidence_and_transitive_dependency_evidence_are_valid() -> None:
+    packet = _input(
+        draft="A. B. C.",
+        claims=[
+            ("a", "A.", 0, 2, [], ["web:a"]),
+            ("b", "B.", 3, 5, ["a"], ["web:b"]),
+            ("c", "C.", 6, 8, ["b"], ["web:c"]),
+        ],
+        evidence=[_evidence(ref="web:a"), _evidence(ref="web:b"), _evidence(ref="web:c")],
+    )
+    own = _multi_result([
+        _decision("a", "KEEP", ["web:a"]),
+        _decision("b", "KEEP", ["web:b"]),
+        _decision("c", "KEEP", ["web:a"]),
+    ])
+    build_phase6_checker_filter_plan(packet, own)
+
+
+def test_unrelated_claim_evidence_is_rejected_for_keep_and_flag() -> None:
+    packet = _input(
+        draft="A. B.",
+        claims=[
+            ("a", "A.", 0, 2, [], ["web:a"]),
+            ("b", "B.", 3, 5, [], ["web:b"]),
+        ],
+        evidence=[_evidence(ref="web:a"), _evidence(ref="web:b")],
+    )
+    for verdict in ("KEEP", "FLAG"):
+        with pytest.raises(Phase6CheckerContractError, match="dependency scope"):
+            build_phase6_checker_filter_plan(
+                packet,
+                _multi_result([
+                    _decision("a", "KEEP", ["web:a"]),
+                    _decision("b", verdict, ["web:a"]),
+                ]),
+            )
+
+
+def test_flag_without_evidence_is_valid() -> None:
+    packet = _input()
+    result = _multi_result([_decision("c1", "FLAG")])
+    plan = build_phase6_checker_filter_plan(packet, result)
+    assert plan.flagged_claim_ids == ["c1"]
+
+
+def test_block_own_or_dependency_text_is_valid_but_unrelated_text_is_not() -> None:
+    dependency_packet = _input(
+        draft="A. B.",
+        claims=[
+            ("a", "A.", 0, 2, [], ["web:text"]),
+            ("b", "B.", 3, 5, ["a"], []),
+        ],
+        evidence=[_evidence(ref="web:text", origin="fetched_web", text="Contrary text.")],
+    )
+    build_phase6_checker_filter_plan(dependency_packet, _multi_result([
+        _decision("a", "KEEP", ["web:text"]),
+        _decision("b", "BLOCK", ["web:text"]),
+    ]))
+
+    unrelated_packet = _input(
+        draft="A. B.",
+        claims=[
+            ("a", "A.", 0, 2, [], ["web:text"]),
+            ("b", "B.", 3, 5, [], ["web:other"]),
+        ],
+        evidence=[
+            _evidence(ref="web:text", origin="fetched_web", text="Contrary text."),
+            _evidence(ref="web:other", origin="fetched_web", text="Other text."),
+        ],
+    )
+    with pytest.raises(Phase6CheckerContractError, match="dependency scope"):
+        build_phase6_checker_filter_plan(unrelated_packet, _multi_result([
+            _decision("a", "KEEP", ["web:text"]),
+            _decision("b", "BLOCK", ["web:text"]),
+        ]))
+
+
 @pytest.mark.parametrize("arguments", [
     {"schema_version": "phase6_checker.result.v1", "decisions": []},
     _result(verdict="KEEP", extra_field="bad"),
@@ -386,6 +490,69 @@ def test_timeout_allocation_is_capped_by_target_and_absolute_deadline() -> None:
     ))
     assert provider.calls[0]["timeout_ms"] <= 8000
     assert outcome.provider_call_count == 1
+
+
+class _MutableClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+
+def test_post_checker_reserve_is_enforced_after_packet_processing(monkeypatch) -> None:
+    clock = _MutableClock()
+    deadline = AbsoluteTurnDeadline(0.0, 1000, clock=clock)
+    original_dumps = __import__(
+        "app.services.phase6_compact_checker_service",
+        fromlist=["json"],
+    ).json.dumps
+
+    def consuming_dumps(*args, **kwargs):
+        encoded = original_dumps(*args, **kwargs)
+        clock.value += 0.5
+        return encoded
+
+    monkeypatch.setattr(
+        "app.services.phase6_compact_checker_service.json.dumps", consuming_dumps
+    )
+    provider = FakeProvider(_provider_response(_result()))
+    outcome = asyncio.run(Phase6CheckerService().run(
+        checker_input=_input(), provider=provider, deadline=deadline,
+        checker_target_ms=800, model="gpt-5.6-luna", reasoning_effort="low",
+        post_checker_reserve_ms=400,
+    ))
+    assert outcome.status == "completed"
+    assert provider.calls[0]["timeout_ms"] <= 100
+    assert outcome.timeout_allocated_ms <= 100
+
+
+def test_post_checker_reserve_exhaustion_makes_zero_provider_calls(monkeypatch) -> None:
+    clock = _MutableClock()
+    deadline = AbsoluteTurnDeadline(0.0, 1000, clock=clock)
+    original_dumps = __import__(
+        "app.services.phase6_compact_checker_service",
+        fromlist=["json"],
+    ).json.dumps
+
+    def consuming_dumps(*args, **kwargs):
+        encoded = original_dumps(*args, **kwargs)
+        clock.value += 0.7
+        return encoded
+
+    monkeypatch.setattr(
+        "app.services.phase6_compact_checker_service.json.dumps", consuming_dumps
+    )
+    provider = FakeProvider(_provider_response(_result()))
+    outcome = asyncio.run(Phase6CheckerService().run(
+        checker_input=_input(), provider=provider, deadline=deadline,
+        checker_target_ms=800, model="gpt-5.6-luna", reasoning_effort="low",
+        post_checker_reserve_ms=400,
+    ))
+    assert outcome.status == "failed"
+    assert outcome.error_code == "insufficient_post_checker_reserve"
+    assert outcome.provider_call_count == 0
+    assert provider.call_count == 0
 
 
 def test_no_research_tools_are_exposed_and_no_continuation_is_used() -> None:

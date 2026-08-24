@@ -271,6 +271,8 @@ class Phase6CheckerDecision(StrictCheckerContract):
         elif self.verdict == Phase6CheckerVerdict.KEEP:
             if self.reason_codes != [Phase6CheckerReasonCode.SUPPORTED]:
                 raise ValueError("KEEP requires exactly SUPPORTED reason")
+            if not self.supporting_evidence_refs:
+                raise ValueError("KEEP requires supporting evidence")
         else:
             allowed_flag_reasons = {
                 Phase6CheckerReasonCode.INSUFFICIENT_SUPPORT,

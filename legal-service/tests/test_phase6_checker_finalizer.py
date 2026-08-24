@@ -101,7 +101,7 @@ def _decision(claim_id: str, verdict: str, refs: list[str] | None = None) -> dic
             "FLAG": ["OVERSTATED"],
             "BLOCK": ["CONTRADICTED_BY_APPLICABLE_EVIDENCE"],
         }[verdict],
-        "supporting_evidence_refs": refs or [],
+        "supporting_evidence_refs": refs or (['web:native'] if verdict == "KEEP" else []),
     }
 
 
@@ -248,7 +248,7 @@ def test_citations_for_blocked_only_claims_are_removed_and_survivors_remain() ->
     ]
     plan = build_phase6_checker_filter_plan(packet, _result([
         _decision("blocked", "BLOCK", ["web:blocked"]),
-        _decision("kept", "KEEP"),
+        _decision("kept", "KEEP", ["web:kept"]),
     ]))
     candidate = apply_phase6_filter_preview(packet, plan, citations=citations)
     assert [citation.evidence_ref for citation in candidate.citations] == ["web:kept"]
@@ -262,7 +262,7 @@ def test_preview_does_not_mutate_input_packet_or_add_claims_or_wording() -> None
     before = packet.model_dump(mode="json")
     plan = build_phase6_checker_filter_plan(packet, _result([
         _decision("blocked", "BLOCK", ["web:blocked"]),
-        _decision("kept", "KEEP"),
+        _decision("kept", "KEEP", ["web:kept"]),
     ]))
     apply_phase6_filter_preview(packet, plan)
     assert packet.model_dump(mode="json") == before
