@@ -284,6 +284,6 @@ def test_arm_b_tools_unchanged() -> None:
 def test_flat_rag_cap_and_deadlines_unchanged() -> None:
     settings = _settings()
     assert settings.agent_max_flat_rag_calls == 1
-    assert settings.default_turn_deadline_ms == 40000
+    assert settings.default_turn_deadline_ms == 60000
     assert settings.default_answer_research_target_ms == 32000
     assert settings.agent_retry_viability_threshold_ms == 8000

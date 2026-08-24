@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         default=8000, ge=0, le=40000, alias="AGENT_RETRY_VIABILITY_THRESHOLD_MS"
     )
     default_turn_deadline_ms: int = Field(
-        default=40000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
+        default=60000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
     )
     premium_turn_deadline_ms: int = Field(
         default=45000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
