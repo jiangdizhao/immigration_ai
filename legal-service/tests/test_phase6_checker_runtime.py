@@ -166,6 +166,88 @@ class ShadowCheckerProvider:
         )
 
 
+class DependencyShadowCheckerProvider(ShadowCheckerProvider):
+    async def call(self, **kwargs):
+        if self.call_count == 0:
+            self.call_count += 1
+            self.calls.append(kwargs)
+            registry = kwargs["registry"]
+            self.evidence_ref = registry.register_fetched_web_evidence(
+                evidence=_fetched_evidence(), tool_call_id="fetch-1", tool_name="web_fetch"
+            )
+            return ProviderResponse(
+                response_id="answer-response",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[ToolCallRequest(
+                    call_id="answer-submit",
+                    name="submit_answer",
+                    arguments={
+                        "schema_version": "agent_submission.v2",
+                        "answer_class": "substantive_legal",
+                        "draft_markdown": "A. B.",
+                        "claims": [
+                            {
+                                "claim_id": "A",
+                                "claim_type": "legal_rule",
+                                "materiality": "decisive",
+                                "text": "A.",
+                                "draft_start": 0,
+                                "draft_end": 2,
+                                "evidence_refs": [self.evidence_ref],
+                            },
+                            {
+                                "claim_id": "B",
+                                "claim_type": "legal_application",
+                                "materiality": "decisive",
+                                "text": "B.",
+                                "draft_start": 3,
+                                "draft_end": 5,
+                                "depends_on": ["A"],
+                                "evidence_refs": [self.evidence_ref],
+                            },
+                        ],
+                        "citations": [],
+                        "research_status": "complete",
+                        "state_patch": [],
+                    },
+                )],
+            )
+        self.call_count += 1
+        self.calls.append(kwargs)
+        result = {
+            "schema_version": "phase6_checker.result.v1",
+            "decisions": [
+                {
+                    "claim_id": "A",
+                    "verdict": "BLOCK",
+                    "reason_codes": ["CONTRADICTED_BY_APPLICABLE_EVIDENCE"],
+                    "supporting_evidence_refs": [self.evidence_ref],
+                },
+                {
+                    "claim_id": "B",
+                    "verdict": "KEEP",
+                    "reason_codes": ["SUPPORTED"],
+                    "supporting_evidence_refs": [self.evidence_ref],
+                },
+            ],
+            "material_omission_suspected": False,
+            "material_omission_evidence_refs": [],
+            "escalate": False,
+        }
+        return ProviderResponse(
+            response_id="checker-response",
+            model="gpt-5.6-luna",
+            status="ok",
+            tool_calls=[ToolCallRequest(
+                call_id="checker-result",
+                name="submit_phase6_checker_result",
+                arguments=result,
+            )],
+            duration_ms=4.0,
+        )
+
+
 def _run(provider: ShadowCheckerProvider, *, arm: str = "L", deadline=None,
          answer_class: str = "substantive_legal"):
     settings = Settings(
@@ -232,6 +314,20 @@ def test_block_and_omission_are_telemetry_only() -> None:
     assert result.submission is not None
     assert result.submission.draft_markdown == "Legal claim."
     assert result.submission.claims[0].claim_id == "c1"
+
+
+def test_phase6_dependency_block_uses_only_new_block_fields_and_preserves_answer() -> None:
+    provider = DependencyShadowCheckerProvider()
+    result = _run(provider, arm="N")
+    assert result.status == "completed"
+    assert result.checker_status == "completed"
+    assert result.checker_blocked_claim_ids == ["A"]
+    assert result.checker_dependency_blocked_claim_ids == ["B"]
+    assert result.checker_dropped_claim_ids == []
+    assert result.checker_dependency_dropped_claim_ids == []
+    assert result.submission is not None
+    assert result.submission.draft_markdown == "A. B."
+    assert [claim.claim_id for claim in result.submission.claims] == ["A", "B"]
 
 
 def test_checker_failure_preserves_answer_without_retry_or_legacy_fallback() -> None:

@@ -892,9 +892,6 @@ class AgentRuntimeService:
                                 checker_dependency_blocked_claim_ids = list(
                                     checker.filter_plan.dependency_blocked_claim_ids
                                 )
-                                checker_dependency_dropped_claim_ids = list(
-                                    checker.filter_plan.dependency_blocked_claim_ids
-                                )
                             if checker.status == "failed" and checker_error_code is None:
                                 checker_error_code = "checker_failed"
 
