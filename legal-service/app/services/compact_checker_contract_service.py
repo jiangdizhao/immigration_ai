@@ -8,7 +8,10 @@ it does not activate that call or alter customer answers.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
+
+from pydantic import ValidationError
 
 from app.schemas.agent import AgentClaim, AgentRuntimeRequest, AgentSubmissionV2
 from app.schemas.checker import (
@@ -33,12 +36,11 @@ from app.schemas.evidence import (
 from app.services.request_evidence_registry import RequestEvidenceRegistry
 
 
-MATERIAL_LEGAL_CLAIM_TYPES = frozenset({
-    "legal_rule",
-    "legal_application",
-    "procedure",
-    "current_fact",
-})
+DEFAULT_MAX_CHECKER_EVIDENCE_ITEMS = 16
+DEFAULT_MAX_CHECKER_EVIDENCE_TEXT_CHARS = 40_000
+DEFAULT_MAX_CHECKER_MATTER_FACTS_CHARS = 8_000
+DEFAULT_MAX_CHECKER_PACKET_CHARS = 80_000
+
 LEGAL_CONCLUSION_TYPES = frozenset({
     "legal_rule",
     "legal_application",
@@ -63,8 +65,23 @@ def _checker_root_claims(submission: AgentSubmissionV2) -> list[AgentClaim]:
     return [
         claim
         for claim in submission.claims
-        if claim.materiality == "decisive" and claim.claim_type in MATERIAL_LEGAL_CLAIM_TYPES
+        if claim.materiality == "decisive" and claim.claim_type in LEGAL_CONCLUSION_TYPES
     ]
+
+
+def _transitive_dependencies(claim: AgentClaim, claims_by_id: dict[str, AgentClaim]) -> set[str]:
+    dependencies: set[str] = set()
+    pending = list(claim.depends_on)
+    while pending:
+        dependency_id = pending.pop()
+        if dependency_id in dependencies:
+            continue
+        dependency = claims_by_id.get(dependency_id)
+        if dependency is None:
+            continue
+        dependencies.add(dependency_id)
+        pending.extend(dependency.depends_on)
+    return dependencies
 
 
 def evaluate_phase6_checker_gate(submission: AgentSubmissionV2) -> Phase6CheckerGateDecision:
@@ -77,20 +94,21 @@ def evaluate_phase6_checker_gate(submission: AgentSubmissionV2) -> Phase6Checker
             reason="no_material_substantive_legal_claim",
         )
 
-    current_fact_ids = {claim.claim_id for claim in roots if claim.claim_type == "current_fact"}
-    legal_claims = [claim for claim in roots if claim.claim_type in LEGAL_CONCLUSION_TYPES]
-    if current_fact_ids and legal_claims:
-        affects_conclusion = any(
-            current_fact_id in claim.depends_on
-            for claim in legal_claims
-            for current_fact_id in current_fact_ids
-        )
-        if affects_conclusion:
-            reason = "decisive_current_fact_affects_legal_conclusion"
-        else:
-            reason = "material_substantive_legal_claim"
-    else:
-        reason = "material_substantive_legal_claim"
+    claims_by_id = {claim.claim_id: claim for claim in submission.claims}
+    decisive_current_fact_ids = {
+        claim.claim_id
+        for claim in submission.claims
+        if claim.claim_type == "current_fact" and claim.materiality == "decisive"
+    }
+    affects_conclusion = any(
+        decisive_current_fact_ids & _transitive_dependencies(claim, claims_by_id)
+        for claim in roots
+    )
+    reason = (
+        "decisive_current_fact_affects_legal_conclusion"
+        if affects_conclusion
+        else "material_substantive_legal_claim"
+    )
     return Phase6CheckerGateDecision(
         checker_required=True,
         reason=reason,
@@ -146,6 +164,14 @@ def _compact_evidence(
     registry_tool_call_id: str,
     registered_at,
 ) -> Phase6CheckerEvidence:
+    if record.authority_kind == "derived_relationship":
+        raise Phase6CheckerContractError(
+            "derived relationship/navigation material cannot enter checker evidence"
+        )
+    if registry_tool_name in {"schedule2_navigation", "lightrag_search"}:
+        raise Phase6CheckerContractError(
+            "graph/navigation tool output cannot enter checker evidence"
+        )
     common = {
         "evidence_ref": record.evidence_ref,
         "evidence_origin": record.evidence_origin,
@@ -201,7 +227,10 @@ def build_phase6_checker_input(
     registry: RequestEvidenceRegistry,
     compact_matter_facts: dict[str, object] | None = None,
     additional_relevant_evidence_refs: list[str] | None = None,
-    max_evidence_items: int = 60,
+    max_evidence_items: int = DEFAULT_MAX_CHECKER_EVIDENCE_ITEMS,
+    max_total_evidence_text_chars: int = DEFAULT_MAX_CHECKER_EVIDENCE_TEXT_CHARS,
+    max_compact_matter_facts_chars: int = DEFAULT_MAX_CHECKER_MATTER_FACTS_CHARS,
+    max_total_packet_chars: int = DEFAULT_MAX_CHECKER_PACKET_CHARS,
 ) -> Phase6CheckerInput:
     """Build a bounded checker packet from actual current-request evidence.
 
@@ -210,6 +239,19 @@ def build_phase6_checker_input(
     optional additional refs are deliberately explicit; this M1 builder does
     not infer semantic relevance from raw research traces.
     """
+
+    if registry.request_id != request.request_id:
+        raise Phase6CheckerContractError(
+            "checker registry request_id does not match runtime request_id"
+        )
+    limits = (
+        max_evidence_items,
+        max_total_evidence_text_chars,
+        max_compact_matter_facts_chars,
+        max_total_packet_chars,
+    )
+    if any(limit < 1 for limit in limits):
+        raise Phase6CheckerContractError("checker packet bounds must be positive")
 
     gate = evaluate_phase6_checker_gate(submission)
     if not gate.checker_required:
@@ -245,26 +287,62 @@ def build_phase6_checker_input(
                 registry_tool_call_id=entry.tool_call_id,
                 registered_at=entry.registered_at,
             ))
+        except Phase6CheckerContractError:
+            raise
         except Exception as exc:
             raise Phase6CheckerContractError(
                 f"evidence ref could not be resolved: {evidence_ref}"
             ) from exc
 
-    return Phase6CheckerInput(
-        schema_version=PHASE6_CHECKER_INPUT_SCHEMA_VERSION,
-        request_id=request.request_id,
-        turn_id=request.turn_id,
-        question=request.user_text,
-        compact_matter_facts=dict(compact_matter_facts or {}),
-        as_of_date=request.as_of_date,
-        accepted_draft=Phase6AcceptedDraft(
-            draft_markdown=submission.draft_markdown,
-            answer_class=submission.answer_class,
-            research_status=submission.research_status,
-        ),
-        material_claims=compact_claims,
-        evidence=evidence,
-    )
+    try:
+        matter_facts_chars = len(json.dumps(
+            compact_matter_facts or {},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ))
+    except (TypeError, ValueError) as exc:
+        raise Phase6CheckerContractError(
+            "compact matter facts are not deterministically serializable"
+        ) from exc
+    if matter_facts_chars > max_compact_matter_facts_chars:
+        raise Phase6CheckerContractError("compact matter facts exceed checker packet bound")
+
+    total_evidence_text_chars = sum(len(item.text or "") for item in evidence)
+    if total_evidence_text_chars > max_total_evidence_text_chars:
+        raise Phase6CheckerContractError("checker evidence text exceeds packet bound")
+
+    try:
+        checker_input = Phase6CheckerInput(
+            schema_version=PHASE6_CHECKER_INPUT_SCHEMA_VERSION,
+            request_id=request.request_id,
+            turn_id=request.turn_id,
+            question=request.user_text,
+            compact_matter_facts=dict(compact_matter_facts or {}),
+            as_of_date=request.as_of_date,
+            accepted_draft=Phase6AcceptedDraft(
+                draft_markdown=submission.draft_markdown,
+                answer_class=submission.answer_class,
+                research_status=submission.research_status,
+            ),
+            material_claims=compact_claims,
+            evidence=evidence,
+        )
+        serialized_packet_chars = len(json.dumps(
+            checker_input.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ))
+    except ValidationError as exc:
+        raise Phase6CheckerContractError(str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        if isinstance(exc, Phase6CheckerContractError):
+            raise
+        raise Phase6CheckerContractError("checker packet is not serializable") from exc
+    if serialized_packet_chars > max_total_packet_chars:
+        raise Phase6CheckerContractError("serialized checker packet exceeds packet bound")
+    return checker_input
 
 
 def validate_phase6_checker_result(
@@ -280,6 +358,9 @@ def validate_phase6_checker_result(
     if set(actual_claim_ids) != expected_claim_ids:
         raise Phase6CheckerContractError("checker must decide every supplied material claim")
     packet_evidence_refs = {item.evidence_ref for item in checker_input.evidence}
+    omission_refs = set(result.material_omission_evidence_refs)
+    if not omission_refs.issubset(packet_evidence_refs):
+        raise Phase6CheckerContractError("omission signal used evidence outside the packet")
     for decision in result.decisions:
         unknown_refs = set(decision.supporting_evidence_refs) - packet_evidence_refs
         if unknown_refs:

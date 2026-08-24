@@ -140,6 +140,8 @@ class Phase6CheckerEvidence(StrictCheckerContract):
     def validate_source_shape(self):
         if self.effective_from and self.effective_to and self.effective_to < self.effective_from:
             raise ValueError("effective_to must not precede effective_from")
+        if self.authority_kind == "derived_relationship":
+            raise ValueError("derived relationship data is not checker evidence")
         if self.evidence_origin == "openai_web_native" and (
             self.text is not None or self.content_hash is not None
         ):
@@ -262,15 +264,23 @@ class Phase6CheckerDecision(StrictCheckerContract):
             raise ValueError("supporting_evidence_refs must be opaque exact or web refs")
         contradiction = Phase6CheckerReasonCode.CONTRADICTED_BY_APPLICABLE_EVIDENCE
         if self.verdict == Phase6CheckerVerdict.BLOCK:
-            if contradiction not in self.reason_codes:
-                raise ValueError("BLOCK requires applicable contradiction reason")
+            if self.reason_codes != [contradiction]:
+                raise ValueError("BLOCK requires exactly applicable contradiction reason")
             if not self.supporting_evidence_refs:
                 raise ValueError("BLOCK requires supporting evidence")
-        elif contradiction in self.reason_codes:
-            raise ValueError("applicable contradiction requires BLOCK")
-        if self.verdict == Phase6CheckerVerdict.KEEP:
-            if Phase6CheckerReasonCode.SUPPORTED not in self.reason_codes:
-                raise ValueError("KEEP requires SUPPORTED reason")
+        elif self.verdict == Phase6CheckerVerdict.KEEP:
+            if self.reason_codes != [Phase6CheckerReasonCode.SUPPORTED]:
+                raise ValueError("KEEP requires exactly SUPPORTED reason")
+        else:
+            allowed_flag_reasons = {
+                Phase6CheckerReasonCode.INSUFFICIENT_SUPPORT,
+                Phase6CheckerReasonCode.APPLICABILITY_UNCLEAR,
+                Phase6CheckerReasonCode.AUTHORITY_WEAK_OR_MISMATCHED,
+                Phase6CheckerReasonCode.POSSIBLY_STALE,
+                Phase6CheckerReasonCode.OVERSTATED,
+            }
+            if not set(self.reason_codes).issubset(allowed_flag_reasons):
+                raise ValueError("FLAG has an invalid or contradictory reason")
         return self
 
 
@@ -278,4 +288,20 @@ class Phase6CheckerResult(StrictCheckerContract):
     schema_version: Literal["phase6_checker.result.v1"]
     decisions: list[Phase6CheckerDecision] = Field(min_length=1, max_length=100)
     material_omission_suspected: bool = False
+    material_omission_evidence_refs: list[str] = Field(default_factory=list, max_length=30)
     escalate: bool = False
+
+    @model_validator(mode="after")
+    def validate_omission_traceability(self):
+        if len(set(self.material_omission_evidence_refs)) != len(self.material_omission_evidence_refs):
+            raise ValueError("material_omission_evidence_refs must not contain duplicates")
+        if any(
+            not (ref.startswith("exact:") or ref.startswith("web:"))
+            for ref in self.material_omission_evidence_refs
+        ):
+            raise ValueError("material_omission_evidence_refs must be opaque exact or web refs")
+        if self.material_omission_suspected != bool(self.material_omission_evidence_refs):
+            raise ValueError(
+                "material omission evidence refs must match material_omission_suspected"
+            )
+        return self
