@@ -361,13 +361,13 @@ def test_schedule_two_cross_references_are_resolved_or_explicitly_unresolved(
         request=ExactLegalLookupRequest(
             schedule="2",
             query=query_text,
-            provision=schedule_two_chunk.section_ref,
             as_of_date=as_of_date,
             max_hits=8,
         ),
         call_id="schedule-2-cross-reference",
     )
 
+    assert output.matches, "cross-reference probe returned no authoritative Schedule 2 matches"
     resolved = [item for item in output.resolved_cross_references if item.locator == expected_surface]
     unresolved = [item for item in output.unresolved_cross_references if item == expected_surface]
     assert resolved or unresolved
