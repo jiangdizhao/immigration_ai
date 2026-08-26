@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     phase7_experience_archive_enabled: bool = Field(
         default=False, alias="PHASE7_EXPERIENCE_ARCHIVE_ENABLED"
     )
+    # Phase 7.3A provisional control-plane safety limits. They govern only
+    # current non-retired rules and are intentionally not quality claims.
+    phase7_reasoning_bank_max_rules: int = Field(
+        default=150, ge=1, alias="PHASE7_REASONING_BANK_MAX_RULES"
+    )
+    phase7_reasoning_bank_max_rules_per_type: int = Field(
+        default=50, ge=1, alias="PHASE7_REASONING_BANK_MAX_RULES_PER_TYPE"
+    )
 
     # v2.1.1 Phase 1 contracts. ANSWER_ENGINE remains legacy/v1 until a later
     # separately approved rollout; the remaining values do not activate calls.
