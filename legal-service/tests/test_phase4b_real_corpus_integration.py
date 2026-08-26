@@ -329,10 +329,14 @@ def test_schedule_two_cross_references_are_resolved_or_explicitly_unresolved(
     canonical_read_only_db,
 ):
     db, _ = canonical_read_only_db
+    as_of_date = date.today()
+    family_id = "migration_regulations_schedule_2"
     schedule_two_chunk = db.scalar(
         select(SourceChunk)
         .join(LegalSource, LegalSource.id == SourceChunk.source_id)
-        .where(ExactLegalSourceService._family_source_condition("migration_regulations_schedule_2"))
+        .where(LegalSource.status == "active")
+        .where(ExactLegalSourceService._family_source_condition(family_id))
+        .where(ExactLegalSourceService._authoritative_source_condition(family_id, as_of_date))
         .where(ExactLegalSourceService._schedule_chunk_condition("2"))
         .where(
             SourceChunk.text.ilike("%Schedule 3%")
@@ -358,7 +362,7 @@ def test_schedule_two_cross_references_are_resolved_or_explicitly_unresolved(
             schedule="2",
             query=query_text,
             provision=schedule_two_chunk.section_ref,
-            as_of_date=date.today(),
+            as_of_date=as_of_date,
             max_hits=8,
         ),
         call_id="schedule-2-cross-reference",
