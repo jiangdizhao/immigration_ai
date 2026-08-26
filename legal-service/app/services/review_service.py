@@ -15,6 +15,7 @@ from app.schemas.review import (
     ReviewConversationItem,
     ReviewQueueItem,
 )
+from app.services.phase7_artifact_service import Phase7ArtifactError, Phase7ArtifactService
 
 
 class ReviewService:
@@ -23,6 +24,9 @@ class ReviewService:
     This service is intentionally passive. It never calls the chatbot inference
     pipeline, retrieval, Schedule reasoning, or LLM services.
     """
+
+    def __init__(self, phase7_artifact_service: Phase7ArtifactService | None = None) -> None:
+        self.phase7_artifact_service = phase7_artifact_service or Phase7ArtifactService()
 
     def list_review_conversations(
         self,
@@ -220,11 +224,13 @@ class ReviewService:
         *,
         trace_id: str,
         payload: AnswerReviewCreate,
+        trusted_lawyer_review: bool = False,
     ) -> AnswerReviewOut | None:
         trace = db.get(AnswerTrace, trace_id)
         if trace is None:
             return None
 
+        phase7_requested = self._phase7_requested(payload)
         review = AnswerReview(
             answer_trace_id=trace.id,
             matter_id=trace.matter_id,
@@ -236,16 +242,41 @@ class ReviewService:
             lawyer_comment=payload.lawyer_comment,
             corrected_answer=payload.corrected_answer,
             lesson_candidate=payload.lesson_candidate,
-            should_create_eval_case=payload.should_create_eval_case,
+            should_create_eval_case=payload.should_create_eval_case or payload.add_to_evaluation_bank,
             should_create_lesson=payload.should_create_lesson,
             should_create_patch_task=payload.should_create_patch_task,
             review_status=payload.review_status,
         )
         db.add(review)
         trace.review_status = "reviewed"
-        db.commit()
+        artifact_results: dict[str, Any] = {}
+        if phase7_requested:
+            try:
+                db.flush()
+                artifact_results["phase7_review_record"] = self.phase7_artifact_service.ensure_review_record(
+                    db,
+                    review=review,
+                    trace=trace,
+                    options=payload,
+                    trusted_lawyer_review=trusted_lawyer_review,
+                )
+                db.commit()
+            except (Phase7ArtifactError, ValueError) as exc:
+                db.rollback()
+                raise ValueError(f"Phase-7 review artifact was not recorded: {exc}") from exc
+            artifact_results.update(
+                self._materialize_optional_artifacts(
+                    db,
+                    review=review,
+                    trace=trace,
+                    options=payload,
+                    trusted_lawyer_review=trusted_lawyer_review,
+                )
+            )
+        else:
+            db.commit()
         db.refresh(review)
-        return self._review_out(review)
+        return self._review_out(review, artifact_results=artifact_results)
 
     def update_answer_review(
         self,
@@ -253,18 +284,67 @@ class ReviewService:
         *,
         review_id: str,
         payload: AnswerReviewUpdate,
+        trusted_lawyer_review: bool = False,
     ) -> AnswerReviewOut | None:
         review = db.get(AnswerReview, review_id)
         if review is None:
             return None
-        updates = payload.model_dump(exclude_unset=True)
+        phase7_keys = {
+            "review_provenance",
+            "review_outcome",
+            "review_origin",
+            "affected_claim_ids",
+            "preferred_reasoning_or_research_approach",
+            "add_to_evaluation_bank",
+            "create_reasoning_lesson_candidate",
+            "expected_claim_ids",
+            "prohibited_claim_ids",
+            "expected_evidence_characteristics",
+            "expected_checker_behavior",
+            "prohibited_behaviors",
+            "max_latency_ms",
+            "max_tool_calls",
+            "tags",
+            "phase7_metadata",
+        }
+        raw_updates = payload.model_dump(exclude_unset=True)
+        phase7_requested = bool(phase7_keys.intersection(raw_updates))
+        updates = {key: value for key, value in raw_updates.items() if key not in phase7_keys}
         if "error_categories" in updates and updates["error_categories"] is not None:
             updates["error_categories"] = list(updates["error_categories"])
         for key, value in updates.items():
             setattr(review, key, value)
-        db.commit()
+        artifact_results: dict[str, Any] = {}
+        if phase7_requested:
+            trace = db.get(AnswerTrace, review.answer_trace_id)
+            if trace is None:
+                raise ValueError("Answer trace for review was not found")
+            try:
+                db.flush()
+                artifact_results["phase7_review_record"] = self.phase7_artifact_service.ensure_review_record(
+                    db,
+                    review=review,
+                    trace=trace,
+                    options=payload,
+                    trusted_lawyer_review=trusted_lawyer_review,
+                )
+                db.commit()
+            except (Phase7ArtifactError, ValueError) as exc:
+                db.rollback()
+                raise ValueError(f"Phase-7 review artifact was not recorded: {exc}") from exc
+            artifact_results.update(
+                self._materialize_optional_artifacts(
+                    db,
+                    review=review,
+                    trace=trace,
+                    options=payload,
+                    trusted_lawyer_review=trusted_lawyer_review,
+                )
+            )
+        else:
+            db.commit()
         db.refresh(review)
-        return self._review_out(review)
+        return self._review_out(review, artifact_results=artifact_results)
 
     def list_reviews_for_matter(self, db: Session, matter_id: str) -> list[AnswerReviewOut]:
         reviews = (
@@ -275,7 +355,122 @@ class ReviewService:
         )
         return [self._review_out(review) for review in reviews]
 
-    def _review_out(self, review: AnswerReview) -> AnswerReviewOut:
+    def materialize_learning_artifacts(
+        self,
+        db: Session,
+        *,
+        review_id: str,
+        options: Any,
+        trusted_lawyer_review: bool = False,
+    ) -> AnswerReviewOut | None:
+        review = db.get(AnswerReview, review_id)
+        if review is None:
+            return None
+        trace = db.get(AnswerTrace, review.answer_trace_id)
+        if trace is None:
+            raise ValueError("Answer trace for review was not found")
+        try:
+            db.flush()
+            review_result = self.phase7_artifact_service.ensure_review_record(
+                db,
+                review=review,
+                trace=trace,
+                options=options,
+                trusted_lawyer_review=trusted_lawyer_review,
+            )
+            db.commit()
+        except (Phase7ArtifactError, ValueError) as exc:
+            db.rollback()
+            raise ValueError(f"Phase-7 review artifact was not recorded: {exc}") from exc
+        results = {"phase7_review_record": review_result}
+        results.update(
+            self._materialize_optional_artifacts(
+                db,
+                review=review,
+                trace=trace,
+                options=options,
+                trusted_lawyer_review=trusted_lawyer_review,
+            )
+        )
+        db.refresh(review)
+        return self._review_out(review, artifact_results=results)
+
+    def _materialize_optional_artifacts(
+        self,
+        db: Session,
+        *,
+        review: AnswerReview,
+        trace: AnswerTrace,
+        options: Any,
+        trusted_lawyer_review: bool,
+    ) -> dict[str, Any]:
+        results: dict[str, Any] = {}
+        for artifact_type, method, requested in (
+            (
+                "phase7_evaluation_case",
+                self.phase7_artifact_service.materialize_evaluation_case,
+                bool(getattr(options, "add_to_evaluation_bank", False)),
+            ),
+            (
+                "phase7_reasoning_lesson_candidate",
+                self.phase7_artifact_service.materialize_lesson_candidate,
+                bool(getattr(options, "create_reasoning_lesson_candidate", False)),
+            ),
+        ):
+            if not requested:
+                results[artifact_type] = {"status": "skipped"}
+                continue
+            try:
+                result = method(
+                    db,
+                    review=review,
+                    trace=trace,
+                    options=options,
+                    trusted_lawyer_review=trusted_lawyer_review,
+                )
+                db.commit()
+                results[artifact_type] = {
+                    "status": result.status,
+                    "artifact_id": result.artifact.id if result.artifact is not None else None,
+                    "warning": result.warning,
+                }
+            except (Phase7ArtifactError, ValueError) as exc:
+                db.rollback()
+                results[artifact_type] = {"status": "failed", "warning": str(exc)}
+        return results
+
+    @staticmethod
+    def _phase7_requested(payload: Any) -> bool:
+        return any(
+            (
+                getattr(payload, "review_provenance", None) is not None,
+                getattr(payload, "review_outcome", None) is not None,
+                getattr(payload, "review_origin", None) is not None,
+                bool(getattr(payload, "add_to_evaluation_bank", False)),
+                bool(getattr(payload, "create_reasoning_lesson_candidate", False)),
+                bool(getattr(payload, "preferred_reasoning_or_research_approach", None)),
+            )
+        )
+
+    def _review_out(self, review: AnswerReview, *, artifact_results: dict[str, Any] | None = None) -> AnswerReviewOut:
+        artifact_statuses = []
+        phase7_provenance = None
+        phase7_outcome = None
+        for value in (artifact_results or {}).values():
+            if hasattr(value, "status"):
+                if value.artifact is not None and value.artifact.artifact_type == "phase7_review_record":
+                    payload = value.artifact.artifact_payload or {}
+                    phase7_provenance = payload.get("provenance")
+                    phase7_outcome = payload.get("review_outcome")
+                artifact_statuses.append(
+                    {
+                        "status": value.status,
+                        "artifact_id": value.artifact.id if value.artifact is not None else None,
+                        "warning": value.warning,
+                    }
+                )
+            else:
+                artifact_statuses.append(value)
         return AnswerReviewOut(
             id=review.id,
             answer_trace_id=review.answer_trace_id,
@@ -292,6 +487,9 @@ class ReviewService:
             should_create_lesson=bool(review.should_create_lesson),
             should_create_patch_task=bool(review.should_create_patch_task),
             review_status=review.review_status,
+            phase7_provenance=phase7_provenance,
+            phase7_review_outcome=phase7_outcome,
+            phase7_artifacts=artifact_statuses,
             created_at=review.created_at,
             updated_at=review.updated_at,
         )

@@ -66,6 +66,41 @@ function preview(value: unknown, maxLength = 180) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
+function claimIdsFromTrace(trace: Record<string, unknown> | null) {
+  const paths = [
+    ["trace_json", "response", "legal_reasoning_trace", "claims"],
+    ["trace_json", "response", "accepted_submission", "claims"],
+    ["trace_json", "legal_reasoning_trace", "claims"],
+  ];
+  const ids: string[] = [];
+  for (const path of paths) {
+    let value: unknown = trace;
+    for (const key of path) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        value = null;
+        break;
+      }
+      value = (value as Record<string, unknown>)[key];
+    }
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    for (const claim of value) {
+      if (
+        claim &&
+        typeof claim === "object" &&
+        typeof (claim as Record<string, unknown>).claim_id === "string"
+      ) {
+        const id = String((claim as Record<string, unknown>).claim_id);
+        if (id && !ids.includes(id)) {
+          ids.push(id);
+        }
+      }
+    }
+  }
+  return ids;
+}
+
 function reviewDateLabel(value?: string | null) {
   if (!value) {
     return "time unknown";
@@ -143,6 +178,10 @@ export default function LawyerReviewPage() {
   const [comment, setComment] = useState("");
   const [correctedAnswer, setCorrectedAnswer] = useState("");
   const [lessonCandidate, setLessonCandidate] = useState("");
+  const [reviewOutcome, setReviewOutcome] = useState("unclassified");
+  const [addToEvaluationBank, setAddToEvaluationBank] = useState(false);
+  const [createLessonCandidate, setCreateLessonCandidate] = useState(false);
+  const [affectedClaimIds, setAffectedClaimIds] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("lawyerReviewToken") ?? "";
@@ -167,6 +206,11 @@ export default function LawyerReviewPage() {
     );
   }, [matter, selectedTraceId]);
 
+  const structuredClaimIds = useMemo(
+    () => claimIdsFromTrace(selectedTrace),
+    [selectedTrace]
+  );
+
   function resetReviewForm() {
     setRating("mostly_correct");
     setSeverity("medium");
@@ -174,6 +218,10 @@ export default function LawyerReviewPage() {
     setComment("");
     setCorrectedAnswer("");
     setLessonCandidate("");
+    setReviewOutcome("unclassified");
+    setAddToEvaluationBank(false);
+    setCreateLessonCandidate(false);
+    setAffectedClaimIds([]);
   }
 
   function selectAnswerTrace(traceId: string | null) {
@@ -255,7 +303,7 @@ export default function LawyerReviewPage() {
     setLoading(true);
     setMessage(null);
     try {
-      await api("", {
+      const submitted = await api("", {
         method: "POST",
         body: JSON.stringify({
           traceId: selectedTraceId,
@@ -267,9 +315,16 @@ export default function LawyerReviewPage() {
           lawyer_comment: comment || null,
           corrected_answer: correctedAnswer || null,
           lesson_candidate: lessonCandidate || null,
-          should_create_eval_case:
-            categories.length > 0 && !categories.includes("good_answer"),
-          should_create_lesson: Boolean(lessonCandidate.trim()),
+          review_outcome:
+            reviewOutcome === "unclassified" ? null : reviewOutcome,
+          affected_claim_ids: affectedClaimIds,
+          preferred_reasoning_or_research_approach: lessonCandidate || null,
+          add_to_evaluation_bank: addToEvaluationBank,
+          create_reasoning_lesson_candidate: createLessonCandidate,
+          // Preserve legacy fields for older operational consumers, but do
+          // not derive them from categories or lesson text.
+          should_create_eval_case: addToEvaluationBank,
+          should_create_lesson: createLessonCandidate,
           should_create_patch_task:
             severity === "high" || severity === "critical",
           review_status: "submitted",
@@ -281,8 +336,16 @@ export default function LawyerReviewPage() {
       await loadQueue();
       resetReviewForm();
       setMessageTone("success");
+      const artifactStatuses = Array.isArray(submitted?.phase7_artifacts)
+        ? submitted.phase7_artifacts
+            .map((item: { status?: string }) => item.status)
+            .filter(Boolean)
+            .join(", ")
+        : "";
       setMessage(
-        "Review submitted successfully. This answer is now marked as commented."
+        `Review submitted successfully. This answer is now marked as commented.${
+          artifactStatuses ? ` Phase-7 artifacts: ${artifactStatuses}.` : ""
+        }`
       );
     } catch (error) {
       setMessageTone("error");
@@ -591,6 +654,23 @@ export default function LawyerReviewPage() {
                 <div className="mt-6 space-y-4 rounded-2xl bg-slate-50 p-4">
                   <h3 className="font-semibold">Lawyer review</h3>
                   <div className="grid gap-3 md:grid-cols-3">
+                    <label className="text-sm font-medium">
+                      Review outcome
+                      <select
+                        className="mt-1 w-full rounded-xl border px-3 py-2 text-sm font-normal"
+                        onChange={(event) =>
+                          setReviewOutcome(event.target.value)
+                        }
+                        value={reviewOutcome}
+                      >
+                        <option value="unclassified">Select outcome</option>
+                        <option value="correct">Correct</option>
+                        <option value="minor_issue">Minor issue</option>
+                        <option value="material_issue">Material issue</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
                     <input
                       className="rounded-xl border px-3 py-2 text-sm"
                       onChange={(event) => setReviewerName(event.target.value)}
@@ -648,9 +728,59 @@ export default function LawyerReviewPage() {
                   <textarea
                     className="min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
                     onChange={(event) => setLessonCandidate(event.target.value)}
-                    placeholder="Reusable lesson candidate"
+                    placeholder="Reasoning/research strategy: what should the system do differently next time?"
                     value={lessonCandidate}
                   />
+                  {structuredClaimIds.length ? (
+                    <fieldset className="rounded-xl border bg-white p-3 text-sm">
+                      <legend className="px-1 font-semibold">
+                        Affected claim IDs (optional)
+                      </legend>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        {structuredClaimIds.map((claimId) => (
+                          <label
+                            className="flex items-center gap-2"
+                            key={claimId}
+                          >
+                            <input
+                              checked={affectedClaimIds.includes(claimId)}
+                              onChange={(event) =>
+                                setAffectedClaimIds((current) =>
+                                  event.target.checked
+                                    ? [...current, claimId]
+                                    : current.filter((item) => item !== claimId)
+                                )
+                              }
+                              type="checkbox"
+                            />
+                            {claimId}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : null}
+                  <div className="space-y-2 rounded-xl border bg-white p-3 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        checked={addToEvaluationBank}
+                        onChange={(event) =>
+                          setAddToEvaluationBank(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      Add this review to Evaluation Bank
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        checked={createLessonCandidate}
+                        onChange={(event) =>
+                          setCreateLessonCandidate(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      Create reasoning lesson candidate
+                    </label>
+                  </div>
                   <button
                     className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     disabled={loading || !selectedTraceId}

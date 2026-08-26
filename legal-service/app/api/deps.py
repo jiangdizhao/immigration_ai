@@ -1,3 +1,4 @@
+import hmac
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
@@ -23,3 +24,13 @@ def verify_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid X-API-Key",
         )
+
+
+def verify_lawyer_review_assertion(
+    settings: AppSettings,
+    assertion: Annotated[str | None, Header(alias="X-Lawyer-Review-Assertion")] = None,
+) -> bool:
+    """Return whether the private server-to-server review assertion is valid."""
+
+    expected = settings.lawyer_review_assertion_secret
+    return bool(expected and assertion and hmac.compare_digest(assertion, expected))

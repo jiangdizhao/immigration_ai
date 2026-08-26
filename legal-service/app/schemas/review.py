@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import Field
 
 from app.schemas.common import BaseSchema
+from app.schemas.learning import ExperienceOrigin, ProvenanceKind, ReviewOutcome
 
 
 class AnswerTraceBase(BaseSchema):
@@ -76,6 +77,24 @@ class AnswerReviewCreate(BaseSchema):
     should_create_lesson: bool = False
     should_create_patch_task: bool = False
     review_status: str = "submitted"
+    # Phase 7.2 fields are opt-in. The authenticated Next.js proxy overrides
+    # review_provenance after checking LAWYER_REVIEW_TOKEN.
+    review_provenance: ProvenanceKind | None = None
+    review_outcome: ReviewOutcome | None = None
+    review_origin: ExperienceOrigin | None = None
+    affected_claim_ids: list[str] = Field(default_factory=list)
+    preferred_reasoning_or_research_approach: str | None = None
+    add_to_evaluation_bank: bool = False
+    create_reasoning_lesson_candidate: bool = False
+    expected_claim_ids: list[str] = Field(default_factory=list)
+    prohibited_claim_ids: list[str] = Field(default_factory=list)
+    expected_evidence_characteristics: dict[str, Any] = Field(default_factory=dict)
+    expected_checker_behavior: dict[str, Any] = Field(default_factory=dict)
+    prohibited_behaviors: list[str] = Field(default_factory=list)
+    max_latency_ms: int | None = Field(default=None, ge=0)
+    max_tool_calls: int | None = Field(default=None, ge=0)
+    tags: list[str] = Field(default_factory=list)
+    phase7_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnswerReviewUpdate(BaseSchema):
@@ -91,6 +110,22 @@ class AnswerReviewUpdate(BaseSchema):
     should_create_lesson: bool | None = None
     should_create_patch_task: bool | None = None
     review_status: str | None = None
+    review_provenance: ProvenanceKind | None = None
+    review_outcome: ReviewOutcome | None = None
+    review_origin: ExperienceOrigin | None = None
+    affected_claim_ids: list[str] | None = None
+    preferred_reasoning_or_research_approach: str | None = None
+    add_to_evaluation_bank: bool | None = None
+    create_reasoning_lesson_candidate: bool | None = None
+    expected_claim_ids: list[str] | None = None
+    prohibited_claim_ids: list[str] | None = None
+    expected_evidence_characteristics: dict[str, Any] | None = None
+    expected_checker_behavior: dict[str, Any] | None = None
+    prohibited_behaviors: list[str] | None = None
+    max_latency_ms: int | None = Field(default=None, ge=0)
+    max_tool_calls: int | None = Field(default=None, ge=0)
+    tags: list[str] | None = None
+    phase7_metadata: dict[str, Any] | None = None
 
 
 class AnswerReviewOut(BaseSchema):
@@ -109,6 +144,9 @@ class AnswerReviewOut(BaseSchema):
     should_create_lesson: bool = False
     should_create_patch_task: bool = False
     review_status: str = "submitted"
+    phase7_provenance: ProvenanceKind | None = None
+    phase7_review_outcome: ReviewOutcome | None = None
+    phase7_artifacts: list[dict[str, Any]] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -129,3 +167,29 @@ class MatterReviewOut(BaseSchema):
     conversation_history: list[dict[str, Any]] = Field(default_factory=list)
     traces: list[AnswerTraceOut] = Field(default_factory=list)
     reviews: list[AnswerReviewOut] = Field(default_factory=list)
+
+
+class MaterializeLearningRequest(BaseSchema):
+    review_provenance: ProvenanceKind | None = None
+    review_outcome: ReviewOutcome | None = None
+    review_origin: ExperienceOrigin | None = None
+    add_to_evaluation_bank: bool = False
+    create_reasoning_lesson_candidate: bool = False
+    preferred_reasoning_or_research_approach: str | None = None
+    affected_claim_ids: list[str] = Field(default_factory=list)
+    expected_claim_ids: list[str] = Field(default_factory=list)
+    prohibited_claim_ids: list[str] = Field(default_factory=list)
+    expected_evidence_characteristics: dict[str, Any] = Field(default_factory=dict)
+    expected_checker_behavior: dict[str, Any] = Field(default_factory=dict)
+    prohibited_behaviors: list[str] = Field(default_factory=list)
+    max_latency_ms: int | None = Field(default=None, ge=0)
+    max_tool_calls: int | None = Field(default=None, ge=0)
+    tags: list[str] = Field(default_factory=list)
+    phase7_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvaluationBankCaseOut(BaseSchema):
+    artifact_id: str
+    artifact_status: str
+    eligible_for_default_regression: bool = False
+    case: dict[str, Any]

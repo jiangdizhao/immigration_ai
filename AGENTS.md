@@ -229,3 +229,13 @@ Do not let the historical ordering imply that already-validated Phase-5.2 founda
 - `COMPACT_CHECKER_ENABLED` remains feature-gated. Phase 6 begins in shadow mode and must not alter customer answers until separately approved serving calibration gates pass.
 - Transitional Flat-RAG remains part of the current revised-Default research path; it is not authorization to make Flat-RAG a Premium tool or to bypass future retrieval decisions.
 - Model IDs, reasoning effort, tool limits, storage backend, and latency thresholds may change only through configuration plus benchmark/approval; configuration changes do not authorize violating the invariants above.
+
+### Phase 7.2 supervision/evaluation control-plane invariants
+
+- Phase 7.2 is control-plane only. `AnswerReview`, `ReviewArtifact`, `ExperienceRecord`, `ReviewRecord`, `EvaluationCase`, and `ReasoningLessonCandidate` must never be read by Default, V2, Premium, retrieval, evidence, citation, Phase-6, or serving prompt code.
+- Reuse `ReviewArtifact` for typed `phase7_review_record`, `phase7_evaluation_case`, and `phase7_reasoning_lesson_candidate` payloads. Do not add Phase-7 tables or migrations. Payload JSON is immutable; use canonical hashing, idempotency, and superseding versions.
+- Lawyer-reviewed provenance must be explicit and established by the authenticated server-side lawyer-review proxy. Never infer it from reviewer name, role, rating, categories, old lesson text, or legacy flags. Existing legacy reviews are not automatically backfilled.
+- Evaluation cases are offline regression material, never legal authority or RequestEvidenceRegistry/Phase-6 evidence. Default bank selection is active, lawyer-reviewed cases; synthetic cases remain separately identifiable and excluded unless explicitly requested.
+- Reasoning lesson candidates retain exact explicit strategy text only. No ReasoningLesson/ReasoningBank persistence, approval, retrieval, embedding, prompt injection, or runtime learning exists in Phase 7.2.
+- Phase-7 unit tests must inject/fake sessions and fail fast if configured `SessionLocal` is reached. Do not pollute the authoritative host database.
+- Authoritative lawyer provenance requires the private server assertion shared by the authenticated review proxy and legal-service; body provenance, reviewer identity, and development proxy bypass are non-authoritative. Verify artifact hashes on read, lock the parent `AnswerReview` row for materialization, fail closed on ambiguous experience links, and exclude synthetic identity from the default evaluation bank.

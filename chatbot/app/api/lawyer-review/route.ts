@@ -1,11 +1,37 @@
 const REVIEW_TOKEN = process.env.LAWYER_REVIEW_TOKEN;
+const REVIEW_ASSERTION_SECRET = process.env.LAWYER_REVIEW_ASSERTION_SECRET;
 
-function isAuthorized(request: Request) {
-  if (!REVIEW_TOKEN && process.env.NODE_ENV !== "production") {
+export function isAuthorized(
+  request: Request,
+  config: { reviewToken?: string; nodeEnv?: string } = {
+    reviewToken: REVIEW_TOKEN,
+    nodeEnv: process.env.NODE_ENV,
+  }
+) {
+  if (!config.reviewToken && config.nodeEnv !== "production") {
     return true;
   }
   const provided = request.headers.get("x-review-token") ?? "";
-  return Boolean(REVIEW_TOKEN) && provided === REVIEW_TOKEN;
+  return Boolean(config.reviewToken) && provided === config.reviewToken;
+}
+
+export function hasAuthenticatedLawyerToken(
+  request: Request,
+  reviewToken = REVIEW_TOKEN
+) {
+  const provided = request.headers.get("x-review-token") ?? "";
+  return Boolean(reviewToken) && provided === reviewToken;
+}
+
+export function trustedAssertionHeaders(
+  request: Request,
+  reviewToken = REVIEW_TOKEN,
+  assertionSecret = REVIEW_ASSERTION_SECRET
+) {
+  if (!hasAuthenticatedLawyerToken(request, reviewToken) || !assertionSecret) {
+    return {};
+  }
+  return { "X-Lawyer-Review-Assertion": assertionSecret };
 }
 
 function jsonError(message: string, status: number) {
@@ -78,12 +104,22 @@ export async function POST(request: Request) {
   if (!traceId) {
     return jsonError("traceId is required", 400);
   }
-  const { traceId: _traceId, ...payload } = body;
+  const {
+    traceId: _traceId,
+    review_provenance: _reviewProvenance,
+    provenance: _provenance,
+    trusted_provenance: _trustedProvenance,
+    ...clientPayload
+  } = body;
+  const payload = {
+    ...clientPayload,
+  };
   return legalFetch(
     `/api/v1/review/traces/${encodeURIComponent(traceId)}/reviews`,
     {
       method: "POST",
       body: JSON.stringify(payload),
+      headers: trustedAssertionHeaders(request),
     }
   );
 }
@@ -97,9 +133,19 @@ export async function PATCH(request: Request) {
   if (!reviewId) {
     return jsonError("reviewId is required", 400);
   }
-  const { reviewId: _reviewId, ...payload } = body;
+  const {
+    reviewId: _reviewId,
+    review_provenance: _reviewProvenance,
+    provenance: _provenance,
+    trusted_provenance: _trustedProvenance,
+    ...clientPayload
+  } = body;
+  const payload = {
+    ...clientPayload,
+  };
   return legalFetch(`/api/v1/review/reviews/${encodeURIComponent(reviewId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+    headers: trustedAssertionHeaders(request),
   });
 }

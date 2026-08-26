@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, func
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, func, inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import get_settings
@@ -199,6 +199,16 @@ class ReviewArtifact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     artifact_status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False, index=True)
 
     review: Mapped[AnswerReview] = relationship()
+
+
+@event.listens_for(ReviewArtifact, "before_update")
+def _reject_review_artifact_content_update(_mapper, _connection, target) -> None:
+    """Allow lifecycle transitions while protecting artifact identity/content."""
+
+    state = inspect(target)
+    for field in ("artifact_payload", "artifact_type", "answer_review_id"):
+        if state.attrs[field].history.has_changes():
+            raise ValueError(f"ReviewArtifact {field} is immutable")
 
 
 class ExperienceRecord(UUIDPrimaryKeyMixin, Base):

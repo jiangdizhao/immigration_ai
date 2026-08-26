@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     allowed_origins: str = Field(default="http://localhost:3000", alias="ALLOWED_ORIGINS")
     legal_service_api_key: str | None = Field(default=None, alias="LEGAL_SERVICE_API_KEY")
+    lawyer_review_assertion_secret: str | None = Field(
+        default=None, alias="LAWYER_REVIEW_ASSERTION_SECRET"
+    )
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     enable_lawyer_review_trace: bool = Field(default=False, alias="ENABLE_LAWYER_REVIEW_TRACE")
     # Phase 7.1 is observational only.  It never feeds archived experiences
