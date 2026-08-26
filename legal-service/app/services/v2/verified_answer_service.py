@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import Matter, ReviewArtifact, SourceChunk
+from app.db.models import Matter, SourceChunk
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.schemas.state import LiveSourceChunk
@@ -41,7 +41,7 @@ class V2LawyerLesson(BaseModel):
     instruction: str
     must_include: list[str] = Field(default_factory=list)
     must_not_include: list[str] = Field(default_factory=list)
-    source: Literal["seed", "review_artifact"] = "seed"
+    source: Literal["seed"] = "seed"
     score: float = 0.0
 
 
@@ -440,14 +440,6 @@ class QueryServiceV2:
             V2LawyerLesson(lesson_id="avoid_wrong_frame_carryover", trigger="topic switch subclass parent partner visa", instruction="If the latest question explicitly names a new visa subclass/topic, do not carry over the previous visa frame unless the user says it is the same matter."),
             V2LawyerLesson(lesson_id="general_rule_vs_personal_eligibility", trigger="can I apply eligible need valid visa extension", instruction="Distinguish a general legal rule from a personal eligibility conclusion. Answer the general rule first, but do not give a personal yes/no unless decisive facts are known."),
         ]
-        try:
-            rows = db.query(ReviewArtifact).filter(ReviewArtifact.artifact_type.in_(["prompt_lesson", "condition_lesson", "source_mapping_lesson"])).order_by(ReviewArtifact.created_at.desc()).limit(40).all()
-            for row in rows:
-                p = row.artifact_payload or {}
-                if isinstance(p, dict) and (p.get("instruction") or p.get("lesson") or p.get("text")):
-                    seed.append(V2LawyerLesson(lesson_id=str(p.get("lesson_id") or row.id), trigger=str(p.get("trigger") or p.get("topic") or ""), instruction=str(p.get("instruction") or p.get("lesson") or p.get("text"))[:700], must_include=[str(x) for x in p.get("must_include", []) if x], must_not_include=[str(x) for x in p.get("must_not_include", []) if x], source="review_artifact"))
-        except Exception:
-            pass
         terms = self._terms(question)
         scored = []
         for lesson in seed:
