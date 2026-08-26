@@ -53,6 +53,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         memory_packet: Any,
         response_language: str,
         matter_id: str | None,
+        reasoning_bank_guidance: str = "",
     ) -> QueryResponse:
         conversation_history = list(getattr(memory_packet, "full_conversation_history", []) or [])
         known_facts = self._known_facts_from_memory(memory_packet)
@@ -89,6 +90,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             conversation_history=conversation_history,
             known_facts=known_facts,
             response_language=response_language,
+            reasoning_bank_guidance=reasoning_bank_guidance,
         )
         mark_pfvd_stage(
             "proposal",
@@ -195,6 +197,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             proposal=proposal,
             evidence_text=evidence_text,
             response_language=response_language,
+            reasoning_bank_guidance=reasoning_bank_guidance,
         )
         mark_pfvd_stage(
             "verify_proposal",
@@ -242,6 +245,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             evidence_text=evidence_text,
             response_language=response_language,
             customer_answer_plan=customer_answer_plan.model_dump(),
+            reasoning_bank_guidance=reasoning_bank_guidance,
         )
         mark_pfvd_stage(
             "final_answer",
@@ -581,6 +585,7 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
         conversation_history: list[dict[str, Any]],
         known_facts: dict[str, Any],
         response_language: str,
+        reasoning_bank_guidance: str = "",
     ) -> dict[str, Any]:
         history_text = self._conversation_history_text(conversation_history)
         known_facts_json = json.dumps(known_facts, ensure_ascii=False)
@@ -638,6 +643,9 @@ class ProposalFirstVerificationDepthAnswerService(ProposalFirstVerifiedAnswerSer
             '  "lawyer_review_notes": string[]\n'
             "}\n"
             "Preserve abundance in proposal_memo_markdown. JSON must not compress away useful reasoning.\n"
+        )
+        system_prompt = self._append_reasoning_bank_guidance(
+            system_prompt, reasoning_bank_guidance
         )
         system_prompt += language_rule
         user_prompt = (

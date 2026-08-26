@@ -525,6 +525,7 @@ class ProposalFirstVerifiedAnswerService:
         proposal: dict[str, Any],
         evidence_text: str,
         response_language: str,
+        reasoning_bank_guidance: str = "",
     ) -> dict[str, Any]:
         system_prompt = (
             "You are a strict Australian immigration legal verifier.\n"
@@ -543,6 +544,9 @@ class ProposalFirstVerifiedAnswerService:
             '  "final_answer_allowed": boolean,\n'
             '  "one_decisive_question": string | null\n'
             "}\n"
+        )
+        system_prompt = self._append_reasoning_bank_guidance(
+            system_prompt, reasoning_bank_guidance
         )
         system_prompt += self._language_rule(response_language)
         proposal_json = json.dumps(proposal, ensure_ascii=False)
@@ -588,6 +592,7 @@ class ProposalFirstVerifiedAnswerService:
         evidence_text: str,
         response_language: str,
         customer_answer_plan: dict[str, Any] | None = None,
+        reasoning_bank_guidance: str = "",
     ) -> dict[str, Any]:
         system_prompt = (
             "You are drafting the final customer-facing answer for an Australian immigration service.\n"
@@ -611,6 +616,9 @@ class ProposalFirstVerifiedAnswerService:
         system_prompt += self.customer_answer_plan_service.final_answer_prompt_rules(
             customer_answer_plan
         )
+        system_prompt = self._append_reasoning_bank_guidance(
+            system_prompt, reasoning_bank_guidance
+        )
         system_prompt += self._language_rule(response_language)
         user_prompt = (
             f"Original question:\n{original_question}\n\n"
@@ -622,6 +630,13 @@ class ProposalFirstVerifiedAnswerService:
             f"Evidence package:\n{evidence_text}\n"
         )
         return self._call_json(model=self.final_model, system_prompt=system_prompt, user_prompt=user_prompt) or {}
+
+    @staticmethod
+    def _append_reasoning_bank_guidance(system_prompt: str, guidance: str) -> str:
+        """Append only the pre-sanitized process block to a model system prompt."""
+        if not guidance.strip():
+            return system_prompt
+        return f"{system_prompt}\n\n{guidance}"
 
     # ------------------------------------------------------------------
     # Evidence formatting and utility helpers
