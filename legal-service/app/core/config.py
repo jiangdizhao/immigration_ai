@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     legal_service_api_key: str | None = Field(default=None, alias="LEGAL_SERVICE_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     enable_lawyer_review_trace: bool = Field(default=False, alias="ENABLE_LAWYER_REVIEW_TRACE")
+    # Phase 7.1 is observational only.  It never feeds archived experiences
+    # back into an answer, retrieval, or checker path.
+    phase7_experience_archive_enabled: bool = Field(
+        default=False, alias="PHASE7_EXPERIENCE_ARCHIVE_ENABLED"
+    )
 
     # v2.1.1 Phase 1 contracts. ANSWER_ENGINE remains legacy/v1 until a later
     # separately approved rollout; the remaining values do not activate calls.

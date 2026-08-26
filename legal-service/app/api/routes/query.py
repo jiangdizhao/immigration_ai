@@ -12,6 +12,7 @@ from app.schemas.query import QueryRequest, QueryResponse
 from app.services.query_service import QueryService
 from app.services.agent_observability_service import AgentObservabilityService, AbsoluteTurnDeadline
 from app.services.political_failsafe_service import get_political_failsafe_service
+from app.services.experience_archive_service import ExperienceArchiveService
 from app.core.config import get_settings
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
@@ -201,6 +202,21 @@ def run_query(
         observability_service.mark_agent_started("serving_engine_dispatch")
         response = service.handle_query(db, payload)
         observability_service.mark_answer_completed()
+
+        # The normal Default service paths archive through ReviewTraceService
+        # with richer state.  This ingress fallback covers Default fast paths
+        # that intentionally do not create an AnswerTrace.  It is idempotent
+        # with the richer sidecar capture and never runs for Premium.
+        if payload.assistant_mode in {"default", "default_legal_pipeline"}:
+            archive_observability = observability_service.trace_payload() or {}
+            archive_request_id = archive_observability.get("request_id") or payload.client_turn_id
+            if not ExperienceArchiveService.capture_scheduled_for(archive_request_id):
+                ExperienceArchiveService().safe_capture_async(
+                    payload=payload,
+                    response=response,
+                    request_id=archive_request_id,
+                    execution_metrics=archive_observability.get("execution_metrics"),
+                )
 
         return response
     finally:

@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.base import Base
 from app.db import models  # noqa: F401
+from app.db.phase7_schema import ensure_phase7_1_append_only_trigger
 from app.db.session import engine, ensure_vector_extension
 from app.schedule.schedule_index_health import validate_schedule_index_ready
 # Unified context + tiered discovery must be the final QueryService controller.
@@ -26,6 +27,7 @@ async def lifespan(_app: FastAPI):
     if settings.auto_create_schema:
         ensure_vector_extension()
         Base.metadata.create_all(bind=engine)
+        ensure_phase7_1_append_only_trigger(engine)
     yield
 
 

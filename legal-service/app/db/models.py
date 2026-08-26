@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import get_settings
@@ -201,10 +201,52 @@ class ReviewArtifact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     review: Mapped[AnswerReview] = relationship()
 
 
+class ExperienceRecord(UUIDPrimaryKeyMixin, Base):
+    """Immutable Phase 7.1 snapshot of a completed Default interaction.
+
+    This table is intentionally separate from AnswerTrace: AnswerTrace has
+    mutable lawyer-review workflow fields, while an experience is an
+    append-only historical snapshot.  No runtime serving path reads it.
+    """
+
+    __tablename__ = "experience_records"
+
+    experience_schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # Historical identifiers are deliberately plain values.  A foreign-key
+    # delete action could mutate an otherwise immutable archive row.
+    matter_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    answer_trace_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    origin: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # NULL request IDs are allowed for offline/manual records.  A stable
+        # request ID, when available, is the idempotency key for live capture.
+        UniqueConstraint("request_id", name="uq_experience_records_request_id"),
+    )
+
+
+@event.listens_for(ExperienceRecord, "before_update")
+def _reject_experience_update(_mapper, _connection, _target) -> None:
+    raise ValueError("ExperienceRecord is append-only and cannot be updated")
+
+
+@event.listens_for(ExperienceRecord, "before_delete")
+def _reject_experience_delete(_mapper, _connection, _target) -> None:
+    raise ValueError("ExperienceRecord is append-only and cannot be deleted")
+
+
 __all__ = [
     "ReviewArtifact",
     "AnswerReview",
     "AnswerTrace",
+    "ExperienceRecord",
     "Case",
     "Citation",
     "IntakeAnswer",

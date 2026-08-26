@@ -12,6 +12,7 @@ from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.state import MatterState
 from app.schemas.agent import AgentExecutionMetrics
 from app.services.agent_observability_service import AgentObservabilityService
+from app.services.experience_archive_service import ExperienceArchiveService
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,10 @@ class ReviewTraceService:
     /api/v1/query.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, experience_archive_service: ExperienceArchiveService | None = None) -> None:
         self.settings = get_settings()
         self.git_commit_sha = os.getenv("GIT_COMMIT_SHA") or os.getenv("APP_GIT_SHA")
+        self.experience_archive_service = experience_archive_service or ExperienceArchiveService()
 
     def safe_record_answer_trace(
         self,
@@ -43,10 +45,10 @@ class ReviewTraceService:
         communication_plan: Any | None = None,
         extra_debug: dict[str, Any] | None = None,
         execution_metrics: AgentExecutionMetrics | dict[str, Any] | None = None,
+        evidence_registry: Any | None = None,
     ) -> str | None:
-        if not getattr(self.settings, "enable_lawyer_review_trace", False):
-            return None
-
+        trace_id: str | None = None
+        active_observability: dict[str, Any] | None = None
         try:
             state_dump = self._safe_json(state)
             response_dump = self._safe_json(response)
@@ -87,36 +89,63 @@ class ReviewTraceService:
                 operation_type = state_dump.get("operation_type")
 
             turn_index = self._assistant_turn_count(state_dump)
-            with SessionLocal() as db:
-                trace = AnswerTrace(
-                    matter_id=matter.id,
-                    session_id=matter.session_id or payload.session_id,
-                    turn_index=turn_index,
-                    user_message=original_question or payload.question,
-                    assistant_answer=response.answer,
-                    response_language=response.response_language,
-                    confidence=response.confidence,
-                    next_action=response.next_action,
-                    escalate=bool(response.escalate),
-                    user_display_mode=response.user_display_mode,
-                    issue_type=response.issue_type or (state.issue_type if state is not None else None),
-                    visa_type=(state.visa_type if state is not None else None),
-                    operation_type=operation_type,
-                    conversation_state=str(response.conversation_state or (state.conversation_state if state is not None else "") or "") or None,
-                    review_status="unreviewed",
-                    trace_json={
-                        **trace_payload,
-                        "original_question": original_question,
-                        "effective_question": effective_question,
-                    },
-                )
-                db.add(trace)
-                db.commit()
-                db.refresh(trace)
-                return trace.id
+            if getattr(self.settings, "enable_lawyer_review_trace", False):
+                with SessionLocal() as db:
+                    trace = AnswerTrace(
+                        matter_id=matter.id,
+                        session_id=matter.session_id or payload.session_id,
+                        turn_index=turn_index,
+                        user_message=original_question or payload.question,
+                        assistant_answer=response.answer,
+                        response_language=response.response_language,
+                        confidence=response.confidence,
+                        next_action=response.next_action,
+                        escalate=bool(response.escalate),
+                        user_display_mode=response.user_display_mode,
+                        issue_type=response.issue_type or (state.issue_type if state is not None else None),
+                        visa_type=(state.visa_type if state is not None else None),
+                        operation_type=operation_type,
+                        conversation_state=str(response.conversation_state or (state.conversation_state if state is not None else "") or "") or None,
+                        review_status="unreviewed",
+                        trace_json={
+                            **trace_payload,
+                            "original_question": original_question,
+                            "effective_question": effective_question,
+                        },
+                    )
+                    db.add(trace)
+                    db.commit()
+                    db.refresh(trace)
+                    trace_id = trace.id
         except Exception:
             logger.exception("Review trace recording failed; public response is unchanged.")
-            return None
+
+        # This is the canonical rich completion capture.  It is independent of
+        # lawyer-review enablement, Default-only, and request-thread snapshot
+        # construction is guarded by the archive coordinator.
+        try:
+            if getattr(payload, "assistant_mode", "") in {"default", "default_legal_pipeline"}:
+                capture_method = getattr(
+                    self.experience_archive_service,
+                    "safe_capture_async",
+                    self.experience_archive_service.safe_capture,
+                )
+                capture_method(
+                    matter=matter,
+                    payload=payload,
+                    response=response,
+                    state=state,
+                    answer_trace_id=trace_id,
+                    request_id=(active_observability or {}).get("request_id") or payload.client_turn_id,
+                    original_question=original_question,
+                    effective_question=effective_question,
+                    stage_timing=stage_timing,
+                    execution_metrics=execution_metrics or (active_observability or {}).get("execution_metrics"),
+                    evidence_registry=evidence_registry,
+                )
+        except Exception:
+            logger.exception("Experience archive capture failed; public response is unchanged.")
+        return trace_id
 
     def _safe_json(self, value: Any) -> Any:
         if value is None:
