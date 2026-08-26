@@ -10,6 +10,7 @@ legal-service/.pytest_cache/
 legal-service/.mypy_cache/
 legal-service/.venv/
 legal-service/venv/
+legal-service/.phase7_3b_runs/
 
 # Env files
 chatbot/.env.local
