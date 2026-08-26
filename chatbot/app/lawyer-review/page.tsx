@@ -101,6 +101,61 @@ function claimIdsFromTrace(trace: Record<string, unknown> | null) {
   return ids;
 }
 
+function reasoningBankTelemetry(trace: Record<string, unknown> | null) {
+  if (!trace) {
+    return null;
+  }
+  const paths = [
+    ["trace_json", "reasoning_bank"],
+    ["trace_json", "extra_debug", "reasoning_bank"],
+    ["trace_json", "response", "retrieval_debug", "reasoning_bank"],
+  ];
+  for (const path of paths) {
+    let value: unknown = trace;
+    for (const key of path) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        value = null;
+        break;
+      }
+      value = (value as Record<string, unknown>)[key];
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      continue;
+    }
+    const candidate = value as Record<string, unknown>;
+    const mode = candidate.mode;
+    if (mode !== "off" && mode !== "shadow" && mode !== "active") {
+      continue;
+    }
+    const keys = Array.isArray(candidate.selected_rule_keys)
+      ? candidate.selected_rule_keys.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : [];
+    const versions =
+      candidate.selected_rule_versions &&
+      typeof candidate.selected_rule_versions === "object" &&
+      !Array.isArray(candidate.selected_rule_versions)
+        ? Object.fromEntries(
+            Object.entries(
+              candidate.selected_rule_versions as Record<string, unknown>
+            ).filter(([, version]) => typeof version === "number")
+          )
+        : {};
+    return {
+      mode,
+      keys,
+      versions,
+      status:
+        typeof candidate.retrieval_status === "string"
+          ? candidate.retrieval_status
+          : "unknown",
+      guidanceInjected: candidate.guidance_injected === true,
+    };
+  }
+  return null;
+}
+
 function reviewDateLabel(value?: string | null) {
   if (!value) {
     return "time unknown";
@@ -211,6 +266,11 @@ export default function LawyerReviewPage() {
     [selectedTrace]
   );
 
+  const selectedReasoningBankTelemetry = useMemo(
+    () => reasoningBankTelemetry(selectedTrace),
+    [selectedTrace]
+  );
+
   function resetReviewForm() {
     setRating("mostly_correct");
     setSeverity("medium");
@@ -298,6 +358,12 @@ export default function LawyerReviewPage() {
   async function submitReview() {
     if (!selectedTraceId) {
       setMessage("Select an answer trace first.");
+      return;
+    }
+    if (createLessonCandidate && !lessonCandidate.trim()) {
+      setMessage(
+        "Enter an explicit process strategy before creating a lesson candidate."
+      );
       return;
     }
     setLoading(true);
@@ -560,6 +626,40 @@ export default function LawyerReviewPage() {
                       {String(selectedTrace.assistant_answer ?? "")}
                     </p>
                   </div>
+                  {selectedReasoningBankTelemetry &&
+                  selectedReasoningBankTelemetry.mode !== "off" ? (
+                    <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                        {selectedReasoningBankTelemetry.mode === "active"
+                          ? "Reasoning guidance used"
+                          : "Shadow reasoning guidance considered"}
+                      </p>
+                      <p className="mt-1 text-sm text-violet-950">
+                        Mode: {selectedReasoningBankTelemetry.mode} · status:{" "}
+                        {selectedReasoningBankTelemetry.status}
+                      </p>
+                      {selectedReasoningBankTelemetry.keys.length ? (
+                        <p className="mt-2 text-xs text-violet-900">
+                          Rules:{" "}
+                          {selectedReasoningBankTelemetry.keys
+                            .map(
+                              (key) =>
+                                `${key} v${String(selectedReasoningBankTelemetry.versions[key] ?? "?")}`
+                            )
+                            .join(", ")}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-xs text-violet-900">
+                          No eligible rule was selected.
+                        </p>
+                      )}
+                      <p className="mt-2 text-xs text-violet-700">
+                        This panel exposes selection telemetry only; it does not
+                        display the process-guidance rule body or legal
+                        evidence.
+                      </p>
+                    </div>
+                  ) : null}
                   <details className="rounded-2xl border p-4">
                     <summary className="cursor-pointer font-semibold">
                       Debug trace
@@ -731,6 +831,12 @@ export default function LawyerReviewPage() {
                     placeholder="Reasoning/research strategy: what should the system do differently next time?"
                     value={lessonCandidate}
                   />
+                  <p className="text-xs text-slate-600">
+                    The Evaluation Bank stores a reviewed case for future
+                    regression testing. A lesson candidate is reusable process
+                    guidance only—not legal authority or evidence. Strategy must
+                    be stated explicitly; it is never inferred.
+                  </p>
                   {structuredClaimIds.length ? (
                     <fieldset className="rounded-xl border bg-white p-3 text-sm">
                       <legend className="px-1 font-semibold">
@@ -768,17 +874,26 @@ export default function LawyerReviewPage() {
                         }
                         type="checkbox"
                       />
-                      Add this review to Evaluation Bank
+                      Add this reviewed case to Evaluation Bank
+                      <span className="text-xs text-slate-500">
+                        Future regression test only; it never changes customer
+                        answers.
+                      </span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
                         checked={createLessonCandidate}
+                        disabled={!lessonCandidate.trim()}
                         onChange={(event) =>
                           setCreateLessonCandidate(event.target.checked)
                         }
                         type="checkbox"
                       />
                       Create reasoning lesson candidate
+                      <span className="text-xs text-slate-500">
+                        Reusable process guidance only—not legal authority or
+                        evidence.
+                      </span>
                     </label>
                   </div>
                   <button

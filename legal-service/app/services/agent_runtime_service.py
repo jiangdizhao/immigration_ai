@@ -46,6 +46,8 @@ from app.services.phase6_compact_checker_service import (
     PHASE6_CHECKER_TOOL_NAME,
     Phase6CheckerService,
 )
+from app.schemas.learning import ReasoningBankRuntimeQuery
+from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,7 @@ class ShadowRunResult:
     terminal_continuation_triggered: bool = False
     terminal_tool_calls: list[ToolCallObservation] = field(default_factory=list)
     shadow_trace: dict[str, Any] | None = None
+    reasoning_bank_telemetry: dict[str, Any] = field(default_factory=dict)
     checker_status: Literal["not_required", "skipped", "completed", "failed"] = "not_required"
     checker_call_count: int = 0
     checker_provider_call_count: int = 0
@@ -174,6 +177,7 @@ class AgentRuntimeService:
         observability: AgentObservabilityService | None = None,
         privacy_guard: SearchPrivacyGuard | None = None,
         web_normalizer: WebEvidenceNormalizer | None = None,
+        reasoning_bank_runtime_service: ReasoningBankRuntimeService | None = None,
     ) -> None:
         self._provider = provider
         self._policy_service = policy_service or AgentPolicyService()
@@ -181,6 +185,9 @@ class AgentRuntimeService:
         self._observability = observability or AgentObservabilityService()
         self._privacy_guard = privacy_guard or SearchPrivacyGuard()
         self._web_normalizer = web_normalizer or WebEvidenceNormalizer()
+        self._reasoning_bank_runtime_service = (
+            reasoning_bank_runtime_service or ReasoningBankRuntimeService()
+        )
 
     async def run_shadow(
         self,
@@ -235,9 +242,40 @@ class AgentRuntimeService:
                 except Exception:
                     logger.warning("Schedule-2 navigation sidecar unavailable for Arm N", exc_info=True)
 
-        # Build initial input for first call
+        reasoning_bank_query = ReasoningBankRuntimeQuery(
+            question=request.user_text,
+            compact_facts={
+                str(key): value
+                for key, value in request.matter_state.items()
+                if isinstance(value, (str, int, float, bool)) or value is None
+            },
+        )
+        # Premium direct answers have a separate architecture and remain off
+        # for Phase 7 runtime guidance.  The Default Luna agent is the only
+        # serving integration in this milestone.
+        if request.mode == "default":
+            reasoning_bank_result = self._reasoning_bank_runtime_service.retrieve(
+                db_session, reasoning_bank_query
+            )
+        else:
+            reasoning_bank_result = self._reasoning_bank_runtime_service.disabled_result(
+                reasoning_bank_query
+            )
+        reasoning_bank_guidance = self._reasoning_bank_runtime_service.prompt_block(
+            reasoning_bank_result
+        )
+        reasoning_bank_telemetry = self._reasoning_bank_runtime_service.telemetry(
+            reasoning_bank_result
+        )
+        reasoning_bank_telemetry["guidance_injected"] = bool(reasoning_bank_guidance)
+
+        # Build initial input for first call. Process guidance is an additional
+        # system instruction, never user data, evidence, or tool context.
+        answer_system_prompt = policy.system_prompt
+        if reasoning_bank_guidance:
+            answer_system_prompt = f"{answer_system_prompt}\n\n{reasoning_bank_guidance}"
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": policy.system_prompt},
+            {"role": "system", "content": answer_system_prompt},
             {"role": "user", "content": self._build_user_message(request)},
         ]
 
@@ -326,7 +364,7 @@ class AgentRuntimeService:
 
                 try:
                     response = await self._provider.call(
-                        system_prompt=policy.system_prompt,
+                        system_prompt=answer_system_prompt,
                         user_text="",
                         model=policy.model,
                         tools=provider_tools,
@@ -1027,6 +1065,7 @@ class AgentRuntimeService:
             "checker_timeout_allocated_ms": checker_timeout_allocated_ms,
             "checker_error_code": checker_error_code,
             "checker_skip_reason": checker_skip_reason,
+            "reasoning_bank": reasoning_bank_telemetry,
         }
 
         return ShadowRunResult(
@@ -1045,6 +1084,7 @@ class AgentRuntimeService:
             terminal_tool_calls=terminal_tool_call_observations,
             errors=errors,
             shadow_trace=shadow_trace,
+            reasoning_bank_telemetry=reasoning_bank_telemetry,
             checker_status=checker_status,
             checker_call_count=checker_call_count,
             checker_provider_call_count=checker_provider_call_count,

@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     phase7_reasoning_bank_max_rules_per_type: int = Field(
         default=50, ge=1, alias="PHASE7_REASONING_BANK_MAX_RULES_PER_TYPE"
     )
+    # Phase 7 real-bank retrieval is explicit and feature-gated.  The default
+    # remains fail-neutral/off; active supplies bounded process guidance only
+    # to the existing Default answer/research prompts and Luna runtime.
+    phase7_reasoning_bank_runtime_mode: Literal["off", "shadow", "active"] = Field(
+        default="off", alias="PHASE7_REASONING_BANK_RUNTIME_MODE"
+    )
 
     # v2.1.1 Phase 1 contracts. ANSWER_ENGINE remains legacy/v1 until a later
     # separately approved rollout; the remaining values do not activate calls.

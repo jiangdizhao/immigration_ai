@@ -1,6 +1,10 @@
 """Offline Phase 7.3A tests; no configured SessionLocal or provider is allowed."""
 
 from copy import deepcopy
+from datetime import date
+from types import SimpleNamespace
+import asyncio
+import time
 import pytest
 from sqlalchemy.exc import OperationalError
 
@@ -13,6 +17,7 @@ from app.schemas.learning import (
     RuleCompilerOutput,
     RuleCompilerProposalDraft,
 )
+from app.schemas.agent import AgentClaim, AgentRuntimeRequest, AgentSubmissionV2, ExecutionBudget
 from app.services.phase7_3a_reasoning_bank import (
     CandidatePoolService,
     Phase73RuleCompilerService,
@@ -29,7 +34,20 @@ from app.services.phase7_3a_reasoning_bank import (
 from app.services.phase7_artifact_service import Phase7ArtifactService
 from app.api.routes.review import _commit_or_rollback
 
-from test_phase7_2_control_plane import _FakeSession, _trace
+from test_phase7_2_control_plane import (
+    _FakeSession,
+    _experience as _live_experience,
+    _phase7_payload,
+    _trace,
+)
+from app.schemas.learning import ReasoningBankRuntimeQuery
+from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
+from app.services.agent_runtime_service import AgentRuntimeService, ProviderResponse
+from app.services.agent_observability_service import AbsoluteTurnDeadline
+from app.services.tool_executor_service import ToolCallRequest
+from app.services.review_service import ReviewService
+from app.services.compact_checker_contract_service import build_phase6_checker_input
+from app.services.request_evidence_registry import create_registry
 
 
 @pytest.fixture(autouse=True)
@@ -632,6 +650,366 @@ def test_revision_preserves_lineage_and_retired_rules_are_terminal():
             procedural_only_confirmed=True,
         )
     assert retired.lifecycle == "retired"
+
+
+def test_real_lawyer_feedback_lifecycle_reaches_shadow_and_retirement():
+    """Exercise the complete real namespace with fake persistence and provider boundaries."""
+    db = _FakeSession()
+    trace = _trace()
+    db.add(trace)
+    db.add(_live_experience())
+    review = ReviewService().create_answer_review(
+        db,
+        trace_id=trace.id,
+        payload=_phase7_payload(
+            add_to_evaluation_bank=True,
+            create_reasoning_lesson_candidate=True,
+            corrected_answer="The reviewed answer.",
+            affected_claim_ids=["c1"],
+            preferred_reasoning_or_research_approach=(
+                "Check decisive facts before selecting the next research step."
+            ),
+        ),
+        trusted_lawyer_review=True,
+    )
+    assert review is not None
+    artifacts = db.rows_for(ReviewArtifact)
+    case_row = next(row for row in artifacts if row.artifact_type == "phase7_evaluation_case")
+    candidate_row = next(
+        row for row in artifacts if row.artifact_type == "phase7_reasoning_lesson_candidate"
+    )
+    case = EvaluationCase.model_validate(case_row.artifact_payload)
+    candidate = ReasoningLessonCandidate.model_validate(candidate_row.artifact_payload)
+    assert case.source_experience_id == "experience-trace-1"
+    assert case.source_experience_snapshot_sha256 == _live_experience().snapshot_sha256
+    assert candidate.source_experience_record_id == case.source_experience_id
+    assert candidate.provenance == "lawyer_reviewed"
+    assert candidate.origin == "live_interaction"
+    assert candidate.lesson_text.startswith("Check decisive facts")
+
+    compiler = Phase73RuleCompilerService()
+    packet = compiler.build_packet(
+        db, candidate_ids=[candidate.candidate_id], bank_namespace="real"
+    )
+    draft = RuleCompilerProposalDraft(
+        rule_type="research_strategy",
+        title="Check decisive facts before research",
+        trigger_conditions=["The question has unresolved decisive facts."],
+        applicability_conditions=["The issue is within the research scope."],
+        action_steps=["Check decisive facts before selecting the next research step."],
+        verification_steps=["Confirm each decisive fact has a documented resolution."],
+        prohibited_behaviors=["Do not treat memory as legal authority."],
+        exceptions_or_limits=["Do not apply to navigation-only questions."],
+        supporting_evaluation_case_ids=[case.case_id],
+        case_erasure_confirmation=True,
+        procedural_only_confirmation=True,
+    )
+    proposal_artifact = compiler.create_proposals_from_output(
+        db,
+        source_candidate_ids=[candidate.candidate_id],
+        compiler_output=RuleCompilerOutput(
+            output_id="offline-output-real-feedback",
+            packet_id=packet.packet_id,
+            proposals=[draft],
+        ),
+        namespace="real",
+        trusted_lawyer_review=True,
+    )[0]
+    proposal = ReasoningRuleProposal.model_validate(proposal_artifact.artifact_payload)
+    rule = ReasoningBankManager().approve_new(
+        db,
+        proposal,
+        decided_by="trusted-test-lawyer",
+        trusted_lawyer_review=True,
+        case_erasure_confirmed=True,
+        procedural_only_confirmed=True,
+    )
+    assert rule.bank_namespace == "real"
+    assert rule.provenance == "lawyer_reviewed"
+    assert rule.origin == "live_interaction"
+    assert rule.lifecycle == "approved"
+
+    shadow = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(
+            phase7_reasoning_bank_runtime_mode="shadow",
+            phase7_reasoning_bank_max_rules=150,
+            phase7_reasoning_bank_max_rules_per_type=50,
+        )
+    )
+    public_answer = "The reviewed answer."
+    shadow_result = shadow.retrieve(
+        db,
+        ReasoningBankRuntimeQuery(
+            question="How should I check decisive facts before research?",
+            compact_facts={"topic": "research strategy"},
+        ),
+    )
+    assert rule.rule_key in shadow_result.selected_rule_keys
+    assert shadow_result.bank_digest
+    assert "evidence_ref" not in shadow_result.model_dump(mode="json")
+    assert "phase6" not in shadow_result.model_dump(mode="json")
+    assert public_answer == "The reviewed answer."
+
+    active = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(
+            phase7_reasoning_bank_runtime_mode="active",
+            phase7_reasoning_bank_max_rules=150,
+            phase7_reasoning_bank_max_rules_per_type=50,
+        )
+    )
+    active_result = active.retrieve(
+        db,
+        ReasoningBankRuntimeQuery(
+            question="How should I check decisive facts before research?",
+            compact_facts={"topic": "research strategy"},
+        ),
+    )
+    assert active_result.selected_rule_keys == [rule.rule_key]
+    assert active_result.selected_rule_versions == {rule.rule_key: rule.rule_version}
+    assert active_result.process_guidance
+    guidance = active.prompt_block(active_result)
+    assert "LAWYER-APPROVED PROCESS GUIDANCE" in guidance
+    assert "Check decisive facts before research" in guidance
+    assert "The reviewed answer." not in guidance
+    for forbidden in (rule.rule_key, candidate.candidate_id, case.case_id, review.id):
+        assert forbidden not in guidance
+
+    class CapturingProvider:
+        def __init__(self):
+            self.calls = []
+
+        async def call(self, **kwargs):
+            self.calls.append(kwargs)
+            return ProviderResponse(
+                response_id="phase7-active-response",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[
+                    ToolCallRequest(
+                        call_id="phase7-submit",
+                        name="submit_answer",
+                        arguments={
+                            "schema_version": "agent_submission.v2",
+                            "answer_class": "general",
+                            "draft_markdown": "A deterministic answer.",
+                            "as_of_date": None,
+                            "claims": [],
+                            "citations": [],
+                            "research_status": "not_required",
+                            "state_patch": [],
+                        },
+                    )
+                ],
+            )
+
+    provider = CapturingProvider()
+    runtime_request = AgentRuntimeRequest(
+        request_id="phase7-runtime-request",
+        turn_id="phase7-runtime-turn",
+        mode="default",
+        user_text="How should I check decisive facts before research?",
+        response_language="en",
+        as_of_date=date(2026, 8, 26),
+        matter_state={"topic": "research strategy"},
+        execution_budget=ExecutionBudget(
+            max_tool_rounds=1,
+            max_provider_calls=1,
+            max_retries=0,
+            turn_deadline_ms=10000,
+            answer_research_target_ms=7000,
+            checker_target_ms=2000,
+        ),
+        experiment_arm=None,
+    )
+    run_result = asyncio.run(
+        AgentRuntimeService(
+            provider=provider,
+            reasoning_bank_runtime_service=active,
+        ).run_shadow(
+            runtime_request,
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=10000),
+            registry=create_registry(runtime_request.request_id),
+            db_session=db,
+        )
+    )
+    assert run_result.status == "completed"
+    assert run_result.submission is not None
+    assert run_result.submission.draft_markdown == "A deterministic answer."
+    assert provider.calls[0]["model"] == "gpt-5.6-luna"
+    model_prompt = provider.calls[0]["system_prompt"]
+    assert "LAWYER-APPROVED PROCESS GUIDANCE" in model_prompt
+    assert "Check decisive facts before research" in model_prompt
+    assert "The reviewed answer." not in model_prompt
+    for forbidden in (rule.rule_key, candidate.candidate_id, case.case_id, review.id):
+        assert forbidden not in model_prompt
+    assert run_result.reasoning_bank_telemetry["selected_rule_keys"] == [rule.rule_key]
+    assert run_result.reasoning_bank_telemetry["selected_rule_versions"] == {
+        rule.rule_key: rule.rule_version
+    }
+    assert run_result.reasoning_bank_telemetry["guidance_injected"] is True
+
+    shadow_provider = CapturingProvider()
+    shadow_run_request = runtime_request.model_copy(
+        update={"request_id": "phase7-shadow-request", "turn_id": "phase7-shadow-turn"}
+    )
+    shadow_run_result = asyncio.run(
+        AgentRuntimeService(
+            provider=shadow_provider,
+            reasoning_bank_runtime_service=shadow,
+        ).run_shadow(
+            shadow_run_request,
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=10000),
+            registry=create_registry(shadow_run_request.request_id),
+            db_session=db,
+        )
+    )
+    assert shadow_run_result.status == "completed"
+    assert shadow_run_result.submission is not None
+    assert shadow_run_result.submission.draft_markdown == "A deterministic answer."
+    assert "LAWYER-APPROVED PROCESS GUIDANCE" not in shadow_provider.calls[0]["system_prompt"]
+    assert "Check decisive facts before research" not in shadow_provider.calls[0]["system_prompt"]
+    assert shadow_run_result.reasoning_bank_telemetry["selected_rule_keys"] == [rule.rule_key]
+    assert shadow_run_result.reasoning_bank_telemetry["guidance_injected"] is False
+
+    checker_request = AgentRuntimeRequest(
+        request_id="runtime-request",
+        turn_id="turn-1",
+        mode="default",
+        user_text="Question",
+        response_language="en",
+        as_of_date=date(2026, 8, 26),
+        matter_state={"confirmed_fact": "value"},
+        execution_budget=ExecutionBudget(
+            turn_deadline_ms=10000,
+            answer_research_target_ms=7000,
+            checker_target_ms=2000,
+        ),
+        experiment_arm="L",
+    )
+    checker_submission = AgentSubmissionV2(
+        schema_version="agent_submission.v2",
+        answer_class="substantive_legal",
+        draft_markdown="A claim",
+        research_status="complete",
+        claims=[
+            AgentClaim(
+                claim_id="claim-1",
+                claim_type="legal_rule",
+                materiality="decisive",
+                text="A claim",
+                draft_start=0,
+                draft_end=len("A claim"),
+            )
+        ],
+    )
+    checker_packet = build_phase6_checker_input(
+        request=checker_request,
+        submission=checker_submission,
+        registry=create_registry(checker_request.request_id),
+    )
+    assert checker_packet.evidence == []
+    assert rule.rule_key not in str(checker_packet.model_dump(mode="json"))
+    assert candidate.candidate_id not in str(checker_packet.model_dump(mode="json"))
+
+    retired = ReasoningBankManager().retire(
+        db,
+        rule_key=rule.rule_key,
+        reason_code="test_retirement",
+        decided_by="trusted-test-lawyer",
+        trusted_lawyer_review=True,
+    )
+    assert retired.lifecycle == "retired"
+    after_retirement = shadow.retrieve(
+        db,
+        ReasoningBankRuntimeQuery(question="Check decisive facts before research"),
+    )
+    assert rule.rule_key not in after_retirement.selected_rule_keys
+
+
+def test_real_shadow_defaults_off_without_reading_reasoning_bank():
+    class ExplodingBank:
+        def list_rules(self, *_args, **_kwargs):
+            raise AssertionError("off-mode shadow retrieval must not read the bank")
+
+    shadow = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(phase7_reasoning_bank_runtime_mode="off"),
+        bank_service=ExplodingBank(),
+    )
+    result = shadow.retrieve(object(), ReasoningBankRuntimeQuery(question="Any question"))
+    assert result.runtime_mode == "off"
+    assert result.selected_rule_keys == []
+    assert result.bank_digest is None
+
+
+def test_runtime_modes_have_one_deterministic_retrieval_boundary_without_provider():
+    rule = SimpleNamespace(
+        rule_key="runtime-rule",
+        rule_version=3,
+        bank_namespace="real",
+        lifecycle="approved",
+        governance_state="normal",
+        validation_state="validated",
+        provenance="lawyer_reviewed",
+        origin="live_interaction",
+        rule_type="research_strategy",
+        title="Check decisive facts",
+        trigger_conditions=["Facts are unresolved."],
+        applicability_conditions=["The request needs research."],
+        action_steps=["Ask for the decisive fact."],
+        verification_steps=["Confirm the fact before concluding."],
+        prohibited_behaviors=["Do not guess."],
+        exceptions_or_limits=["Skip for navigation-only requests."],
+    )
+
+    class CountingBank:
+        def __init__(self):
+            self.list_calls = 0
+            self.state_calls = 0
+
+        def list_rules(self, _db, *, bank_namespace):
+            self.list_calls += 1
+            assert bank_namespace == "real"
+            return [rule]
+
+        def state(self, _db, *, bank_namespace):
+            self.state_calls += 1
+            assert bank_namespace == "real"
+            return SimpleNamespace(bank_digest="digest-runtime")
+
+    query = ReasoningBankRuntimeQuery(question="How should I check decisive facts?")
+    off_bank = CountingBank()
+    off = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(phase7_reasoning_bank_runtime_mode="off"),
+        bank_service=off_bank,
+    )
+    off_result = off.retrieve(object(), query)
+    assert off_bank.list_calls == 0
+    assert off_bank.state_calls == 0
+    assert off_result.process_guidance == []
+    assert off.prompt_block(off_result) == ""
+
+    shadow_bank = CountingBank()
+    shadow = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(phase7_reasoning_bank_runtime_mode="shadow"),
+        bank_service=shadow_bank,
+    )
+    shadow_result = shadow.retrieve(object(), query)
+    assert shadow_bank.list_calls == 1
+    assert shadow_bank.state_calls == 1
+    assert shadow_result.selected_rule_keys == ["runtime-rule"]
+    assert shadow_result.process_guidance == []
+    assert shadow.prompt_block(shadow_result) == ""
+
+    active_bank = CountingBank()
+    active = ReasoningBankRuntimeService(
+        settings=SimpleNamespace(phase7_reasoning_bank_runtime_mode="active"),
+        bank_service=active_bank,
+    )
+    active_result = active.retrieve(object(), query)
+    assert active_bank.list_calls == 1
+    assert active_bank.state_calls == 1
+    assert active_result.process_guidance[0].title == "Check decisive facts"
+    assert "LAWYER-APPROVED PROCESS GUIDANCE" in active.prompt_block(active_result)
 
 
 def test_compiler_output_is_strict_and_server_derives_authority():

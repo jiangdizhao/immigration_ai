@@ -5,12 +5,14 @@ import time
 from typing import Any
 
 from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.learning import ReasoningBankRuntimeQuery
 from app.services.conversation_memory_service import ConversationMemoryService
 from app.services.premium_direct_answer_service import PremiumDirectAnswerService
 from app.services.proposal_first_verification_depth_answer_service import (
     ProposalFirstVerificationDepthAnswerService,
 )
 from app.services.query_service import QueryService, _QueryStageTimer
+from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
 
 logger = logging.getLogger(__name__)
 _PATCHED = False
@@ -230,6 +232,50 @@ def apply_patch() -> None:
                 frontend_messages=getattr(payload, "frontend_messages", []) or [],
             )
 
+            reasoning_bank_telemetry: dict[str, Any] = {}
+            reasoning_bank_guidance = ""
+            reasoning_bank_service: Any = None
+            try:
+                compact_facts = {
+                    str(key): value
+                    for key, value in (
+                        dict(getattr(memory_packet, "stable_facts", {}) or {})
+                        | dict(getattr(memory_packet, "active_focus", {}) or {})
+                    ).items()
+                    if isinstance(value, (str, int, float, bool)) or value is None
+                }
+                reasoning_bank_service = (
+                    getattr(self, "reasoning_bank_runtime_service", None)
+                    or ReasoningBankRuntimeService()
+                )
+                self.reasoning_bank_runtime_service = reasoning_bank_service
+                reasoning_bank_result = reasoning_bank_service.retrieve(
+                    db,
+                    ReasoningBankRuntimeQuery(
+                        question=effective_payload.question,
+                        compact_facts=dict(list(compact_facts.items())[:32]),
+                    ),
+                )
+                reasoning_bank_guidance = reasoning_bank_service.prompt_block(
+                    reasoning_bank_result
+                )
+                reasoning_bank_telemetry = reasoning_bank_service.telemetry(
+                    reasoning_bank_result
+                )
+                reasoning_bank_telemetry["guidance_injected"] = bool(reasoning_bank_guidance)
+            except Exception:  # pragma: no cover - defensive fail-neutral guard
+                logger.exception("ReasoningBank runtime failed; continuing without guidance")
+                reasoning_bank_telemetry = {
+                    "mode": getattr(reasoning_bank_service, "runtime_mode", "off"),
+                    "bank_namespace": "real",
+                    "selected_rule_keys": [],
+                    "selected_rule_versions": {},
+                    "relevance_scores": {},
+                    "retrieval_status": "error",
+                    "error_code": "runtime_integration_failed",
+                    "guidance_injected": False,
+                }
+
             service = (
                 getattr(self, "proposal_first_verification_depth_answer_service", None)
                 or ProposalFirstVerificationDepthAnswerService()
@@ -243,8 +289,11 @@ def apply_patch() -> None:
                 memory_packet=memory_packet,
                 response_language=language_context.response_language,
                 matter_id=matter.id,
+                reasoning_bank_guidance=reasoning_bank_guidance,
             )
             response.matter_id = matter.id
+            response.retrieval_debug = dict(response.retrieval_debug or {})
+            response.retrieval_debug["reasoning_bank"] = reasoning_bank_telemetry
 
             state = current_state.model_copy(deep=True)
             state.latest_question = effective_payload.question

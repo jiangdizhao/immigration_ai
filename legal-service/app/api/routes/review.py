@@ -18,6 +18,8 @@ from app.schemas.review import (
 from app.schemas.learning import (
     ReasoningRuleDecisionRequest,
     ReasoningRuleRetirementRequest,
+    ReasoningBankRuntimeQuery,
+    ReasoningBankRuntimeResult,
     RuleCompilerSubmission,
 )
 from app.services.phase7_3a_reasoning_bank import (
@@ -28,6 +30,7 @@ from app.services.phase7_3a_reasoning_bank import (
     RuleFormationError,
 )
 from app.services.review_service import ReviewService
+from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
 from app.services.evaluation_bank_service import (
     EvaluationBankService,
     EvaluationBankValidationError,
@@ -40,6 +43,7 @@ candidate_pool_service = CandidatePoolService()
 reasoning_bank_service = ReasoningBankService()
 reasoning_bank_manager = ReasoningBankManager()
 rule_compiler_service = Phase73RuleCompilerService()
+reasoning_bank_runtime_service = ReasoningBankRuntimeService()
 
 
 def _commit_or_rollback(db: DBSession) -> None:
@@ -269,6 +273,20 @@ def get_reasoning_bank_state(
     bank_namespace: str = Query(default="real", pattern="^(real|simulation)$"),
 ) -> dict:
     return reasoning_bank_service.state(db, bank_namespace=bank_namespace).model_dump(mode="json")
+
+
+@router.post("/reasoning-bank/shadow-retrieve", response_model=ReasoningBankRuntimeResult)
+def shadow_retrieve_reasoning_bank(
+    payload: ReasoningBankRuntimeQuery,
+    db: DBSession,
+    trusted_lawyer_review: bool = Depends(verify_lawyer_review_assertion),
+) -> ReasoningBankRuntimeResult:
+    """Return real-bank runtime telemetry; never enters the customer answer path."""
+    if not trusted_lawyer_review:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="trusted lawyer assertion required"
+        )
+    return reasoning_bank_runtime_service.retrieve(db, payload)
 
 
 @router.post("/reasoning-bank/compiler-output")

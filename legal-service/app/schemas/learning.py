@@ -424,6 +424,56 @@ class RuleCompilerOutput(LearningStrictContract):
     proposals: list[RuleCompilerProposalDraft] = Field(default_factory=list, max_length=3)
 
 
+class ReasoningBankRuntimeQuery(LearningStrictContract):
+    """Bounded current-request query; never an evidence or answer-model contract."""
+
+    question: str = Field(min_length=1, max_length=4000)
+    compact_facts: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class ReasoningBankRuntimeDecision(LearningStrictContract):
+    rule_key: str = Field(min_length=1, max_length=255)
+    rule_version: int = Field(ge=1)
+    relevance_score: float = Field(ge=0, le=1)
+    rank: int = Field(ge=1)
+    selected: bool
+
+
+class ReasoningBankProcessGuidance(LearningStrictContract):
+    """Only the generalized procedural body allowed in an active prompt."""
+
+    title: str = Field(min_length=1, max_length=180)
+    rule_type: RuleType
+    trigger_conditions: list[str] = Field(min_length=1, max_length=8)
+    applicability_conditions: list[str] = Field(min_length=1, max_length=8)
+    action_steps: list[str] = Field(min_length=1, max_length=8)
+    verification_steps: list[str] = Field(min_length=1, max_length=8)
+    prohibited_behaviors: list[str] = Field(min_length=1, max_length=8)
+    exceptions_or_limits: list[str] = Field(min_length=1, max_length=8)
+
+
+class ReasoningBankRuntimeResult(LearningStrictContract):
+    """Auditable runtime result; guidance is populated only in active mode."""
+
+    runtime_mode: Literal["off", "shadow", "active"]
+    bank_namespace: Literal["real"] = "real"
+    query_fingerprint: str | None = None
+    bank_digest: str | None = None
+    selected_rule_keys: list[str] = Field(default_factory=list, max_length=3)
+    selected_rule_versions: dict[str, int] = Field(default_factory=dict, max_length=3)
+    relevance_scores: dict[str, float] = Field(default_factory=dict, max_length=3)
+    decisions: list[ReasoningBankRuntimeDecision] = Field(default_factory=list, max_length=3)
+    process_guidance: list[ReasoningBankProcessGuidance] = Field(default_factory=list, max_length=2)
+    retrieval_status: Literal["disabled", "completed", "error"] = "completed"
+    error_code: str | None = Field(default=None, max_length=100)
+
+
+# Compatibility names for the Phase 7 readiness endpoint/tests.
+ReasoningBankShadowQuery = ReasoningBankRuntimeQuery
+ReasoningBankShadowDecision = ReasoningBankRuntimeDecision
+ReasoningBankShadowResult = ReasoningBankRuntimeResult
+
+
 class RuleCompilerSubmission(LearningStrictContract):
     """Real-bank API input; namespace and authoritative lineage are server-owned."""
 

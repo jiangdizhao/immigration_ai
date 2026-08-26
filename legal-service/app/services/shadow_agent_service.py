@@ -108,6 +108,7 @@ class ShadowTrace:
     terminal_submission_continuation_count: int = 0
     terminal_continuation_triggered: bool = False
     terminal_tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    reasoning_bank: dict[str, Any] = field(default_factory=dict)
     postcondition_status: str | None = None
     checker_status: str = "not_required"
     checker_call_count: int = 0
@@ -398,6 +399,7 @@ class ShadowAgentService:
             terminal_tool_calls=[
                 tc.model_dump(mode="json") for tc in result.terminal_tool_calls
             ],
+            reasoning_bank=dict(result.reasoning_bank_telemetry),
             postcondition_status=(
                 "passed" if result.submission else None
             ),
