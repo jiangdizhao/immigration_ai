@@ -208,12 +208,14 @@ for (const [name, endpoint, assistantMode] of [
       const body = (await response.json()) as {
         citations: unknown[];
         text: string;
+        userDisplayMode: string;
       };
 
       expect(response.status()).toBe(200);
       expect(body.text).toContain(blockedResponseText);
       expect(body.text).not.toContain(blockedText);
       expect(body.citations).toEqual([]);
+      expect(body.userDisplayMode).toBe("political_gate_blocked");
     }
   );
 }

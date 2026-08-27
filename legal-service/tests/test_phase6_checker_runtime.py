@@ -292,6 +292,29 @@ def test_default_l_and_n_valid_phase6_checker_runs_once_and_preserves_answer(arm
     assert result.metrics.provider_api_call_count == 2
     assert result.metrics.checker_keep_count == (1 if expected_verdict == "KEEP" else 0)
     assert result.metrics.checker_flag_count == (1 if expected_verdict == "FLAG" else 0)
+    assert result.checker_decisions[0]["claim_id"] == "c1"
+    assert result.checker_decisions[0]["claim_type"] == "legal_rule"
+    assert result.checker_decisions[0]["materiality"] == "decisive"
+    assert result.checker_decisions[0]["verdict"] == expected_verdict
+    assert result.checker_decisions[0]["reason_codes"] == [
+        "SUPPORTED" if expected_verdict == "KEEP" else "INSUFFICIENT_SUPPORT"
+    ]
+    assert result.checker_decisions[0]["evidence_refs"] == (
+        [provider.evidence_ref] if expected_verdict == "KEEP" else []
+    )
+    assert result.checker_packet_manifest["material_claim_count"] == 1
+    assert result.checker_packet_manifest["checker_evidence_count"] == (
+        1 if arm == "N" else 0
+    )
+    assert result.checker_packet_manifest["graph_evidence_count"] == 0
+    assert "reasoning_bank" not in result.checker_packet_manifest
+    if arm == "N":
+        assert result.checker_packet_manifest["evidence"][0]["origin"] == "fetched_web"
+        assert result.checker_packet_manifest["evidence"][0]["backend_text_available"] is True
+        assert "text" not in result.checker_packet_manifest["evidence"][0]
+    assert result.metrics.retry_count == 0
+    assert result.metrics.continuation_count == 0
+    assert result.metrics.answer_provider_call_count == 1
     assert result.metrics.tool_calls[-1].tool_name == "submit_phase6_checker_result"
 
 
@@ -424,3 +447,47 @@ def test_general_turn_and_disabled_checker_have_zero_checker_calls() -> None:
     assert general.checker_status == "not_required"
     assert general.checker_provider_call_count == 0
     assert general_provider.call_count == 1
+
+
+class ContinuationProvider:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def call(self, **_kwargs):
+        self.call_count += 1
+        if self.call_count == 1:
+            return ProviderResponse(
+                response_id="answer-initial",
+                model="gpt-5.6-luna",
+                status="ok",
+                text="A draft without terminal submission.",
+            )
+        return ProviderResponse(
+            response_id="answer-continuation",
+            model="gpt-5.6-luna",
+            status="ok",
+            tool_calls=[ToolCallRequest(
+                call_id="answer-submit",
+                name="submit_answer",
+                arguments={
+                    "schema_version": "agent_submission.v2",
+                    "answer_class": "general",
+                    "draft_markdown": "OK.",
+                    "claims": [],
+                    "citations": [],
+                    "research_status": "not_required",
+                    "state_patch": [],
+                },
+            )],
+        )
+
+
+def test_runtime_continuation_is_not_counted_as_retry() -> None:
+    provider = ContinuationProvider()
+    result = _run(provider, answer_class="general")
+
+    assert result.status == "completed"
+    assert result.metrics.retry_count == 0
+    assert result.metrics.continuation_count == 1
+    assert result.metrics.answer_provider_call_count == 2
+    assert result.metrics.provider_api_call_count == 2

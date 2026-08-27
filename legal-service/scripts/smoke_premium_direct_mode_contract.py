@@ -48,17 +48,18 @@ def main() -> None:
     assert "_history_text" in direct_service
     assert "frontend_history_sent_to_answer_model" in direct_service
     assert "system_prompt_sent_to_answer_model" in direct_service
-    assert "'the second'" in direct_service
-    assert "Schedule 3" in direct_service
+    assert "Recent conversation context:" in direct_service
+    assert "Latest user question:" in direct_service
+    assert "material cross-references" in direct_service
 
-    # Terra primary, Luna fallback and explicit serving-model diagnostics.
+    # Sol primary, Luna fallback and explicit serving-model diagnostics.
     assert "PREMIUM_DIRECT_PRIMARY_MODEL" in direct_service
     assert "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT" in direct_service
     assert "PREMIUM_DIRECT_PRIMARY_MAX_RETRIES" in direct_service
     assert "PREMIUM_DIRECT_FALLBACK_MODEL" in direct_service
     assert "PREMIUM_DIRECT_FALLBACK_REASONING_EFFORT" in direct_service
     assert "PREMIUM_DIRECT_FALLBACK_MAX_RETRIES" in direct_service
-    assert '"gpt-5.6-terra"' in direct_service
+    assert '"gpt-5.6-sol"' in direct_service
     assert '"gpt-5.6-luna"' in direct_service
     assert "_answer_with_fallback" in direct_service
     assert "used_fallback_model" in direct_service
@@ -68,6 +69,7 @@ def main() -> None:
     assert "PREMIUM_DIRECT_WEB_SEARCH_ENABLED" in direct_service
     assert "PREMIUM_DIRECT_WEB_SEARCH_REQUIRED" in direct_service
     assert "PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE" in direct_service
+    assert "PREMIUM_DIRECT_MAX_TOOL_CALLS" in direct_service
     assert '"type": "web_search"' in direct_service
     assert '"type": "web_search_preview"' in direct_service
     assert '"tool_choice": "required" if self.web_search_required else "auto"' in direct_service
@@ -88,7 +90,7 @@ def main() -> None:
     assert '"gpt-5.4-mini"' not in direct_service
     assert "AI quick research answer used live web search" in direct_service
 
-    print("OK: premium direct Terra/Luna agentic web-search contract is installed")
+    print("OK: premium direct Sol/Luna agentic web-search contract is installed")
 
 
 if __name__ == "__main__":

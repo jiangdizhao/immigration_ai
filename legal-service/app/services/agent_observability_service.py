@@ -200,6 +200,7 @@ class AgentObservabilityService:
         output_tokens: int | None = None,
         status: str = "ok",
         is_retry: bool = False,
+        call_kind: str = "initial",
     ) -> None:
         observation = self._require_turn()
         remaining = (
@@ -223,6 +224,7 @@ class AgentObservabilityService:
                 duration_ms=duration_ms,
                 remaining_deadline_before_call_ms=remaining,
                 status=status,
+                call_kind=call_kind,
                 is_retry=is_retry,
             )
         )
@@ -232,8 +234,19 @@ class AgentObservabilityService:
         observation.metrics.native_web_search_call_count += native_web_search_call_count
         observation.metrics.native_web_source_count += native_web_source_count
         observation.metrics.native_web_citation_count += native_web_citation_count
-        if is_retry:
-            observation.metrics.retry_count += 1
+        observation.metrics.retry_count = sum(
+            1 for call in observation.metrics.provider_calls if call.is_retry
+        )
+        observation.metrics.continuation_count = sum(
+            1
+            for call in observation.metrics.provider_calls
+            if call.call_kind in {"continuation", "missing_terminal_continuation"}
+        )
+        observation.metrics.answer_provider_call_count = sum(
+            1
+            for call in observation.metrics.provider_calls
+            if call.stage != "phase6_checker"
+        )
 
     def record_tool_call(
         self,
@@ -285,9 +298,6 @@ class AgentObservabilityService:
         }
         counter_name = counter_by_tool[call.tool_name]
         setattr(observation.metrics, counter_name, getattr(observation.metrics, counter_name) + 1)
-        if is_retry:
-            observation.metrics.retry_count += 1
-
     def record_web_search_pii_violation(self, count: int = 1) -> None:
         if count < 0:
             raise ValueError("count must be non-negative")
@@ -327,6 +337,34 @@ class AgentObservabilityService:
 
     def mark_metrics_complete(self) -> None:
         self._require_turn().metrics.metrics_complete = True
+
+    def record_agent_execution_metrics(self, metrics: AgentExecutionMetrics) -> None:
+        """Adopt bounded runtime metrics without losing ingress gate telemetry."""
+
+        observation = self._require_turn()
+        existing = observation.metrics
+        adopted = metrics.model_copy(deep=True)
+        adopted.retry_count = sum(
+            1 for call in adopted.provider_calls if call.is_retry
+        )
+        adopted.continuation_count = sum(
+            1
+            for call in adopted.provider_calls
+            if call.call_kind in {"continuation", "missing_terminal_continuation"}
+        )
+        adopted.answer_provider_call_count = sum(
+            1 for call in adopted.provider_calls if call.stage != "phase6_checker"
+        )
+        adopted.political_gate_decision = existing.political_gate_decision
+        adopted.political_policy_version = existing.political_policy_version
+        adopted.political_policy_hash = existing.political_policy_hash
+        adopted.political_gate_enforcement_layer = existing.political_gate_enforcement_layer
+        adopted.political_gate_latency_ms = existing.political_gate_latency_ms
+        adopted.deadline_checkpoints = [
+            *existing.deadline_checkpoints,
+            *adopted.deadline_checkpoints,
+        ]
+        observation.metrics = adopted
 
     def snapshot(self) -> AgentExecutionMetrics | None:
         observation = _CURRENT_TURN.get()

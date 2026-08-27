@@ -8,8 +8,9 @@ from app.services.review_trace_service import ReviewTraceService
 
 
 class CapturingSession:
-    def __init__(self) -> None:
+    def __init__(self, *, existing_matter_ids=None) -> None:
         self.added = None
+        self.existing_matter_ids = set(existing_matter_ids or ())
 
     def __enter__(self):
         return self
@@ -26,6 +27,9 @@ class CapturingSession:
     def refresh(self, _value) -> None:
         return None
 
+    def get(self, _model, matter_id):
+        return SimpleNamespace(id=matter_id) if matter_id in self.existing_matter_ids else None
+
 
 def response() -> QueryResponse:
     return QueryResponse(
@@ -40,7 +44,7 @@ def response() -> QueryResponse:
 def test_review_trace_contains_exact_observability_fields(monkeypatch) -> None:
     import app.services.review_trace_service as review_module
 
-    session = CapturingSession()
+    session = CapturingSession(existing_matter_ids={"matter-1"})
     monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
     service = ReviewTraceService()
     service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
@@ -93,6 +97,69 @@ def test_review_trace_contains_exact_observability_fields(monkeypatch) -> None:
     assert metrics["provider_api_call_count"] == 1
     assert metrics["tool_call_count"] == 1
     assert metrics["terminal_submission_missing"] is True
+    assert session.added.matter_id == "matter-1"
+
+
+def test_invalid_matter_fk_skips_answer_trace_but_archives_diagnostics(monkeypatch) -> None:
+    import app.services.review_trace_service as review_module
+
+    session = CapturingSession()
+    monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
+    captured = []
+
+    class ArchiveSpy:
+        def safe_capture(self, **kwargs):
+            captured.append(kwargs)
+
+    service = ReviewTraceService(experience_archive_service=ArchiveSpy())
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+    public_response = response().model_copy(update={
+        "retrieval_debug": {"checker": {"status": "failed", "reason": "diagnostic"}},
+    })
+    before = public_response.model_dump()
+    trace_id = service.safe_record_answer_trace(
+        matter=SimpleNamespace(id="nonexistent-matter", session_id="session-1"),
+        payload=QueryRequest(question="Question", matter_id="nonexistent-matter"),
+        response=public_response,
+        state=None,
+    )
+
+    assert trace_id is None
+    assert session.added is None
+    assert public_response.model_dump() == before
+    assert len(captured) == 1
+    assert captured[0]["matter"].id is None
+    assert captured[0]["payload"].matter_id is None
+    assert captured[0]["response"].matter_id is None
+    assert captured[0]["response"].retrieval_debug["checker"]["status"] == "failed"
+
+
+def test_missing_matter_id_is_fail_neutral_without_creating_matter(monkeypatch) -> None:
+    import app.services.review_trace_service as review_module
+
+    session = CapturingSession()
+    monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
+    captured = []
+
+    class ArchiveSpy:
+        def safe_capture(self, **kwargs):
+            captured.append(kwargs)
+
+    service = ReviewTraceService(experience_archive_service=ArchiveSpy())
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+    public_response = response()
+    before = public_response.model_dump()
+    assert service.safe_record_answer_trace(
+        matter=SimpleNamespace(id=None, session_id="session-1"),
+        payload=QueryRequest(question="Question"),
+        response=public_response,
+        state=None,
+    ) is None
+
+    assert public_response.model_dump() == before
+    assert session.added is None
+    assert len(captured) == 1
+    assert captured[0]["matter"].id is None
 
 
 def test_review_trace_failure_remains_passive(monkeypatch) -> None:

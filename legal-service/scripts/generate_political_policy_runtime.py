@@ -177,10 +177,19 @@ def build_patterns(policy: dict[str, Any]) -> list[dict[str, Any]]:
             for alias in aliases:
                 source_patterns.append(("hard", hard_rule["id"], alias))
 
+    hard_sensitive_dictionaries = set(policy.get("hard_sensitive_dictionaries", []))
     for dictionary_name, aliases_by_language in policy.get("dictionaries", {}).items():
+        dictionary_kind = (
+            "hard" if dictionary_name in hard_sensitive_dictionaries else "dictionary"
+        )
+        dictionary_owner = (
+            f"hard:{dictionary_name}"
+            if dictionary_kind == "hard"
+            else dictionary_name
+        )
         for aliases in aliases_by_language.values():
             for alias in aliases:
-                source_patterns.append(("dictionary", dictionary_name, alias))
+                source_patterns.append((dictionary_kind, dictionary_owner, alias))
 
     for exception in policy.get("contextual_allow_exceptions", []):
         for aliases in exception.get("phrases", {}).values():

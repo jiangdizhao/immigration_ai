@@ -49,7 +49,6 @@ def test_raw_provider_tool_round_and_retry_counters() -> None:
             round_index=2,
             status="timeout",
             duration_ms=1000,
-            is_retry=True,
         )
         service.record_logical_stage("fact_check")
         service.record_provider_call(
@@ -58,6 +57,8 @@ def test_raw_provider_tool_round_and_retry_counters() -> None:
             model="gpt-5.6-luna",
             duration_ms=800,
             status="ok",
+            call_kind="retry",
+            is_retry=True,
         )
         service.mark_answer_completed()
         service.mark_metrics_complete()
@@ -76,7 +77,37 @@ def test_raw_provider_tool_round_and_retry_counters() -> None:
     assert metrics.flat_rag_call_count == 0
     assert metrics.utility_call_count == 0
     assert metrics.retry_count == 1
+    assert metrics.continuation_count == 0
     assert metrics.metrics_complete is True
+
+
+def test_continuation_count_excludes_retries() -> None:
+    service = AgentObservabilityService()
+    token = service.begin_turn(mode="default", turn_deadline_ms=40000)
+    try:
+        service.record_provider_call(
+            stage="answer_research",
+            duration_ms=1,
+            call_kind="initial",
+        )
+        service.record_provider_call(
+            stage="answer_research",
+            duration_ms=1,
+            call_kind="continuation",
+        )
+        service.record_provider_call(
+            stage="terminal_synthesis",
+            duration_ms=1,
+            call_kind="continuation",
+        )
+        metrics = service.snapshot()
+    finally:
+        service.reset_turn(token)
+
+    assert metrics is not None
+    assert metrics.retry_count == 0
+    assert metrics.continuation_count == 2
+    assert metrics.answer_provider_call_count == 3
 
 
 def test_terminal_submission_does_not_consume_tool_round() -> None:

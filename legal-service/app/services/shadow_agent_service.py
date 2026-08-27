@@ -107,6 +107,7 @@ class ShadowTrace:
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = 0
     terminal_continuation_triggered: bool = False
+    terminal_continuation_reason: str | None = None
     terminal_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     reasoning_bank: dict[str, Any] = field(default_factory=dict)
     postcondition_status: str | None = None
@@ -396,6 +397,7 @@ class ShadowAgentService:
             terminal_submission_missing=result.terminal_submission_missing,
             terminal_submission_continuation_count=result.terminal_submission_continuation_count,
             terminal_continuation_triggered=result.terminal_continuation_triggered,
+            terminal_continuation_reason=result.terminal_continuation_reason,
             terminal_tool_calls=[
                 tc.model_dump(mode="json") for tc in result.terminal_tool_calls
             ],

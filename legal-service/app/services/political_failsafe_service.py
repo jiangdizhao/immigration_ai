@@ -344,20 +344,39 @@ def _iter_user_strings(value: Any) -> Iterator[str]:
             pending.extend(reversed(item))
 
 
-def _iter_frontend_message_strings(messages: Any) -> Iterator[str]:
-    """Yield each forwarded message as well as every nested client string.
+def _iter_frontend_message_strings(messages: Any, *, current_only: bool = False) -> Iterator[str]:
+    """Yield current or all forwarded messages and their nested client strings.
 
     Widget routes serialize text parts by joining them with a newline before
     FastAPI sees them.  Matching that joined carrier prevents a direct caller
     from splitting a hard or contextual phrase over individually harmless
     parts, while the nested traversal still covers arbitrary client fields.
+    Historical messages are not a current submission and must not independently
+    trigger the gate.
     """
 
     if not isinstance(messages, list):
         yield from _iter_user_strings(messages)
         return
 
-    for message in messages:
+    selected_messages = (
+        [
+            next(
+                (
+                    message
+                    for message in reversed(messages)
+                    if isinstance(message, dict) and message.get("role") == "user"
+                ),
+                None,
+            )
+        ]
+        if current_only
+        else messages
+    )
+
+    for message in selected_messages:
+        if message is None:
+            continue
         if isinstance(message, dict):
             direct_text = message.get("text")
             if isinstance(direct_text, str):
@@ -378,6 +397,38 @@ def _iter_frontend_message_strings(messages: Any) -> Iterator[str]:
         yield from _iter_user_strings(message)
 
 
+_REMOVED = object()
+
+
+def _remove_blocked_values(value: Any, matcher: CompiledPoliticalMatcher) -> Any:
+    """Copy client history while dropping values blocked by the local policy."""
+
+    if isinstance(value, str):
+        return _REMOVED if matcher.evaluate(value).decision == "block" else value
+    if isinstance(value, dict):
+        cleaned: dict[Any, Any] = {}
+        for key, child in value.items():
+            if isinstance(key, str) and matcher.evaluate(key).decision == "block":
+                continue
+            safe_child = _remove_blocked_values(child, matcher)
+            if safe_child is not _REMOVED:
+                cleaned[key] = safe_child
+        return cleaned
+    if isinstance(value, list):
+        return [
+            safe_child
+            for child in value
+            if (safe_child := _remove_blocked_values(child, matcher)) is not _REMOVED
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            safe_child
+            for child in value
+            if (safe_child := _remove_blocked_values(child, matcher)) is not _REMOVED
+        )
+    return value
+
+
 class PoliticalFailsafeService:
     """FastAPI wrapper around a process-startup compiled matcher."""
 
@@ -387,15 +438,57 @@ class PoliticalFailsafeService:
     def evaluate_text(self, text: str) -> PoliticalGateResult:
         return self.matcher.evaluate(text)
 
+    def sanitize_history(self, messages: Any) -> Any:
+        """Drop blocked historical message carriers before normal model use."""
+
+        if not isinstance(messages, list):
+            return messages
+        return [
+            message
+            for message in messages
+            if not any(
+                result.decision == "block"
+                for result in (
+                    self.matcher.evaluate(value)
+                    for value in _iter_frontend_message_strings([message])
+                )
+            )
+        ]
+
+    def sanitize_payload_history(self, payload: Any) -> Any:
+        """Remove blocked carried history without changing the current turn."""
+
+        update = {
+            "frontend_messages": self.sanitize_history(
+                getattr(payload, "frontend_messages", [])
+            ),
+            "intake_facts": _remove_blocked_values(
+                getattr(payload, "intake_facts", {}), self.matcher
+            ),
+        }
+        return payload.model_copy(update=update)
+
     def evaluate_payload(self, payload: Any) -> PoliticalGateResult:
-        # Scan every client-controlled text carrier that an active legacy path
-        # can put into memory, state, persistence, or a provider prompt.  Each
-        # value is independently evaluated so old history cannot create a false
-        # contextual proximity match across turn boundaries.
+        # Scan only current submission carriers.  Historical carriers are
+        # sanitized separately before normal model processing, so they cannot
+        # create a sticky block or contaminate a later prompt.
+        current_intake_facts = getattr(payload, "current_intake_facts", None)
+        frontend_messages = getattr(payload, "frontend_messages", [])
+        compatibility_facts = (
+            current_intake_facts
+            if current_intake_facts is not None
+            else (
+                getattr(payload, "intake_facts", {})
+                if not isinstance(frontend_messages, list) or not frontend_messages
+                else None
+            )
+        )
         values: Iterable[str] = chain(
             [str(getattr(payload, "question", ""))],
-            _iter_frontend_message_strings(getattr(payload, "frontend_messages", [])),
-            _iter_user_strings(getattr(payload, "intake_facts", {})),
+            _iter_frontend_message_strings(
+                frontend_messages, current_only=True
+            ),
+            _iter_user_strings(compatibility_facts),
         )
         last_result: PoliticalGateResult | None = None
         for value in values:

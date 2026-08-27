@@ -125,6 +125,12 @@ class Settings(BaseSettings):
     backend_political_failsafe_enabled: bool = Field(
         default=True, alias="BACKEND_POLITICAL_FAILSAFE_ENABLED"
     )
+    # Phase 2 is an explicit, off-by-default serving switch.  When disabled,
+    # Default continues through the current rollback path; when enabled, the
+    # bounded AgentRuntime becomes the customer-serving Default path.
+    default_agent_serving_enabled: bool = Field(
+        default=False, alias="DEFAULT_AGENT_SERVING_ENABLED"
+    )
     agent_shadow_enabled: bool = Field(default=False, alias="AGENT_SHADOW_ENABLED")
     agent_rollout_percent_default: int = Field(
         default=0, ge=0, le=100, alias="AGENT_ROLLOUT_PERCENT_DEFAULT"

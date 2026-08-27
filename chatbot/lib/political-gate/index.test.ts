@@ -5,6 +5,7 @@ import {
   evaluatePoliticalText,
   evaluateWidgetSubmission,
   politicalGateIdentity,
+  sanitizePoliticalHistory,
 } from "./index";
 
 type FixtureCase = {
@@ -93,6 +94,65 @@ test("submission scanning evaluates text parts as one forwarded message", () => 
           role: "user",
         },
       ],
+    }).decision,
+    "block"
+  );
+});
+
+test("historical blocked turns do not make a later submission sticky", () => {
+  assert.equal(
+    evaluateWidgetSubmission({
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "习近平" }] },
+        {
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "Can a holder of subclass 461 visa who is onshore apply on their own?",
+            },
+          ],
+        },
+      ],
+    }).decision,
+    "allow"
+  );
+});
+
+test("blocked historical messages are removed before normal history forwarding", () => {
+  const safeHistory = sanitizePoliticalHistory([
+    { role: "user", parts: [{ type: "text", text: "习近平" }] },
+    {
+      role: "user",
+      parts: [{ type: "text", text: "Can I apply for a visa?" }],
+    },
+  ]) as Array<{ role: string; parts: Array<{ text: string }> }>;
+
+  assert.deepEqual(safeHistory, [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "Can I apply for a visa?" }],
+    },
+  ]);
+});
+
+test("current guided-intake facts are checked without carried historical facts", () => {
+  assert.equal(
+    evaluateWidgetSubmission({
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "Can I apply?" }] },
+      ],
+      intakeFacts: { previous_free_text: "法轮功" },
+      currentIntakeFacts: {},
+    }).decision,
+    "allow"
+  );
+  assert.equal(
+    evaluateWidgetSubmission({
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "Guided intake" }] },
+      ],
+      currentIntakeFacts: { current_free_text: "法轮功" },
     }).decision,
     "block"
   );

@@ -28,6 +28,7 @@ import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
   type PoliticalGateResult,
+  sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import { AssistantRichMarkdown } from "./assistant-rich-markdown";
@@ -512,7 +513,11 @@ export function ImmigrationAIWorkspace({
         setConversationId(data.chatId);
         setWorkspaceChatParam(data.chatId);
         setMatterId(data.legalMatterId ?? null);
-        setMessages((data.messages ?? []).map(widgetMessageFromStoredMessage));
+        setMessages(
+          sanitizePoliticalHistory(
+            (data.messages ?? []).map(widgetMessageFromStoredMessage)
+          ) as WidgetMessage[]
+        );
         setDraftFacts({});
         setIntakeFacts({});
         setConversationReady(true);
@@ -586,7 +591,22 @@ export function ImmigrationAIWorkspace({
     };
   }, [createConversation, loadConversation, refreshConversationList]);
 
-  const appendAssistantMessage = async (data: WidgetRouteResponse) => {
+  const appendAssistantMessage = async (
+    data: WidgetRouteResponse,
+    submittedUserMessageId?: string
+  ) => {
+    if (
+      data.userDisplayMode === "political_gate_blocked" &&
+      submittedUserMessageId
+    ) {
+      // Next.js/FastAPI may be the layer that blocks after this user message
+      // was optimistically rendered. Never retain that raw turn in browser
+      // history, where it would be resent on the next submission.
+      setMessages((current) =>
+        current.filter((message) => message.id !== submittedUserMessageId)
+      );
+    }
+
     if (data.matterId) {
       setMatterId(data.matterId);
       refreshConversationList().catch((refreshError) => {
@@ -679,6 +699,7 @@ export function ImmigrationAIWorkspace({
   const sendToWidgetRoute = async (
     nextMessages: WidgetMessage[],
     facts: IntakeFacts,
+    currentFacts: IntakeFacts = {},
     answerPreference: AnswerPreference = "answer_first",
     activeConversationId: string | null = conversationId
   ) => {
@@ -696,6 +717,7 @@ export function ImmigrationAIWorkspace({
           frontendChatId: stableConversationId,
           matterId,
           intakeFacts: facts,
+          currentIntakeFacts: currentFacts,
           answerPreference,
           selectedChatModel: DEFAULT_CHAT_MODEL,
           assistantMode,
@@ -726,10 +748,13 @@ export function ImmigrationAIWorkspace({
       text: trimmed,
     };
 
-    const nextMessages = [...messages, nextUserMessage];
+    const nextMessages = [
+      ...(sanitizePoliticalHistory(messages) as WidgetMessage[]),
+      nextUserMessage,
+    ];
     const submissionDecision = evaluateWidgetSubmission({
       messages: nextMessages,
-      intakeFacts,
+      currentIntakeFacts: {},
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
@@ -757,10 +782,11 @@ export function ImmigrationAIWorkspace({
       const data = await sendToWidgetRoute(
         nextMessages,
         intakeFacts,
+        {},
         answerPreference,
         activeConversationId
       );
-      await appendAssistantMessage(data);
+      await appendAssistantMessage(data, nextUserMessage.id);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -803,12 +829,13 @@ export function ImmigrationAIWorkspace({
       text: syntheticText,
     };
 
-    const visibleMessages = [...messages, visibleUserMessage];
-    const backendMessages = [...messages, backendUserMessage];
+    const safeHistory = sanitizePoliticalHistory(messages) as WidgetMessage[];
+    const visibleMessages = [...safeHistory, visibleUserMessage];
+    const backendMessages = [...safeHistory, backendUserMessage];
 
     const submissionDecision = evaluateWidgetSubmission({
       messages: backendMessages,
-      intakeFacts: mergedFacts,
+      currentIntakeFacts: draftFacts,
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
@@ -837,10 +864,11 @@ export function ImmigrationAIWorkspace({
       const data = await sendToWidgetRoute(
         backendMessages,
         mergedFacts,
+        draftFacts,
         "answer_first",
         activeConversationId
       );
-      await appendAssistantMessage(data);
+      await appendAssistantMessage(data, visibleUserMessage.id);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError

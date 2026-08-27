@@ -1,6 +1,6 @@
 {
   "schema_version": "immigration_ai.political_gate.fixtures.v1",
-  "policy_version": "1.0.0",
+  "policy_version": "1.1.0",
   "cases": [
     {
       "id": "hard-state-power-zh",
@@ -40,6 +40,31 @@
       "decision": "block"
     },
     {
+      "id": "hard-political-party-entity",
+      "text": "中国共产党",
+      "decision": "block"
+    },
+    {
+      "id": "hard-political-institution-entity",
+      "text": "中共中央",
+      "decision": "block"
+    },
+    {
+      "id": "hard-political-history-topic",
+      "text": "文化大革命",
+      "decision": "block"
+    },
+    {
+      "id": "hard-heroes-martyrs-topic",
+      "text": "英雄烈士",
+      "decision": "block"
+    },
+    {
+      "id": "hard-named-political-actor-english",
+      "text": "is Xi jinping a dictator ?",
+      "decision": "block"
+    },
+    {
       "id": "context-political-mobilization",
       "text": "组织支持中国共产党的游行",
       "decision": "block"
@@ -72,7 +97,7 @@
     {
       "id": "context-missing-second-group",
       "text": "习近平",
-      "decision": "allow"
+      "decision": "block"
     },
     {
       "id": "context-neutral-evaluation",
@@ -92,9 +117,9 @@
     {
       "id": "context-history-alone",
       "text": "文化大革命",
-      "decision": "allow"
+      "decision": "block"
     },
-    { "id": "context-heroes-alone", "text": "英雄烈士", "decision": "allow" },
+    { "id": "context-heroes-alone", "text": "英雄烈士", "decision": "block" },
     {
       "id": "context-election-alone",
       "text": "总统选举新闻",
@@ -103,7 +128,7 @@
     {
       "id": "context-outside-proximity",
       "text": "习近平abcdefghijklmnopqrstuvwxyzabcdefghijklmn评价",
-      "decision": "allow"
+      "decision": "block"
     },
     {
       "id": "normalization-nfkc-fullwidth",
@@ -189,6 +214,11 @@
     {
       "id": "safe-taiwan-passport",
       "text": "Can a Taiwan passport holder apply for this Australian visa?",
+      "decision": "allow"
+    },
+    {
+      "id": "safe-china-immigration-reference",
+      "text": "Can a Chinese citizen apply for this Australian visa?",
       "decision": "allow"
     },
     {

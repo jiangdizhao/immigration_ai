@@ -435,7 +435,7 @@ class ExperienceArchiveService:
     def _phase6_snapshot(self, response: QueryResponse, debug: Any) -> dict[str, Any]:
         explicit = self._first_mapping(debug, {"phase6", "phase6_checker", "compact_checker", "checker"})
         if explicit:
-            allowed = {key: self._safe_json(explicit[key]) for key in ("status", "checker_status", "checker_required", "skip_reason", "error_code", "error", "result", "checker_result", "verdicts", "decisions", "reason_codes", "material_omission_suspected", "material_omission_evidence_refs", "duration_ms", "latency_ms", "model", "reasoning_effort") if key in explicit}
+            allowed = {key: self._safe_json(explicit[key]) for key in ("status", "checker_status", "checker_required", "skip_reason", "error_code", "error", "result", "checker_result", "verdicts", "decisions", "reason_codes", "material_omission_suspected", "material_omission_evidence_refs", "duration_ms", "latency_ms", "model", "reasoning_effort", "checker_packet") if key in explicit}
             if "status" not in allowed and "checker_status" in allowed:
                 allowed["status"] = allowed["checker_status"]
             allowed.setdefault("status", "unavailable")

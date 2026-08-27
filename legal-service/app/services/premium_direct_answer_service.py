@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from typing import Any
 
 from openai import OpenAI
 
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
+from app.services.agent_observability_service import AbsoluteTurnDeadline
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +57,12 @@ class PremiumDirectAnswerService:
     - recent chat history is preserved for follow-up continuity;
     - the authoritative deterministic political gate runs at FastAPI ingress
       before this service is constructed;
-    - GPT-5.6 Terra is attempted first, then GPT-5.6 Luna;
+    - the configured Premium primary model is attempted first, then the
+      configured fallback model;
     - the Responses API web_search tool is enabled for agentic live research;
     - actual web-search sources are captured without an artificial cap;
-    - transient primary-model failures receive bounded retries before fallback.
+    - primary and fallback requests share one absolute lane deadline and use
+      zero SDK retries.
     """
 
     def __init__(self) -> None:
@@ -66,11 +70,11 @@ class PremiumDirectAnswerService:
 
         self.primary_model = os.getenv(
             "PREMIUM_DIRECT_PRIMARY_MODEL",
-            os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.6-terra"),
+            os.getenv("PREMIUM_DIRECT_MODEL", "gpt-5.6-sol"),
         )
         self.primary_reasoning_effort = os.getenv(
             "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT",
-            os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "medium"),
+            os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "high"),
         ).strip()
         self.primary_timeout_seconds = float(
             os.getenv(
@@ -78,12 +82,18 @@ class PremiumDirectAnswerService:
                 os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "50"),
             )
         )
-        self.primary_max_retries = int(
+        configured_primary_retries = int(
             os.getenv(
                 "PREMIUM_DIRECT_PRIMARY_MAX_RETRIES",
-                os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", "1"),
+                os.getenv("PREMIUM_DIRECT_OPENAI_MAX_RETRIES", "0"),
             )
         )
+        if configured_primary_retries:
+            logger.warning(
+                "Premium Direct primary retries are fixed at zero; configured value=%s ignored",
+                configured_primary_retries,
+            )
+        self.primary_max_retries = 0
 
         self.fallback_model = os.getenv(
             "PREMIUM_DIRECT_FALLBACK_MODEL",
@@ -96,8 +106,34 @@ class PremiumDirectAnswerService:
         self.fallback_timeout_seconds = float(
             os.getenv("PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS", "55")
         )
-        self.fallback_max_retries = int(
+        configured_fallback_retries = int(
             os.getenv("PREMIUM_DIRECT_FALLBACK_MAX_RETRIES", "0")
+        )
+        if configured_fallback_retries:
+            logger.warning(
+                "Premium Direct fallback retries are fixed at zero; configured value=%s ignored",
+                configured_fallback_retries,
+            )
+        self.fallback_max_retries = 0
+
+        # Premium Direct uses the existing 45-second Premium backend contract
+        # by default.  A direct-lane override is available for controlled
+        # deployments, but primary and fallback always share this one budget;
+        # it is intentionally below the frontend's 170-second request timeout.
+        self.lane_budget_ms = int(
+            os.getenv(
+                "PREMIUM_DIRECT_LANE_BUDGET_MS",
+                str(self.settings.premium_turn_deadline_ms),
+            )
+        )
+        self.minimum_fallback_budget_ms = int(
+            os.getenv("PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS", "1000")
+        )
+        self.max_tool_calls = self._env_int(
+            "PREMIUM_DIRECT_MAX_TOOL_CALLS",
+            default=3,
+            minimum=1,
+            maximum=10,
         )
 
         self.web_search_enabled = self._env_bool(
@@ -135,6 +171,26 @@ class PremiumDirectAnswerService:
             return default
         return raw.strip().lower() in {"1", "true", "yes", "on"}
 
+    @staticmethod
+    def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
+        raw = os.getenv(name)
+        try:
+            value = default if raw is None else int(raw)
+        except ValueError:
+            logger.warning("Invalid %s=%r; using %s", name, raw, default)
+            return default
+        if not minimum <= value <= maximum:
+            logger.warning(
+                "Invalid %s=%s; expected %s..%s, using %s",
+                name,
+                value,
+                minimum,
+                maximum,
+                default,
+            )
+            return default
+        return value
+
     def _client(self, *, timeout_seconds: float, max_retries: int) -> OpenAI:
         if not self.settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is missing from backend settings.")
@@ -156,21 +212,35 @@ class PremiumDirectAnswerService:
     ) -> QueryResponse:
         is_zh = response_language == "zh"
         question_for_model = original_question.strip() or effective_question.strip()
-        history_text = self._history_text(getattr(payload, "frontend_messages", []) or [])
+
+        if not question_for_model:
+            return self._empty_question_response(is_zh=is_zh, matter_id=matter_id)
+
+        # Start the direct lane budget before history/prompt assembly and carry
+        # this same monotonic deadline through both provider attempts.
+        lane_deadline = AbsoluteTurnDeadline(
+            started_at=time.perf_counter(),
+            turn_deadline_ms=self.lane_budget_ms,
+        )
+
+        history_text = self._history_text(
+            getattr(payload, "frontend_messages", []) or [],
+            latest_question=question_for_model,
+        )
         model_input = self._model_input(
             history_text=history_text,
             latest_question=question_for_model,
             is_zh=is_zh,
         )
+        instructions = self._model_instructions(is_zh=is_zh)
         high_risk = self._looks_high_risk(original_question) or self._looks_high_risk(
             effective_question
         )
 
-        if not question_for_model:
-            return self._empty_question_response(is_zh=is_zh, matter_id=matter_id)
-
         answer_text, web_sources, model_debug = self._answer_with_fallback(
-            model_input=model_input
+            model_input=model_input,
+            instructions=instructions,
+            deadline=lane_deadline,
         )
 
         if not answer_text:
@@ -233,6 +303,7 @@ class PremiumDirectAnswerService:
                         "lightweight_history_plus_latest_user_question_with_agentic_web_research_instruction"
                     ),
                     "answer_model_input_char_count": len(model_input),
+                    "answer_model_instructions_char_count": len(instructions),
                     "latest_question_char_count": len(question_for_model),
                     "history_char_count": len(history_text),
                     "frontend_history_sent_to_answer_model": bool(history_text),
@@ -241,6 +312,8 @@ class PremiumDirectAnswerService:
                     "max_history_chars_per_turn": self.max_history_chars_per_turn,
                     "max_history_total_chars": self.max_history_total_chars,
                     "high_risk_detected": high_risk,
+                    "max_tool_calls": self.max_tool_calls,
+                    "premium_lane_budget_ms": self.lane_budget_ms,
                     **model_debug,
                     "skipped_pipeline": [
                         "semantic_turn_router",
@@ -258,7 +331,17 @@ class PremiumDirectAnswerService:
         self,
         *,
         model_input: str,
+        instructions: str = "",
+        deadline: AbsoluteTurnDeadline | None = None,
     ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
+        deadline = deadline or AbsoluteTurnDeadline(
+            started_at=time.perf_counter(),
+            turn_deadline_ms=self.lane_budget_ms,
+        )
+        primary_budget_ms = min(
+            max(0.0, self.primary_timeout_seconds * 1000.0),
+            deadline.remaining_ms(),
+        )
         primary_debug = {
             "primary_model": self.primary_model,
             "primary_reasoning_effort": self.primary_reasoning_effort or None,
@@ -269,7 +352,19 @@ class PremiumDirectAnswerService:
             "fallback_timeout_seconds": self.fallback_timeout_seconds,
             "fallback_max_retries": self.fallback_max_retries,
             "service_tier": self.service_tier or None,
+            "premium_lane_budget_ms": self.lane_budget_ms,
+            "primary_budget_ms": primary_budget_ms,
+            "fallback_budget_ms": 0.0,
+            "fallback_skipped_due_to_budget": False,
         }
+
+        if primary_budget_ms <= 0:
+            return "", [], {
+                **primary_debug,
+                "primary_failed": True,
+                "primary_error_type": "PremiumLaneBudgetExhausted",
+                "fallback_skipped_due_to_budget": True,
+            }
 
         logger.info(
             "premium_direct_primary_request model=%s reasoning_effort=%s timeout_seconds=%s "
@@ -289,9 +384,11 @@ class PremiumDirectAnswerService:
             primary_text, primary_sources, primary_call_debug = self._call_model(
                 model=self.primary_model,
                 reasoning_effort=self.primary_reasoning_effort,
-                timeout_seconds=self.primary_timeout_seconds,
+                timeout_seconds=primary_budget_ms / 1000.0,
                 max_retries=self.primary_max_retries,
                 model_input=model_input,
+                instructions=instructions,
+                deadline=deadline,
             )
             if primary_text:
                 return primary_text, primary_sources, {
@@ -304,7 +401,7 @@ class PremiumDirectAnswerService:
             raise RuntimeError("primary model returned empty output_text")
         except Exception as exc:
             logger.warning(
-                "premium_direct_primary_failed; trying fallback model=%s "
+                "premium_direct_primary_failed; evaluating fallback model=%s "
                 "error_type=%s error=%s",
                 self.fallback_model,
                 exc.__class__.__name__,
@@ -316,26 +413,60 @@ class PremiumDirectAnswerService:
                 "primary_error": str(exc)[:1000],
             }
 
+        fallback_budget_ms = min(
+            max(0.0, self.fallback_timeout_seconds * 1000.0),
+            deadline.remaining_ms(),
+        )
+        if fallback_budget_ms < self.minimum_fallback_budget_ms:
+            logger.info(
+                "premium_direct_fallback_skipped_due_to_budget remaining_ms=%s",
+                fallback_budget_ms,
+            )
+            return "", [], {
+                **primary_debug,
+                **primary_error_debug,
+                "fallback_budget_ms": fallback_budget_ms,
+                "fallback_skipped_due_to_budget": True,
+            }
+
+        primary_debug["fallback_budget_ms"] = fallback_budget_ms
         logger.info(
             "premium_direct_fallback_request model=%s reasoning_effort=%s "
             "timeout_seconds=%s max_retries=%s web_search=%s "
             "search_context_size=%s input_chars=%s",
             self.fallback_model,
             self.fallback_reasoning_effort or None,
-            self.fallback_timeout_seconds,
+            fallback_budget_ms / 1000.0,
             self.fallback_max_retries,
             self.web_search_enabled,
             self.web_search_context_size,
             len(model_input),
         )
 
-        fallback_text, fallback_sources, fallback_call_debug = self._call_model(
-            model=self.fallback_model,
-            reasoning_effort=self.fallback_reasoning_effort,
-            timeout_seconds=self.fallback_timeout_seconds,
-            max_retries=self.fallback_max_retries,
-            model_input=model_input,
-        )
+        try:
+            fallback_text, fallback_sources, fallback_call_debug = self._call_model(
+                model=self.fallback_model,
+                reasoning_effort=self.fallback_reasoning_effort,
+                timeout_seconds=fallback_budget_ms / 1000.0,
+                max_retries=self.fallback_max_retries,
+                model_input=model_input,
+                instructions=instructions,
+                deadline=deadline,
+            )
+        except Exception as exc:
+            logger.warning(
+                "premium_direct_fallback_failed error_type=%s error=%s",
+                exc.__class__.__name__,
+                str(exc)[:500],
+            )
+            return "", [], {
+                **primary_debug,
+                **primary_error_debug,
+                "fallback_budget_ms": fallback_budget_ms,
+                "fallback_failed": True,
+                "fallback_error_type": exc.__class__.__name__,
+                "fallback_error": str(exc)[:1000],
+            }
         return fallback_text, fallback_sources, {
             **primary_debug,
             **primary_error_debug,
@@ -352,15 +483,28 @@ class PremiumDirectAnswerService:
         timeout_seconds: float,
         max_retries: int,
         model_input: str,
+        instructions: str = "",
+        deadline: AbsoluteTurnDeadline | None = None,
     ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
-        client = self._client(
-            timeout_seconds=timeout_seconds,
-            max_retries=max_retries,
-        )
+        def create_response(request_kwargs: dict[str, Any]) -> Any:
+            request_timeout_seconds = timeout_seconds
+            if deadline is not None:
+                remaining_ms = deadline.remaining_ms()
+                if remaining_ms <= 0:
+                    raise TimeoutError("Premium Direct lane deadline exhausted")
+                request_timeout_seconds = min(timeout_seconds, remaining_ms / 1000.0)
+            client = self._client(
+                timeout_seconds=request_timeout_seconds,
+                max_retries=max_retries,
+            )
+            return client.responses.create(**request_kwargs)
+
         request_kwargs: dict[str, Any] = {
             "model": model,
             "input": model_input,
         }
+        if instructions:
+            request_kwargs["instructions"] = instructions
 
         effort = (reasoning_effort or "").strip()
         if effort and effort.lower() not in {"none", "off", "false", "0"}:
@@ -381,12 +525,13 @@ class PremiumDirectAnswerService:
                         }
                     ],
                     "tool_choice": "required" if self.web_search_required else "auto",
+                    "max_tool_calls": self.max_tool_calls,
                     "include": ["web_search_call.action.sources"],
                 }
             )
 
         try:
-            response = client.responses.create(**request_kwargs)
+            response = create_response(request_kwargs)
         except TypeError as exc:
             if not self.web_search_enabled:
                 raise
@@ -406,7 +551,7 @@ class PremiumDirectAnswerService:
             ]
             search_mode = "web_search_preview"
             try:
-                response = client.responses.create(**legacy_kwargs)
+                response = create_response(legacy_kwargs)
             except TypeError:
                 if self.web_search_required:
                     raise
@@ -419,7 +564,7 @@ class PremiumDirectAnswerService:
                 closed_book_kwargs.pop("tools", None)
                 closed_book_kwargs.pop("tool_choice", None)
                 search_mode = "closed_book_after_search_tool_unavailable"
-                response = client.responses.create(**closed_book_kwargs)
+                response = create_response(closed_book_kwargs)
 
         answer_text = (getattr(response, "output_text", "") or "").strip()
         web_sources = self._extract_web_sources(response)
@@ -432,9 +577,15 @@ class PremiumDirectAnswerService:
             "web_search_returned_sources": bool(web_sources),
         }
 
-    def _history_text(self, frontend_messages: list[dict[str, Any]]) -> str:
+    def _history_text(
+        self,
+        frontend_messages: list[dict[str, Any]],
+        *,
+        latest_question: str = "",
+    ) -> str:
         rows: list[str] = []
         total_chars = 0
+        latest_history_item_seen = False
 
         for item in reversed(frontend_messages):
             if len(rows) >= self.max_history_turns:
@@ -459,6 +610,15 @@ class PremiumDirectAnswerService:
             if not text:
                 continue
 
+            if not latest_history_item_seen:
+                latest_history_item_seen = True
+                if (
+                    role == "user"
+                    and self._normalized_context_text(text)
+                    == self._normalized_context_text(latest_question)
+                ):
+                    continue
+
             clipped = text[: self.max_history_chars_per_turn]
             row = f"{role}: {clipped}"
             if total_chars + len(row) > self.max_history_total_chars:
@@ -470,6 +630,10 @@ class PremiumDirectAnswerService:
         rows.reverse()
         return "\n".join(rows)
 
+    @staticmethod
+    def _normalized_context_text(value: str) -> str:
+        return " ".join(value.split()).casefold()
+
     def _model_input(
         self,
         *,
@@ -477,57 +641,35 @@ class PremiumDirectAnswerService:
         latest_question: str,
         is_zh: bool,
     ) -> str:
-        if is_zh:
-            research_instruction = (
-                "请直接、准确、完整地回答用户最新问题。"
-                "对于涉及澳大利亚移民法、签证、法规、期限、现行政策或其他可变事实的问题，"
-                "使用可用的网页搜索工具进行主动检索；优先检索并引用澳大利亚联邦立法登记册、"
-                "澳大利亚内政部、联邦法院或其他一手权威来源。"
-                "发现法规交叉引用时应继续追踪，例如从 Schedule 2 追踪到 Schedule 1、"
-                "Schedule 3、Migration Act、相关立法文书、过渡条款或判例。"
-                "不要因为找到第一个相关页面就停止。"
-                "先明确直接结论，再解释决定性规则、不同分支和实际含义；在有助于理解时提供简短例子。"
-                "对于无法由来源支持的内容，应明确说明不确定性，不要猜测。"
-                "不要自行编造链接或来源列表；实际搜索来源将由系统从工具结果中提取。"
-            )
-            if history_text:
-                return (
-                    "以下是最近对话。必须正确理解诸如“第二个”“是的”“之前”等依赖上下文的简短回复，"
-                    "不要把它们当作新的独立问题：\n"
-                    f"{history_text}\n\n"
-                    "用户最新问题：\n"
-                    f"{latest_question}\n\n"
-                    f"{research_instruction}"
-                )
-            return f"{latest_question}\n\n{research_instruction}"
-
-        research_instruction = (
-            "Answer the latest question directly, precisely and comprehensively. "
-            "For Australian immigration law, visas, legislation, deadlines, current policy, "
-            "or other changeable factual matters, use the available web-search tool proactively. "
-            "Prioritise primary authoritative sources such as the Federal Register of Legislation, "
-            "the Department of Home Affairs, Federal Court decisions and other official Australian "
-            "government material. Follow legislative cross-references rather than stopping at the "
-            "first relevant page—for example, continue from Schedule 2 into Schedule 1, Schedule 3, "
-            "the Migration Act, legislative instruments, transitional provisions or case law when "
-            "the controlling rule requires it. Do not stop merely because one relevant result has "
-            "been found. State the direct conclusion first, then explain the controlling rule, "
-            "material branches and practical meaning. Include a concise worked example where it "
-            "materially improves understanding. Clearly identify uncertainty when authoritative "
-            "sources do not establish the answer, and do not guess. Do not invent links or a source "
-            "list; the system will extract the actual sources returned by the search tool."
-        )
         if history_text:
             return (
-                "Recent chat history follows. Correctly resolve short contextual replies such as "
-                "'the second', 'yes', or 'before that date'; do not treat them as unrelated new "
-                "questions:\n"
+                "Recent conversation context:\n"
                 f"{history_text}\n\n"
                 "Latest user question:\n"
-                f"{latest_question}\n\n"
-                f"{research_instruction}"
+                f"{latest_question}"
             )
-        return f"{latest_question}\n\n{research_instruction}"
+        return latest_question
+
+    def _model_instructions(self, *, is_zh: bool) -> str:
+        if is_zh:
+            return (
+                "请直接、准确、完整地回答用户最新问题。仅当答案实质上依赖当前或近期变化的信息、"
+                "准确的法规或立法文书措辞、决定性法律交叉引用、模型不确定的事实，或需要权威核实时，"
+                "才使用可用的网页搜索工具；如果无需研究即可可靠回答，不要调用研究工具。"
+                "需要研究时，优先使用澳大利亚联邦立法登记册、澳大利亚内政部、联邦法院及其他官方政府来源。"
+                "必要时追踪具有实质意义的法律交叉引用；获得足够证据后停止研究。"
+                "不要因为工具可用就穷尽式研究，不要猜测，也不要编造引用或链接。"
+            )
+        return (
+            "Answer the user's latest question directly, accurately, and completely. Use available web search "
+            "only when needed to verify current or changing legal requirements, exact legal wording, material "
+            "cross-references, uncertain facts, or information requiring authoritative verification. Do not use "
+            "research unnecessarily. When research is needed, prefer authoritative Australian primary and official "
+            "sources such as the Federal Register of Legislation, the Department of Home Affairs, Federal Court "
+            "decisions, and other official government sources. Follow material cross-references when necessary, "
+            "and stop researching once sufficient evidence exists to answer. Do not perform exhaustive research "
+            "merely because tools are available. Do not guess or fabricate citations or URLs."
+        )
 
     @staticmethod
     def _response_to_dict(response: Any) -> dict[str, Any]:

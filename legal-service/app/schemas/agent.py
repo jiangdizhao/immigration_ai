@@ -46,6 +46,17 @@ class AgentSubmissionV2(StrictContract):
     schema_version: Literal["agent_submission.v2"]
     answer_class: Literal["general", "procedural", "substantive_legal", "safety_blocked"]
     draft_markdown: str = Field(min_length=1, max_length=50000)
+    # Serving metadata is bounded control data, not free-form correction text.
+    # Defaults preserve older shadow/evaluation submissions.
+    next_action: Literal["answer", "ask_followup", "suggest_consultation"] = "answer"
+    user_display_mode: Literal[
+        "direct_short",
+        "general_with_warning",
+        "answer_then_ask",
+        "ask_one_question",
+        "escalate_with_brief_reason",
+        "booking_handoff",
+    ] | None = None
     as_of_date: date | None = None
 
     @field_validator("as_of_date", mode="before")
@@ -228,6 +239,9 @@ class AgentExecutionMetrics(StrictContract):
     checker_block_count: int = Field(default=0, ge=0)
     checker_dependency_block_count: int = Field(default=0, ge=0)
     retry_count: int = Field(default=0, ge=0)
+    continuation_count: int = Field(default=0, ge=0)
+    answer_provider_call_count: int = Field(default=0, ge=0)
+    terminal_continuation_reason: str | None = Field(default=None, max_length=100)
     turn_deadline_ms: int = Field(ge=1)
     backend_total_latency_ms: float = Field(default=0, ge=0)
     pre_agent_latency_ms: float = Field(default=0, ge=0)

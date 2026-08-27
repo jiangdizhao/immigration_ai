@@ -367,14 +367,31 @@ function collectUntrustedStrings(
 
 function collectMessageCarrierStrings(
   messages: unknown,
-  strings: string[]
+  strings: string[],
+  currentOnly = false
 ): void {
   if (!Array.isArray(messages)) {
     collectUntrustedStrings(messages, strings);
     return;
   }
 
-  for (const message of messages) {
+  const messagesToScan = currentOnly
+    ? [
+        [...messages]
+          .reverse()
+          .find(
+            (message) =>
+              typeof message === "object" &&
+              message !== null &&
+              (message as Record<string, unknown>).role === "user"
+          ),
+      ]
+    : messages;
+
+  for (const message of messagesToScan) {
+    if (message === undefined) {
+      continue;
+    }
     if (typeof message === "object" && message !== null) {
       const record = message as Record<string, unknown>;
       if (typeof record.text === "string") {
@@ -405,18 +422,28 @@ function collectMessageCarrierStrings(
 }
 
 /**
- * Guard every client-supplied text carrier the widget routes can forward.
- * Inputs remain independent messages so old history cannot manufacture a new
- * contextual-proximity relationship across turns.
+ * Guard the current client-controlled submission carriers.  Historical
+ * messages are conversational context, not a new submission: scanning them
+ * here would make a previously blocked turn sticky across the session.
  */
 export function evaluateWidgetSubmission(input: {
+  currentIntakeFacts?: unknown;
   intakeFacts?: unknown;
   messages?: unknown;
   question?: string;
 }): PoliticalGateResult {
   const strings = [input.question ?? ""];
-  collectMessageCarrierStrings(input.messages, strings);
-  collectUntrustedStrings(input.intakeFacts, strings);
+  collectMessageCarrierStrings(input.messages, strings, true);
+  // `intakeFacts` is retained as a compatibility fallback for direct callers
+  // that submit no message envelope.  Once a message history is present, it
+  // is carried context and only the explicit current carrier is scanned.
+  const compatibilityFacts =
+    input.currentIntakeFacts !== undefined
+      ? input.currentIntakeFacts
+      : Array.isArray(input.messages) && input.messages.length > 0
+        ? undefined
+        : input.intakeFacts;
+  collectUntrustedStrings(compatibilityFacts, strings);
   let lastResult = evaluatePoliticalText("");
   for (const value of strings) {
     const result = evaluatePoliticalText(value);
@@ -426,6 +453,21 @@ export function evaluateWidgetSubmission(input: {
     lastResult = result;
   }
   return lastResult;
+}
+
+/** Remove blocked raw content from carried message history before model use. */
+export function sanitizePoliticalHistory(messages: unknown): unknown {
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+
+  return messages.filter((message) => {
+    const strings: string[] = [];
+    collectMessageCarrierStrings([message], strings);
+    return !strings.some(
+      (value) => evaluatePoliticalText(value).decision === "block"
+    );
+  });
 }
 
 export const politicalGateIdentity = Object.freeze({

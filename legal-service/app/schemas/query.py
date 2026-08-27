@@ -20,6 +20,9 @@ class QueryRequest(BaseSchema):
     preferred_jurisdiction: str | None = Field(default=settings.canonical_jurisdiction)
     preferred_source_types: list[str] = Field(default_factory=list)
     intake_facts: dict[str, Any] = Field(default_factory=dict)
+    # Facts belonging to the current guided submission.  ``None`` preserves
+    # compatibility for direct/stale clients that only send intake_facts.
+    current_intake_facts: dict[str, Any] | None = None
     top_k: int | None = Field(default=None, ge=1, le=20)
     answer_preference: Literal["auto", "answer_first", "continue_intake", "final_recommendation"] = "answer_first"
     # Public UI processing lane. The default keeps the full legal verification pipeline.

@@ -168,8 +168,34 @@ def test_snapshot_captures_claim_dependencies_evidence_and_phase6_without_resear
         },
         phase6_checker={
             "status": "completed",
-            "decisions": [{"claim_id": "c2", "verdict": "KEEP", "reason_codes": ["SUPPORTED"]}],
-            "material_omission_suspected": False,
+            "decisions": [{
+                "claim_id": "c2",
+                "claim_type": "legal_application",
+                "materiality": "decisive",
+                "claim_text": "Conclusion",
+                "verdict": "KEEP",
+                "reason_codes": ["SUPPORTED"],
+                "evidence_refs": ["exact:opaque-ref"],
+            }],
+            "material_omission_suspected": True,
+            "material_omission_evidence_refs": ["exact:opaque-ref"],
+            "checker_packet": {
+                "material_claim_count": 1,
+                "checker_evidence_count": 1,
+                "canonical_local_count": 1,
+                "native_web_count": 0,
+                "evidence_with_backend_text_count": 1,
+                "checker_evidence_text_chars": 20,
+                "matter_fact_chars": 2,
+                "serialized_packet_chars": 300,
+                "evidence": [{
+                    "evidence_ref": "exact:opaque-ref",
+                    "origin": "canonical_local",
+                    "backend_text_available": True,
+                    "evidence_text_chars": 20,
+                    "claim_ids": ["c2"],
+                }],
+            },
         },
     )
     snapshot = service.build_snapshot(payload=_payload(), response=response, request_id="request-1")
@@ -178,6 +204,11 @@ def test_snapshot_captures_claim_dependencies_evidence_and_phase6_without_resear
     assert snapshot.evidence["reported_evidence_refs"] == ["exact:opaque-ref"]
     assert snapshot.phase6["status"] == "completed"
     assert snapshot.phase6["decisions"][0]["verdict"] == "KEEP"
+    assert snapshot.phase6["decisions"][0]["claim_type"] == "legal_application"
+    assert snapshot.phase6["decisions"][0]["evidence_refs"] == ["exact:opaque-ref"]
+    assert snapshot.phase6["material_omission_suspected"] is True
+    assert snapshot.phase6["checker_packet"]["checker_evidence_count"] == 1
+    assert snapshot.phase6["checker_packet"]["evidence"][0]["origin"] == "canonical_local"
     assert snapshot.research["tool_calls"] == []
 
 

@@ -1,9 +1,9 @@
-"""Phase 5 — Agent runtime service.
+"""Bounded Luna AgentRuntime service.
 
-Core Luna shadow execution: provider/tool loop with absolute deadline,
-terminal submit handling, evidence registry, and metrics.
-
-This is the SHADOW runtime — it does NOT serve customer answers.
+The same bounded provider/tool loop is used by Phase 5 shadow evaluation and
+the Phase 2 Default serving adapter.  Serving policy lives at the caller; this
+class owns execution, request-scoped evidence, terminal submission, and
+content-free metrics.
 """
 
 from __future__ import annotations
@@ -133,6 +133,7 @@ class ShadowRunResult:
     terminal_submission_continuation_count: int
     errors: list[str]
     terminal_continuation_triggered: bool = False
+    terminal_continuation_reason: str | None = None
     terminal_tool_calls: list[ToolCallObservation] = field(default_factory=list)
     shadow_trace: dict[str, Any] | None = None
     reasoning_bank_telemetry: dict[str, Any] = field(default_factory=dict)
@@ -157,15 +158,18 @@ class ShadowRunResult:
     checker_error_code: str | None = None
     checker_skip_reason: str | None = None
     checker_latency_ms: float = 0.0
+    checker_decisions: list[dict[str, Any]] = field(default_factory=list)
+    checker_packet_manifest: dict[str, Any] = field(default_factory=dict)
 
 
 class AgentRuntimeService:
-    """Luna shadow agent runtime.
+    """Bounded Luna agent runtime.
 
     Executes ONE Luna run with provider/tool loop, absolute deadline,
     terminal submit handling, and evidence registry.
 
-    This is SHADOW ONLY — never serves customer answers.
+    ``run`` is the explicit runtime API.  ``run_shadow`` remains as a
+    compatibility alias for the Phase 5 shadow adapter and tests.
     """
 
     def __init__(
@@ -189,7 +193,7 @@ class AgentRuntimeService:
             reasoning_bank_runtime_service or ReasoningBankRuntimeService()
         )
 
-    async def run_shadow(
+    async def run(
         self,
         request: AgentRuntimeRequest,
         *,
@@ -200,7 +204,7 @@ class AgentRuntimeService:
         schedule2_navigation_map: Any = None,
         exact_legal_lookup_service: Any = None,
     ) -> ShadowRunResult:
-        """Execute one shadow Luna agent run."""
+        """Execute one bounded Luna agent run."""
         start_time = time.perf_counter()
         errors: list[str] = []
         provider_response_ids: list[str] = []
@@ -229,9 +233,10 @@ class AgentRuntimeService:
             exact_legal_lookup_service=exact_legal_lookup_service,
         )
         if request.mode == "default" and request.experiment_arm == "N":
-            # Arm N is evaluation-only.  Loading the tracked sidecar here keeps
-            # the navigation adapter read-only and request-local; a missing or
-            # malformed artifact becomes a deterministic unavailable tool result.
+            # Arm N is the bounded Default research capability profile. Loading
+            # the tracked sidecar keeps navigation read-only and request-local;
+            # a missing or malformed artifact becomes a deterministic
+            # unavailable tool result.
             if tool_context.schedule2_navigation_map is None:
                 try:
                     from app.legal_map_experimental.schedule2_navigation_sidecar import (
@@ -284,8 +289,9 @@ class AgentRuntimeService:
         submission_received = False
         submission: AgentSubmissionV2 | None = None
         terminal_missing = False
-        continuation_count = 0
+        terminal_submission_continuation_count = 0
         terminal_continuation_triggered = False
+        terminal_continuation_reason: str | None = None
         previous_response_id: str | None = None
         flat_rag_executed_count = 0
         flat_rag_denied_count = 0
@@ -315,10 +321,14 @@ class AgentRuntimeService:
         checker_error_code: str | None = None
         checker_skip_reason: str | None = None
         checker_latency_ms = 0.0
+        checker_decisions: list[dict[str, Any]] = []
+        checker_packet_manifest: dict[str, Any] = {}
         checker_call_count = 0
         answer_agent_duration_ms = 0.0
         answer_provider_call_count = 0
         terminal_phase = False
+        terminal_recovery_attempted = False
+        terminal_recovery_pending = False
         prev_call_was_failed = False
         prev_call_was_missing_terminal = False
 
@@ -332,6 +342,50 @@ class AgentRuntimeService:
 
         def _research_stage_remaining_ms() -> float:
             return max(0.0, (research_stage_deadline_at - deadline.clock()) * 1000.0)
+
+        def _provider_call_kind() -> str:
+            # A terminal recovery follows a failed research call, but it is a
+            # bounded continuation rather than a provider retry.  Keep that
+            # distinction explicit in the per-call telemetry.
+            if terminal_recovery_pending:
+                return "continuation"
+            if prev_call_was_failed:
+                return "retry"
+            if provider_call_count > 1 and prev_call_was_missing_terminal:
+                return "missing_terminal_continuation"
+            if provider_call_count > 1:
+                return "continuation"
+            return "initial"
+
+        def _begin_terminal_recovery(reason: str) -> bool:
+            nonlocal terminal_phase
+            nonlocal terminal_recovery_attempted
+            nonlocal terminal_recovery_pending
+            nonlocal terminal_continuation_triggered
+            nonlocal terminal_submission_continuation_count
+            nonlocal terminal_continuation_reason
+
+            # Recovery is available only after a research-stage failure, with
+            # accumulated conversation/tool context and enough of the original
+            # absolute deadline for the existing terminal contract.  The
+            # retry viability threshold is reused; no second threshold is
+            # introduced for this path.
+            if (
+                terminal_phase
+                or terminal_recovery_attempted
+                or submission_received
+                or provider_call_count >= budget.max_provider_calls
+                or len(messages) <= 2
+                or deadline.remaining_ms() < budget.retry_viability_threshold_ms
+            ):
+                return False
+            terminal_phase = True
+            terminal_recovery_attempted = True
+            terminal_recovery_pending = True
+            terminal_continuation_triggered = True
+            terminal_submission_continuation_count = 1
+            terminal_continuation_reason = reason
+            return True
 
         try:
             while provider_call_count < budget.max_provider_calls:
@@ -362,6 +416,7 @@ class AgentRuntimeService:
                     else min(remaining, research_remaining)
                 )
 
+                provider_call_started = time.perf_counter()
                 try:
                     response = await self._provider.call(
                         system_prompt=answer_system_prompt,
@@ -384,11 +439,62 @@ class AgentRuntimeService:
                         registry=registry,
                         previous_response_id=previous_response_id,
                     )
-                except TurnDeadlineExceeded:
+                except TurnDeadlineExceeded as exc:
+                    provider_call_observations.append(ProviderCallObservation(
+                        stage="terminal_synthesis" if terminal_phase else "answer_research",
+                        call_index=provider_call_count,
+                        call_kind=_provider_call_kind(),
+                        response_id=None,
+                        previous_response_id=previous_response_id,
+                        model=policy.model,
+                        effort=getattr(policy, "reasoning_effort", None),
+                        duration_ms=max(0.0, (time.perf_counter() - provider_call_started) * 1000.0),
+                        timeout_allocated_ms=call_timeout_ms,
+                        remaining_deadline_before_call_ms=remaining,
+                        research_stage_remaining_before_ms=0 if terminal_phase else research_remaining,
+                        absolute_remaining_after_ms=deadline.remaining_ms(),
+                        research_stage_remaining_after_ms=0 if terminal_phase else _research_stage_remaining_ms(),
+                        input_items_count=len(messages),
+                        input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
+                        function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                        tool_definitions_count=len(provider_tools),
+                        status="timeout",
+                        is_retry=(_provider_call_kind() == "retry"),
+                    ))
                     errors.append("Deadline exceeded during provider call")
                     break
                 except Exception as exc:
                     logger.exception("Provider call failed")
+                    failure_kind = "timeout" if isinstance(exc, TimeoutError) else "error"
+                    provider_call_observations.append(ProviderCallObservation(
+                        stage="terminal_synthesis" if terminal_phase else "answer_research",
+                        call_index=provider_call_count,
+                        call_kind=_provider_call_kind(),
+                        response_id=None,
+                        previous_response_id=previous_response_id,
+                        model=policy.model,
+                        effort=getattr(policy, "reasoning_effort", None),
+                        duration_ms=max(0.0, (time.perf_counter() - provider_call_started) * 1000.0),
+                        timeout_allocated_ms=call_timeout_ms,
+                        remaining_deadline_before_call_ms=remaining,
+                        research_stage_remaining_before_ms=0 if terminal_phase else research_remaining,
+                        absolute_remaining_after_ms=deadline.remaining_ms(),
+                        research_stage_remaining_after_ms=0 if terminal_phase else _research_stage_remaining_ms(),
+                        input_items_count=len(messages),
+                        input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
+                        function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                        tool_definitions_count=len(provider_tools),
+                        status=failure_kind,
+                        is_retry=(_provider_call_kind() == "retry"),
+                    ))
+                    if terminal_phase:
+                        errors.append(f"Terminal synthesis provider call failed: {exc}")
+                        break
+                    if _begin_terminal_recovery(
+                        "research_provider_timeout" if failure_kind == "timeout" else "research_provider_error"
+                    ):
+                        errors.append(f"Provider call failed during research: {exc}")
+                        continue
                     if provider_call_count <= budget.max_retries + 1:
                         if not self._retry_threshold_met(budget=budget, deadline=deadline):
                             provider_retry_skipped_reason = "retry_viability_threshold_not_met"
@@ -408,13 +514,8 @@ class AgentRuntimeService:
                 pii_violation_count += response.pii_violation_count
 
                 # Record provider-call diagnostic observation (content-free).
-                call_kind = "initial"
-                if prev_call_was_failed:
-                    call_kind = "retry"
-                elif provider_call_count > 1 and prev_call_was_missing_terminal:
-                    call_kind = "missing_terminal_continuation"
-                elif provider_call_count > 1:
-                    call_kind = "continuation"
+                call_kind = _provider_call_kind()
+                terminal_recovery_pending = False
                 provider_call_observations.append(ProviderCallObservation(
                     stage="terminal_synthesis" if terminal_phase else "answer_research",
                     call_index=provider_call_count,
@@ -464,6 +565,10 @@ class AgentRuntimeService:
 
                 if response.status == "timeout":
                     errors.append("Provider call timed out")
+                    if terminal_phase:
+                        break
+                    if _begin_terminal_recovery("research_provider_timeout"):
+                        continue
                     if provider_call_count <= budget.max_retries + 1:
                         if not self._retry_threshold_met(budget=budget, deadline=deadline):
                             provider_retry_skipped_reason = "retry_viability_threshold_not_met"
@@ -478,6 +583,10 @@ class AgentRuntimeService:
 
                 if response.status == "error":
                     errors.append("Provider call returned error")
+                    if terminal_phase:
+                        break
+                    if _begin_terminal_recovery("research_provider_error"):
+                        continue
                     if provider_call_count <= budget.max_retries + 1:
                         if not self._retry_threshold_met(budget=budget, deadline=deadline):
                             provider_retry_skipped_reason = "retry_viability_threshold_not_met"
@@ -715,7 +824,13 @@ class AgentRuntimeService:
                                     break
                             elif result.submission_action is not None:
                                 if result.submission_action.can_continue:
-                                    continuation_count += 1
+                                    if terminal_recovery_attempted:
+                                        errors.append(
+                                            "Terminal synthesis submission failed after research recovery; no second attempt allowed"
+                                        )
+                                        terminal_failure = True
+                                        break
+                                    terminal_submission_continuation_count += 1
                                     terminal_continuation_triggered = True
                                 else:
                                     errors.append(f"Terminal submission failed: {result.submission_action.reason}")
@@ -763,10 +878,15 @@ class AgentRuntimeService:
                 else:
                     # No custom tool calls — provider returned text without submit_answer
                     terminal_missing = True
+                    if terminal_recovery_attempted:
+                        errors.append(
+                            "Terminal synthesis missing submit_answer after research recovery; no second attempt allowed"
+                        )
+                        break
                     action = self._tool_executor.handle_missing_submission(tool_context)
 
                     if action.can_continue:
-                        continuation_count += 1
+                        terminal_submission_continuation_count += 1
                         terminal_continuation_triggered = True
                         terminal_phase = True
                         messages.append({
@@ -827,6 +947,7 @@ class AgentRuntimeService:
                             checker_error_code = "packet_build_failure"
                             checker_remaining_budget_after_ms = deadline.remaining_ms()
                         else:
+                            checker_packet_manifest = self._checker_packet_manifest(checker_input)
                             checker_timeout_allocated_ms = checker_timeout
                             checker = await Phase6CheckerService().run(
                                 checker_input=checker_input,
@@ -910,6 +1031,10 @@ class AgentRuntimeService:
                                 ))
                             if checker.checker_result is not None:
                                 checker_result = checker.checker_result
+                                checker_decisions = self._checker_decision_snapshot(
+                                    checker_input,
+                                    checker_result,
+                                )
                                 checker_keep_claim_ids = [
                                     d.claim_id for d in checker_result.decisions if d.verdict == "KEEP"
                                 ]
@@ -991,7 +1116,14 @@ class AgentRuntimeService:
             checker_flag_count=len(checker_flagged_claim_ids),
             checker_block_count=len(checker_blocked_claim_ids),
             checker_dependency_block_count=len(checker_dependency_blocked_claim_ids),
-            retry_count=max(0, answer_provider_call_count - 1),
+            retry_count=sum(1 for call in provider_call_observations if call.is_retry),
+            continuation_count=sum(
+                1
+                for call in provider_call_observations
+                if call.stage != "phase6_checker"
+                and call.call_kind in {"continuation", "missing_terminal_continuation"}
+            ),
+            answer_provider_call_count=answer_provider_call_count,
             turn_deadline_ms=deadline.turn_deadline_ms,
             backend_total_latency_ms=total_duration,
             pre_agent_latency_ms=0,
@@ -1001,8 +1133,9 @@ class AgentRuntimeService:
                 else "shadow_run" if deadline.remaining_ms() <= 0 else None
             ),
             terminal_submission_missing=terminal_missing,
-            terminal_submission_continuation_count=continuation_count,
+            terminal_submission_continuation_count=terminal_submission_continuation_count,
             terminal_continuation_triggered=terminal_continuation_triggered,
+            terminal_continuation_reason=terminal_continuation_reason,
             answer_agent_latency_ms=answer_agent_duration_ms or total_duration,
             fact_check_latency_ms=checker_latency_ms,
             total_latency_ms=total_duration,
@@ -1035,7 +1168,9 @@ class AgentRuntimeService:
             "tool_round_count": tool_round_count,
             "tool_call_count": len(tool_outputs),
             "terminal_submission_missing": terminal_missing,
-            "terminal_submission_continuation_count": continuation_count,
+            "terminal_submission_continuation_count": terminal_submission_continuation_count,
+            "terminal_continuation_triggered": terminal_continuation_triggered,
+            "terminal_continuation_reason": terminal_continuation_reason,
             "errors": errors,
             "provider_response_ids": provider_response_ids,
             "deadline_ms": deadline.turn_deadline_ms,
@@ -1065,6 +1200,8 @@ class AgentRuntimeService:
             "checker_timeout_allocated_ms": checker_timeout_allocated_ms,
             "checker_error_code": checker_error_code,
             "checker_skip_reason": checker_skip_reason,
+            "checker_decisions": checker_decisions,
+            "checker_packet_manifest": checker_packet_manifest,
             "reasoning_bank": reasoning_bank_telemetry,
         }
 
@@ -1079,8 +1216,9 @@ class AgentRuntimeService:
             metrics=metrics,
             provider_response_ids=provider_response_ids,
             terminal_submission_missing=terminal_missing,
-            terminal_submission_continuation_count=continuation_count,
+            terminal_submission_continuation_count=terminal_submission_continuation_count,
             terminal_continuation_triggered=terminal_continuation_triggered,
+            terminal_continuation_reason=terminal_continuation_reason,
             terminal_tool_calls=terminal_tool_call_observations,
             errors=errors,
             shadow_trace=shadow_trace,
@@ -1106,6 +1244,119 @@ class AgentRuntimeService:
             checker_error_code=checker_error_code,
             checker_skip_reason=checker_skip_reason,
             checker_latency_ms=checker_latency_ms,
+            checker_decisions=checker_decisions,
+            checker_packet_manifest=checker_packet_manifest,
+        )
+
+    @staticmethod
+    def _checker_decision_snapshot(
+        checker_input: Any,
+        checker_result: Any,
+    ) -> list[dict[str, Any]]:
+        """Return bounded, content-safe diagnostics for each checker decision."""
+
+        claims_by_id = {
+            claim.claim_id: claim for claim in checker_input.material_claims
+        }
+        decisions: list[dict[str, Any]] = []
+        for decision in checker_result.decisions[:100]:
+            claim = claims_by_id.get(decision.claim_id)
+            if claim is None:
+                continue
+            decisions.append({
+                "claim_id": decision.claim_id,
+                "claim_type": claim.claim_type,
+                "materiality": claim.materiality,
+                # Claim text is bounded and is already part of the accepted
+                # submission/trace policy.  Evidence text is never duplicated.
+                "claim_text": claim.text[:1000],
+                "verdict": decision.verdict,
+                "reason_codes": list(decision.reason_codes),
+                "evidence_refs": list(decision.supporting_evidence_refs),
+                "claim_evidence_refs": list(claim.evidence_refs),
+                "depends_on": list(claim.depends_on),
+            })
+        return decisions
+
+    @staticmethod
+    def _checker_packet_manifest(checker_input: Any) -> dict[str, Any]:
+        """Describe the exact bounded packet supplied to the checker."""
+
+        claims_by_ref: dict[str, list[str]] = {}
+        for claim in checker_input.material_claims:
+            for evidence_ref in claim.evidence_refs:
+                claims_by_ref.setdefault(evidence_ref, []).append(claim.claim_id)
+
+        evidence_rows: list[dict[str, Any]] = []
+        origin_counts: dict[str, int] = {}
+        evidence_text_chars = 0
+        evidence_with_text_count = 0
+        for item in checker_input.evidence[:60]:
+            text_chars = len(item.text or "")
+            has_backend_text = bool(item.text and item.text.strip())
+            evidence_text_chars += text_chars
+            evidence_with_text_count += int(has_backend_text)
+            origin = str(item.evidence_origin)
+            origin_counts[origin] = origin_counts.get(origin, 0) + 1
+            evidence_rows.append({
+                "evidence_ref": item.evidence_ref,
+                "origin": origin,
+                "backend_text_available": has_backend_text,
+                "evidence_text_chars": text_chars,
+                "source_type": item.source_type,
+                "authority_kind": item.authority_kind,
+                "document_id": item.document_id,
+                "provision_or_span": item.provision_or_span,
+                "claim_ids": claims_by_ref.get(item.evidence_ref, []),
+            })
+
+        compact_facts_json = json.dumps(
+            checker_input.compact_matter_facts,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        packet_json = json.dumps(
+            checker_input.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return {
+            "material_claim_count": len(checker_input.material_claims),
+            "checker_evidence_count": len(checker_input.evidence),
+            "canonical_local_count": origin_counts.get("canonical_local", 0),
+            "native_web_count": origin_counts.get("openai_web_native", 0),
+            "fetched_web_count": origin_counts.get("fetched_web", 0),
+            "graph_evidence_count": 0,
+            "evidence_with_backend_text_count": evidence_with_text_count,
+            "checker_evidence_text_chars": evidence_text_chars,
+            "matter_fact_chars": len(compact_facts_json),
+            "serialized_packet_chars": len(packet_json),
+            "evidence": evidence_rows,
+        }
+
+    async def run_shadow(
+        self,
+        request: AgentRuntimeRequest,
+        *,
+        deadline: AbsoluteTurnDeadline,
+        registry: RequestEvidenceRegistry,
+        flat_rag_search_fn: Any = None,
+        db_session: Any = None,
+        schedule2_navigation_map: Any = None,
+        exact_legal_lookup_service: Any = None,
+    ) -> ShadowRunResult:
+        """Compatibility entry point for the existing non-serving shadow lane."""
+
+        return await self.run(
+            request,
+            deadline=deadline,
+            registry=registry,
+            flat_rag_search_fn=flat_rag_search_fn,
+            db_session=db_session,
+            schedule2_navigation_map=schedule2_navigation_map,
+            exact_legal_lookup_service=exact_legal_lookup_service,
         )
 
     @staticmethod

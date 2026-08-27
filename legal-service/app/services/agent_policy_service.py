@@ -48,6 +48,23 @@ SUBMIT_ANSWER_TOOL = {
                 "type": "string",
                 "description": "The complete answer in Markdown format",
             },
+            "next_action": {
+                "type": "string",
+                "enum": ["answer", "ask_followup", "suggest_consultation"],
+                "description": "Bounded serving action for the existing consultation/task handoff UI",
+            },
+            "user_display_mode": {
+                "type": "string",
+                "enum": [
+                    "direct_short",
+                    "general_with_warning",
+                    "answer_then_ask",
+                    "ask_one_question",
+                    "escalate_with_brief_reason",
+                    "booking_handoff",
+                ],
+                "description": "Optional existing UI display mode; use booking_handoff for an explicit consultation booking request",
+            },
             "as_of_date": {
                 "type": "string",
                 "description": "ISO date (YYYY-MM-DD) the answer is current as of, or null",

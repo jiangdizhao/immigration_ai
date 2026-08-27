@@ -9,6 +9,7 @@ from app.schemas.agent import AgentRuntimeRequest, ExecutionBudget
 from app.services.agent_observability_service import AbsoluteTurnDeadline
 from app.services.agent_runtime_service import AgentRuntimeService, ProviderResponse
 from app.services.tool_executor_service import ToolCallRequest
+from app.schemas.tools import CorpusCoverage, ExactLegalLookupOutput
 
 
 class FakeProvider:
@@ -130,12 +131,28 @@ def _submit_response(*, answer_class: str = "general", call_id: str = "submit-1"
     )
 
 
+def _exact_response(call_id: str = "exact-1") -> ProviderResponse:
+    return ProviderResponse(
+        response_id=f"response-{call_id}",
+        model="gpt-5.6-luna",
+        status="ok",
+        tool_calls=[ToolCallRequest(
+            call_id=call_id,
+            name="exact_legal_lookup",
+            arguments={"requests": [{"query": "unmatched legal provision"}]},
+        )],
+    )
+
+
 def _run(
     provider: FakeProvider,
     *,
     budget: ExecutionBudget | None = None,
     flat_calls: list[str] | None = None,
     checker_enabled: bool = False,
+    deadline=None,
+    exact_service=None,
+    flat_search=None,
 ):
     settings = Settings(
         DATABASE_URL="postgresql://test",
@@ -158,9 +175,10 @@ def _run(
             runtime = AgentRuntimeService(provider=provider)
             return await runtime.run_shadow(
                 _request(budget=budget),
-                deadline=AbsoluteTurnDeadline(time.perf_counter(), 40000),
+                deadline=deadline or AbsoluteTurnDeadline(time.perf_counter(), 40000),
                 registry=__import__("app.services.request_evidence_registry", fromlist=["create_registry"]).create_registry("orchestration-request"),
-                flat_rag_search_fn=fake_flat_rag_search,
+                flat_rag_search_fn=flat_search or fake_flat_rag_search,
+                exact_legal_lookup_service=exact_service,
             )
     import asyncio
     return asyncio.run(execute())
@@ -214,6 +232,138 @@ def test_web_remains_visible_after_local_retrieval():
     assert result.status == "completed"
     assert "web_search" in provider.seen_tools[1]
     assert result.metrics.flat_rag_call_count == 1
+
+
+def test_research_timeout_recovers_once_with_terminal_only_submission():
+    timeout = ProviderResponse(
+        response_id="response-timeout",
+        model="gpt-5.6-luna",
+        status="timeout",
+        duration_ms=10.0,
+    )
+    provider = FakeProvider([_flat_response(), timeout, _submit_response()])
+    def usable_flat_search(**_kwargs):
+        from app.tools.flat_rag_search import FlatRagResult
+        return FlatRagResult(
+            chunks=[{"chunk_id": "chunk-1", "text": "usable context"}],
+            evidence_refs=[],
+            debug={},
+            duration_ms=1.0,
+        )
+
+    result = _run(provider, flat_search=usable_flat_search)
+
+    assert result.status == "completed"
+    assert provider.call_count == 3
+    assert provider.seen_tools[2] == ["submit_answer"]
+    assert provider.seen_tool_choices[2] == {"type": "function", "name": "submit_answer"}
+    assert result.submission is not None
+    assert result.tool_outputs[0].status == "ok"
+    assert len(result.tool_outputs[0].data["chunks"]) == 1
+    assert result.terminal_continuation_triggered is True
+    assert result.terminal_continuation_reason == "research_provider_timeout"
+    assert result.terminal_submission_continuation_count == 1
+    assert result.metrics.retry_count == 0
+    # Call #2 and the terminal recovery call are both continuations; neither
+    # is a retry of the failed provider request.
+    assert result.metrics.continuation_count == 2
+    assert [call.status for call in result.metrics.provider_calls] == ["ok", "timeout", "ok"]
+    assert result.metrics.provider_calls[1].is_retry is False
+    assert result.metrics.provider_calls[1].stage == "answer_research"
+    assert result.metrics.provider_calls[2].stage == "terminal_synthesis"
+    assert result.metrics.provider_calls[2].call_kind == "continuation"
+    assert result.metrics.submit_answer_call_count == 1
+
+
+def test_terminal_recovery_failure_does_not_start_a_second_terminal_attempt():
+    timeout = ProviderResponse(
+        response_id="response-timeout",
+        model="gpt-5.6-luna",
+        status="timeout",
+        duration_ms=10.0,
+    )
+    provider = FakeProvider([_flat_response(), timeout, timeout])
+    result = _run(provider)
+
+    assert result.status == "error"
+    assert provider.call_count == 3
+    assert provider.seen_tools[2] == ["submit_answer"]
+    assert result.submission is None
+    assert result.metrics.submit_answer_call_count == 0
+    assert result.metrics.provider_calls[-1].stage == "terminal_synthesis"
+
+
+def test_zero_result_exact_lookup_is_survivable():
+    class EmptyExactService:
+        def lookup(self, *_args, **_kwargs):
+            return ExactLegalLookupOutput(
+                matches=[],
+                resolved_cross_references=[],
+                unresolved_cross_references=[],
+                coverage=CorpusCoverage(
+                    family="test",
+                    status="unknown",
+                    report_version="test",
+                ),
+                corpus_version="unknown",
+                index_version="unknown",
+            )
+
+    provider = FakeProvider([_exact_response(), _submit_response()])
+    result = _run(provider, exact_service=EmptyExactService())
+
+    assert result.status == "completed"
+    assert provider.call_count == 2
+    assert result.metrics.exact_lookup_call_count == 1
+    assert result.metrics.exact_lookup_unresolved_locator_count == 1
+    assert result.metrics.submit_answer_call_count == 1
+    assert result.tool_outputs[0].data["lookups"]
+    assert all(not lookup["matches"] for lookup in result.tool_outputs[0].data["lookups"])
+
+
+def test_terminal_recovery_is_skipped_when_absolute_budget_is_below_viability_threshold():
+    clock = AdvancingClock()
+    budget = ExecutionBudget(
+        max_tool_rounds=2,
+        max_provider_calls=3,
+        max_retries=1,
+        turn_deadline_ms=40000,
+        answer_research_target_ms=35000,
+        checker_target_ms=5000,
+        max_flat_rag_calls=1,
+        retry_viability_threshold_ms=8000,
+    )
+    timeout = ProviderResponse(
+        response_id="response-timeout",
+        model="gpt-5.6-luna",
+        status="timeout",
+        duration_ms=10.0,
+    )
+    provider = AdvancingProvider([_flat_response(), timeout], clock, [33.0, 0.0])
+    result = _run(
+        provider,
+        budget=budget,
+        deadline=AbsoluteTurnDeadline(0.0, 40000, clock=clock),
+    )
+
+    assert result.status == "error"
+    assert provider.call_count == 2
+    assert result.terminal_continuation_triggered is False
+    assert result.metrics.submit_answer_call_count == 0
+
+
+def test_terminal_recovery_is_skipped_after_absolute_deadline_expires():
+    clock = AdvancingClock()
+    clock.value = 40000.0
+    provider = FakeProvider([_flat_response(), _submit_response()])
+    result = _run(
+        provider,
+        deadline=AbsoluteTurnDeadline(0.0, 40000, clock=clock),
+    )
+
+    assert result.status == "timeout"
+    assert provider.call_count == 0
+    assert result.terminal_continuation_triggered is False
 
 
 def test_substantive_arm_l_finishes_with_checker_disabled():

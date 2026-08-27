@@ -14,8 +14,10 @@ import { ChatbotError } from "@/lib/errors";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
+  sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
+import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 
 export const maxDuration = 180;
 
@@ -50,6 +52,7 @@ const widgetRequestBodySchema = z.object({
     .optional()
     .default("default"),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
+  currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: z
     .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
@@ -432,7 +435,7 @@ function normalizeRetrievalDebug(
   const pfvd = dbg.proposal_first_verification_depth ?? {};
   const customerQuality = dbg.customer_answer_quality ?? {};
   const customerPlan = customerQuality.customer_answer_plan ?? {};
-  return {
+  const normalized = {
     effective_question:
       (typeof dbg.effective_question === "string" && dbg.effective_question) ||
       (typeof dbg.contextualization?.standalone_question === "string" &&
@@ -462,6 +465,10 @@ function normalizeRetrievalDebug(
       customerPlan.public_option_coverage_map ??
       [],
   };
+  const runtimeDebug = defaultAgentRuntimeDebug(dbg);
+  return runtimeDebug
+    ? { ...normalized, defaultAgentRuntime: runtimeDebug }
+    : normalized;
 }
 
 function extractEvidenceGaps(
@@ -638,14 +645,15 @@ function logWidgetDebug(params: {
 function emptyWidgetResponse(
   text: string,
   matterId?: string | null,
-  responseLanguage: ResponseLanguage = detectResponseLanguage(text)
+  responseLanguage: ResponseLanguage = detectResponseLanguage(text),
+  userDisplayMode: string | null = null
 ) {
   return Response.json({
     text,
     responseLanguage,
     citations: [],
     compactSources: [],
-    userDisplayMode: null,
+    userDisplayMode,
     followUpQuestions: [],
     missingFacts: [],
     evidenceGaps: [],
@@ -779,20 +787,30 @@ export async function POST(request: Request) {
       intakeFacts,
       responseLanguage: requestedResponseLanguage,
       answerPreference,
+      currentIntakeFacts,
     } = widgetRequestBodySchema.parse(json);
 
     // This is intentionally before rate limiting, authentication, database
     // access, FastAPI, and persistence. Direct/stale callers cannot make a
     // blocked turn reach any normal server-side state.
-    const gateDecision = evaluateWidgetSubmission({ messages, intakeFacts });
+    const gateDecision = evaluateWidgetSubmission({
+      messages,
+      currentIntakeFacts,
+    });
     if (gateDecision.decision === "block") {
       const blockedResponse = blockedResponseForLocale(gateDecision.locale);
       return emptyWidgetResponse(
         blockedResponse.text,
         null,
-        blockedResponse.responseLanguage
+        blockedResponse.responseLanguage,
+        "political_gate_blocked"
       );
     }
+
+    // A client may carry history created before this gate ran, or may be a
+    // direct/stale caller. Remove blocked message carriers before they reach
+    // FastAPI/model history. The current user message was checked above.
+    const safeMessages = sanitizePoliticalHistory(messages) as typeof messages;
 
     const assistantMode = normalizeAssistantMode(requestedAssistantMode);
 
@@ -820,7 +838,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const question = extractLatestUserText(messages);
+    const question = extractLatestUserText(safeMessages);
     if (!question) {
       return emptyWidgetResponse(
         "Please enter a question so I can help.",
@@ -863,7 +881,8 @@ export async function POST(request: Request) {
         assistant_mode: assistantMode,
         political_gate_version: gateDecision.policyVersion,
         political_gate_decision_id: gateDecision.decisionId,
-        frontend_messages: serializeFrontendMessages(messages),
+        current_intake_facts: currentIntakeFacts ?? null,
+        frontend_messages: serializeFrontendMessages(safeMessages),
       },
     });
 

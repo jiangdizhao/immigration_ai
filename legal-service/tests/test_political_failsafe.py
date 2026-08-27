@@ -66,7 +66,7 @@ def test_gate_result_and_telemetry_do_not_expose_match_or_user_text(
     }
 
 
-def test_payload_guard_scans_history_and_intake_and_ignores_client_gate_metadata(
+def test_payload_guard_scans_current_message_and_compatibility_intake_and_ignores_client_gate_metadata(
     failsafe: PoliticalFailsafeService,
 ) -> None:
     base = {
@@ -78,7 +78,8 @@ def test_payload_guard_scans_history_and_intake_and_ignores_client_gate_metadata
         **{
             **base,
             "frontend_messages": [
-                {"role": "user", "parts": [{"type": "text", "text": "falun gong"}]}
+                {"role": "user", "parts": [{"type": "text", "text": "falun gong"}]},
+                {"role": "user", "parts": [{"type": "text", "text": "Can I apply for a visa?"}]},
             ],
         }
     )
@@ -89,8 +90,41 @@ def test_payload_guard_scans_history_and_intake_and_ignores_client_gate_metadata
         }
     )
 
-    assert failsafe.evaluate_payload(history_bypass).decision == "block"
+    assert failsafe.evaluate_payload(history_bypass).decision == "allow"
     assert failsafe.evaluate_payload(intake_bypass).decision == "block"
+
+
+def test_payload_guard_checks_explicit_current_intake_facts_only(
+    failsafe: PoliticalFailsafeService,
+) -> None:
+    payload = QueryRequest(
+        question="Can I apply for a visa?",
+        intake_facts={"previous_free_text": "falun gong"},
+        current_intake_facts={},
+    )
+    assert failsafe.evaluate_payload(payload).decision == "allow"
+
+    payload.current_intake_facts = {"current_free_text": "falun gong"}
+    assert failsafe.evaluate_payload(payload).decision == "block"
+
+
+def test_historical_blocked_content_is_removed_before_normal_model_use(
+    failsafe: PoliticalFailsafeService,
+) -> None:
+    payload = QueryRequest(
+        question="Can I apply for a visa?",
+        intake_facts={"previous_free_text": "falun gong", "visa": "461"},
+        frontend_messages=[
+            {"role": "user", "parts": [{"type": "text", "text": "falun gong"}]},
+            {"role": "user", "parts": [{"type": "text", "text": "Can I apply for a visa?"}]},
+        ],
+        current_intake_facts={},
+    )
+
+    safe = failsafe.sanitize_payload_history(payload)
+    assert safe.intake_facts == {"visa": "461"}
+    assert len(safe.frontend_messages) == 1
+    assert "falun gong" not in json.dumps(safe.model_dump(), ensure_ascii=False).lower()
 
 
 def test_payload_guard_matches_text_parts_as_the_forwarded_message(

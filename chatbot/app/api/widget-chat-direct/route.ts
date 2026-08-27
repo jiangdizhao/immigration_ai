@@ -13,8 +13,10 @@ import { ChatbotError } from "@/lib/errors";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
+  sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
+import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 
 export const maxDuration = 180;
 
@@ -50,6 +52,7 @@ const widgetDirectRequestBodySchema = z.object({
     .optional()
     .default("premium"),
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
+  currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: z
     .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
@@ -147,7 +150,7 @@ function normalizeRetrievalDebug(
   retrievalDebug: LegalServiceResponse["retrieval_debug"]
 ) {
   const dbg = retrievalDebug ?? {};
-  return {
+  const normalized = {
     effective_question:
       (typeof dbg.effective_question === "string" && dbg.effective_question) ||
       null,
@@ -159,19 +162,24 @@ function normalizeRetrievalDebug(
     live_result_count: 0,
     top_titles: [],
   };
+  const runtimeDebug = defaultAgentRuntimeDebug(dbg);
+  return runtimeDebug
+    ? { ...normalized, defaultAgentRuntime: runtimeDebug }
+    : normalized;
 }
 
 function emptyWidgetResponse(
   text: string,
   matterId?: string | null,
-  responseLanguage: ResponseLanguage = detectResponseLanguage(text)
+  responseLanguage: ResponseLanguage = detectResponseLanguage(text),
+  userDisplayMode = "general_with_warning"
 ) {
   return Response.json({
     text,
     responseLanguage,
     citations: [],
     compactSources: [],
-    userDisplayMode: "general_with_warning",
+    userDisplayMode,
     followUpQuestions: [],
     missingFacts: [],
     evidenceGaps: [],
@@ -291,20 +299,27 @@ export async function POST(request: Request) {
       intakeFacts,
       responseLanguage: requestedResponseLanguage,
       answerPreference,
+      currentIntakeFacts,
     } = widgetDirectRequestBodySchema.parse(json);
 
     // Defence in depth for direct or stale clients. This must stay ahead of
     // rate limiting, authentication, database access, FastAPI, and message
     // persistence so the blocked text cannot enter a normal server path.
-    const gateDecision = evaluateWidgetSubmission({ messages, intakeFacts });
+    const gateDecision = evaluateWidgetSubmission({
+      messages,
+      currentIntakeFacts,
+    });
     if (gateDecision.decision === "block") {
       const blockedResponse = blockedResponseForLocale(gateDecision.locale);
       return emptyWidgetResponse(
         blockedResponse.text,
         null,
-        blockedResponse.responseLanguage
+        blockedResponse.responseLanguage,
+        "political_gate_blocked"
       );
     }
+
+    const safeMessages = sanitizePoliticalHistory(messages) as typeof messages;
 
     const assistantMode = normalizeAssistantMode(requestedAssistantMode);
 
@@ -328,7 +343,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const question = extractLatestUserText(messages);
+    const question = extractLatestUserText(safeMessages);
     if (!question) {
       return emptyWidgetResponse(
         "Please enter a question so I can help.",
@@ -365,7 +380,8 @@ export async function POST(request: Request) {
         assistant_mode: assistantMode,
         political_gate_version: gateDecision.policyVersion,
         political_gate_decision_id: gateDecision.decisionId,
-        frontend_messages: serializeFrontendMessages(messages),
+        current_intake_facts: currentIntakeFacts ?? null,
+        frontend_messages: serializeFrontendMessages(safeMessages),
       },
     });
 

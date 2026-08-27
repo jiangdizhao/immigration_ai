@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Any
 
+from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.learning import ReasoningBankRuntimeQuery
 from app.services.conversation_memory_service import ConversationMemoryService
@@ -167,6 +168,28 @@ def apply_patch() -> None:
                 "Unified runtime selected premium direct path before semantic router; FastAPI ingress already applied the shared political gate"
             )
             return handle_premium_direct_query(self, db, payload)
+
+        # Phase 2 serving switch.  This branch is deliberately before language
+        # preparation, semantic routing, PFVD, and the legacy fallback.  A
+        # failure-neutral AgentRuntime response is returned by the serving
+        # adapter; it must never silently re-enter PFVD while this flag is on.
+        if (
+            payload.assistant_mode in {"default", "default_legal_pipeline"}
+            and getattr(get_settings(), "default_agent_serving_enabled", False)
+        ):
+            from app.services.default_agent_serving_service import DefaultAgentServingService
+            from app.api.routes.query import observability_service
+
+            logger.info(
+                "Unified runtime selected customer-serving Default AgentRuntime before semantic router"
+            )
+            return DefaultAgentServingService().answer(
+                query_service=self,
+                db=db,
+                payload=payload,
+                deadline=observability_service.current_deadline(),
+                observability=observability_service,
+            )
 
         original_question = payload.question
         language_context = self.language_service.prepare_turn(

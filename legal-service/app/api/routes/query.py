@@ -116,13 +116,19 @@ def run_query(
     # This is the backend timing origin: before engine selection, service
     # construction, matter/state loading, or agent setup.
     accepted_at = time.perf_counter()
+    settings = get_settings()
+    default_agent_selected = (
+        getattr(settings, "default_agent_serving_enabled", False)
+        and payload.assistant_mode in {"default", "default_legal_pipeline"}
+    )
     token = observability_service.begin_turn(
         mode=payload.assistant_mode,
         started_at=accepted_at,
-        architecture_version="legacy.v1",
+        architecture_version=(
+            "phase2.default_agent_runtime" if default_agent_selected else "legacy.v1"
+        ),
     )
     try:
-        settings = get_settings()
         politically_blocked = False
 
         if settings.backend_political_failsafe_enabled:
@@ -161,11 +167,20 @@ def run_query(
                     retrieval_debug={},
                 )
 
+            # Keep defense-in-depth history hygiene for callers that bypass
+            # Next.js.  The current submission was checked above; only blocked
+            # carried history is removed here before any engine can consume it.
+            payload = political_failsafe_service.sanitize_payload_history(payload)
+
         # Launch the non-serving shadow after the political gate and before
         # legacy work.  The shadow receives only immutable request data and
         # owns its DB/provider resources, so legacy state mutation cannot race
         # with a shared Matter/session snapshot.
-        if settings.agent_shadow_enabled and not politically_blocked:
+        if (
+            settings.agent_shadow_enabled
+            and not politically_blocked
+            and not default_agent_selected
+        ):
             is_premium = payload.assistant_mode in (
                 "premium", "premium_direct_gpt55_high",
             )
@@ -202,6 +217,7 @@ def run_query(
         observability_service.mark_agent_started("serving_engine_dispatch")
         response = service.handle_query(db, payload)
         observability_service.mark_answer_completed()
+        observability_service.mark_metrics_complete()
 
         # The normal Default service paths archive through ReviewTraceService
         # with richer state.  This ingress fallback covers Default fast paths

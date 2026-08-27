@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from types import SimpleNamespace
 from typing import Any
 
 from app.core.config import get_settings
@@ -49,6 +50,9 @@ class ReviewTraceService:
     ) -> str | None:
         trace_id: str | None = None
         active_observability: dict[str, Any] | None = None
+        archive_matter: Any = matter
+        archive_payload = payload
+        archive_response = response
         try:
             state_dump = self._safe_json(state)
             response_dump = self._safe_json(response)
@@ -91,32 +95,48 @@ class ReviewTraceService:
             turn_index = self._assistant_turn_count(state_dump)
             if getattr(self.settings, "enable_lawyer_review_trace", False):
                 with SessionLocal() as db:
-                    trace = AnswerTrace(
-                        matter_id=matter.id,
-                        session_id=matter.session_id or payload.session_id,
-                        turn_index=turn_index,
-                        user_message=original_question or payload.question,
-                        assistant_answer=response.answer,
-                        response_language=response.response_language,
-                        confidence=response.confidence,
-                        next_action=response.next_action,
-                        escalate=bool(response.escalate),
-                        user_display_mode=response.user_display_mode,
-                        issue_type=response.issue_type or (state.issue_type if state is not None else None),
-                        visa_type=(state.visa_type if state is not None else None),
-                        operation_type=operation_type,
-                        conversation_state=str(response.conversation_state or (state.conversation_state if state is not None else "") or "") or None,
-                        review_status="unreviewed",
-                        trace_json={
-                            **trace_payload,
-                            "original_question": original_question,
-                            "effective_question": effective_question,
-                        },
-                    )
-                    db.add(trace)
-                    db.commit()
-                    db.refresh(trace)
-                    trace_id = trace.id
+                    verified_matter_id = self._verified_matter_id(db, matter)
+                    if verified_matter_id is None:
+                        # AnswerTrace.matter_id is a non-nullable FK.  Do not
+                        # manufacture a Matter or let a stale/request-only ID
+                        # turn passive diagnostics into an integrity failure.
+                        logger.warning("Skipping AnswerTrace persistence: Matter FK is not valid")
+                        archive_matter = SimpleNamespace(
+                            id=None,
+                            session_id=getattr(matter, "session_id", None),
+                            issue_type=getattr(matter, "issue_type", None),
+                            visa_type=getattr(matter, "visa_type", None),
+                            status=getattr(matter, "status", None),
+                        )
+                        archive_payload = payload.model_copy(update={"matter_id": None})
+                        archive_response = response.model_copy(update={"matter_id": None})
+                    else:
+                        trace = AnswerTrace(
+                            matter_id=verified_matter_id,
+                            session_id=getattr(matter, "session_id", None) or payload.session_id,
+                            turn_index=turn_index,
+                            user_message=original_question or payload.question,
+                            assistant_answer=response.answer,
+                            response_language=response.response_language,
+                            confidence=response.confidence,
+                            next_action=response.next_action,
+                            escalate=bool(response.escalate),
+                            user_display_mode=response.user_display_mode,
+                            issue_type=response.issue_type or (state.issue_type if state is not None else None),
+                            visa_type=(state.visa_type if state is not None else None),
+                            operation_type=operation_type,
+                            conversation_state=str(response.conversation_state or (state.conversation_state if state is not None else "") or "") or None,
+                            review_status="unreviewed",
+                            trace_json={
+                                **trace_payload,
+                                "original_question": original_question,
+                                "effective_question": effective_question,
+                            },
+                        )
+                        db.add(trace)
+                        db.commit()
+                        db.refresh(trace)
+                        trace_id = trace.id
         except Exception:
             logger.exception("Review trace recording failed; public response is unchanged.")
 
@@ -131,9 +151,9 @@ class ReviewTraceService:
                     self.experience_archive_service.safe_capture,
                 )
                 capture_method(
-                    matter=matter,
-                    payload=payload,
-                    response=response,
+                    matter=archive_matter,
+                    payload=archive_payload,
+                    response=archive_response,
                     state=state,
                     answer_trace_id=trace_id,
                     request_id=(active_observability or {}).get("request_id") or payload.client_turn_id,
@@ -146,6 +166,26 @@ class ReviewTraceService:
         except Exception:
             logger.exception("Experience archive capture failed; public response is unchanged.")
         return trace_id
+
+    @staticmethod
+    def _verified_matter_id(db: Any, matter: Any) -> str | None:
+        """Return an existing Matter ID, never an unverified request value."""
+
+        matter_id = getattr(matter, "id", None)
+        if not isinstance(matter_id, str) or not matter_id:
+            return None
+        try:
+            existing = db.get(Matter, matter_id)
+        except AttributeError:
+            try:
+                existing = db.query(Matter).filter(Matter.id == matter_id).one_or_none()
+            except Exception:
+                logger.warning("Matter FK validation unavailable; skipping AnswerTrace", exc_info=True)
+                return None
+        except Exception:
+            logger.warning("Matter FK validation failed; skipping AnswerTrace", exc_info=True)
+            return None
+        return matter_id if existing is not None else None
 
     def _safe_json(self, value: Any) -> Any:
         if value is None:
