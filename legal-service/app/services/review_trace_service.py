@@ -115,8 +115,10 @@ class ReviewTraceService:
                             matter_id=verified_matter_id,
                             session_id=getattr(matter, "session_id", None) or payload.session_id,
                             turn_index=turn_index,
-                            user_message=original_question or payload.question,
-                            assistant_answer=response.answer,
+                            user_message=self._pg_safe_text(
+                                original_question or payload.question
+                            ),
+                            assistant_answer=self._pg_safe_text(response.answer),
                             response_language=response.response_language,
                             confidence=response.confidence,
                             next_action=response.next_action,
@@ -127,11 +129,11 @@ class ReviewTraceService:
                             operation_type=operation_type,
                             conversation_state=str(response.conversation_state or (state.conversation_state if state is not None else "") or "") or None,
                             review_status="unreviewed",
-                            trace_json={
+                            trace_json=self._safe_json({
                                 **trace_payload,
                                 "original_question": original_question,
                                 "effective_question": effective_question,
-                            },
+                            }),
                         )
                         db.add(trace)
                         db.commit()
@@ -187,21 +189,45 @@ class ReviewTraceService:
             return None
         return matter_id if existing is not None else None
 
+    @staticmethod
+    def _pg_safe_text(value: str) -> str:
+        """Replace PostgreSQL-forbidden NUL characters without dropping content."""
+        return value.replace("\x00", "\uFFFD")
+
     def _safe_json(self, value: Any) -> Any:
+        """Return JSON-safe data with PostgreSQL-forbidden NUL removed recursively."""
         if value is None:
             return None
+
         if hasattr(value, "model_dump"):
-            value = value.model_dump()
-        elif isinstance(value, list):
-            value = [self._safe_json(item) for item in value]
-        elif isinstance(value, tuple):
-            value = [self._safe_json(item) for item in value]
-        elif isinstance(value, dict):
-            value = {str(key): self._safe_json(item) for key, item in value.items()}
+            try:
+                value = value.model_dump(mode="json")
+            except TypeError:
+                value = value.model_dump()
+
+        if isinstance(value, str):
+            return self._pg_safe_text(value)
+
+        if isinstance(value, (bool, int, float)):
+            return value
+
+        if isinstance(value, (list, tuple)):
+            return [self._safe_json(item) for item in value]
+
+        if isinstance(value, dict):
+            return {
+                self._pg_safe_text(str(key)): self._safe_json(item)
+                for key, item in value.items()
+            }
+
         try:
-            return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+            normalized = json.loads(
+                json.dumps(value, ensure_ascii=False, default=str)
+            )
         except Exception:
-            return str(value)
+            normalized = str(value)
+
+        return self._safe_json(normalized)
 
     def _assistant_turn_count(self, state_dump: Any) -> int | None:
         if not isinstance(state_dump, dict):

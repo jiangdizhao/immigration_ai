@@ -181,3 +181,78 @@ def test_review_trace_failure_remains_passive(monkeypatch) -> None:
     )
     assert trace_id is None
     assert public_response.model_dump() == before
+
+
+def test_review_trace_sanitizes_postgresql_forbidden_nul_recursively(monkeypatch) -> None:
+    import app.services.review_trace_service as review_module
+
+    session = CapturingSession(existing_matter_ids={"matter-1"})
+    monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
+
+    class ArchiveSpy:
+        def safe_capture(self, **_kwargs):
+            return None
+
+    service = ReviewTraceService(experience_archive_service=ArchiveSpy())
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+
+    payload = QueryRequest(
+        question="Question\x00with NUL",
+        assistant_mode="default",
+    )
+    public_response = response().model_copy(
+        update={
+            "answer": "Answer\x00with NUL",
+            "retrieval_debug": {
+                "nested": {
+                    "text": "tool\x00result",
+                    "key\x00part": "value\x00part",
+                }
+            },
+        }
+    )
+    before_answer = public_response.answer
+
+    service.safe_record_answer_trace(
+        matter=SimpleNamespace(id="matter-1", session_id="session-1"),
+        payload=payload,
+        response=public_response,
+        state=None,
+        original_question="Original\x00question",
+        effective_question="Effective\x00question",
+    )
+
+    assert session.added is not None
+
+    # Persistence sanitization must not mutate the public response object.
+    assert public_response.answer == before_answer
+    assert "\x00" in public_response.answer
+
+    # PostgreSQL text columns are sanitized.
+    assert session.added.user_message == "Original\uFFFDquestion"
+    assert session.added.assistant_answer == "Answer\uFFFDwith NUL"
+
+    # Nested JSON values and keys are sanitized recursively.
+    assert (
+        session.added.trace_json["retrieval_debug"]["nested"]["text"]
+        == "tool\uFFFDresult"
+    )
+    assert (
+        session.added.trace_json["retrieval_debug"]["nested"]["key\uFFFDpart"]
+        == "value\uFFFDpart"
+    )
+    assert session.added.trace_json["original_question"] == "Original\uFFFDquestion"
+    assert session.added.trace_json["effective_question"] == "Effective\uFFFDquestion"
+
+    def assert_no_nul(value):
+        if isinstance(value, str):
+            assert "\x00" not in value
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                assert_no_nul(key)
+                assert_no_nul(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                assert_no_nul(item)
+
+    assert_no_nul(session.added.trace_json)

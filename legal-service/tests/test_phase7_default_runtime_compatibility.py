@@ -14,8 +14,18 @@ from app.services.query_service import QueryService
 from app.services import unified_context_runtime_patch  # noqa: F401
 
 
-def test_unified_default_forwards_empty_guidance_without_pfvd_fallback():
+def test_unified_default_forwards_empty_guidance_without_pfvd_fallback(monkeypatch):
     """The unified Default call must match the frozen PFVD compatibility contract."""
+
+    # This fixture exercises the pre-AgentRuntime PFVD compatibility contract.
+    # Keep the serving switch explicit so a developer's .env cannot route the
+    # test into DefaultAgentServingService, whose production language-service
+    # contract is intentionally different.
+    monkeypatch.setattr(
+        unified_context_runtime_patch,
+        "get_settings",
+        lambda: SimpleNamespace(default_agent_serving_enabled=False),
+    )
 
     answer_parameter = signature(
         ProposalFirstVerificationDepthAnswerService.answer
