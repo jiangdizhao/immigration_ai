@@ -27,7 +27,7 @@ export function trustedAssertionHeaders(
   request: Request,
   reviewToken = REVIEW_TOKEN,
   assertionSecret = REVIEW_ASSERTION_SECRET
-) {
+): Record<string, string> {
   if (!hasAuthenticatedLawyerToken(request, reviewToken) || !assertionSecret) {
     return {};
   }
