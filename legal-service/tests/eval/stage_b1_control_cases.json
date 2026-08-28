@@ -1,0 +1,16 @@
+[
+  {
+    "case_id": "student-500-refusal-genuine-student-review",
+    "category": "student_500_refusal_review",
+    "question": "My Student visa (subclass 500) application was refused after the Genuine Student assessment. What are the possible review or appeal pathways, what deadline issues should I check, and what documents should I preserve?",
+    "response_language": "en",
+    "as_of_date": "2026-08-29"
+  },
+  {
+    "case_id": "485-post-higher-education-work-eligibility",
+    "category": "subclass_485_post_higher_education_work",
+    "question": "As at 29 August 2026, can I apply for the Temporary Graduate visa (subclass 485), Post-Higher Education Work stream? I am 31, completed an eligible Australian degree, meet the English requirement, currently hold a Student visa, and plan to apply within the required period after completion. What eligibility requirements and expected grant period should I verify?",
+    "response_language": "en",
+    "as_of_date": "2026-08-29"
+  }
+]

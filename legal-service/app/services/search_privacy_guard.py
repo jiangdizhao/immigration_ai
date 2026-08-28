@@ -1,8 +1,13 @@
 """Phase 5 — Search privacy guard.
 
-Deterministic PII protection for outbound web-search queries.
+Deterministic PII protection for search queries handled by the backend.
 
-Before an outbound web-search query can execute, this guard:
+- For backend-controlled search calls, callers can use this guard before
+  execution to detect prohibited client-specific fields.
+- For OpenAI-hosted web_search, the adapter observes provider-returned action
+  metadata afterward; this retrospective check is diagnostic and cannot
+  prevent the hosted provider from issuing its internal query.
+- In both cases this guard:
 - Detects prohibited client-specific fields (name, DOB, passport, TRN, etc.)
 - Blocks/sanitizes queries containing PII
 - Never calls an LLM
@@ -74,11 +79,16 @@ _POSTCODE_PATTERN: Pattern[str] = re.compile(
     re.IGNORECASE,
 )
 
-# Full name patterns (two or more capitalized words that look like a person name)
-# This is conservative — only matches when combined with other indicators
+# Full name patterns (two or more capitalized words that look like a person
+# name). Keep the subject markers case-insensitive, but keep the candidate
+# words case-sensitive: ordinary phrases such as "applicant is in Australia"
+# must not become names merely because the whole query is case-insensitive.
+# Explicit name constructions are included because "client name: Jane Doe"
+# does not use the older subject-is form.
 _NAME_INDICATOR_PATTERN: Pattern[str] = re.compile(
-    r"\b(?:name|client|applicant|person|individual)\s*(?:is|:|=)\s*['\"]?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})['\"]?\b",
-    re.IGNORECASE,
+    r"\b(?:(?i:name|client|applicant|person|individual)\s*(?i:is|:|=)|"
+    r"(?i:client|applicant|person|individual)\s+(?i:name)\s*(?i:is|:|=))\s*"
+    r"['\"]?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})['\"]?\b"
 )
 
 # Unique customer identifier patterns

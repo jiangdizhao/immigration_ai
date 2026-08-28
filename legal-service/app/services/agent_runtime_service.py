@@ -35,6 +35,7 @@ from app.services.tool_executor_service import (
     ToolCallRequest,
     ToolExecutorContext,
     ToolExecutorService,
+    normalized_tool_call_key,
 )
 from app.tools.base import build_tool_result
 from app.services.web_evidence_normalizer import WebEvidenceNormalizer
@@ -94,6 +95,20 @@ class ProviderResponse:
     native_web_search_call_count: int = 0
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
+    # Content-free native web action telemetry. Timing fields are elapsed
+    # milliseconds within this provider call and remain null when the SDK did
+    # not expose the corresponding lifecycle event.
+    web_action_search_count: int = 0
+    web_action_open_page_count: int = 0
+    web_action_find_in_page_count: int = 0
+    web_search_query_count: int = 0
+    web_sources_observed_count: int = 0
+    web_citations_observed_count: int = 0
+    first_web_action_started_ms: float | None = None
+    first_web_action_completed_ms: float | None = None
+    last_web_action_completed_ms: float | None = None
+    first_output_text_after_web_ms: float | None = None
+    post_web_action_provider_ms: float | None = None
     # Stage A: artifacts received before a streamed provider call completed.
     # Partial text is context only; it is never a customer answer by itself.
     partial: bool = False
@@ -368,6 +383,8 @@ class AgentRuntimeService:
         terminal_remaining_budget_after_ms = 0.0
         terminal_instruction_added = False
         recovered_artifact_context_added = False
+        duplicate_tool_call_suppressed_count = 0
+        duplicate_tool_names: list[str] = []
 
         # Phase 5 resource governance: the answer/research target is a NON-RESETTING
         # stage budget inherited from the SAME original turn start, not a per-call
@@ -685,6 +702,17 @@ class AgentRuntimeService:
                     native_web_search_call_count=response.native_web_search_call_count,
                     native_web_source_count=response.native_web_source_count,
                     native_web_citation_count=response.native_web_citation_count,
+                    web_action_search_count=response.web_action_search_count,
+                    web_action_open_page_count=response.web_action_open_page_count,
+                    web_action_find_in_page_count=response.web_action_find_in_page_count,
+                    web_search_query_count=response.web_search_query_count,
+                    web_sources_observed_count=response.web_sources_observed_count,
+                    web_citations_observed_count=response.web_citations_observed_count,
+                    first_web_action_started_ms=response.first_web_action_started_ms,
+                    first_web_action_completed_ms=response.first_web_action_completed_ms,
+                    last_web_action_completed_ms=response.last_web_action_completed_ms,
+                    first_output_text_after_web_ms=response.first_output_text_after_web_ms,
+                    post_web_action_provider_ms=response.post_web_action_provider_ms,
                     stream_partial_available=response.partial,
                     stream_partial_text_chars=len(response.partial_text or ""),
                     stream_source_count=len(response.partial_sources),
@@ -768,6 +796,7 @@ class AgentRuntimeService:
                 ):
                     _begin_terminal_recovery("research_budget_exhausted")
                 if response.tool_calls:
+                    same_round_seen: set[tuple[str, str]] = set()
                     research_calls = [
                         tc for tc in response.tool_calls
                         if tc.name != "submit_answer"
@@ -811,6 +840,32 @@ class AgentRuntimeService:
                                 tool_round_count += 1
                                 research_round_counted = True
                             continue
+
+                        duplicate_key = normalized_tool_call_key(tc)
+                        if duplicate_key in same_round_seen:
+                            duplicate_tool_call_suppressed_count += 1
+                            if tc.name not in duplicate_tool_names:
+                                duplicate_tool_names.append(tc.name)
+                            duplicate = build_tool_result(
+                                tool_call_id=tc.call_id,
+                                status="partial",
+                                data={
+                                    "duplicate_suppressed": True,
+                                },
+                                duration_ms=0,
+                                error={
+                                    "code": "DUPLICATE_TOOL_CALL_SUPPRESSED",
+                                    "message": "Equivalent tool request already executed in this round.",
+                                },
+                            )
+                            tool_outputs.append(duplicate)
+                            tool_results_for_provider.append({
+                                "role": "tool",
+                                "tool_call_id": tc.call_id,
+                                "content": json.dumps(duplicate.model_dump(mode="json")),
+                            })
+                            continue
+                        same_round_seen.add(duplicate_key)
 
                         if not research_round_available and tc.name != "submit_answer":
                             denied = build_tool_result(
@@ -1269,6 +1324,10 @@ class AgentRuntimeService:
             else "safe_failure"
         )
 
+        custom_tool_calls_per_round, research_tool_names_by_round = (
+            self._custom_tool_round_telemetry(provider_call_observations)
+        )
+
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
         metrics = AgentExecutionMetrics(
@@ -1276,6 +1335,10 @@ class AgentRuntimeService:
             provider_api_call_count=provider_call_count,
             tool_call_count=len(tool_outputs) + checker_result_tool_call_count,
             tool_round_count=tool_round_count,
+            duplicate_tool_call_suppressed_count=duplicate_tool_call_suppressed_count,
+            duplicate_tool_names=duplicate_tool_names,
+            custom_tool_calls_per_round=custom_tool_calls_per_round,
+            research_tool_names_by_round=research_tool_names_by_round,
             web_search_call_count=sum(1 for t in tool_outputs if "web_search" in str(t.data)),
             # Phase 5.1A: aggregate actual provider-native built-in web_search usage
             # across all provider calls in this run from the actual provider output.
@@ -1287,6 +1350,39 @@ class AgentRuntimeService:
             ),
             native_web_citation_count=sum(
                 pc.native_web_citation_count for pc in provider_call_observations
+            ),
+            web_action_search_count=sum(
+                pc.web_action_search_count for pc in provider_call_observations
+            ),
+            web_action_open_page_count=sum(
+                pc.web_action_open_page_count for pc in provider_call_observations
+            ),
+            web_action_find_in_page_count=sum(
+                pc.web_action_find_in_page_count for pc in provider_call_observations
+            ),
+            web_search_query_count=sum(
+                pc.web_search_query_count for pc in provider_call_observations
+            ),
+            web_sources_observed_count=sum(
+                pc.web_sources_observed_count for pc in provider_call_observations
+            ),
+            web_citations_observed_count=sum(
+                pc.web_citations_observed_count for pc in provider_call_observations
+            ),
+            first_web_action_started_ms=self._single_provider_timing(
+                provider_call_observations, "first_web_action_started_ms"
+            ),
+            first_web_action_completed_ms=self._single_provider_timing(
+                provider_call_observations, "first_web_action_completed_ms"
+            ),
+            last_web_action_completed_ms=self._single_provider_timing(
+                provider_call_observations, "last_web_action_completed_ms"
+            ),
+            first_output_text_after_web_ms=self._single_provider_timing(
+                provider_call_observations, "first_output_text_after_web_ms"
+            ),
+            post_web_action_provider_ms=self._single_provider_timing(
+                provider_call_observations, "post_web_action_provider_ms"
             ),
             stream_partial_call_count=sum(
                 pc.stream_partial_available for pc in provider_call_observations
@@ -1650,6 +1746,46 @@ class AgentRuntimeService:
             for category, count in category_map.items():
                 merged[category] = merged.get(category, 0) + count
         return merged
+
+    @staticmethod
+    def _single_provider_timing(
+        provider_calls: list[ProviderCallObservation], field_name: str
+    ) -> float | None:
+        """Expose a request timing only when its elapsed origin is unambiguous.
+
+        Per-call observations retain timings for multi-call runs. Combining
+        elapsed values from separate provider calls would imply a turn timeline
+        that the current contract does not measure.
+        """
+        if len(provider_calls) != 1:
+            return None
+        value = getattr(provider_calls[0], field_name, None)
+        return float(value) if value is not None else None
+
+    @staticmethod
+    def _custom_tool_round_telemetry(
+        provider_calls: list[ProviderCallObservation],
+    ) -> tuple[list[int], list[list[str]]]:
+        """Summarize custom tool names by provider/tool-selection round.
+
+        Native ``web_search`` is intentionally excluded: it is provider-hosted
+        rather than a backend custom tool. Checker calls are also excluded so
+        this remains Default research/terminal telemetry.
+        """
+        counts: list[int] = []
+        names_by_round: list[list[str]] = []
+        for observation in provider_calls:
+            if observation.stage == "phase6_checker":
+                continue
+            names = [
+                name for name in observation.returned_tool_names
+                if name != "web_search"
+            ]
+            if not names:
+                continue
+            counts.append(len(names))
+            names_by_round.append(names)
+        return counts, names_by_round
 
     @staticmethod
     def _retry_threshold_met(

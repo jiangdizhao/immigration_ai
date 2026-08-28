@@ -96,13 +96,21 @@ class Settings(BaseSettings):
         default=8000, ge=0, le=40000, alias="AGENT_RETRY_VIABILITY_THRESHOLD_MS"
     )
     default_turn_deadline_ms: int = Field(
-        default=60000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
+        default=75000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
     )
     premium_turn_deadline_ms: int = Field(
         default=90000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
     )
     default_answer_research_target_ms: int = Field(
-        default=32000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
+        default=45000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
+    )
+    # Default-only terminal allocation.  Premium Direct has its own explicit
+    # PREMIUM_DIRECT_* controls and must not inherit this calibration.
+    default_terminal_synthesis_target_ms: int = Field(
+        default=20000, ge=1, alias="DEFAULT_TERMINAL_SYNTHESIS_TARGET_MS"
+    )
+    default_final_response_reserve_ms: int = Field(
+        default=5000, ge=0, alias="DEFAULT_FINAL_RESPONSE_RESERVE_MS"
     )
     premium_answer_research_target_ms: int = Field(
         default=40000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
@@ -173,20 +181,34 @@ class Settings(BaseSettings):
             > self.premium_turn_deadline_ms
         ):
             raise ValueError("premium answer/checker targets must fit inside the turn deadline")
-        for mode, deadline_ms, research_target_ms in (
-            ("default", self.default_turn_deadline_ms, self.default_answer_research_target_ms),
-            ("premium", self.premium_turn_deadline_ms, self.premium_answer_research_target_ms),
+        for mode, deadline_ms, research_target_ms, terminal_target_ms, reserve_ms in (
+            (
+                "default",
+                self.default_turn_deadline_ms,
+                self.default_answer_research_target_ms,
+                self.default_terminal_synthesis_target_ms,
+                self.default_final_response_reserve_ms,
+            ),
+            (
+                "premium",
+                self.premium_turn_deadline_ms,
+                self.premium_answer_research_target_ms,
+                self.terminal_synthesis_target_ms,
+                self.final_response_reserve_ms,
+            ),
         ):
-            if self.terminal_synthesis_target_ms + self.final_response_reserve_ms > deadline_ms:
+            if terminal_target_ms + reserve_ms > deadline_ms:
                 raise ValueError(
                     f"{mode} terminal target and final response reserve must fit inside the turn deadline"
                 )
-            if research_target_ms + self.terminal_synthesis_min_start_budget_ms + self.final_response_reserve_ms > deadline_ms:
+            if research_target_ms + self.terminal_synthesis_min_start_budget_ms + reserve_ms > deadline_ms:
                 raise ValueError(
                     f"{mode} research target must leave room for terminal synthesis and final response reserve"
                 )
         if self.terminal_synthesis_min_start_budget_ms > self.terminal_synthesis_target_ms:
             raise ValueError("terminal minimum-start budget must not exceed terminal target")
+        if self.terminal_synthesis_min_start_budget_ms > self.default_terminal_synthesis_target_ms:
+            raise ValueError("terminal minimum-start budget must not exceed default terminal target")
         return self
 
     @property

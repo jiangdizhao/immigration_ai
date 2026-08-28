@@ -12,6 +12,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -60,6 +61,32 @@ def _dedup_ordered(refs: list[str]) -> list[str]:
             seen.add(ref)
             out.append(ref)
     return out
+
+
+def normalized_tool_call_key(tool_call: ToolCallRequest) -> tuple[str, str]:
+    """Return a conservative same-round duplicate key.
+
+    Only structural normalization is performed: tool names are exact, object
+    keys are ordered, strings are trimmed and internal whitespace is collapsed,
+    and list order is preserved. No semantic or embedding comparison occurs.
+    """
+
+    def normalize(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): normalize(value[key])
+                for key in sorted(value, key=lambda item: str(item))
+            }
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        if isinstance(value, str):
+            return " ".join(value.strip().split())
+        return value
+
+    return (
+        tool_call.name,
+        json.dumps(normalize(tool_call.arguments), ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+    )
 
 
 _EXACT_IDENTITY_FIELDS = (

@@ -88,6 +88,16 @@ class ResponsesStreamAccumulator:
     citation_annotations: list[dict[str, Any]] = field(default_factory=list)
     search_call_ids: list[str] = field(default_factory=list)
     search_queries: list[str] = field(default_factory=list)
+    web_action_search_count: int = 0
+    web_action_open_page_count: int = 0
+    web_action_find_in_page_count: int = 0
+    web_search_query_count: int = 0
+    first_web_action_started_ms: float | None = None
+    first_web_action_completed_ms: float | None = None
+    last_web_action_completed_ms: float | None = None
+    first_output_text_after_web_ms: float | None = None
+    post_web_action_provider_ms: float | None = None
+    web_action_types: dict[str, str] = field(default_factory=dict)
     function_buffers: dict[str, str] = field(default_factory=dict)
     function_names: dict[str, str] = field(default_factory=dict)
     function_call_ids: dict[str, str] = field(default_factory=dict)
@@ -122,16 +132,29 @@ class ResponsesStreamAccumulator:
             if getattr(value, key, None) is not None
         }
 
-    def consume(self, event: Any) -> None:
+    def consume(self, event: Any, *, observed_at_ms: float | None = None) -> None:
         if self.completed:
             return
         event_type = self._get(event, "type", "")
+        if event_type in {
+            "response.web_search_call.in_progress",
+            "response.web_search_call.searching",
+        }:
+            self._observe_web_action_event(event, observed_at_ms=observed_at_ms, completed=False)
+        elif event_type == "response.web_search_call.completed":
+            self._observe_web_action_event(event, observed_at_ms=observed_at_ms, completed=True)
         if event_type in {"response.created", "response.in_progress"}:
             self._capture_response_identity(self._get(event, "response"))
         elif event_type == "response.output_text.delta":
             delta = self._get(event, "delta", "")
             if delta:
                 self.text_parts.append(str(delta))
+                if (
+                    observed_at_ms is not None
+                    and self.last_web_action_completed_ms is not None
+                    and self.first_output_text_after_web_ms is None
+                ):
+                    self.first_output_text_after_web_ms = observed_at_ms
         elif event_type == "response.output_text.done":
             text = self._get(event, "text", "")
             if text and not self.text_parts:
@@ -155,6 +178,7 @@ class ResponsesStreamAccumulator:
             self._consume_completed_item(
                 self._get(event, "item"),
                 confirmed_completed=True,
+                observed_at_ms=observed_at_ms,
             )
         elif event_type == "response.completed":
             response = self._get(event, "response")
@@ -163,6 +187,7 @@ class ResponsesStreamAccumulator:
                 response,
                 include_text=not bool(self.text_parts),
                 allow_implicit_function_completion=True,
+                observed_at_ms=observed_at_ms,
             )
             self.completed = True
             self.partial = False
@@ -175,6 +200,7 @@ class ResponsesStreamAccumulator:
                 response,
                 include_text=not bool(self.text_parts),
                 allow_implicit_function_completion=False,
+                observed_at_ms=observed_at_ms,
             )
             self.partial = self._has_salvageable_artifacts()
             self.status = "timeout"
@@ -186,6 +212,7 @@ class ResponsesStreamAccumulator:
                 response,
                 include_text=not bool(self.text_parts),
                 allow_implicit_function_completion=False,
+                observed_at_ms=observed_at_ms,
             )
             self.partial = self._has_salvageable_artifacts()
             self.status = "error"
@@ -206,6 +233,7 @@ class ResponsesStreamAccumulator:
             response,
             include_text=not bool(self.text_parts),
             allow_implicit_function_completion=True,
+            observed_at_ms=None,
         )
         self.completed = True
         self.status = "ok"
@@ -238,6 +266,7 @@ class ResponsesStreamAccumulator:
         *,
         include_text: bool,
         allow_implicit_function_completion: bool,
+        observed_at_ms: float | None = None,
     ) -> None:
         if response is None:
             return
@@ -257,6 +286,7 @@ class ResponsesStreamAccumulator:
                 self._consume_completed_item(
                     item,
                     allow_implicit_completion=allow_implicit_function_completion,
+                    observed_at_ms=observed_at_ms,
                 )
 
     def _consume_completed_item(
@@ -265,6 +295,7 @@ class ResponsesStreamAccumulator:
         *,
         confirmed_completed: bool = False,
         allow_implicit_completion: bool = False,
+        observed_at_ms: float | None = None,
     ) -> None:
         if item is None:
             return
@@ -304,14 +335,31 @@ class ResponsesStreamAccumulator:
                 or (allow_implicit_completion and self._get(item, "status") is None)
             ):
                 return
-            self._consume_web_search_item(item)
+            self._consume_web_search_item(item, observed_at_ms=observed_at_ms)
 
-    def _consume_web_search_item(self, item: Any) -> None:
+    def _consume_web_search_item(
+        self,
+        item: Any,
+        *,
+        observed_at_ms: float | None = None,
+    ) -> None:
         search_id = str(self._get(item, "id", ""))
+        action = self._get(item, "action")
+        action_type = str(self._get(action, "type", "search") or "search")
+        queries = [
+            query for query in (self._get(action, "queries", []) or [])
+            if isinstance(query, str)
+        ]
+        self._record_web_action(
+            action_id=search_id,
+            action_type=action_type,
+            queries=queries,
+            completed=True,
+            observed_at_ms=observed_at_ms,
+        )
         if search_id and search_id not in self.search_call_ids:
             self.search_call_ids.append(search_id)
-        action = self._get(item, "action")
-        for query in self._get(action, "queries", []) or []:
+        for query in queries:
             if isinstance(query, str) and query not in self.search_queries:
                 self.search_queries.append(query)
         source_lists = [
@@ -331,6 +379,90 @@ class ResponsesStreamAccumulator:
                 ):
                     source_dict["search_call_id"] = search_id
                     self.native_sources.append(source_dict)
+
+    def _record_web_action(
+        self,
+        *,
+        action_id: str,
+        action_type: str,
+        queries: list[str],
+        completed: bool,
+        observed_at_ms: float | None,
+        started: bool = False,
+    ) -> None:
+        normalized_type = action_type if action_type in {
+            "search", "open_page", "find_in_page"
+        } else None
+        if normalized_type is None:
+            return
+        # Without a provider action ID, lifecycle events cannot be reliably
+        # attributed to distinct actions. Deduplicate the anonymous stream
+        # conservatively instead of counting each lifecycle event as a new
+        # search/open/find action.
+        identity = action_id or f"anonymous:{normalized_type}"
+        if identity not in self.web_action_types:
+            self.web_action_types[identity] = normalized_type
+            if normalized_type == "search":
+                self.web_action_search_count += 1
+            elif normalized_type == "open_page":
+                self.web_action_open_page_count += 1
+            else:
+                self.web_action_find_in_page_count += 1
+        for query in queries:
+            if query not in self.search_queries:
+                self.search_queries.append(query)
+        self.web_search_query_count = len(self.search_queries)
+        if observed_at_ms is None:
+            return
+        if started and self.first_web_action_started_ms is None:
+            self.first_web_action_started_ms = observed_at_ms
+        if completed:
+            if self.first_web_action_completed_ms is None:
+                self.first_web_action_completed_ms = observed_at_ms
+            self.last_web_action_completed_ms = observed_at_ms
+
+    def _observe_web_action_event(
+        self,
+        event: Any,
+        *,
+        observed_at_ms: float | None,
+        completed: bool,
+    ) -> None:
+        action = self._get(event, "action")
+        item = self._get(event, "item")
+        action = action or self._get(item, "action")
+        event_type = str(self._get(action, "type", "") or "")
+        if not event_type:
+            event_type = "search"
+        action_id = str(
+            self._get(event, "item_id", "")
+            or self._get(event, "id", "")
+            or self._get(item, "id", "")
+        )
+        queries = [
+            query for query in (self._get(action, "queries", []) or [])
+            if isinstance(query, str)
+        ]
+        self._record_web_action(
+            action_id=action_id,
+            action_type=event_type,
+            queries=queries,
+            completed=completed,
+            observed_at_ms=observed_at_ms,
+            started=not completed,
+        )
+
+    def finalize_web_timings(self, total_provider_ms: float) -> None:
+        """Derive only timings backed by observed provider lifecycle events.
+
+        The Responses stream does not guarantee lifecycle events for every SDK
+        shape.  In that case the corresponding timing remains ``None`` rather
+        than being inferred from search/source counts or estimated locally.
+        """
+        if self.last_web_action_completed_ms is not None:
+            self.post_web_action_provider_ms = max(
+                0.0, total_provider_ms - self.last_web_action_completed_ms
+            )
 
     def materialized_sources(self) -> list[dict[str, Any]]:
         """Return deduplicated source metadata, including citation-only URLs."""
@@ -426,7 +558,8 @@ def consume_responses_stream(
     downgrade an already completed response.
     """
     accumulator = ResponsesStreamAccumulator()
-    provider_deadline = clock() + max(0.0, allocated_timeout_seconds)
+    stream_started_at = clock()
+    provider_deadline = stream_started_at + max(0.0, allocated_timeout_seconds)
 
     def close_stream() -> None:
         close = getattr(stream, "close", None)
@@ -482,7 +615,10 @@ def consume_responses_stream(
                 )
                 break
 
-            accumulator.consume(event)
+            accumulator.consume(
+                event,
+                observed_at_ms=(clock() - stream_started_at) * 1000.0,
+            )
             if not accumulator.completed and clock() >= provider_deadline:
                 accumulator.mark_interrupted(
                     timeout=True,
@@ -490,6 +626,9 @@ def consume_responses_stream(
                 )
                 break
     finally:
+        accumulator.finalize_web_timings(
+            (clock() - stream_started_at) * 1000.0
+        )
         # Closing is also attempted after normal completion so a cleanup error
         # is exercised without ever changing the successful accumulator state.
         close_stream()
@@ -630,8 +769,19 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),
                 effort=reasoning_effort,
                 native_web_search_call_count=len(ctx.search_call_ids),
-                native_web_source_count=len(ctx.native_sources),
+                native_web_source_count=len(materialized_sources),
                 native_web_citation_count=len(ctx.citation_annotations),
+                web_action_search_count=accumulator.web_action_search_count,
+                web_action_open_page_count=accumulator.web_action_open_page_count,
+                web_action_find_in_page_count=accumulator.web_action_find_in_page_count,
+                web_search_query_count=accumulator.web_search_query_count,
+                web_sources_observed_count=len(materialized_sources),
+                web_citations_observed_count=len(accumulator.citation_annotations),
+                first_web_action_started_ms=accumulator.first_web_action_started_ms,
+                first_web_action_completed_ms=accumulator.first_web_action_completed_ms,
+                last_web_action_completed_ms=accumulator.last_web_action_completed_ms,
+                first_output_text_after_web_ms=accumulator.first_output_text_after_web_ms,
+                post_web_action_provider_ms=accumulator.post_web_action_provider_ms,
                 partial=accumulator.partial,
                 partial_text=("".join(accumulator.text_parts) or None)
                 if accumulator.partial

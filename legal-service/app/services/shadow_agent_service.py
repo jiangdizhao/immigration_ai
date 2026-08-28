@@ -72,6 +72,10 @@ class ShadowTrace:
     provider_response_ids: list[str] = field(default_factory=list)
     tool_call_count: int = 0
     tool_round_count: int = 0
+    duplicate_tool_call_suppressed_count: int = 0
+    duplicate_tool_names: list[str] = field(default_factory=list)
+    custom_tool_calls_per_round: list[int] = field(default_factory=list)
+    research_tool_names_by_round: list[list[str]] = field(default_factory=list)
     web_search_call_count: int = 0
     # Phase 5.1A.1: content-free aggregated search-privacy violation telemetry.
     search_privacy_violation_count: int = 0
@@ -81,6 +85,17 @@ class ShadowTrace:
     native_web_search_call_count: int = 0
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
+    web_action_search_count: int = 0
+    web_action_open_page_count: int = 0
+    web_action_find_in_page_count: int = 0
+    web_search_query_count: int = 0
+    web_sources_observed_count: int = 0
+    web_citations_observed_count: int = 0
+    first_web_action_started_ms: float | None = None
+    first_web_action_completed_ms: float | None = None
+    last_web_action_completed_ms: float | None = None
+    first_output_text_after_web_ms: float | None = None
+    post_web_action_provider_ms: float | None = None
     exact_lookup_call_count: int = 0
     exact_lookup_requested_locator_count: int = 0
     exact_lookup_resolved_locator_count: int = 0
@@ -108,6 +123,7 @@ class ShadowTrace:
     terminal_submission_continuation_count: int = 0
     terminal_continuation_triggered: bool = False
     terminal_continuation_reason: str | None = None
+    completion_status: str = "safe_failure"
     terminal_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     reasoning_bank: dict[str, Any] = field(default_factory=dict)
     postcondition_status: str | None = None
@@ -249,8 +265,16 @@ class ShadowAgentService:
                 checker_target_ms=settings.legal_fact_check_target_ms,
                 max_flat_rag_calls=settings.agent_max_flat_rag_calls,
                 retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
-                terminal_synthesis_target_ms=settings.terminal_synthesis_target_ms,
-                final_response_reserve_ms=settings.final_response_reserve_ms,
+                terminal_synthesis_target_ms=(
+                    settings.default_terminal_synthesis_target_ms
+                    if not is_premium
+                    else settings.terminal_synthesis_target_ms
+                ),
+                final_response_reserve_ms=(
+                    settings.default_final_response_reserve_ms
+                    if not is_premium
+                    else settings.final_response_reserve_ms
+                ),
                 terminal_synthesis_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
             )
 
@@ -366,6 +390,14 @@ class ShadowAgentService:
             provider_response_ids=result.provider_response_ids,
             tool_call_count=result.metrics.tool_call_count,
             tool_round_count=result.metrics.tool_round_count,
+            duplicate_tool_call_suppressed_count=(
+                result.metrics.duplicate_tool_call_suppressed_count
+            ),
+            duplicate_tool_names=list(result.metrics.duplicate_tool_names),
+            custom_tool_calls_per_round=list(result.metrics.custom_tool_calls_per_round),
+            research_tool_names_by_round=[
+                list(names) for names in result.metrics.research_tool_names_by_round
+            ],
             web_search_call_count=result.metrics.web_search_call_count,
             search_privacy_violation_count=result.metrics.search_privacy_violation_count,
             search_privacy_violation_categories=dict(
@@ -374,6 +406,17 @@ class ShadowAgentService:
             native_web_search_call_count=result.metrics.native_web_search_call_count,
             native_web_source_count=result.metrics.native_web_source_count,
             native_web_citation_count=result.metrics.native_web_citation_count,
+            web_action_search_count=result.metrics.web_action_search_count,
+            web_action_open_page_count=result.metrics.web_action_open_page_count,
+            web_action_find_in_page_count=result.metrics.web_action_find_in_page_count,
+            web_search_query_count=result.metrics.web_search_query_count,
+            web_sources_observed_count=result.metrics.web_sources_observed_count,
+            web_citations_observed_count=result.metrics.web_citations_observed_count,
+            first_web_action_started_ms=result.metrics.first_web_action_started_ms,
+            first_web_action_completed_ms=result.metrics.first_web_action_completed_ms,
+            last_web_action_completed_ms=result.metrics.last_web_action_completed_ms,
+            first_output_text_after_web_ms=result.metrics.first_output_text_after_web_ms,
+            post_web_action_provider_ms=result.metrics.post_web_action_provider_ms,
             exact_lookup_call_count=result.metrics.exact_lookup_call_count,
             exact_lookup_requested_locator_count=result.metrics.exact_lookup_requested_locator_count,
             exact_lookup_resolved_locator_count=result.metrics.exact_lookup_resolved_locator_count,
@@ -401,6 +444,7 @@ class ShadowAgentService:
             terminal_submission_continuation_count=result.terminal_submission_continuation_count,
             terminal_continuation_triggered=result.terminal_continuation_triggered,
             terminal_continuation_reason=result.terminal_continuation_reason,
+            completion_status=result.completion_status,
             terminal_tool_calls=[
                 tc.model_dump(mode="json") for tc in result.terminal_tool_calls
             ],

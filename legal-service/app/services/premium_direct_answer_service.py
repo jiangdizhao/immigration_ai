@@ -910,6 +910,17 @@ class PremiumDirectAnswerService:
                 "stream_partial_text_chars": len(answer_text) if accumulator.partial else 0,
                 "stream_source_count": len(web_sources),
                 "stream_citation_count": len(accumulator.citation_annotations),
+                "web_action_search_count": accumulator.web_action_search_count,
+                "web_action_open_page_count": accumulator.web_action_open_page_count,
+                "web_action_find_in_page_count": accumulator.web_action_find_in_page_count,
+                "web_search_query_count": accumulator.web_search_query_count,
+                "web_sources_observed_count": len(accumulator.materialized_sources()),
+                "web_citations_observed_count": len(accumulator.citation_annotations),
+                "first_web_action_started_ms": accumulator.first_web_action_started_ms,
+                "first_web_action_completed_ms": accumulator.first_web_action_completed_ms,
+                "last_web_action_completed_ms": accumulator.last_web_action_completed_ms,
+                "first_output_text_after_web_ms": accumulator.first_output_text_after_web_ms,
+                "post_web_action_provider_ms": accumulator.post_web_action_provider_ms,
                 "stream_completed_function_call": bool(
                     accumulator.completed_function_calls
                 ),

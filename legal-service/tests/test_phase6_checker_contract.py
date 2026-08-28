@@ -589,10 +589,11 @@ def test_material_omission_signal_is_representable_without_rewrite_or_research()
     assert not hasattr(result.decisions[0], "replacement_text")
 
 
-def test_phase6_default_absolute_deadline_is_60000_and_checker_remains_off() -> None:
+def test_phase6_default_absolute_deadline_is_75000_and_checker_remains_off() -> None:
     settings = Settings(
         DATABASE_URL="postgresql://test",
         OPENAI_API_KEY="test",
+        COMPACT_CHECKER_ENABLED=False,
     )
-    assert settings.default_turn_deadline_ms == 60000
+    assert settings.default_turn_deadline_ms == 75000
     assert settings.compact_checker_enabled is False
