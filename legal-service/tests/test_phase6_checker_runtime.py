@@ -407,18 +407,17 @@ def test_wrong_or_multiple_checker_result_tools_fail_neutral(provider_kwargs: di
     assert result.submission.draft_markdown == "Legal claim."
 
 
-def test_insufficient_remaining_budget_skips_checker_without_provider_call() -> None:
+def test_insufficient_remaining_budget_uses_safe_failure_before_terminal_call() -> None:
     provider = ShadowCheckerProvider()
     deadline = AbsoluteTurnDeadline(time.perf_counter() - 59.0, 60000)
     result = _run(provider, deadline=deadline)
-    assert result.status == "completed"
-    assert result.checker_status == "skipped"
-    assert result.checker_skip_reason == "insufficient_remaining_budget"
+    assert result.status == "error"
+    assert result.submission is None
+    assert result.checker_status == "not_required"
     assert result.checker_provider_call_count == 0
     assert result.metrics.logical_llm_stage_count == 1
-    assert provider.call_count == 1
-    assert result.submission is not None
-    assert result.submission.draft_markdown == "Legal claim."
+    assert provider.call_count == 0
+    assert "Insufficient budget to start terminal synthesis" in result.errors
 
 
 def test_general_turn_and_disabled_checker_have_zero_checker_calls() -> None:

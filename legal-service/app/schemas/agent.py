@@ -100,6 +100,9 @@ class ExecutionBudget(StrictContract):
     # exceeds this threshold. Prevents a futile late provider call from burning the
     # residual budget after a first attempt consumed most of the research budget.
     retry_viability_threshold_ms: int = Field(default=8000, ge=0, le=40000)
+    terminal_synthesis_target_ms: int = Field(default=15000, ge=1)
+    final_response_reserve_ms: int = Field(default=3000, ge=0)
+    terminal_synthesis_min_start_budget_ms: int = Field(default=5000, ge=1)
 
     @model_validator(mode="after")
     def validate_budget(self):
@@ -107,6 +110,8 @@ class ExecutionBudget(StrictContract):
             raise ValueError("answer and checker targets must fit inside turn_deadline_ms")
         if self.retry_viability_threshold_ms > self.turn_deadline_ms:
             raise ValueError("retry viability threshold must fit inside turn_deadline_ms")
+        if self.terminal_synthesis_min_start_budget_ms > self.terminal_synthesis_target_ms:
+            raise ValueError("terminal minimum-start budget must not exceed terminal target")
         return self
 
 
@@ -251,6 +256,17 @@ class AgentExecutionMetrics(StrictContract):
     terminal_submission_missing: bool = False
     terminal_submission_continuation_count: int = Field(default=0, ge=0, le=1)
     terminal_continuation_triggered: bool = False
+    research_stage_target_ms: int = Field(default=0, ge=0)
+    research_stage_exhausted: bool = False
+    terminal_recovery_triggered: bool = False
+    terminal_recovery_reason: str | None = Field(default=None, max_length=100)
+    terminal_timeout_allocated_ms: float = Field(default=0, ge=0)
+    terminal_model: str | None = Field(default=None, max_length=255)
+    terminal_web_search_enabled: bool = False
+    terminal_remaining_budget_before_ms: float = Field(default=0, ge=0)
+    terminal_remaining_budget_after_ms: float = Field(default=0, ge=0)
+    final_response_reserve_ms: int = Field(default=0, ge=0)
+    completion_status: Literal["complete", "partial_timeout", "safe_failure"] | None = None
     answer_agent_latency_ms: float = Field(default=0, ge=0)
     fact_check_latency_ms: float = Field(default=0, ge=0)
     total_latency_ms: float = Field(default=0, ge=0)

@@ -69,6 +69,12 @@ function extractMetadataFromParts(parts: unknown) {
       : [],
     citations: Array.isArray(value.citations) ? value.citations : [],
     confidence: typeof value.confidence === "string" ? value.confidence : null,
+    researchStatus:
+      value.researchStatus === "not_required" ||
+      value.researchStatus === "complete" ||
+      value.researchStatus === "incomplete"
+        ? value.researchStatus
+        : null,
     followUpQuestions: Array.isArray(value.followUpQuestions)
       ? value.followUpQuestions.filter(
           (item): item is string => typeof item === "string"

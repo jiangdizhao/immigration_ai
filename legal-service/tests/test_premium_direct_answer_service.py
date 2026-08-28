@@ -36,6 +36,10 @@ def _service(monkeypatch, **values: str) -> PremiumDirectAnswerService:
         "PREMIUM_DIRECT_WEB_SEARCH_ENABLED": "true",
         "PREMIUM_DIRECT_WEB_SEARCH_REQUIRED": "false",
         "PREMIUM_DIRECT_LANE_BUDGET_MS": "45000",
+        "PREMIUM_DIRECT_RESEARCH_TARGET_MS": "65000",
+        "PREMIUM_DIRECT_TERMINAL_TARGET_MS": "15000",
+        "PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS": "3000",
+        "PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS": "5000",
         "PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS": "50",
         "PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS": "55",
         "PREMIUM_DIRECT_PRIMARY_MAX_RETRIES": "0",
@@ -302,10 +306,14 @@ def test_quick_primary_failure_gets_bounded_fallback_budget(monkeypatch) -> None
     assert debug["fallback_skipped_due_to_budget"] is False
 
 
-def test_exhausted_primary_budget_skips_fallback_and_returns_neutral_result(monkeypatch) -> None:
+def test_exhausted_primary_budget_uses_protected_terminal_synthesis(monkeypatch) -> None:
     service = _service(
         monkeypatch,
         PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
         PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
         PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS="55",
     )
@@ -315,19 +323,188 @@ def test_exhausted_primary_budget_skips_fallback_and_returns_neutral_result(monk
 
     def fake_call(**kwargs):
         calls.append(kwargs)
-        clock.advance_ms(9950)
-        raise TimeoutError("primary consumed lane")
+        if kwargs["model"] == service.primary_model:
+            clock.advance_ms(6000)
+            raise TimeoutError("primary consumed research window")
+        return "terminal best-effort answer", [], {
+            "web_search_request_mode": "disabled",
+        }
 
     monkeypatch.setattr(service, "_call_model", fake_call)
     answer, sources, debug = service._answer_with_fallback(
         model_input="question", deadline=deadline
     )
 
-    assert answer == ""
+    assert answer == "terminal best-effort answer"
     assert sources == []
-    assert len(calls) == 1
+    assert [call["model"] for call in calls] == [
+        service.primary_model,
+        service.terminal_model,
+    ]
     assert debug["fallback_skipped_due_to_budget"] is True
     assert debug["fallback_budget_ms"] < service.minimum_fallback_budget_ms
+    assert debug["terminal_recovery_triggered"] is True
+    assert debug["terminal_web_search_enabled"] is False
+    assert debug["research_status"] == "incomplete"
+    assert debug["completion_status"] == "partial_timeout"
+
+
+def test_terminal_call_forcibly_omits_all_web_search_fields(monkeypatch) -> None:
+    service = _service(monkeypatch)
+    calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
+
+    service._call_model(
+        model=service.terminal_model,
+        reasoning_effort=service.terminal_reasoning_effort,
+        timeout_seconds=3,
+        max_retries=0,
+        model_input="question",
+        instructions=service._terminal_instructions(),
+        web_search_enabled=False,
+    )
+
+    request = calls[-1]
+    assert "tools" not in request
+    assert "web_search" not in str(request)
+    assert "web_search_preview" not in str(request)
+    assert "include" not in request
+    assert "tool_choice" not in request
+    assert "max_tool_calls" not in request
+
+
+def test_terminal_failure_returns_deterministic_non_empty_safe_failure(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+    )
+    clock = FakeClock()
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        if kwargs["model"] == service.primary_model:
+            clock.advance_ms(6500)
+        raise TimeoutError("provider failed")
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    response = service.answer(
+        payload=QueryRequest(question="What is the deadline?"),
+        original_question="What is the deadline?",
+        effective_question="What is the deadline?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    assert response.answer.strip()
+    assert response.research_status == "incomplete"
+    assert "couldn't complete the research" in response.answer.lower()
+    assert len(calls) == 3
+
+
+def test_timeout_zero_sources_does_not_serve_exact_current_fee_from_memory(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="1",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+    )
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        if kwargs["model"] == service.primary_model:
+            raise TimeoutError("research timed out")
+        return "The latest amount I can reliably state is AUD 2,000.", [], {}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    response = service.answer(
+        payload=QueryRequest(question="What is the current student visa fee?"),
+        original_question="What is the current student visa fee?",
+        effective_question="What is the current student visa fee?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    assert response.answer.strip()
+    assert response.research_status == "incomplete"
+    assert "AUD 2,000" not in response.answer
+    assert "latest amount" not in response.answer.lower()
+    assert len(calls) == 2
+    debug = response.retrieval_debug["premium_direct_answer"]
+    assert debug["verified_source_count"] == 0
+    assert debug["terminal_output_suppressed_due_to_unverified_current_fact"] is True
+
+
+def test_timeout_with_genuine_source_metadata_allows_supported_terminal_fact(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="500",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="1000",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 10000, clock=clock)
+    source = {"title": "Official fee page", "url": "https://example.gov.au/fees"}
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        if kwargs["model"] == service.primary_model:
+            return "", [source], {}
+        return "The supported amount is AUD 2,000.", [], {}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, sources, debug = service._answer_with_fallback(
+        model_input="What is the current fee?",
+        deadline=deadline,
+        current_fact_request=True,
+    )
+
+    assert answer == "The supported amount is AUD 2,000."
+    assert sources == [source]
+    assert debug["verified_source_count"] == 1
+    assert "verified_source_count=1" in calls[-1]["instructions"]
+    assert "https://example.gov.au/fees" in calls[-1]["instructions"]
+
+
+def test_timeout_stable_general_question_keeps_useful_terminal_answer(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="1",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+    )
+    monkeypatch.setattr(
+        service,
+        "_call_model",
+        lambda **kwargs: (
+            "Generally, a visa is permission to enter or remain subject to its conditions.",
+            [],
+            {},
+        )
+        if kwargs["model"] != service.primary_model
+        else (_ for _ in ()).throw(TimeoutError("research timed out")),
+    )
+
+    response = service.answer(
+        payload=QueryRequest(question="What is a visa?"),
+        original_question="What is a visa?",
+        effective_question="What is a visa?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    assert "Generally, a visa" in response.answer
+    assert response.research_status == "incomplete"
+    assert response.retrieval_debug["premium_direct_answer"]["completion_status"] == "partial_timeout"
 
 
 def test_fallback_success_is_served_with_shared_budget_debug(monkeypatch) -> None:

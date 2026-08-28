@@ -51,6 +51,13 @@ from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeServ
 
 logger = logging.getLogger(__name__)
 
+TERMINAL_RECOVERY_INSTRUCTION = (
+    "Research could not be completed within the research budget. Do not perform further research. "
+    "Use only the information and genuine request-scoped evidence already available. Produce the best "
+    "useful answer possible, communicate any uncertainty, and do not fabricate evidence or citations. "
+    "Submit the answer through submit_answer. research_status must be incomplete because research was incomplete."
+)
+
 # ---------------------------------------------------------------------------
 # Provider interface
 # ---------------------------------------------------------------------------
@@ -134,6 +141,13 @@ class ShadowRunResult:
     errors: list[str]
     terminal_continuation_triggered: bool = False
     terminal_continuation_reason: str | None = None
+    research_stage_exhausted: bool = False
+    terminal_timeout_allocated_ms: float = 0.0
+    terminal_model: str | None = None
+    terminal_web_search_enabled: bool = False
+    terminal_remaining_budget_before_ms: float = 0.0
+    terminal_remaining_budget_after_ms: float = 0.0
+    completion_status: Literal["complete", "partial_timeout", "safe_failure"] = "safe_failure"
     terminal_tool_calls: list[ToolCallObservation] = field(default_factory=list)
     shadow_trace: dict[str, Any] | None = None
     reasoning_bank_telemetry: dict[str, Any] = field(default_factory=dict)
@@ -331,6 +345,12 @@ class AgentRuntimeService:
         terminal_recovery_pending = False
         prev_call_was_failed = False
         prev_call_was_missing_terminal = False
+        research_stage_exhausted = False
+        research_incomplete = False
+        terminal_timeout_allocated_ms = 0.0
+        terminal_remaining_budget_before_ms = 0.0
+        terminal_remaining_budget_after_ms = 0.0
+        terminal_instruction_added = False
 
         # Phase 5 resource governance: the answer/research target is a NON-RESETTING
         # stage budget inherited from the SAME original turn start, not a per-call
@@ -357,6 +377,17 @@ class AgentRuntimeService:
                 return "continuation"
             return "initial"
 
+        def _add_terminal_recovery_instruction() -> None:
+            nonlocal terminal_instruction_added
+            if terminal_instruction_added:
+                return
+            messages.append({
+                "role": "user",
+                "content": TERMINAL_RECOVERY_INSTRUCTION,
+                "terminal_instruction": True,
+            })
+            terminal_instruction_added = True
+
         def _begin_terminal_recovery(reason: str) -> bool:
             nonlocal terminal_phase
             nonlocal terminal_recovery_attempted
@@ -364,19 +395,17 @@ class AgentRuntimeService:
             nonlocal terminal_continuation_triggered
             nonlocal terminal_submission_continuation_count
             nonlocal terminal_continuation_reason
+            nonlocal research_stage_exhausted
+            nonlocal research_incomplete
 
-            # Recovery is available only after a research-stage failure, with
-            # accumulated conversation/tool context and enough of the original
-            # absolute deadline for the existing terminal contract.  The
-            # retry viability threshold is reused; no second threshold is
-            # introduced for this path.
+            # Recovery is available after a research-stage failure/cutoff even
+            # when no tool or response history exists. The original system and
+            # user messages are sufficient context for degraded synthesis.
             if (
                 terminal_phase
                 or terminal_recovery_attempted
                 or submission_received
                 or provider_call_count >= budget.max_provider_calls
-                or len(messages) <= 2
-                or deadline.remaining_ms() < budget.retry_viability_threshold_ms
             ):
                 return False
             terminal_phase = True
@@ -385,6 +414,13 @@ class AgentRuntimeService:
             terminal_continuation_triggered = True
             terminal_submission_continuation_count = 1
             terminal_continuation_reason = reason
+            research_incomplete = True
+            research_stage_exhausted = reason in {
+                "research_budget_exhausted",
+                "research_tool_round_cutoff",
+                "research_provider_budget_cutoff",
+            }
+            _add_terminal_recovery_instruction()
             return True
 
         try:
@@ -395,14 +431,22 @@ class AgentRuntimeService:
                     break
 
                 research_remaining = _research_stage_remaining_ms()
-                if (
-                    research_remaining <= 0
-                    or tool_round_count >= budget.max_tool_rounds
-                    or provider_call_count >= budget.max_provider_calls - 1
-                ):
-                    terminal_phase = True
+                if not terminal_phase:
+                    cutoff_reason: str | None = None
+                    if research_remaining <= 0:
+                        cutoff_reason = "research_budget_exhausted"
+                    elif tool_round_count >= budget.max_tool_rounds:
+                        cutoff_reason = "research_tool_round_cutoff"
+                    elif provider_call_count >= budget.max_provider_calls - 1:
+                        cutoff_reason = "research_provider_budget_cutoff"
+                    if cutoff_reason is not None:
+                        if not _begin_terminal_recovery(cutoff_reason):
+                            research_incomplete = True
+                            research_stage_exhausted = True
+                            terminal_phase = True
+                            terminal_continuation_reason = cutoff_reason
+                            _add_terminal_recovery_instruction()
 
-                provider_call_count += 1
                 provider_tools = self._provider_tools_for_round(
                     policy.tools,
                     flat_rag_executed_count=flat_rag_executed_count,
@@ -410,12 +454,30 @@ class AgentRuntimeService:
                     exact_legal_lookup_used=tool_context.exact_legal_lookup_call_count >= 1,
                     terminal_phase=terminal_phase,
                 )
-                call_timeout_ms = (
-                    remaining
-                    if terminal_phase
-                    else min(remaining, research_remaining)
-                )
+                if terminal_phase:
+                    terminal_remaining_budget_before_ms = remaining
+                    usable_terminal_budget = max(
+                        0.0,
+                        remaining - float(budget.final_response_reserve_ms),
+                    )
+                    if usable_terminal_budget < float(
+                        budget.terminal_synthesis_min_start_budget_ms
+                    ):
+                        errors.append("Insufficient budget to start terminal synthesis")
+                        terminal_remaining_budget_after_ms = deadline.remaining_ms()
+                        break
+                    call_timeout_ms = min(
+                        float(budget.terminal_synthesis_target_ms),
+                        usable_terminal_budget,
+                    )
+                    terminal_timeout_allocated_ms = call_timeout_ms
+                else:
+                    call_timeout_ms = min(remaining, research_remaining)
 
+                # Count only an actual provider API call. A protected terminal
+                # attempt that is skipped below the minimum-start threshold is
+                # not an API call and must not inflate provider telemetry.
+                provider_call_count += 1
                 provider_call_started = time.perf_counter()
                 try:
                     response = await self._provider.call(
@@ -439,7 +501,7 @@ class AgentRuntimeService:
                         registry=registry,
                         previous_response_id=previous_response_id,
                     )
-                except TurnDeadlineExceeded as exc:
+                except TurnDeadlineExceeded:
                     provider_call_observations.append(ProviderCallObservation(
                         stage="terminal_synthesis" if terminal_phase else "answer_research",
                         call_index=provider_call_count,
@@ -462,6 +524,8 @@ class AgentRuntimeService:
                         is_retry=(_provider_call_kind() == "retry"),
                     ))
                     errors.append("Deadline exceeded during provider call")
+                    if terminal_phase:
+                        terminal_remaining_budget_after_ms = deadline.remaining_ms()
                     break
                 except Exception as exc:
                     logger.exception("Provider call failed")
@@ -489,6 +553,7 @@ class AgentRuntimeService:
                     ))
                     if terminal_phase:
                         errors.append(f"Terminal synthesis provider call failed: {exc}")
+                        terminal_remaining_budget_after_ms = deadline.remaining_ms()
                         break
                     if _begin_terminal_recovery(
                         "research_provider_timeout" if failure_kind == "timeout" else "research_provider_error"
@@ -552,6 +617,8 @@ class AgentRuntimeService:
                     is_retry=(call_kind == "retry"),
                 ))
                 total_provider_duration_ms += response.duration_ms
+                if terminal_phase:
+                    terminal_remaining_budget_after_ms = deadline.remaining_ms()
                 prev_call_was_failed = response.status in ("timeout", "error")
                 prev_call_was_missing_terminal = False
 
@@ -566,6 +633,7 @@ class AgentRuntimeService:
                 if response.status == "timeout":
                     errors.append("Provider call timed out")
                     if terminal_phase:
+                        terminal_remaining_budget_after_ms = deadline.remaining_ms()
                         break
                     if _begin_terminal_recovery("research_provider_timeout"):
                         continue
@@ -584,6 +652,7 @@ class AgentRuntimeService:
                 if response.status == "error":
                     errors.append("Provider call returned error")
                     if terminal_phase:
+                        terminal_remaining_budget_after_ms = deadline.remaining_ms()
                         break
                     if _begin_terminal_recovery("research_provider_error"):
                         continue
@@ -601,6 +670,12 @@ class AgentRuntimeService:
 
                 # Process research/custom calls and terminal submission
                 # independently. Research rounds never block submit_answer.
+                if (
+                    not terminal_phase
+                    and _research_stage_remaining_ms() <= 0
+                    and not submission_received
+                ):
+                    _begin_terminal_recovery("research_budget_exhausted")
                 if response.tool_calls:
                     research_calls = [
                         tc for tc in response.tool_calls
@@ -630,6 +705,7 @@ class AgentRuntimeService:
                             0.0 if terminal_phase else _research_stage_remaining_ms()
                         )
                         if not terminal_phase and research_remaining <= 0:
+                            _begin_terminal_recovery("research_budget_exhausted")
                             terminal_phase = True
                             research_round_available = False
                             research_remaining = 0.0
@@ -878,6 +954,18 @@ class AgentRuntimeService:
                 else:
                     # No custom tool calls — provider returned text without submit_answer
                     terminal_missing = True
+                    # A research response can arrive just as the non-resetting
+                    # research budget expires.  The cutoff handler has already
+                    # armed the protected terminal continuation; preserve this
+                    # response as context and make that continuation call now.
+                    # Do not mistake the research response for terminal output.
+                    if terminal_recovery_pending and terminal_recovery_attempted:
+                        messages.append({
+                            "role": "assistant",
+                            "content": response.text or "",
+                        })
+                        terminal_missing = False
+                        continue
                     if terminal_recovery_attempted:
                         errors.append(
                             "Terminal synthesis missing submit_answer after research recovery; no second attempt allowed"
@@ -900,6 +988,12 @@ class AgentRuntimeService:
 
             if not submission_received and not terminal_missing:
                 errors.append("No response from provider")
+
+            if submission_received and submission is not None and research_incomplete:
+                # The runtime owns timeout-derived bookkeeping. This does not
+                # alter draft text or re-run semantic validation.
+                if submission.research_status != "incomplete":
+                    submission = submission.model_copy(update={"research_status": "incomplete"})
 
             # Phase 6 M3: one evidence-only semantic checker after the bounded
             # answer/research stage. This is Default L/N shadow telemetry only;
@@ -1064,6 +1158,14 @@ class AgentRuntimeService:
             logger.exception("Unexpected error in shadow agent run")
             errors.append(f"Unexpected error: {exc}")
 
+        completion_status: Literal["complete", "partial_timeout", "safe_failure"] = (
+            "partial_timeout"
+            if submission_received and research_incomplete
+            else "complete"
+            if submission_received
+            else "safe_failure"
+        )
+
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
         metrics = AgentExecutionMetrics(
@@ -1136,6 +1238,17 @@ class AgentRuntimeService:
             terminal_submission_continuation_count=terminal_submission_continuation_count,
             terminal_continuation_triggered=terminal_continuation_triggered,
             terminal_continuation_reason=terminal_continuation_reason,
+            research_stage_target_ms=int(research_stage_budget_ms),
+            research_stage_exhausted=research_stage_exhausted,
+            terminal_recovery_triggered=terminal_recovery_attempted,
+            terminal_recovery_reason=terminal_continuation_reason,
+            terminal_timeout_allocated_ms=terminal_timeout_allocated_ms,
+            terminal_model=policy.model if terminal_recovery_attempted else None,
+            terminal_web_search_enabled=False,
+            terminal_remaining_budget_before_ms=terminal_remaining_budget_before_ms,
+            terminal_remaining_budget_after_ms=terminal_remaining_budget_after_ms,
+            final_response_reserve_ms=budget.final_response_reserve_ms,
+            completion_status=completion_status,
             answer_agent_latency_ms=answer_agent_duration_ms or total_duration,
             fact_check_latency_ms=checker_latency_ms,
             total_latency_ms=total_duration,
@@ -1171,6 +1284,17 @@ class AgentRuntimeService:
             "terminal_submission_continuation_count": terminal_submission_continuation_count,
             "terminal_continuation_triggered": terminal_continuation_triggered,
             "terminal_continuation_reason": terminal_continuation_reason,
+            "research_stage_target_ms": int(research_stage_budget_ms),
+            "research_stage_exhausted": research_stage_exhausted,
+            "terminal_recovery_triggered": terminal_recovery_attempted,
+            "terminal_recovery_reason": terminal_continuation_reason,
+            "terminal_timeout_allocated_ms": terminal_timeout_allocated_ms,
+            "terminal_model": policy.model if terminal_recovery_attempted else None,
+            "terminal_web_search_enabled": False,
+            "terminal_remaining_budget_before_ms": terminal_remaining_budget_before_ms,
+            "terminal_remaining_budget_after_ms": terminal_remaining_budget_after_ms,
+            "final_response_reserve_ms": budget.final_response_reserve_ms,
+            "completion_status": completion_status,
             "errors": errors,
             "provider_response_ids": provider_response_ids,
             "deadline_ms": deadline.turn_deadline_ms,
@@ -1219,6 +1343,13 @@ class AgentRuntimeService:
             terminal_submission_continuation_count=terminal_submission_continuation_count,
             terminal_continuation_triggered=terminal_continuation_triggered,
             terminal_continuation_reason=terminal_continuation_reason,
+            research_stage_exhausted=research_stage_exhausted,
+            terminal_timeout_allocated_ms=terminal_timeout_allocated_ms,
+            terminal_model=policy.model if terminal_recovery_attempted else None,
+            terminal_web_search_enabled=False,
+            terminal_remaining_budget_before_ms=terminal_remaining_budget_before_ms,
+            terminal_remaining_budget_after_ms=terminal_remaining_budget_after_ms,
+            completion_status=completion_status,
             terminal_tool_calls=terminal_tool_call_observations,
             errors=errors,
             shadow_trace=shadow_trace,

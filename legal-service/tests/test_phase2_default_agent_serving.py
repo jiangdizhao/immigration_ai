@@ -187,10 +187,11 @@ def test_default_serving_uses_run_and_preserves_customer_answer(monkeypatch):
 
         async def run(self, *_args, **_kwargs):
             calls["run"] += 1
+            metrics = _metrics().model_copy(update={"terminal_recovery_triggered": True})
             return SimpleNamespace(
                 model="gpt-5.6-luna",
                 submission=_submission("customer answer"),
-                metrics=_metrics(),
+                metrics=metrics,
                 checker_status="not_required",
                 checker_provider_call_count=0,
                 checker_result_tool_call_count=0,
@@ -217,6 +218,8 @@ def test_default_serving_uses_run_and_preserves_customer_answer(monkeypatch):
     assert response.answer == "customer answer"
     assert response.architecture_version == "phase2.default_agent_runtime"
     assert response.retrieval_debug["legacy_pfvd_skipped"] is True
+    assert response.retrieval_debug["terminal_recovery"]["triggered"] is True
+    assert response.retrieval_debug["execution_metrics"]["terminal_recovery_triggered"] is True
     assert calls == {"run": 1, "run_shadow": 0}
     assert len(query_service.updated) == 1
     assert len(query_service.review_trace_service.calls) == 1

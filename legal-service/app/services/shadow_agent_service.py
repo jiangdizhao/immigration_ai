@@ -249,6 +249,9 @@ class ShadowAgentService:
                 checker_target_ms=settings.legal_fact_check_target_ms,
                 max_flat_rag_calls=settings.agent_max_flat_rag_calls,
                 retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
+                terminal_synthesis_target_ms=settings.terminal_synthesis_target_ms,
+                final_response_reserve_ms=settings.final_response_reserve_ms,
+                terminal_synthesis_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
             )
 
         # Create fresh registry for this shadow run

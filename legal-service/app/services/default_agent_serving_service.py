@@ -72,6 +72,9 @@ class DefaultAgentServingService:
                 checker_target_ms=settings.legal_fact_check_target_ms,
                 max_flat_rag_calls=settings.agent_max_flat_rag_calls,
                 retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
+                terminal_synthesis_target_ms=settings.terminal_synthesis_target_ms,
+                final_response_reserve_ms=settings.final_response_reserve_ms,
+                terminal_synthesis_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
             )
 
             runtime_state = self._compact_state(
@@ -317,9 +320,10 @@ class DefaultAgentServingService:
         return QueryResponse(
             matter_id=matter_id,
             answer=(
-                "抱歉，当前暂时无法完成答复。请稍后再试，或预约律师确认。"
+                "我未能在可用时间内完成研究，因此没有足够的已核实材料给出完整答复。你可以重试、缩小问题范围，"
+                "或安排律师咨询。"
                 if is_zh
-                else "Sorry, I could not complete the answer right now. Please try again or arrange a lawyer consultation."
+                else "I couldn't complete the research within the available time, so I don't have enough verified material to give you a complete answer. You can retry the question, narrow its scope, or arrange a lawyer consultation."
             ),
             response_language="zh" if is_zh else "en",
             confidence="low",
@@ -482,6 +486,20 @@ class DefaultAgentServingService:
                 "checker_packet": checker_packet_manifest,
             },
             "checker_packet": checker_packet_summary,
+            "terminal_recovery": {
+                "triggered": bool(
+                    metrics.get(
+                        "terminal_recovery_triggered",
+                        getattr(result, "terminal_continuation_triggered", False),
+                    )
+                ),
+                "reason": getattr(result, "terminal_continuation_reason", None),
+                "model": getattr(result, "terminal_model", None),
+                "timeout_allocated_ms": getattr(result, "terminal_timeout_allocated_ms", 0.0),
+                "web_search_enabled": getattr(result, "terminal_web_search_enabled", False),
+                "research_stage_exhausted": getattr(result, "research_stage_exhausted", False),
+                "completion_status": getattr(result, "completion_status", None),
+            },
             "execution_metrics": metrics,
         }
 

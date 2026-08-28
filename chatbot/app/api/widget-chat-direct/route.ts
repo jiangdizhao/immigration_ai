@@ -9,6 +9,7 @@ import {
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
+import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
 import {
   blockedResponseForLocale,
@@ -16,7 +17,6 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
-import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 
 export const maxDuration = 180;
 
@@ -65,6 +65,7 @@ type ResponseLanguage = "en" | "zh";
 type LegalServiceResponse = {
   answer?: string;
   response_language?: string | null;
+  research_status?: "not_required" | "complete" | "incomplete" | null;
   citations?: Record<string, any>[];
   compact_sources?: string[];
   user_display_mode?: string | null;
@@ -403,6 +404,7 @@ export async function POST(request: Request) {
       compactSources,
       citations: normalizedCitations,
       confidence: data.confidence ?? null,
+      researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
       matterId: data.matter_id ?? matterId ?? null,
       retrievalDebug: SHOW_WIDGET_DEBUG
@@ -474,6 +476,7 @@ export async function POST(request: Request) {
     return Response.json({
       text: finalText,
       responseLanguage: finalResponseLanguage,
+      researchStatus: data.research_status ?? null,
       citations: normalizedCitations,
       compactSources,
       userDisplayMode: data.user_display_mode ?? "general_with_warning",

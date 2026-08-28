@@ -517,6 +517,7 @@ export function ImmigrationAssistantWidget() {
       text: "",
       isStreaming: true,
       responseLanguage: data.responseLanguage ?? null,
+      researchStatus: data.researchStatus ?? null,
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
@@ -905,6 +906,14 @@ export function ImmigrationAssistantWidget() {
                             <span className="ml-0.5 inline-block animate-pulse text-slate-400">
                               ▍
                             </span>
+                          ) : null}
+                          {assistantReady &&
+                          message.researchStatus === "incomplete" ? (
+                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                              {messageZh
+                                ? "研究未完成：来源核对已达到时间限制。这是尽力答复，部分内容可能仍需进一步核实。"
+                                : "Research incomplete: the source check reached its time limit. This is a best-effort answer and some points may require further verification."}
+                            </div>
                           ) : null}
                         </div>
 

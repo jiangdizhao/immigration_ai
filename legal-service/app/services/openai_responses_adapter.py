@@ -229,9 +229,12 @@ class OpenAIResponsesAdapter(ProviderInterface):
             return items
         if previous_response_id:
             latest_user_message: dict[str, Any] | None = None
+            terminal_instruction: dict[str, Any] | None = None
             for message in messages_history:
                 if message.get("role") == "user":
                     latest_user_message = message
+                if message.get("terminal_instruction") is True:
+                    terminal_instruction = message
             for message in messages_history:
                 if message.get("role") == "tool":
                     call_id = message.get("tool_call_id")
@@ -248,11 +251,25 @@ class OpenAIResponsesAdapter(ProviderInterface):
                     "role": "user",
                     "content": [{"type": "input_text", "text": str(latest_user_message.get("content") or "")}],
                 })
+            if terminal_instruction is not None:
+                items.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": str(terminal_instruction.get("content") or ""),
+                    }],
+                })
             return items
         for msg in messages_history:
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if role == "system":
+                continue
+            if msg.get("terminal_instruction") is True:
+                items.append({
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": str(content)}],
+                })
                 continue
             if role == "assistant" and "tool_calls" in msg:
                 continue

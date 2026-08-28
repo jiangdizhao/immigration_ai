@@ -205,6 +205,9 @@ def _request(*, user_text: str = "Which provision matters?", max_tool_rounds: in
             checker_target_ms=1000,
             max_flat_rag_calls=1,
             retry_viability_threshold_ms=100,
+            terminal_synthesis_target_ms=500,
+            final_response_reserve_ms=100,
+            terminal_synthesis_min_start_budget_ms=100,
         ),
         experiment_arm="N",
     )

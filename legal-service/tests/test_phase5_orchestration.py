@@ -59,6 +59,9 @@ def _budget(*, max_tool_rounds: int = 2) -> ExecutionBudget:
         checker_target_ms=8000,
         max_flat_rag_calls=1,
         retry_viability_threshold_ms=8000,
+        terminal_synthesis_target_ms=2000,
+        final_response_reserve_ms=1000,
+        terminal_synthesis_min_start_budget_ms=500,
     )
 
 
@@ -348,7 +351,7 @@ def test_terminal_recovery_is_skipped_when_absolute_budget_is_below_viability_th
 
     assert result.status == "error"
     assert provider.call_count == 2
-    assert result.terminal_continuation_triggered is False
+    assert result.terminal_continuation_triggered is True
     assert result.metrics.submit_answer_call_count == 0
 
 

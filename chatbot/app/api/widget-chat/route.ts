@@ -10,6 +10,7 @@ import {
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
+import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
 import {
   blockedResponseForLocale,
@@ -17,7 +18,6 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
-import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 
 export const maxDuration = 180;
 
@@ -76,6 +76,7 @@ type LegalCitation = {
 type LegalServiceResponse = {
   answer?: string;
   response_language?: string | null;
+  research_status?: "not_required" | "complete" | "incomplete" | null;
   citations?: LegalCitation[];
   compact_sources?: string[];
   user_display_mode?: string | null;
@@ -497,6 +498,7 @@ function logWidgetDebug(params: {
   matterId?: string | null;
   response: LegalServiceResponse;
   responseLanguage: ResponseLanguage;
+  researchStatus?: LegalServiceResponse["research_status"];
 }) {
   const dbg = params.response.retrieval_debug ?? {};
   const pfvd = dbg.proposal_first_verification_depth ?? null;
@@ -508,6 +510,7 @@ function logWidgetDebug(params: {
   console.log("matterId(in):", params.matterId ?? null);
   console.log("matterId(out):", params.response.matter_id ?? null);
   console.log("responseLanguage:", params.responseLanguage);
+  console.log("researchStatus:", params.researchStatus ?? null);
   console.log("originalQuestion:", dbg.original_question ?? params.question);
   console.log(
     "effectiveQuestion:",
@@ -911,6 +914,7 @@ export async function POST(request: Request) {
       compactSources,
       citations: normalizedCitations,
       confidence: data.confidence ?? null,
+      researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
       matterId: data.matter_id ?? matterId ?? null,
       retrievalDebug: SHOW_WIDGET_DEBUG
@@ -974,6 +978,7 @@ export async function POST(request: Request) {
       matterId,
       response: data,
       responseLanguage: finalResponseLanguage,
+      researchStatus: data.research_status ?? null,
     });
 
     return Response.json({

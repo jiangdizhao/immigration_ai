@@ -93,13 +93,22 @@ class Settings(BaseSettings):
         default=60000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
     )
     premium_turn_deadline_ms: int = Field(
-        default=45000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
+        default=90000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
     )
     default_answer_research_target_ms: int = Field(
         default=32000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
     )
     premium_answer_research_target_ms: int = Field(
-        default=37000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
+        default=65000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
+    )
+    terminal_synthesis_target_ms: int = Field(
+        default=15000, ge=1, alias="TERMINAL_SYNTHESIS_TARGET_MS"
+    )
+    final_response_reserve_ms: int = Field(
+        default=3000, ge=0, alias="FINAL_RESPONSE_RESERVE_MS"
+    )
+    terminal_synthesis_min_start_budget_ms: int = Field(
+        default=5000, ge=1, alias="TERMINAL_SYNTHESIS_MIN_START_BUDGET_MS"
     )
     legal_fact_check_target_ms: int = Field(
         default=8000, ge=1, alias="LEGAL_FACT_CHECK_TARGET_MS"
@@ -158,6 +167,20 @@ class Settings(BaseSettings):
             > self.premium_turn_deadline_ms
         ):
             raise ValueError("premium answer/checker targets must fit inside the turn deadline")
+        for mode, deadline_ms, research_target_ms in (
+            ("default", self.default_turn_deadline_ms, self.default_answer_research_target_ms),
+            ("premium", self.premium_turn_deadline_ms, self.premium_answer_research_target_ms),
+        ):
+            if self.terminal_synthesis_target_ms + self.final_response_reserve_ms > deadline_ms:
+                raise ValueError(
+                    f"{mode} terminal target and final response reserve must fit inside the turn deadline"
+                )
+            if research_target_ms + self.terminal_synthesis_min_start_budget_ms + self.final_response_reserve_ms > deadline_ms:
+                raise ValueError(
+                    f"{mode} research target must leave room for terminal synthesis and final response reserve"
+                )
+        if self.terminal_synthesis_min_start_budget_ms > self.terminal_synthesis_target_ms:
+            raise ValueError("terminal minimum-start budget must not exceed terminal target")
         return self
 
     @property

@@ -260,6 +260,10 @@ function looksChineseText(text: string) {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text);
 }
 
+function isZhLanguage(responseLanguage?: string | null) {
+  return (responseLanguage ?? "").toLowerCase().startsWith("zh");
+}
+
 function workspaceProgressStage(elapsedMs: number, isZh: boolean) {
   const stages = isZh
     ? WORKSPACE_PROGRESS_STAGES_ZH
@@ -288,6 +292,7 @@ type ImmigrationStoredMessage = {
   citations?: WidgetAssistantMessage["citations"];
   compactSources?: string[];
   confidence?: WidgetAssistantMessage["confidence"];
+  researchStatus?: WidgetAssistantMessage["researchStatus"];
   followUpQuestions?: string[];
   matterId?: string | null;
   retrievalDebug?: WidgetAssistantMessage["retrievalDebug"];
@@ -306,6 +311,7 @@ function assistantFromStoredMessage(
     text: message.text,
     isStreaming: false,
     responseLanguage: looksChineseText(message.text) ? "zh" : "en",
+    researchStatus: message.researchStatus ?? null,
     citations: message.citations ?? [],
     compactSources: message.compactSources ?? [],
     userDisplayMode: null,
@@ -637,6 +643,7 @@ export function ImmigrationAIWorkspace({
       text: "",
       isStreaming: true,
       responseLanguage: data.responseLanguage ?? null,
+      researchStatus: data.researchStatus ?? null,
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
@@ -1195,6 +1202,15 @@ export function ImmigrationAIWorkspace({
                             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                               <Loader2 className="size-3.5 animate-spin" />
                               Drafting...
+                            </div>
+                          ) : null}
+                          {isAssistant &&
+                          !message.isStreaming &&
+                          message.researchStatus === "incomplete" ? (
+                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                              {isZhLanguage(message.responseLanguage)
+                                ? "研究未完成：来源核对已达到时间限制。这是尽力答复，部分内容可能仍需进一步核实。"
+                                : "Research incomplete: the source check reached its time limit. This is a best-effort answer and some points may require further verification."}
                             </div>
                           ) : null}
                         </div>

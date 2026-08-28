@@ -107,6 +107,7 @@ export interface WidgetAssistantMessage {
   text: string;
   isStreaming?: boolean;
   responseLanguage?: ResponseLanguage | null;
+  researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
   userDisplayMode?: string | null;
@@ -135,6 +136,7 @@ export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 export interface WidgetRouteResponse {
   text: string;
   responseLanguage?: ResponseLanguage | null;
+  researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
   userDisplayMode?: string | null;

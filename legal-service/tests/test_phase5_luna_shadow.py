@@ -612,7 +612,7 @@ class TestBudgets:
         )
         assert result.metrics.provider_api_call_count <= 3
 
-    async def test_retry_count_tracked(self):
+    async def test_first_provider_failure_enters_terminal_recovery(self):
         provider = MockProvider([
             ProviderResponse(response_id="resp-err", model="gpt-5.6-luna", status="error", duration_ms=100),
             make_greeting_response(),
@@ -621,7 +621,35 @@ class TestBudgets:
         registry = create_registry()
         deadline = AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000)
         result = await runtime.run_shadow(make_runtime_request(user_text="Hello"), deadline=deadline, registry=registry)
-        assert result.metrics.retry_count >= 1
+        assert result.submission is not None
+        assert result.submission.research_status == "incomplete"
+        assert result.metrics.retry_count == 0
+        assert result.metrics.terminal_recovery_triggered is True
+        assert result.metrics.provider_calls[1].call_kind == "continuation"
+        assert result.metrics.provider_calls[1].stage == "terminal_synthesis"
+        assert result.metrics.provider_calls[1].returned_tool_names == ["submit_answer"]
+        assert any(
+            message.get("terminal_instruction") is True
+            and "Research could not be completed" in message.get("content", "")
+            for message in provider.call_args[1]["messages_history"]
+        )
+
+    async def test_timeout_recovery_normalizes_model_complete_status_to_incomplete(self):
+        terminal = make_greeting_response()
+        terminal.tool_calls[0].arguments["research_status"] = "complete"
+        provider = MockProvider([
+            ProviderResponse(response_id="resp-timeout", model="gpt-5.6-luna", status="timeout"),
+            terminal,
+        ])
+        result = await AgentRuntimeService(provider=provider).run_shadow(
+            make_runtime_request(user_text="What rule applies?"),
+            deadline=AbsoluteTurnDeadline(started_at=time.perf_counter(), turn_deadline_ms=40000),
+            registry=create_registry("normalize-timeout-status"),
+        )
+
+        assert result.submission is not None
+        assert result.submission.research_status == "incomplete"
+        assert result.completion_status == "partial_timeout"
 
     async def test_inherited_execution_budget_honored(self):
         provider = MockProvider([make_no_submit_response(), make_no_submit_response()])
@@ -749,8 +777,8 @@ class TestPhase5ResourceGovernance:
             registry=create_registry("retry-early"),
         )
         assert provider.call_count == 2
-        assert result.metrics.retry_count >= 1
-        assert result.metrics.provider_retry_skipped_reason is None
+        assert result.metrics.retry_count == 0
+        assert result.metrics.terminal_recovery_triggered is True
 
     async def test_late_failure_retry_skipped_when_remaining_below_threshold(self):
         """The first provider call starts while the 32s research stage is still
@@ -785,12 +813,11 @@ class TestPhase5ResourceGovernance:
             deadline=deadline,
             registry=create_registry("retry-late"),
         )
-        # Exactly one provider call: it started while the 32s stage was valid.
-        assert provider.call_count == 1
-        # After the 31s call, research-stage remaining ~1s < retry threshold 8s,
-        # so the retry is skipped.
-        assert result.metrics.provider_retry_skipped_reason == "retry_viability_threshold_not_met"
-        assert "retry skipped" in " ".join(result.errors).lower()
+        # The second call is the protected terminal attempt, not a research retry.
+        assert provider.call_count == 2
+        assert result.metrics.retry_count == 0
+        assert result.metrics.terminal_recovery_triggered is True
+        assert result.metrics.provider_calls[1].stage == "terminal_synthesis"
 
     async def test_deadline_remains_absolute_and_unchanged(self):
         """The resource-governance changes do not reset or extend the absolute
@@ -886,19 +913,19 @@ class TestPhase5ResourceGovernance:
             deadline=deadline,
             registry=create_registry("stage-nonreset"),
         )
-        # One research call, one denied post-boundary request, and one terminal
-        # synthesis call.
-        assert provider.call_count == 3
-        assert result.metrics.provider_api_call_count == 3
+        # One research call and one denied post-boundary request. The protected
+        # terminal minimum-start threshold prevents a late provider call.
+        assert provider.call_count == 2
+        assert result.metrics.provider_api_call_count == 2
         assert result.metrics.utility_call_count == 1
         # Cumulative elapsed time exceeded the 32s stage but stayed within 40s.
         assert clock() >= 32.0
         assert clock() < 40.0
-        assert result.metrics.submit_answer_call_count == 1
+        assert result.metrics.submit_answer_call_count == 0
         # No provider call/tool received a fresh 32s stage budget; terminal
         # synthesis used the remaining absolute deadline.
         # The absolute 40s deadline was not reset.
-        assert result.status == "completed"
+        assert result.status == "error"
 
     async def test_provider_continuation_blocked_after_stage_exhausted(self):
         """A provider continuation cannot start after the 32s answer/research
@@ -930,13 +957,7 @@ class TestPhase5ResourceGovernance:
         assert clock() < 40.0
         # The second continuation did NOT occur.
         assert result.metrics.provider_api_call_count == 1
-        # A controlled terminal/stage/deadline error occurred (behavioral, not
-        # one exact human-readable sentence).
-        errs_lower = " ".join(result.errors).lower()
-        assert any(k in errs_lower for k in (
-            "answer/research stage", "deadline exceeded", "no continuation allowed",
-            "terminal submission",
-        ))
+        assert result.metrics.research_stage_exhausted is True
 
     async def test_early_retry_still_allowed_with_stage_budget(self):
         """A fast early transient failure still gets one bounded retry when both
@@ -964,8 +985,8 @@ class TestPhase5ResourceGovernance:
             registry=create_registry("stage-early-retry"),
         )
         assert provider.call_count == 2
-        assert result.metrics.retry_count >= 1
-        assert result.metrics.provider_retry_skipped_reason is None
+        assert result.metrics.retry_count == 0
+        assert result.metrics.terminal_recovery_triggered is True
 
     async def test_observability_records_ordered_provider_and_tool_observations(self):
         """Multiple provider calls generate ordered observations with correct
@@ -996,14 +1017,12 @@ class TestPhase5ResourceGovernance:
         )
         # Ordered provider observations.
         pcs = result.metrics.provider_calls
-        assert len(pcs) == 3
+        assert len(pcs) == 2
         assert pcs[0].call_index == 1
         assert pcs[0].call_kind == "initial"
         assert pcs[1].call_index == 2
         assert pcs[1].call_kind in ("continuation",)
-        assert pcs[2].call_index == 3
-        assert pcs[2].stage == "terminal_synthesis"
-        assert pcs[2].research_stage_remaining_before_ms == 0
+        assert pcs[1].stage == "answer_research"
         # Timeout allocation and stage remainders observable.
         assert pcs[0].timeout_allocated_ms == 32000
         assert pcs[0].research_stage_remaining_before_ms == 32000
@@ -1050,8 +1069,9 @@ class TestPhase5ResourceGovernance:
         assert len(pcs) == 2
         assert pcs[0].call_kind == "initial"
         assert pcs[0].status == "error"
-        assert pcs[1].call_kind == "retry"
-        assert pcs[1].is_retry is True
+        assert pcs[1].call_kind == "continuation"
+        assert pcs[1].stage == "terminal_synthesis"
+        assert pcs[1].is_retry is False
 
     async def test_multiple_short_calls_share_32s_budget_not_each_32s(self):
         """Twelve ~3s calls would consume ~36s; under a per-call timeout all 12
@@ -1722,6 +1742,40 @@ class TestProviderAdapter:
             "call_id": "utility-call-3",
             "output": '{"status":"ok"}',
         }]
+
+    def test_terminal_recovery_instruction_reaches_fresh_and_continued_inputs(self):
+        from app.services.agent_runtime_service import TERMINAL_RECOVERY_INSTRUCTION
+        from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+
+        adapter = OpenAIResponsesAdapter(
+            client=SimpleNamespace(
+                responses=SimpleNamespace(create=lambda **_: SimpleNamespace(id="resp-2", output=[]))
+            )
+        )
+        terminal_message = {
+            "role": "user",
+            "content": TERMINAL_RECOVERY_INSTRUCTION,
+            "terminal_instruction": True,
+        }
+        fresh = adapter._build_input(
+            system_prompt="system",
+            messages_history=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "question"},
+                terminal_message,
+            ],
+        )
+        continued = adapter._build_input(
+            system_prompt="system",
+            previous_response_id="resp-1",
+            messages_history=[
+                {"role": "assistant", "content": "", "tool_calls": [{"id": "search-1"}]},
+                {"role": "tool", "tool_call_id": "search-1", "content": "{}"},
+                terminal_message,
+            ],
+        )
+        assert fresh[-1]["content"][0]["text"] == TERMINAL_RECOVERY_INSTRUCTION
+        assert continued[-1]["content"][0]["text"] == TERMINAL_RECOVERY_INSTRUCTION
 
     def test_provider_missing_terminal_submit(self):
         resp = make_no_submit_response()

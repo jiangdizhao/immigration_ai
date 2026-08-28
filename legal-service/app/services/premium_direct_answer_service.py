@@ -47,6 +47,17 @@ REFERENCE_HEADING_MARKERS = (
     "核对来源",
 )
 
+# These broad mutable-fact indicators only control timeout-degraded answer
+# policy. They are not eligibility or research-routing rules.
+CURRENT_FACT_MARKERS = (
+    "current", "currently", "latest", "today", "as of", "up to date", "recent",
+    "fee", "fees", "charge", "charges", "cost", "amount", "threshold",
+    "processing time", "processing times", "waiting time", "deadline", "deadlines",
+    "expiry", "expires", "requirement", "requirements", "condition", "conditions",
+    "policy", "policies", "有效期", "费用", "金额", "门槛", "处理时间", "截止日期",
+    "要求", "条件", "政策",
+)
+
 
 class PremiumDirectAnswerService:
     """Agentic direct-answer lane for the UI's premium LLM option.
@@ -61,8 +72,10 @@ class PremiumDirectAnswerService:
       configured fallback model;
     - the Responses API web_search tool is enabled for agentic live research;
     - actual web-search sources are captured without an artificial cap;
-    - primary and fallback requests share one absolute lane deadline and use
-      zero SDK retries.
+    - research attempts share one non-resetting research deadline inside the
+      absolute lane deadline;
+    - terminal synthesis has its own protected, tool-free budget and uses zero
+      SDK retries.
     """
 
     def __init__(self) -> None:
@@ -79,7 +92,7 @@ class PremiumDirectAnswerService:
         self.primary_timeout_seconds = float(
             os.getenv(
                 "PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS",
-                os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "50"),
+                os.getenv("PREMIUM_DIRECT_TIMEOUT_SECONDS", "60"),
             )
         )
         configured_primary_retries = int(
@@ -116,14 +129,45 @@ class PremiumDirectAnswerService:
             )
         self.fallback_max_retries = 0
 
-        # Premium Direct uses the existing 45-second Premium backend contract
-        # by default.  A direct-lane override is available for controlled
-        # deployments, but primary and fallback always share this one budget;
-        # it is intentionally below the frontend's 170-second request timeout.
+        # Premium research has a non-resetting stage budget inside the absolute
+        # 90-second lane. Both values remain overrideable for short deterministic
+        # tests and controlled local smoke tests.
         self.lane_budget_ms = int(
             os.getenv(
                 "PREMIUM_DIRECT_LANE_BUDGET_MS",
                 str(self.settings.premium_turn_deadline_ms),
+            )
+        )
+        self.research_stage_target_ms = int(
+            os.getenv(
+                "PREMIUM_DIRECT_RESEARCH_TARGET_MS",
+                str(self.settings.premium_answer_research_target_ms),
+            )
+        )
+        self.terminal_model = os.getenv(
+            "PREMIUM_DIRECT_TERMINAL_MODEL",
+            self.fallback_model,
+        )
+        self.terminal_reasoning_effort = os.getenv(
+            "PREMIUM_DIRECT_TERMINAL_REASONING_EFFORT",
+            self.fallback_reasoning_effort,
+        ).strip()
+        self.terminal_synthesis_target_ms = int(
+            os.getenv(
+                "PREMIUM_DIRECT_TERMINAL_TARGET_MS",
+                str(getattr(self.settings, "terminal_synthesis_target_ms", 15000)),
+            )
+        )
+        self.final_response_reserve_ms = int(
+            os.getenv(
+                "PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS",
+                str(getattr(self.settings, "final_response_reserve_ms", 3000)),
+            )
+        )
+        self.terminal_min_start_budget_ms = int(
+            os.getenv(
+                "PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS",
+                str(getattr(self.settings, "terminal_synthesis_min_start_budget_ms", 5000)),
             )
         )
         self.minimum_fallback_budget_ms = int(
@@ -241,13 +285,19 @@ class PremiumDirectAnswerService:
             model_input=model_input,
             instructions=instructions,
             deadline=lane_deadline,
+            current_fact_request=self._is_current_fact_request(question_for_model),
         )
 
+        research_status = model_debug.get(
+            "research_status",
+            "complete" if self.web_search_enabled else "not_required",
+        )
         if not answer_text:
-            answer_text = (
-                "抱歉，我现在无法生成快速研究答复。建议改用默认法律核对模式，或请律师人工确认。"
-                if is_zh
-                else "Sorry, I could not generate a quick research answer. Please use the default legal-check mode or ask the lawyer to confirm manually."
+            answer_text = self._safe_failure_text(
+                is_zh=is_zh,
+                current_fact_unverified=bool(
+                    model_debug.get("terminal_output_suppressed_due_to_unverified_current_fact")
+                ),
             )
 
         if web_sources:
@@ -257,6 +307,11 @@ class PremiumDirectAnswerService:
                 is_zh=is_zh,
             )
             compact_sources = self._format_compact_sources(web_sources)
+        elif model_debug.get("terminal_recovery_triggered"):
+            # Terminal synthesis cannot introduce model-authored URLs or
+            # references. Only genuine sources returned by a research response
+            # are ever rendered.
+            compact_sources = []
         else:
             compact_sources = self._extract_reference_lines(answer_text)
 
@@ -314,6 +369,10 @@ class PremiumDirectAnswerService:
                     "high_risk_detected": high_risk,
                     "max_tool_calls": self.max_tool_calls,
                     "premium_lane_budget_ms": self.lane_budget_ms,
+                    "absolute_deadline_ms": self.lane_budget_ms,
+                    "research_stage_target_ms": self.research_stage_target_ms,
+                    "final_response_reserve_ms": self.final_response_reserve_ms,
+                    "research_status": research_status,
                     **model_debug,
                     "skipped_pipeline": [
                         "semantic_turn_router",
@@ -325,6 +384,7 @@ class PremiumDirectAnswerService:
                     ],
                 },
             },
+            research_status=research_status,
         )
 
     def _answer_with_fallback(
@@ -333,14 +393,17 @@ class PremiumDirectAnswerService:
         model_input: str,
         instructions: str = "",
         deadline: AbsoluteTurnDeadline | None = None,
+        current_fact_request: bool = False,
     ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
         deadline = deadline or AbsoluteTurnDeadline(
             started_at=time.perf_counter(),
             turn_deadline_ms=self.lane_budget_ms,
         )
+        research_remaining_ms = deadline.stage_remaining_ms(self.research_stage_target_ms)
         primary_budget_ms = min(
             max(0.0, self.primary_timeout_seconds * 1000.0),
             deadline.remaining_ms(),
+            research_remaining_ms,
         )
         primary_debug = {
             "primary_model": self.primary_model,
@@ -353,31 +416,46 @@ class PremiumDirectAnswerService:
             "fallback_max_retries": self.fallback_max_retries,
             "service_tier": self.service_tier or None,
             "premium_lane_budget_ms": self.lane_budget_ms,
+            "absolute_deadline_ms": self.lane_budget_ms,
+            "research_stage_target_ms": self.research_stage_target_ms,
+            "research_stage_remaining_before_ms": research_remaining_ms,
+            "final_response_reserve_ms": self.final_response_reserve_ms,
             "primary_budget_ms": primary_budget_ms,
             "fallback_budget_ms": 0.0,
             "fallback_skipped_due_to_budget": False,
+            "terminal_recovery_triggered": False,
+            "terminal_web_search_enabled": False,
+            "current_fact_request": current_fact_request,
         }
+        verified_sources: list[dict[str, str]] = []
 
         if primary_budget_ms <= 0:
-            return "", [], {
-                **primary_debug,
-                "primary_failed": True,
-                "primary_error_type": "PremiumLaneBudgetExhausted",
-                "fallback_skipped_due_to_budget": True,
-            }
+            return self._terminal_synthesis(
+                model_input=model_input,
+                deadline=deadline,
+                base_debug={
+                    **primary_debug,
+                    "primary_failed": True,
+                    "primary_error_type": "PremiumResearchBudgetExhausted",
+                    "fallback_skipped_due_to_budget": True,
+                },
+                verified_sources=verified_sources,
+                current_fact_request=current_fact_request,
+            )
 
         logger.info(
             "premium_direct_primary_request model=%s reasoning_effort=%s timeout_seconds=%s "
             "max_retries=%s web_search=%s search_context_size=%s input_chars=%s "
-            "fallback_model=%s",
+            "fallback_model=%s research_target_ms=%s",
             self.primary_model,
             self.primary_reasoning_effort or None,
-            self.primary_timeout_seconds,
+            primary_budget_ms / 1000.0,
             self.primary_max_retries,
             self.web_search_enabled,
             self.web_search_context_size,
             len(model_input),
             self.fallback_model,
+            self.research_stage_target_ms,
         )
 
         try:
@@ -390,6 +468,7 @@ class PremiumDirectAnswerService:
                 instructions=instructions,
                 deadline=deadline,
             )
+            verified_sources = self._merge_sources(verified_sources, primary_sources)
             if primary_text:
                 return primary_text, primary_sources, {
                     **primary_debug,
@@ -397,6 +476,8 @@ class PremiumDirectAnswerService:
                     "serving_model": self.primary_model,
                     "used_fallback_model": False,
                     "primary_failed": False,
+                    "research_status": "complete" if self.web_search_enabled else "not_required",
+                    "completion_status": "complete",
                 }
             raise RuntimeError("primary model returned empty output_text")
         except Exception as exc:
@@ -413,21 +494,32 @@ class PremiumDirectAnswerService:
                 "primary_error": str(exc)[:1000],
             }
 
+        fallback_research_remaining_ms = deadline.stage_remaining_ms(
+            self.research_stage_target_ms
+        )
         fallback_budget_ms = min(
             max(0.0, self.fallback_timeout_seconds * 1000.0),
             deadline.remaining_ms(),
+            fallback_research_remaining_ms,
         )
         if fallback_budget_ms < self.minimum_fallback_budget_ms:
             logger.info(
-                "premium_direct_fallback_skipped_due_to_budget remaining_ms=%s",
+                "premium_direct_fallback_skipped_due_to_research_budget remaining_ms=%s",
                 fallback_budget_ms,
             )
-            return "", [], {
-                **primary_debug,
-                **primary_error_debug,
-                "fallback_budget_ms": fallback_budget_ms,
-                "fallback_skipped_due_to_budget": True,
-            }
+            return self._terminal_synthesis(
+                model_input=model_input,
+                deadline=deadline,
+                base_debug={
+                    **primary_debug,
+                    **primary_error_debug,
+                    "fallback_budget_ms": fallback_budget_ms,
+                    "fallback_skipped_due_to_budget": True,
+                    "fallback_skipped_due_to_research_budget": True,
+                },
+                verified_sources=verified_sources,
+                current_fact_request=current_fact_request,
+            )
 
         primary_debug["fallback_budget_ms"] = fallback_budget_ms
         logger.info(
@@ -453,27 +545,214 @@ class PremiumDirectAnswerService:
                 instructions=instructions,
                 deadline=deadline,
             )
+            verified_sources = self._merge_sources(verified_sources, fallback_sources)
+            if fallback_text:
+                return fallback_text, fallback_sources, {
+                    **primary_debug,
+                    **primary_error_debug,
+                    **fallback_call_debug,
+                    "serving_model": self.fallback_model,
+                    "used_fallback_model": True,
+                    "research_status": "complete" if self.web_search_enabled else "not_required",
+                    "completion_status": "complete",
+                }
+            raise RuntimeError("fallback model returned empty output_text")
         except Exception as exc:
             logger.warning(
                 "premium_direct_fallback_failed error_type=%s error=%s",
                 exc.__class__.__name__,
                 str(exc)[:500],
             )
-            return "", [], {
-                **primary_debug,
-                **primary_error_debug,
-                "fallback_budget_ms": fallback_budget_ms,
-                "fallback_failed": True,
-                "fallback_error_type": exc.__class__.__name__,
-                "fallback_error": str(exc)[:1000],
-            }
-        return fallback_text, fallback_sources, {
-            **primary_debug,
-            **primary_error_debug,
-            **fallback_call_debug,
-            "serving_model": self.fallback_model,
-            "used_fallback_model": True,
+            return self._terminal_synthesis(
+                model_input=model_input,
+                deadline=deadline,
+                base_debug={
+                    **primary_debug,
+                    **primary_error_debug,
+                    **(fallback_call_debug if "fallback_call_debug" in locals() else {}),
+                    "fallback_budget_ms": fallback_budget_ms,
+                    "fallback_failed": True,
+                    "fallback_error_type": exc.__class__.__name__,
+                    "fallback_error": str(exc)[:1000],
+                },
+                verified_sources=verified_sources,
+                current_fact_request=current_fact_request,
+            )
+
+    def _terminal_synthesis(
+        self,
+        *,
+        model_input: str,
+        deadline: AbsoluteTurnDeadline,
+        base_debug: dict[str, Any],
+        verified_sources: list[dict[str, str]] | None = None,
+        current_fact_request: bool = False,
+    ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
+        verified_sources = verified_sources or []
+        remaining_before_ms = deadline.remaining_ms()
+        usable_budget_ms = max(
+            0.0,
+            remaining_before_ms - float(self.final_response_reserve_ms),
+        )
+        debug = {
+            **base_debug,
+            "terminal_recovery_triggered": True,
+            "terminal_recovery_reason": "research_timeout_or_exhaustion",
+            "terminal_model": self.terminal_model,
+            "terminal_web_search_enabled": False,
+            "terminal_remaining_budget_before_ms": remaining_before_ms,
+            "terminal_timeout_allocated_ms": 0.0,
+            "terminal_remaining_budget_after_ms": remaining_before_ms,
+            "research_status": "incomplete",
+            "research_incomplete": True,
+            "verified_source_count": len(verified_sources),
+            "current_fact_request": current_fact_request,
         }
+        if usable_budget_ms < self.terminal_min_start_budget_ms:
+            debug.update({
+                "completion_status": "safe_failure",
+                "terminal_skipped_due_to_budget": True,
+            })
+            return "", verified_sources, debug
+
+        terminal_timeout_ms = min(
+            float(self.terminal_synthesis_target_ms),
+            usable_budget_ms,
+        )
+        debug["terminal_timeout_allocated_ms"] = terminal_timeout_ms
+        terminal_instructions = self._terminal_instructions(
+            current_fact_request=current_fact_request,
+            verified_source_count=len(verified_sources),
+            verified_sources=verified_sources,
+        )
+        logger.info(
+            "premium_direct_terminal_request model=%s timeout_ms=%s "
+            "web_search=false remaining_before_ms=%s reserve_ms=%s",
+            self.terminal_model,
+            terminal_timeout_ms,
+            remaining_before_ms,
+            self.final_response_reserve_ms,
+        )
+        try:
+            terminal_text, _ignored_sources, terminal_call_debug = self._call_model(
+                model=self.terminal_model,
+                reasoning_effort=self.terminal_reasoning_effort,
+                timeout_seconds=terminal_timeout_ms / 1000.0,
+                max_retries=0,
+                model_input=model_input,
+                instructions=terminal_instructions,
+                deadline=deadline,
+                web_search_enabled=False,
+            )
+            debug.update(terminal_call_debug)
+            debug["terminal_remaining_budget_after_ms"] = deadline.remaining_ms()
+            if not terminal_text:
+                raise RuntimeError("terminal synthesis returned empty output_text")
+            if current_fact_request and not verified_sources:
+                # Model confidence cannot turn memory into verification. Keep
+                # this policy deterministic even if terminal prose is overly
+                # certain or claims to be current/reliable.
+                debug.update({
+                    "completion_status": "safe_failure",
+                    "terminal_output_suppressed_due_to_unverified_current_fact": True,
+                })
+                return "", verified_sources, debug
+            debug["completion_status"] = "partial_timeout"
+            return terminal_text, verified_sources, debug
+        except Exception as exc:
+            logger.warning(
+                "premium_direct_terminal_failed error_type=%s error=%s",
+                exc.__class__.__name__,
+                str(exc)[:500],
+            )
+            debug.update({
+                "completion_status": "safe_failure",
+                "terminal_failed": True,
+                "terminal_error_type": exc.__class__.__name__,
+                "terminal_error": str(exc)[:1000],
+                "terminal_remaining_budget_after_ms": deadline.remaining_ms(),
+            })
+            return "", verified_sources, debug
+
+    def _terminal_instructions(
+        self,
+        *,
+        current_fact_request: bool = False,
+        verified_source_count: int = 0,
+        verified_sources: list[dict[str, str]] | None = None,
+    ) -> str:
+        source_lines = "\n".join(
+            f"- {source.get('title') or 'Source'} — {source.get('url')}"
+            for source in (verified_sources or [])
+            if source.get("url")
+        )
+        if current_fact_request and verified_source_count == 0:
+            mutable_fact_rule = (
+                "The user requested a current or mutable fact. Do not state an exact figure, date, threshold, "
+                "requirement, condition, processing time, or policy setting from memory or describe it as "
+                "current, latest, reliable, or verified. Explain that the requested current fact could not be "
+                "verified within the available research time."
+            )
+        elif current_fact_request:
+            mutable_fact_rule = (
+                "Use current or mutable facts only when supported by the genuine material already available; do "
+                "not fill gaps from memory."
+            )
+        else:
+            mutable_fact_rule = (
+                "Stable/general information may be useful, but do not introduce unsupported current claims."
+            )
+        return (
+            "Research was incomplete because the protected research budget ended or a research provider failed. "
+            "Do not use web search or perform any further research.\n"
+            "research_incomplete=true\n"
+            f"verified_source_count={verified_source_count}\n"
+            f"genuine_source_metadata_already_returned:\n{source_lines or '(none)'}\n"
+            f"current_fact_request={str(current_fact_request).lower()}\n"
+            f"{mutable_fact_rule}\n"
+            "Use only the original question, bounded conversation context, and genuinely returned material "
+            "already present. Give the best useful best-effort answer possible, state uncertainty where "
+            "verification is incomplete, and do not fabricate citations or URLs."
+        )
+
+    @staticmethod
+    def _safe_failure_text(
+        *,
+        is_zh: bool,
+        current_fact_unverified: bool = False,
+    ) -> str:
+        if current_fact_unverified:
+            return (
+                "我未能在可用时间内核实你所询问的当前或可变信息，因此不会把未经核实的金额、日期、门槛或要求当作最新事实提供。请重试或缩小问题范围，并核对相关官方来源；如需结合个人情况判断，也可以安排律师咨询。"
+                if is_zh
+                else "I couldn't verify the current or changeable fact you asked about within the available research time, so I won't present an unverified fee, date, threshold, requirement, or policy setting as current. Please retry or narrow the question, check the relevant official source, or arrange a lawyer consultation."
+            )
+        return (
+            "我未能在可用时间内完成研究，因此没有足够的已核实材料给出完整答复。你可以重试、缩小问题范围，"
+            "或安排律师咨询。"
+            if is_zh
+            else "I couldn't complete the research within the available time, so I don't have enough verified material to give you a complete answer. You can retry the question, narrow its scope, or arrange a lawyer consultation."
+        )
+
+    @staticmethod
+    def _is_current_fact_request(question: str) -> bool:
+        normalized = re.sub(r"\s+", " ", question.lower()).strip()
+        return any(marker in normalized for marker in CURRENT_FACT_MARKERS)
+
+    @staticmethod
+    def _merge_sources(
+        existing: list[dict[str, str]],
+        additional: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        merged = list(existing)
+        seen = {str(source.get("url") or "").rstrip("/").lower() for source in merged}
+        for source in additional:
+            url = str(source.get("url") or "").strip()
+            key = url.rstrip("/").lower()
+            if url and key not in seen:
+                merged.append(source)
+                seen.add(key)
+        return merged
 
     def _call_model(
         self,
@@ -485,6 +764,7 @@ class PremiumDirectAnswerService:
         model_input: str,
         instructions: str = "",
         deadline: AbsoluteTurnDeadline | None = None,
+        web_search_enabled: bool | None = None,
     ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
         def create_response(request_kwargs: dict[str, Any]) -> Any:
             request_timeout_seconds = timeout_seconds
@@ -513,8 +793,14 @@ class PremiumDirectAnswerService:
         if self.service_tier:
             request_kwargs["service_tier"] = self.service_tier
 
+        effective_web_search_enabled = (
+            self.web_search_enabled if web_search_enabled is None else web_search_enabled
+        )
+        effective_web_search_required = (
+            self.web_search_required if effective_web_search_enabled else False
+        )
         search_mode = "disabled"
-        if self.web_search_enabled:
+        if effective_web_search_enabled:
             search_mode = "web_search"
             request_kwargs.update(
                 {
@@ -524,7 +810,7 @@ class PremiumDirectAnswerService:
                             "search_context_size": self.web_search_context_size,
                         }
                     ],
-                    "tool_choice": "required" if self.web_search_required else "auto",
+                    "tool_choice": "required" if effective_web_search_required else "auto",
                     "max_tool_calls": self.max_tool_calls,
                     "include": ["web_search_call.action.sources"],
                 }
@@ -533,7 +819,7 @@ class PremiumDirectAnswerService:
         try:
             response = create_response(request_kwargs)
         except TypeError as exc:
-            if not self.web_search_enabled:
+            if not effective_web_search_enabled:
                 raise
             logger.warning(
                 "premium_direct_web_search_modern_sdk_type_error; "
@@ -553,7 +839,7 @@ class PremiumDirectAnswerService:
             try:
                 response = create_response(legacy_kwargs)
             except TypeError:
-                if self.web_search_required:
+                if effective_web_search_required:
                     raise
                 logger.warning(
                     "premium_direct_web_search_unavailable; using closed-book request model=%s",
