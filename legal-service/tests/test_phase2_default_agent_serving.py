@@ -187,11 +187,14 @@ def test_default_serving_uses_run_and_preserves_customer_answer(monkeypatch):
 
         async def run(self, *_args, **_kwargs):
             calls["run"] += 1
-            metrics = _metrics().model_copy(update={"terminal_recovery_triggered": True})
+            # Exercise the compatibility path where the runtime result carries
+            # the event flag but an older metrics object does not yet mirror it.
+            metrics = _metrics().model_copy(update={"terminal_recovery_triggered": False})
             return SimpleNamespace(
                 model="gpt-5.6-luna",
                 submission=_submission("customer answer"),
                 metrics=metrics,
+                terminal_continuation_triggered=True,
                 checker_status="not_required",
                 checker_provider_call_count=0,
                 checker_result_tool_call_count=0,

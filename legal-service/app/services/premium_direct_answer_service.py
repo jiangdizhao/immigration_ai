@@ -11,6 +11,11 @@ from openai import OpenAI
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.agent_observability_service import AbsoluteTurnDeadline
+from app.services.openai_responses_adapter import (
+    ResponsesStreamAccumulator,
+    consume_responses_stream,
+)
+from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +35,17 @@ HIGH_RISK_TERMS = (
     "501",
     "health waiver",
     "deadline",
+    "appeal",
+    "review",
     "aat",
     "art",
     "tribunal",
     "ministerial intervention",
+    "拒签",
+    "拒绝",
+    "复审",
+    "行政复审",
+    "签证被拒",
 )
 
 REFERENCE_HEADING_MARKERS = (
@@ -87,7 +99,7 @@ class PremiumDirectAnswerService:
         )
         self.primary_reasoning_effort = os.getenv(
             "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT",
-            os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "high"),
+            os.getenv("PREMIUM_DIRECT_REASONING_EFFORT", "medium"),
         ).strip()
         self.primary_timeout_seconds = float(
             os.getenv(
@@ -150,12 +162,12 @@ class PremiumDirectAnswerService:
         )
         self.terminal_reasoning_effort = os.getenv(
             "PREMIUM_DIRECT_TERMINAL_REASONING_EFFORT",
-            self.fallback_reasoning_effort,
+            "low",
         ).strip()
         self.terminal_synthesis_target_ms = int(
             os.getenv(
                 "PREMIUM_DIRECT_TERMINAL_TARGET_MS",
-                str(getattr(self.settings, "terminal_synthesis_target_ms", 15000)),
+                "20000",
             )
         )
         self.final_response_reserve_ms = int(
@@ -171,11 +183,14 @@ class PremiumDirectAnswerService:
             )
         )
         self.minimum_fallback_budget_ms = int(
-            os.getenv("PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS", "1000")
+            os.getenv(
+                "PREMIUM_DIRECT_FALLBACK_MIN_START_BUDGET_MS",
+                os.getenv("PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS", "10000"),
+            )
         )
         self.max_tool_calls = self._env_int(
             "PREMIUM_DIRECT_MAX_TOOL_CALLS",
-            default=3,
+            default=2,
             minimum=1,
             maximum=10,
         )
@@ -189,15 +204,15 @@ class PremiumDirectAnswerService:
             default=False,
         )
         self.web_search_context_size = (
-            os.getenv("PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE", "high").strip().lower()
-            or "high"
+            os.getenv("PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE", "medium").strip().lower()
+            or "medium"
         )
         if self.web_search_context_size not in {"low", "medium", "high"}:
             logger.warning(
-                "Invalid PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE=%s; using high",
+                "Invalid PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE=%s; using medium",
                 self.web_search_context_size,
             )
-            self.web_search_context_size = "high"
+            self.web_search_context_size = "medium"
 
         self.service_tier = os.getenv("PREMIUM_DIRECT_SERVICE_TIER", "").strip()
         self.max_history_turns = int(os.getenv("PREMIUM_DIRECT_MAX_HISTORY_TURNS", "8"))
@@ -288,6 +303,27 @@ class PremiumDirectAnswerService:
             current_fact_request=self._is_current_fact_request(question_for_model),
         )
 
+        salvage = None
+        if (
+            not answer_text
+            and model_debug.get("terminal_recovery_triggered")
+            and model_debug.get("completion_status") == "safe_failure"
+        ):
+            salvage = EvidenceSalvageFinalizer.build(
+                is_zh=is_zh,
+                web_sources=web_sources,
+                citation_count=int(model_debug.get("recovered_citation_count", 0) or 0),
+            )
+            if salvage is not None:
+                model_debug.update({
+                    **salvage.telemetry,
+                    "completion_status": "evidence_salvage",
+                })
+                answer_text = salvage.answer
+                # The finalizer has already rendered the bounded recovered
+                # source list; do not append the full provider list again.
+                web_sources = []
+
         research_status = model_debug.get(
             "research_status",
             "complete" if self.web_search_enabled else "not_required",
@@ -307,6 +343,8 @@ class PremiumDirectAnswerService:
                 is_zh=is_zh,
             )
             compact_sources = self._format_compact_sources(web_sources)
+        elif salvage is not None:
+            compact_sources = salvage.compact_sources
         elif model_debug.get("terminal_recovery_triggered"):
             # Terminal synthesis cannot introduce model-authored URLs or
             # references. Only genuine sources returned by a research response
@@ -318,7 +356,7 @@ class PremiumDirectAnswerService:
         answer_text = self._with_research_notice(
             answer_text,
             is_zh=is_zh,
-            live_web_search_used=bool(web_sources),
+            live_web_search_used=bool(web_sources) or salvage is not None,
         )
 
         return QueryResponse(
@@ -332,8 +370,12 @@ class PremiumDirectAnswerService:
             follow_up_questions=[],
             citations=[],
             compact_sources=compact_sources,
-            escalate=high_risk,
-            next_action="suggest_consultation" if high_risk else "answer",
+            escalate=high_risk or salvage is not None,
+            next_action=(
+                "suggest_consultation"
+                if high_risk or salvage is not None
+                else "answer"
+            ),
             retrieval_debug={
                 "original_question": original_question,
                 "effective_question": effective_question,
@@ -352,6 +394,11 @@ class PremiumDirectAnswerService:
                         else "from_direct_llm_answer_body_without_cap"
                     ),
                     "reference_count": len(compact_sources),
+                    "reference_provenance": (
+                        "request_scoped_native_web"
+                        if web_sources
+                        else "model_text_extracted"
+                    ),
                     "politics_filter_preserved": True,
                     "politics_filter_type": "local_lightweight_gate",
                     "answer_model_input": (
@@ -422,12 +469,14 @@ class PremiumDirectAnswerService:
             "final_response_reserve_ms": self.final_response_reserve_ms,
             "primary_budget_ms": primary_budget_ms,
             "fallback_budget_ms": 0.0,
+            "fallback_min_start_budget_ms": self.minimum_fallback_budget_ms,
             "fallback_skipped_due_to_budget": False,
             "terminal_recovery_triggered": False,
             "terminal_web_search_enabled": False,
             "current_fact_request": current_fact_request,
         }
         verified_sources: list[dict[str, str]] = []
+        partial_research_text = ""
 
         if primary_budget_ms <= 0:
             return self._terminal_synthesis(
@@ -469,7 +518,7 @@ class PremiumDirectAnswerService:
                 deadline=deadline,
             )
             verified_sources = self._merge_sources(verified_sources, primary_sources)
-            if primary_text:
+            if primary_call_debug.get("provider_status", "ok") == "ok" and primary_text:
                 return primary_text, primary_sources, {
                     **primary_debug,
                     **primary_call_debug,
@@ -479,7 +528,12 @@ class PremiumDirectAnswerService:
                     "research_status": "complete" if self.web_search_enabled else "not_required",
                     "completion_status": "complete",
                 }
-            raise RuntimeError("primary model returned empty output_text")
+            if primary_text:
+                partial_research_text = primary_text
+            raise RuntimeError(
+                "primary model stream did not complete" if primary_text
+                else "primary model returned empty output_text"
+            )
         except Exception as exc:
             logger.warning(
                 "premium_direct_primary_failed; evaluating fallback model=%s "
@@ -518,6 +572,7 @@ class PremiumDirectAnswerService:
                     "fallback_skipped_due_to_research_budget": True,
                 },
                 verified_sources=verified_sources,
+                partial_research_text=partial_research_text,
                 current_fact_request=current_fact_request,
             )
 
@@ -546,7 +601,7 @@ class PremiumDirectAnswerService:
                 deadline=deadline,
             )
             verified_sources = self._merge_sources(verified_sources, fallback_sources)
-            if fallback_text:
+            if fallback_call_debug.get("provider_status", "ok") == "ok" and fallback_text:
                 return fallback_text, fallback_sources, {
                     **primary_debug,
                     **primary_error_debug,
@@ -556,7 +611,15 @@ class PremiumDirectAnswerService:
                     "research_status": "complete" if self.web_search_enabled else "not_required",
                     "completion_status": "complete",
                 }
-            raise RuntimeError("fallback model returned empty output_text")
+            if fallback_text:
+                partial_research_text = self._merge_partial_text(
+                    partial_research_text,
+                    fallback_text,
+                )
+            raise RuntimeError(
+                "fallback model stream did not complete" if fallback_text
+                else "fallback model returned empty output_text"
+            )
         except Exception as exc:
             logger.warning(
                 "premium_direct_fallback_failed error_type=%s error=%s",
@@ -576,6 +639,7 @@ class PremiumDirectAnswerService:
                     "fallback_error": str(exc)[:1000],
                 },
                 verified_sources=verified_sources,
+                partial_research_text=partial_research_text,
                 current_fact_request=current_fact_request,
             )
 
@@ -586,6 +650,7 @@ class PremiumDirectAnswerService:
         deadline: AbsoluteTurnDeadline,
         base_debug: dict[str, Any],
         verified_sources: list[dict[str, str]] | None = None,
+        partial_research_text: str = "",
         current_fact_request: bool = False,
     ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
         verified_sources = verified_sources or []
@@ -598,6 +663,8 @@ class PremiumDirectAnswerService:
             **base_debug,
             "terminal_recovery_triggered": True,
             "terminal_recovery_reason": "research_timeout_or_exhaustion",
+            "interrupted_response_continuation_skipped": True,
+            "terminal_fresh_request": True,
             "terminal_model": self.terminal_model,
             "terminal_web_search_enabled": False,
             "terminal_remaining_budget_before_ms": remaining_before_ms,
@@ -607,6 +674,11 @@ class PremiumDirectAnswerService:
             "research_incomplete": True,
             "verified_source_count": len(verified_sources),
             "current_fact_request": current_fact_request,
+            "recovered_partial_text_chars": len(partial_research_text),
+            "recovered_source_count": len(verified_sources),
+            "recovered_citation_count": int(
+                base_debug.get("stream_citation_count", 0) or 0
+            ),
         }
         if usable_budget_ms < self.terminal_min_start_budget_ms:
             debug.update({
@@ -625,6 +697,10 @@ class PremiumDirectAnswerService:
             verified_source_count=len(verified_sources),
             verified_sources=verified_sources,
         )
+        terminal_model_input = self._terminal_model_input(
+            model_input=model_input,
+            partial_research_text=partial_research_text,
+        )
         logger.info(
             "premium_direct_terminal_request model=%s timeout_ms=%s "
             "web_search=false remaining_before_ms=%s reserve_ms=%s",
@@ -639,13 +715,23 @@ class PremiumDirectAnswerService:
                 reasoning_effort=self.terminal_reasoning_effort,
                 timeout_seconds=terminal_timeout_ms / 1000.0,
                 max_retries=0,
-                model_input=model_input,
+                model_input=terminal_model_input,
                 instructions=terminal_instructions,
                 deadline=deadline,
                 web_search_enabled=False,
             )
             debug.update(terminal_call_debug)
+            debug["research_stream_source_count"] = len(verified_sources)
+            debug["terminal_stream_source_count"] = terminal_call_debug.get(
+                "stream_source_count", 0
+            )
+            debug["stream_source_count"] = max(
+                int(terminal_call_debug.get("stream_source_count", 0) or 0),
+                len(verified_sources),
+            )
             debug["terminal_remaining_budget_after_ms"] = deadline.remaining_ms()
+            if terminal_call_debug.get("provider_status", "ok") != "ok":
+                raise RuntimeError("terminal synthesis stream did not complete")
             if not terminal_text:
                 raise RuntimeError("terminal synthesis returned empty output_text")
             if current_fact_request and not verified_sources:
@@ -716,6 +802,25 @@ class PremiumDirectAnswerService:
         )
 
     @staticmethod
+    def _merge_partial_text(existing: str, additional: str) -> str:
+        if not existing:
+            return additional
+        if not additional or additional == existing:
+            return existing
+        return f"{existing}\n\n{additional}"
+
+    @staticmethod
+    def _terminal_model_input(*, model_input: str, partial_research_text: str) -> str:
+        if not partial_research_text:
+            return model_input
+        return (
+            f"{model_input}\n\n"
+            "Unverified partial provider research notes (context only; not evidence, not a citation, "
+            "and not permission to state a current fact without genuine supporting material):\n"
+            f"{partial_research_text}"
+        )
+
+    @staticmethod
     def _safe_failure_text(
         *,
         is_zh: bool,
@@ -777,7 +882,43 @@ class PremiumDirectAnswerService:
                 timeout_seconds=request_timeout_seconds,
                 max_retries=max_retries,
             )
-            return client.responses.create(**request_kwargs)
+            return client.responses.create(**request_kwargs, stream=True)
+
+        def consume_response(
+            response: Any,
+        ) -> tuple[str, list[dict[str, str]], dict[str, Any]]:
+            if self._is_stream_iterable(response):
+                allocated_timeout_seconds = max(0.0, timeout_seconds)
+                if deadline is not None:
+                    allocated_timeout_seconds = min(
+                        allocated_timeout_seconds,
+                        max(0.0, deadline.remaining_ms() / 1000.0),
+                    )
+                accumulator = consume_responses_stream(
+                    response,
+                    allocated_timeout_seconds=allocated_timeout_seconds,
+                )
+            else:
+                accumulator = ResponsesStreamAccumulator()
+                accumulator.consume_response(response)
+            answer_text = "".join(accumulator.text_parts).strip()
+            web_sources = self._stream_sources(accumulator.materialized_sources())
+            return answer_text, web_sources, {
+                "response_id": accumulator.response_id or None,
+                "provider_status": accumulator.status,
+                "stream_partial_available": accumulator.partial,
+                "stream_partial_text_chars": len(answer_text) if accumulator.partial else 0,
+                "stream_source_count": len(web_sources),
+                "stream_citation_count": len(accumulator.citation_annotations),
+                "stream_completed_function_call": bool(
+                    accumulator.completed_function_calls
+                ),
+                "stream_completed_output_item_count": accumulator.completed_output_item_count,
+                "stream_timeout_after_partial": (
+                    accumulator.status == "timeout" and accumulator.partial
+                ),
+                "stream_error": accumulator.stream_error,
+            }
 
         request_kwargs: dict[str, Any] = {
             "model": model,
@@ -812,7 +953,10 @@ class PremiumDirectAnswerService:
                     ],
                     "tool_choice": "required" if effective_web_search_required else "auto",
                     "max_tool_calls": self.max_tool_calls,
-                    "include": ["web_search_call.action.sources"],
+                    "include": [
+                        "web_search_call.action.sources",
+                        "web_search_call.results",
+                    ],
                 }
             )
 
@@ -852,16 +996,43 @@ class PremiumDirectAnswerService:
                 search_mode = "closed_book_after_search_tool_unavailable"
                 response = create_response(closed_book_kwargs)
 
-        answer_text = (getattr(response, "output_text", "") or "").strip()
-        web_sources = self._extract_web_sources(response)
-        response_id = getattr(response, "id", None)
-
+        answer_text, web_sources, stream_debug = consume_response(response)
         return answer_text, web_sources, {
-            "response_id": response_id,
+            **stream_debug,
             "web_search_request_mode": search_mode,
             "web_search_source_count": len(web_sources),
             "web_search_returned_sources": bool(web_sources),
         }
+
+    @staticmethod
+    def _is_stream_iterable(response: Any) -> bool:
+        return (
+            not isinstance(response, (dict, list, tuple))
+            and hasattr(response, "__iter__")
+            and not hasattr(response, "output_text")
+        )
+
+    @staticmethod
+    def _is_timeout_exception(exc: BaseException) -> bool:
+        return isinstance(exc, TimeoutError) or "timeout" in exc.__class__.__name__.lower()
+
+    @staticmethod
+    def _stream_sources(raw_sources: list[dict[str, Any]]) -> list[dict[str, str]]:
+        sources: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for raw in raw_sources:
+            url = str(raw.get("url") or "").strip()
+            if not url:
+                continue
+            key = url.rstrip("/").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            sources.append({
+                "title": str(raw.get("title") or raw.get("name") or url).strip(),
+                "url": url,
+            })
+        return sources
 
     def _history_text(
         self,
@@ -943,7 +1114,9 @@ class PremiumDirectAnswerService:
                 "准确的法规或立法文书措辞、决定性法律交叉引用、模型不确定的事实，或需要权威核实时，"
                 "才使用可用的网页搜索工具；如果无需研究即可可靠回答，不要调用研究工具。"
                 "需要研究时，优先使用澳大利亚联邦立法登记册、澳大利亚内政部、联邦法院及其他官方政府来源。"
-                "必要时追踪具有实质意义的法律交叉引用；获得足够证据后停止研究。"
+                "必要时追踪具有实质意义的法律交叉引用；普通法律咨询通常以2至5个权威来源为宜，"
+                "一旦足以回答实质问题就停止，不要为了增加来源数量继续检索。这是接待/客户答复流程，"
+                "不是详尽的法律研究备忘录。"
                 "不要因为工具可用就穷尽式研究，不要猜测，也不要编造引用或链接。"
             )
         return (
@@ -952,9 +1125,11 @@ class PremiumDirectAnswerService:
             "cross-references, uncertain facts, or information requiring authoritative verification. Do not use "
             "research unnecessarily. When research is needed, prefer authoritative Australian primary and official "
             "sources such as the Federal Register of Legislation, the Department of Home Affairs, Federal Court "
-            "decisions, and other official government sources. Follow material cross-references when necessary, "
-            "and stop researching once sufficient evidence exists to answer. Do not perform exhaustive research "
-            "merely because tools are available. Do not guess or fabricate citations or URLs."
+            "decisions, and other official government sources. For ordinary legal intake questions, usually 2-5 "
+            "strong authoritative sources are sufficient. Follow a material cross-reference only when needed "
+            "to answer the user's actual question, and stop researching once the material issues are sufficiently "
+            "supported. Do not collect sources merely for breadth. This is an intake/customer-answer workflow, "
+            "not an exhaustive legal research memorandum. Do not guess or fabricate citations or URLs."
         )
 
     @staticmethod

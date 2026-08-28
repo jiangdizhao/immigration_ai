@@ -486,13 +486,15 @@ class AgentPolicyService:
         Arm N: Arm-L research baseline + bounded Schedule-2 navigation and exact lookup
         """
         settings = get_settings()
+        web_search_tool = deepcopy(WEB_SEARCH_TOOL)
+        web_search_tool["search_context_size"] = settings.default_web_search_context_size
 
         if experiment_arm in {"B", "L", "N"}:
             # Arm B and revised Default local+web arm L: web + local retrieval
             # + utility + submit. The implementation is shared; the arm names
             # preserve historical B results while making the revised target
             # explicit.
-            tools = [WEB_SEARCH_TOOL]
+            tools = [web_search_tool]
             if settings.flat_rag_tool_enabled:
                 tools.append(FLAT_RAG_SEARCH_TOOL)
             if experiment_arm == "N":
@@ -508,7 +510,7 @@ class AgentPolicyService:
 
         # Arm A (default): web + utility + submit
         return [
-            WEB_SEARCH_TOOL,
+            web_search_tool,
             DETERMINISTIC_UTILITY_TOOL,
             build_submit_answer_tool(allow_canonical_refs=experiment_arm != "A"),
         ]

@@ -36,12 +36,13 @@ def _service(monkeypatch, **values: str) -> PremiumDirectAnswerService:
         "PREMIUM_DIRECT_WEB_SEARCH_ENABLED": "true",
         "PREMIUM_DIRECT_WEB_SEARCH_REQUIRED": "false",
         "PREMIUM_DIRECT_LANE_BUDGET_MS": "45000",
-        "PREMIUM_DIRECT_RESEARCH_TARGET_MS": "65000",
-        "PREMIUM_DIRECT_TERMINAL_TARGET_MS": "15000",
+        "PREMIUM_DIRECT_RESEARCH_TARGET_MS": "40000",
+        "PREMIUM_DIRECT_TERMINAL_TARGET_MS": "20000",
         "PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS": "3000",
         "PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS": "5000",
         "PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS": "50",
         "PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS": "55",
+        "PREMIUM_DIRECT_MAX_TOOL_CALLS": "2",
         "PREMIUM_DIRECT_PRIMARY_MAX_RETRIES": "0",
         "PREMIUM_DIRECT_FALLBACK_MAX_RETRIES": "0",
     }
@@ -69,6 +70,29 @@ def _capturing_client(monkeypatch, service: PremiumDirectAnswerService, response
     return calls
 
 
+def test_stage_a_premium_research_defaults_are_bounded(monkeypatch) -> None:
+    for name in (
+        "PREMIUM_DIRECT_PRIMARY_REASONING_EFFORT",
+        "PREMIUM_DIRECT_REASONING_EFFORT",
+        "PREMIUM_DIRECT_WEB_SEARCH_CONTEXT_SIZE",
+        "PREMIUM_DIRECT_MAX_TOOL_CALLS",
+        "PREMIUM_DIRECT_RESEARCH_TARGET_MS",
+        "PREMIUM_DIRECT_FALLBACK_MIN_START_BUDGET_MS",
+        "PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    service = PremiumDirectAnswerService()
+
+    assert service.primary_model == "gpt-5.6-sol"
+    assert service.primary_reasoning_effort == "medium"
+    assert service.web_search_context_size == "medium"
+    assert service.max_tool_calls == 2
+    assert service.research_stage_target_ms == 40000
+    assert service.minimum_fallback_budget_ms == 10000
+    assert service.terminal_reasoning_effort == "low"
+    assert service.terminal_synthesis_target_ms == 20000
+
+
 def test_normal_premium_exposes_optional_web_search_with_auto_tool_choice(monkeypatch) -> None:
     service = _service(monkeypatch)
     calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
@@ -82,10 +106,13 @@ def test_normal_premium_exposes_optional_web_search_with_auto_tool_choice(monkey
     )
 
     request = calls[-1]
-    assert request["tools"] == [{"type": "web_search", "search_context_size": "high"}]
+    assert request["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
     assert request["tool_choice"] == "auto"
-    assert request["max_tool_calls"] == 3
-    assert request["include"] == ["web_search_call.action.sources"]
+    assert request["max_tool_calls"] == 2
+    assert request["include"] == [
+        "web_search_call.action.sources",
+        "web_search_call.results",
+    ]
 
 
 def test_search_can_be_disabled_without_search_request_fields(monkeypatch) -> None:
@@ -108,7 +135,7 @@ def test_search_can_be_disabled_without_search_request_fields(monkeypatch) -> No
 
 
 def test_max_tool_calls_is_configurable_with_safe_default(monkeypatch) -> None:
-    assert _service(monkeypatch).max_tool_calls == 3
+    assert _service(monkeypatch).max_tool_calls == 2
     service = _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS="2")
     calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
 
@@ -125,7 +152,7 @@ def test_max_tool_calls_is_configurable_with_safe_default(monkeypatch) -> None:
 
 @pytest.mark.parametrize("value", ["0", "11", "not-an-int"])
 def test_max_tool_calls_invalid_values_use_safe_default(monkeypatch, value: str) -> None:
-    assert _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS=value).max_tool_calls == 3
+    assert _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS=value).max_tool_calls == 2
 
 
 def test_required_search_is_only_an_explicit_override(monkeypatch) -> None:
@@ -203,7 +230,7 @@ def test_model_input_removes_duplicate_optimistic_user_message_and_keeps_history
     assert "I finished my studies last year." in captured["input"]
     assert "That may be relevant." in captured["input"]
     assert "Use available web search" not in captured["input"]
-    assert "stop researching once sufficient evidence exists" in captured["instructions"]
+    assert "stop researching once the material issues are sufficiently supported" in captured["instructions"]
 
 
 def test_instructions_are_separate_from_lightweight_input(monkeypatch) -> None:
@@ -281,6 +308,7 @@ def test_quick_primary_failure_gets_bounded_fallback_budget(monkeypatch) -> None
         PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
         PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
         PREMIUM_DIRECT_FALLBACK_TIMEOUT_SECONDS="10",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="1000",
     )
     clock = FakeClock()
     deadline = AbsoluteTurnDeadline(100.0, 10000, clock=clock)
@@ -349,6 +377,38 @@ def test_exhausted_primary_budget_uses_protected_terminal_synthesis(monkeypatch)
     assert debug["completion_status"] == "partial_timeout"
 
 
+def test_fallback_is_skipped_when_only_three_seconds_research_budget_remains(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="20000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="10000",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 20000, clock=clock)
+    calls: list[str] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == service.primary_model:
+            clock.advance_ms(7000)
+            raise TimeoutError("research timeout")
+        return "terminal answer", [], {"provider_status": "ok"}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(
+        model_input="question",
+        deadline=deadline,
+    )
+
+    assert answer == "terminal answer"
+    assert calls == [service.primary_model, service.terminal_model]
+    assert debug["fallback_skipped_due_to_budget"] is True
+    assert debug["fallback_budget_ms"] == pytest.approx(3000)
+
+
 def test_terminal_call_forcibly_omits_all_web_search_fields(monkeypatch) -> None:
     service = _service(monkeypatch)
     calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
@@ -402,7 +462,7 @@ def test_terminal_failure_returns_deterministic_non_empty_safe_failure(monkeypat
     assert response.answer.strip()
     assert response.research_status == "incomplete"
     assert "couldn't complete the research" in response.answer.lower()
-    assert len(calls) == 3
+    assert len(calls) == 2
 
 
 def test_timeout_zero_sources_does_not_serve_exact_current_fee_from_memory(monkeypatch) -> None:
@@ -507,6 +567,46 @@ def test_timeout_stable_general_question_keeps_useful_terminal_answer(monkeypatc
     assert response.retrieval_debug["premium_direct_answer"]["completion_status"] == "partial_timeout"
 
 
+def test_terminal_failure_with_recovered_sources_uses_deterministic_salvage(monkeypatch) -> None:
+    service = _service(monkeypatch)
+    sources = [
+        {"title": "Official fee page", "url": "https://example.gov.au/fees"},
+        {"title": "Official fee page duplicate", "url": "https://example.gov.au/fees/"},
+    ]
+    monkeypatch.setattr(
+        service,
+        "_answer_with_fallback",
+        lambda **_kwargs: (
+            "",
+            sources,
+            {
+                "terminal_recovery_triggered": True,
+                "completion_status": "safe_failure",
+                "research_status": "incomplete",
+                "recovered_citation_count": 1,
+            },
+        ),
+    )
+
+    response = service.answer(
+        payload=QueryRequest(question="What is the current fee?"),
+        original_question="What is the current fee?",
+        effective_question="What is the current fee?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    debug = response.retrieval_debug["premium_direct_answer"]
+    assert response.research_status == "incomplete"
+    assert debug["completion_status"] == "evidence_salvage"
+    assert debug["evidence_salvage_triggered"] is True
+    assert response.escalate is True
+    assert len(response.compact_sources) == 1
+    assert "https://example.gov.au/fees" in response.answer
+    assert "safe failure" not in response.answer.lower()
+    assert "AUD" not in response.answer
+
+
 def test_fallback_success_is_served_with_shared_budget_debug(monkeypatch) -> None:
     service = _service(monkeypatch, PREMIUM_DIRECT_LANE_BUDGET_MS="12000")
     clock = FakeClock()
@@ -554,8 +654,8 @@ def test_premium_prompt_uses_epistemic_need_policy_in_english_and_chinese(monkey
     assert "do not stop merely because one relevant result" not in english.lower()
     assert "主动检索" not in chinese
     assert "不要因为找到第一个相关页面就停止" not in chinese
-    assert "stop researching once sufficient evidence exists" in english.lower()
-    assert "获得足够证据后停止研究" in chinese
+    assert "stop researching once the material issues are sufficiently supported" in english.lower()
+    assert "一旦足以回答实质问题就停止" in chinese
 
 
 def test_premium_response_records_direct_isolation_contract(monkeypatch) -> None:

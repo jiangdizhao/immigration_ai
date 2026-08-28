@@ -148,6 +148,12 @@ class ProviderCallObservation(StrictContract):
     native_web_search_call_count: int = Field(default=0, ge=0)
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
+    stream_partial_available: bool = False
+    stream_partial_text_chars: int = Field(default=0, ge=0)
+    stream_source_count: int = Field(default=0, ge=0)
+    stream_timeout_after_partial: bool = False
+    stream_completed_function_call_count: int = Field(default=0, ge=0)
+    stream_completed_output_item_count: int = Field(default=0, ge=0)
     # Phase 5.1A.1: content-free per-call search-privacy violation category
     # counts (category -> count). Never stores raw query text, hashes, names,
     # or identifier values.
@@ -214,6 +220,12 @@ class AgentExecutionMetrics(StrictContract):
     native_web_search_call_count: int = Field(default=0, ge=0)
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
+    stream_partial_call_count: int = Field(default=0, ge=0)
+    stream_partial_text_chars: int = Field(default=0, ge=0)
+    stream_source_count: int = Field(default=0, ge=0)
+    stream_timeout_after_partial_count: int = Field(default=0, ge=0)
+    stream_completed_function_call_count: int = Field(default=0, ge=0)
+    stream_completed_output_item_count: int = Field(default=0, ge=0)
     web_search_pii_violation_count: int = Field(default=0, ge=0)
     # Phase 5.1A.1: content-free aggregated search-privacy violation category
     # counts (category -> count). Never stores raw query text, hashes, names,
@@ -260,13 +272,23 @@ class AgentExecutionMetrics(StrictContract):
     research_stage_exhausted: bool = False
     terminal_recovery_triggered: bool = False
     terminal_recovery_reason: str | None = Field(default=None, max_length=100)
+    interrupted_response_continuation_skipped: bool = False
+    terminal_fresh_request: bool = False
     terminal_timeout_allocated_ms: float = Field(default=0, ge=0)
     terminal_model: str | None = Field(default=None, max_length=255)
     terminal_web_search_enabled: bool = False
     terminal_remaining_budget_before_ms: float = Field(default=0, ge=0)
     terminal_remaining_budget_after_ms: float = Field(default=0, ge=0)
     final_response_reserve_ms: int = Field(default=0, ge=0)
-    completion_status: Literal["complete", "partial_timeout", "safe_failure"] | None = None
+    completion_status: Literal[
+        "complete", "partial_timeout", "evidence_salvage", "safe_failure"
+    ] | None = None
+    evidence_salvage_triggered: bool = False
+    evidence_salvage_reason: str | None = Field(default=None, max_length=120)
+    recovered_legal_evidence_count: int = Field(default=0, ge=0)
+    recovered_web_source_count: int = Field(default=0, ge=0)
+    recovered_citation_count: int = Field(default=0, ge=0)
+    evidence_salvage_displayed_source_count: int = Field(default=0, ge=0)
     answer_agent_latency_ms: float = Field(default=0, ge=0)
     fact_check_latency_ms: float = Field(default=0, ge=0)
     total_latency_ms: float = Field(default=0, ge=0)

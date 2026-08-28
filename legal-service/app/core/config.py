@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     )
     agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
     agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
+    default_web_search_max_tool_calls: int = Field(
+        default=2, ge=1, le=10, alias="DEFAULT_WEB_SEARCH_MAX_TOOL_CALLS"
+    )
+    default_web_search_context_size: Literal["low", "medium", "high"] = Field(
+        default="low", alias="DEFAULT_WEB_SEARCH_CONTEXT_SIZE"
+    )
     agent_max_provider_calls: int = Field(
         default=3, ge=1, le=20, alias="AGENT_MAX_PROVIDER_CALLS"
     )
@@ -99,7 +105,7 @@ class Settings(BaseSettings):
         default=32000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
     )
     premium_answer_research_target_ms: int = Field(
-        default=65000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
+        default=40000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
     )
     terminal_synthesis_target_ms: int = Field(
         default=15000, ge=1, alias="TERMINAL_SYNTHESIS_TARGET_MS"

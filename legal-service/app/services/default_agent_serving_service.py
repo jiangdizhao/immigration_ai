@@ -20,6 +20,7 @@ from app.schemas.agent import AgentRuntimeRequest, ExecutionBudget
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.services.agent_observability_service import AbsoluteTurnDeadline, AgentObservabilityService
+from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
 from app.services.request_evidence_registry import RequestEvidenceRegistry, create_registry
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ class DefaultAgentServingService:
                     matter_id=matter_id,
                     response_language=response_language,
                     result=result,
+                    registry=registry,
                 )
                 self._record_trace(
                     query_service=query_service,
@@ -183,6 +185,7 @@ class DefaultAgentServingService:
                 response_language=response_language,
                 result=result,
                 error=exc,
+                registry=registry,
             )
         finally:
             if registry is not None:
@@ -314,9 +317,80 @@ class DefaultAgentServingService:
         response_language: str,
         result: Any | None,
         error: Exception | None = None,
+        registry: RequestEvidenceRegistry | None = None,
     ) -> QueryResponse:
         is_zh = response_language == "zh"
         metrics = result.metrics.model_dump(mode="json") if result is not None else {}
+        recovery_triggered = bool(
+            result is not None
+            and (
+                metrics.get("terminal_recovery_triggered", False)
+                or getattr(result, "terminal_continuation_triggered", False)
+            )
+        )
+        if recovery_triggered and registry is not None and result is not None:
+            entries = []
+            for evidence_ref in registry.get_all_refs():
+                try:
+                    entries.append(registry.resolve(evidence_ref))
+                except Exception:
+                    continue
+            salvage = EvidenceSalvageFinalizer.build(
+                is_zh=is_zh,
+                local_entries=entries,
+                citation_count=sum(
+                    bool(getattr(entry, "native_web_citation", None))
+                    for entry in entries
+                    if getattr(entry, "evidence_origin", None) == "openai_web_native"
+                ),
+                web_sources=[
+                    {
+                        "title": getattr(entry.evidence_record, "title", None),
+                        "url": getattr(entry, "url", None),
+                        "evidence_ref": entry.evidence_ref,
+                        "search_call_id": getattr(entry, "search_call_id", None)
+                        or getattr(entry, "tool_call_id", None),
+                    }
+                    for entry in entries
+                    if getattr(entry, "evidence_origin", None)
+                    in {"openai_web_native", "fetched_web"}
+                ],
+            )
+            if salvage is not None:
+                result.completion_status = "evidence_salvage"
+                result.metrics = result.metrics.model_copy(
+                    update={
+                        "completion_status": "evidence_salvage",
+                        **salvage.telemetry,
+                    }
+                )
+                metrics = result.metrics.model_dump(mode="json")
+                debug = self._debug_payload(
+                    result=result,
+                    metrics=metrics,
+                    registry=registry,
+                )
+                debug.update({
+                    "completion_status": "evidence_salvage",
+                    "evidence_salvage": salvage.telemetry,
+                    "execution_metrics": metrics,
+                })
+                return QueryResponse(
+                    matter_id=matter_id,
+                    answer=salvage.answer,
+                    response_language="zh" if is_zh else "en",
+                    confidence="low",
+                    user_display_mode="escalate_with_brief_reason",
+                    issue_type="agent_runtime_default",
+                    citations=salvage.citations,
+                    compact_sources=salvage.compact_sources,
+                    escalate=True,
+                    next_action="suggest_consultation",
+                    retrieval_debug=debug,
+                    architecture_version=self.RUNTIME_ARCHITECTURE,
+                    research_status="incomplete",
+                    fact_check_status="uncertain",
+                )
         return QueryResponse(
             matter_id=matter_id,
             answer=(
@@ -414,6 +488,14 @@ class DefaultAgentServingService:
             )
             if key in checker_packet_manifest
         }
+        terminal_recovery_triggered = bool(
+            metrics.get("terminal_recovery_triggered", False)
+            or getattr(result, "terminal_continuation_triggered", False)
+        )
+        # Keep the nested recovery event and its execution-metrics mirror on a
+        # single canonical value.  This also repairs older result doubles that
+        # expose only terminal_continuation_triggered.
+        metrics["terminal_recovery_triggered"] = terminal_recovery_triggered
         return {
             "agent_runtime_serving": True,
             "runtime_architecture": self.RUNTIME_ARCHITECTURE,
@@ -487,12 +569,7 @@ class DefaultAgentServingService:
             },
             "checker_packet": checker_packet_summary,
             "terminal_recovery": {
-                "triggered": bool(
-                    metrics.get(
-                        "terminal_recovery_triggered",
-                        getattr(result, "terminal_continuation_triggered", False),
-                    )
-                ),
+                "triggered": terminal_recovery_triggered,
                 "reason": getattr(result, "terminal_continuation_reason", None),
                 "model": getattr(result, "terminal_model", None),
                 "timeout_allocated_ms": getattr(result, "terminal_timeout_allocated_ms", 0.0),

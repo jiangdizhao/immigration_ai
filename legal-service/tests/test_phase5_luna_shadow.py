@@ -634,6 +634,160 @@ class TestBudgets:
             for message in provider.call_args[1]["messages_history"]
         )
 
+    async def test_interrupted_research_uses_fresh_terminal_request_and_salvages_artifacts(self):
+        first_research_calls = [
+            ToolCallRequest(
+                call_id="flat-first",
+                name="flat_rag_search",
+                arguments={"query": "current immigration fee", "top_k": 1},
+            ),
+            ToolCallRequest(
+                call_id="exact-first",
+                name="exact_legal_lookup",
+                arguments={"requests": [{"query": "current immigration fee"}]},
+            ),
+        ]
+        source = {"title": "Official source", "url": "https://example.gov.au/rule"}
+        exact_output = SimpleNamespace(
+            matches=[],
+            resolved_cross_references=[],
+            unresolved_cross_references=[],
+            coverage=SimpleNamespace(
+                model_dump=lambda **_: {"family": "fee", "status": "available_partial"}
+            ),
+            corpus_version="F2026C00667",
+            index_version="exact-test",
+            model_dump=lambda **_: {
+                "matches": [],
+                "resolved_cross_references": [],
+                "unresolved_cross_references": [],
+                "coverage": {"family": "fee", "status": "available_partial"},
+                "corpus_version": "F2026C00667",
+                "index_version": "exact-test",
+            },
+        )
+
+        def fake_flat_search(**_kwargs):
+            return SimpleNamespace(
+                chunks=[{"evidence_ref": "local:flat-first-evidence", "text": "bounded rule"}],
+                evidence_refs=["local:flat-first-evidence"],
+                duration_ms=1,
+            )
+
+        class FakeExactService:
+            def lookup(self, *_args, **_kwargs):
+                return exact_output
+
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-completed-research",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=first_research_calls,
+            ),
+            ProviderResponse(
+                response_id="resp-interrupted",
+                model="gpt-5.6-luna",
+                status="timeout",
+                text="raw partial research prose",
+                partial=True,
+                partial_text="raw partial research prose",
+                partial_sources=[source],
+                partial_citations=[{
+                    "url": source["url"],
+                    "title": source["title"],
+                }],
+            ),
+            make_greeting_response(),
+        ])
+
+        result = await AgentRuntimeService(provider=provider).run_shadow(
+            make_runtime_request(
+                user_text="What rule applies?",
+                execution_budget=ExecutionBudget(
+                    max_tool_rounds=2,
+                    max_provider_calls=3,
+                    max_retries=0,
+                    turn_deadline_ms=40000,
+                    answer_research_target_ms=32000,
+                    checker_target_ms=8000,
+                ),
+            ),
+            deadline=AbsoluteTurnDeadline(
+                started_at=time.perf_counter(),
+                turn_deadline_ms=40000,
+            ),
+            registry=create_registry("fresh-terminal-recovery"),
+            flat_rag_search_fn=fake_flat_search,
+            exact_legal_lookup_service=FakeExactService(),
+        )
+
+        assert result.submission is not None
+        assert result.submission.research_status == "incomplete"
+        assert result.metrics.interrupted_response_continuation_skipped is True
+        assert result.metrics.terminal_fresh_request is True
+        assert provider.call_args[1]["previous_response_id"] == "resp-completed-research"
+        assert provider.call_args[2]["previous_response_id"] is None
+        assert provider.call_args[2]["tool_choice"] == {
+            "type": "function",
+            "name": "submit_answer",
+        }
+        assert [
+            tool.get("name")
+            for tool in provider.call_args[2]["tools"]
+            if tool.get("type") == "function"
+        ] == ["submit_answer"]
+        terminal_messages = provider.call_args[2]["messages_history"]
+        assert any(
+            message.get("terminal_fresh_request") is True
+            for message in terminal_messages
+            if message.get("terminal_instruction") is True
+        )
+        assert any(
+            message.get("partial_provider_text") is True
+            and "raw partial research prose" in message.get("content", "")
+            for message in terminal_messages
+        )
+        assert any(
+            message.get("recovered_artifact_context") is True
+            and source["url"] in message.get("content", "")
+            for message in terminal_messages
+        )
+
+    async def test_completed_response_continuation_remains_available(self):
+        utility_call = ToolCallRequest(
+            call_id="utility-complete",
+            name="deterministic_utility",
+            arguments={
+                "operation": "arithmetic",
+                "operands": [2, 3],
+                "expression": "2 + 3",
+            },
+        )
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-completed",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[utility_call],
+            ),
+            make_greeting_response(),
+        ])
+
+        result = await AgentRuntimeService(provider=provider).run_shadow(
+            make_runtime_request(user_text="Calculate 2 + 3."),
+            deadline=AbsoluteTurnDeadline(
+                started_at=time.perf_counter(),
+                turn_deadline_ms=40000,
+            ),
+            registry=create_registry("completed-continuation"),
+        )
+
+        assert result.submission is not None
+        assert provider.call_args[1]["previous_response_id"] == "resp-completed"
+        assert result.metrics.interrupted_response_continuation_skipped is False
+        assert result.metrics.terminal_fresh_request is False
+
     async def test_timeout_recovery_normalizes_model_complete_status_to_incomplete(self):
         terminal = make_greeting_response()
         terminal.tool_calls[0].arguments["research_status"] = "complete"
@@ -1433,6 +1587,11 @@ class TestAgentPolicy:
     def test_tool_choice_is_auto(self):
         assert AgentPolicyService().build_policy(mode="default").tool_choice == "auto"
 
+    def test_default_native_search_context_is_configured_medium(self):
+        policy = AgentPolicyService().build_policy(mode="default")
+        assert policy.tools[0]["type"] == "web_search"
+        assert policy.tools[0]["search_context_size"] == "medium"
+
     def test_system_prompt_no_visa_routing(self):
         prompt_lower = AgentPolicyService().build_policy(mode="default").system_prompt.lower()
         for subclass in ("subclass 188", "subclass 485", "subclass 400", "subclass 482", "subclass 500", "subclass 820"):
@@ -1652,7 +1811,10 @@ class TestProviderAdapter:
         assert evidence.search_call_id == "ws-native-1"
         assert evidence.provenance_complete is True
         assert evidence.native_web_citation is not None
-        assert fake_responses.calls[0]["include"] == ["web_search_call.action.sources"]
+        assert fake_responses.calls[0]["include"] == [
+            "web_search_call.action.sources",
+            "web_search_call.results",
+        ]
 
     def test_responses_registers_source_without_fabricating_citation(self):
         from app.services.openai_responses_adapter import OpenAIResponsesAdapter
@@ -1742,6 +1904,104 @@ class TestProviderAdapter:
             "call_id": "utility-call-3",
             "output": '{"status":"ok"}',
         }]
+
+    def test_fresh_terminal_converts_old_local_tool_outputs_to_bounded_context(self):
+        from app.services.openai_responses_adapter import (
+            FRESH_RECOVERY_TOOL_CONTEXT_MAX_CHARS,
+            OpenAIResponsesAdapter,
+        )
+
+        flat_call_id = "flat-rag-old-call"
+        exact_call_id = "exact-lookup-old-call"
+        adapter = OpenAIResponsesAdapter(
+            client=SimpleNamespace(
+                responses=SimpleNamespace(create=lambda **_: SimpleNamespace(id="resp-terminal", output=[]))
+            )
+        )
+        items = adapter._build_input(
+            system_prompt="terminal system",
+            previous_response_id=None,
+            messages_history=[
+                {"role": "user", "content": "What is the current fee?"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": flat_call_id,
+                            "type": "function",
+                            "function": {"name": "flat_rag_search", "arguments": "{}"},
+                        },
+                        {
+                            "id": exact_call_id,
+                            "type": "function",
+                            "function": {"name": "exact_legal_lookup", "arguments": "{}"},
+                        },
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": flat_call_id,
+                    "content": json.dumps({
+                        "tool_call_id": flat_call_id,
+                        "status": "ok",
+                        "data": {
+                            "evidence_refs": ["local:flat-evidence-1"],
+                            "chunks": [{"evidence_ref": "local:flat-evidence-1", "text": "bounded local rule"}],
+                        },
+                        "meta": {"duration_ms": 4, "observed_at": "implementation detail"},
+                    }),
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": exact_call_id,
+                    "content": json.dumps({
+                        "tool_call_id": exact_call_id,
+                        "status": "ok",
+                        "data": {
+                            "lookups": [{
+                                "canonical_evidence_ref": "local:exact-evidence-1",
+                                "text": "exact statutory wording",
+                            }],
+                            "provenance": {"corpus_version": "F2026C00667"},
+                        },
+                    }),
+                },
+                {
+                    "role": "user",
+                    "content": "Recovered web source: https://example.gov.au/current",
+                    "recovered_artifact_context": True,
+                },
+                {
+                    "role": "user",
+                    "content": "Unverified partial prose (context only)",
+                    "partial_provider_text": True,
+                },
+                {
+                    "role": "user",
+                    "content": "Fresh terminal recovery instructions",
+                    "terminal_instruction": True,
+                    "terminal_fresh_request": True,
+                },
+            ],
+        )
+
+        protocol_items = [item for item in items if item.get("type") == "function_call_output"]
+        assert protocol_items == []
+        assert not any("tool_calls" in item for item in items)
+        context_items = [
+            item for item in items
+            if "Recovered completed local tool evidence" in item.get("content", [{}])[0].get("text", "")
+        ]
+        assert len(context_items) == 1
+        context_text = context_items[0]["content"][0]["text"]
+        assert "flat_rag_search" in context_text
+        assert "exact_legal_lookup" in context_text
+        assert "local:flat-evidence-1" in context_text
+        assert "local:exact-evidence-1" in context_text
+        assert "F2026C00667" in context_text
+        assert "implementation detail" not in context_text
+        assert len(context_text) <= FRESH_RECOVERY_TOOL_CONTEXT_MAX_CHARS
 
     def test_terminal_recovery_instruction_reaches_fresh_and_continued_inputs(self):
         from app.services.agent_runtime_service import TERMINAL_RECOVERY_INSTRUCTION
