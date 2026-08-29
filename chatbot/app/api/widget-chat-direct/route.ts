@@ -19,10 +19,10 @@ import {
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { isPremiumAllowed, premiumDeniedResponse } from "@/lib/vip/entitlement";
 
-export const maxDuration = 180;
+export const maxDuration = 390;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
-const LEGAL_SERVICE_DIRECT_TIMEOUT_MS = 170_000;
+const LEGAL_SERVICE_DIRECT_TIMEOUT_MS = 370_000;
 
 const textPartSchema = z.object({
   type: z.literal("text"),

@@ -18,7 +18,9 @@ import {
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 
-export const maxDuration = 180;
+export const maxDuration = 390;
+
+const LEGAL_SERVICE_TIMEOUT_MS = 370_000;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 
@@ -692,7 +694,10 @@ async function fetchLegalServiceJson(params: {
   matterId: string | null;
 }): Promise<LegalServiceJsonResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 150_000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    LEGAL_SERVICE_TIMEOUT_MS
+  );
 
   let response: Response;
   try {
