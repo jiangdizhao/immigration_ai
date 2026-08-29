@@ -4,7 +4,6 @@ import { auth } from "@/app/(auth)/auth";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
   getImmigrationConversationByChatId,
-  getOrCreateLocalImmigrationUserId,
   saveMessages,
   touchImmigrationConversation,
   updateImmigrationConversation,
@@ -294,7 +293,6 @@ export async function POST(request: Request) {
     const {
       id,
       frontendChatId,
-      matterId,
       messages,
       assistantMode: requestedAssistantMode,
       intakeFacts,
@@ -327,8 +325,10 @@ export async function POST(request: Request) {
     await checkIpRateLimit(ipAddress(request));
 
     const session = await auth();
-    const frontendUserId =
-      session?.user?.id ?? (await getOrCreateLocalImmigrationUserId());
+    if (!session?.user) {
+      return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    const frontendUserId = session.user.id;
     const activeFrontendChatId = frontendChatId ?? id;
     const ownedConversation = frontendChatId
       ? await getImmigrationConversationByChatId({
@@ -344,11 +344,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // Matter identity is server-owned just like conversation identity. A
+    // client-provided matterId may never select another customer's matter.
+    const effectiveMatterId = ownedConversation?.legalMatterId ?? null;
+
     const question = extractLatestUserText(safeMessages);
     if (!question) {
       return emptyWidgetResponse(
         "Please enter a question so I can help.",
-        matterId ?? null,
+        effectiveMatterId,
         "en"
       );
     }
@@ -365,11 +369,11 @@ export async function POST(request: Request) {
       url: `${legalServiceUrl}/api/v1/query`,
       apiKey,
       responseLanguage,
-      matterId: matterId ?? null,
+      matterId: effectiveMatterId,
       payload: {
         question,
         response_language: responseLanguage,
-        matter_id: matterId ?? ownedConversation?.legalMatterId ?? null,
+        matter_id: effectiveMatterId,
         session_id: id,
         frontend_chat_id: activeFrontendChatId,
         frontend_user_id: frontendUserId,
@@ -406,7 +410,7 @@ export async function POST(request: Request) {
       confidence: data.confidence ?? null,
       researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
-      matterId: data.matter_id ?? matterId ?? null,
+      matterId: data.matter_id ?? effectiveMatterId,
       retrievalDebug: SHOW_WIDGET_DEBUG
         ? normalizeRetrievalDebug(data.retrieval_debug)
         : null,
@@ -486,7 +490,7 @@ export async function POST(request: Request) {
       escalate: Boolean(data.escalate),
       nextAction: normalizeNextAction(data.next_action),
       confidence: data.confidence ?? "medium",
-      matterId: data.matter_id ?? matterId ?? null,
+      matterId: data.matter_id ?? effectiveMatterId,
       conversationState: data.conversation_state ?? null,
       caseHypothesis: null,
       factSlotStates: [],

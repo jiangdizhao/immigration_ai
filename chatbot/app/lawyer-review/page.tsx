@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { SiteHeader } from "@/components/site-header";
 
 type ConversationQueueItem = {
   matter_id: string;
@@ -215,7 +216,6 @@ function commentStatusClass(item: ConversationQueueItem) {
 }
 
 export default function LawyerReviewPage() {
-  const [token, setToken] = useState("");
   const [status, setStatus] = useState("uncommented");
   const [queue, setQueue] = useState<ConversationQueueItem[]>([]);
   const [selectedMatterId, setSelectedMatterId] = useState<string | null>(null);
@@ -237,13 +237,6 @@ export default function LawyerReviewPage() {
   const [addToEvaluationBank, setAddToEvaluationBank] = useState(false);
   const [createLessonCandidate, setCreateLessonCandidate] = useState(false);
   const [affectedClaimIds, setAffectedClaimIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("lawyerReviewToken") ?? "";
-    if (saved) {
-      setToken(saved);
-    }
-  }, []);
 
   const selectedTrace = useMemo(() => {
     return (
@@ -296,7 +289,6 @@ export default function LawyerReviewPage() {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "X-Review-Token": token,
         ...(init.headers ?? {}),
       },
     });
@@ -312,7 +304,6 @@ export default function LawyerReviewPage() {
     setMessage(null);
     setMessageTone("info");
     try {
-      window.localStorage.setItem("lawyerReviewToken", token);
       const data = await api(
         `?conversations=true&status=${encodeURIComponent(status)}&limit=80`
       );
@@ -432,8 +423,9 @@ export default function LawyerReviewPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-900">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <SiteHeader />
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="rounded-3xl border bg-white p-6 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
             Immigration AI lawyer review
@@ -449,14 +441,7 @@ export default function LawyerReviewPage() {
         </header>
 
         <section className="rounded-3xl border bg-white p-5 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
-            <input
-              className="rounded-xl border px-3 py-2 text-sm"
-              onChange={(event) => setToken(event.target.value)}
-              placeholder="Review token"
-              type="password"
-              value={token}
-            />
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
             <select
               className="rounded-xl border px-3 py-2 text-sm"
               onChange={(event) => setStatus(event.target.value)}

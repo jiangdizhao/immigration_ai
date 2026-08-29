@@ -172,6 +172,27 @@ function formatKey(value?: string | null) {
   return value.replaceAll("_", " ");
 }
 
+function formatConversationUpdatedAt(
+  updatedAt?: string | null,
+  createdAt?: string | null
+) {
+  const value = updatedAt ?? createdAt;
+  if (!value) {
+    return "Updated time unavailable";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Updated time unavailable";
+  }
+
+  return `Updated ${new Intl.DateTimeFormat("en-AU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(parsed)} UTC`;
+}
+
 function statusText(status: "ready" | "submitted" | "typing") {
   if (status === "submitted") {
     return "Checking sources";
@@ -1017,6 +1038,12 @@ export function ImmigrationAIWorkspace({
                 >
                   <span className="block truncate font-semibold">
                     {conversation.title || "Immigration conversation"}
+                  </span>
+                  <span className="mt-1 block text-[11px] opacity-75">
+                    {formatConversationUpdatedAt(
+                      conversation.updatedAt,
+                      conversation.createdAt
+                    )}
                   </span>
                   <span className="mt-1 block font-mono text-[11px] opacity-75">
                     chat {conversation.chatId.slice(0, 8)} · matter{" "}

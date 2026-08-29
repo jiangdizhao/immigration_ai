@@ -7,12 +7,13 @@ import { createUser, getUser } from "@/lib/db/queries";
 import { signIn } from "./auth";
 
 const authFormSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email().max(64),
   password: z.string().min(6),
 });
 
 export type LoginActionState = {
   status: "idle" | "in_progress" | "success" | "failed" | "invalid_data";
+  redirectTo?: "/ai-workspace" | "/admin-portal";
 };
 
 export const login = async (
@@ -25,13 +26,25 @@ export const login = async (
       password: formData.get("password"),
     });
 
-    await signIn("credentials", {
+    const users = await getUser(validatedData.email);
+    if (users.length !== 1) {
+      return { status: "failed" };
+    }
+
+    const result = await signIn("credentials", {
       email: validatedData.email,
       password: validatedData.password,
       redirect: false,
     });
 
-    return { status: "success" };
+    if (result?.error) {
+      return { status: "failed" };
+    }
+
+    return {
+      status: "success",
+      redirectTo: users[0].role === "admin" ? "/admin-portal" : "/ai-workspace",
+    };
   } catch (error) {
     if (error instanceof z.ZodError) {
       return { status: "invalid_data" };
@@ -49,6 +62,7 @@ export type RegisterActionState = {
     | "failed"
     | "user_exists"
     | "invalid_data";
+  redirectTo?: "/ai-workspace";
 };
 
 export const register = async (
@@ -73,7 +87,7 @@ export const register = async (
       redirect: false,
     });
 
-    return { status: "success" };
+    return { status: "success", redirectTo: "/ai-workspace" };
   } catch (error) {
     if (error instanceof z.ZodError) {
       return { status: "invalid_data" };

@@ -2,45 +2,43 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  hasAuthenticatedLawyerToken,
-  isAuthorized,
+  reviewAccessDecision,
+  reviewAuthorizationResponse,
   trustedAssertionHeaders,
-} from "./route";
+} from "./access";
 
-test("development review bypass is not a trusted assertion", () => {
-  const request = new Request("http://localhost", { method: "POST" });
-
+test("only an authenticated administrator gets lawyer-review access", () => {
+  assert.equal(reviewAccessDecision(null), "unauthenticated");
   assert.equal(
-    isAuthorized(request, { reviewToken: undefined, nodeEnv: "development" }),
-    true
+    reviewAccessDecision({
+      user: { email: "phase8-free-test@local.test", role: "user" },
+    }),
+    "forbidden"
   );
-  assert.equal(hasAuthenticatedLawyerToken(request, undefined), false);
-  assert.deepEqual(
-    trustedAssertionHeaders(request, undefined, "private-secret"),
-    {}
+  assert.equal(
+    reviewAccessDecision({
+      user: { email: "phase8-admin-test@local.test", role: "admin" },
+    }),
+    "allowed"
+  );
+  assert.equal(
+    reviewAccessDecision({ user: { email: "guest-123", role: "admin" } }),
+    "unauthenticated"
   );
 });
 
-test("only a configured matching review token gets the private assertion", () => {
-  const request = new Request("http://localhost", {
-    method: "POST",
-    headers: { "X-Review-Token": "review-token" },
-  });
-
+test("review authorization returns distinct authentication and role failures", () => {
+  assert.equal(reviewAuthorizationResponse(null)?.status, 401);
   assert.equal(
-    isAuthorized(request, {
-      reviewToken: "review-token",
-      nodeEnv: "production",
-    }),
-    true
+    reviewAuthorizationResponse({ user: { role: "user" } })?.status,
+    403
   );
-  assert.equal(hasAuthenticatedLawyerToken(request, "review-token"), true);
-  assert.deepEqual(
-    trustedAssertionHeaders(request, "review-token", "private-secret"),
-    { "X-Lawyer-Review-Assertion": "private-secret" }
-  );
-  assert.deepEqual(
-    trustedAssertionHeaders(request, "wrong-token", "private-secret"),
-    {}
-  );
+  assert.equal(reviewAuthorizationResponse({ user: { role: "admin" } }), null);
+});
+
+test("an authorized admin receives only the private server assertion", () => {
+  assert.deepEqual(trustedAssertionHeaders("private-secret"), {
+    "X-Lawyer-Review-Assertion": "private-secret",
+  });
+  assert.deepEqual(trustedAssertionHeaders(undefined), {});
 });

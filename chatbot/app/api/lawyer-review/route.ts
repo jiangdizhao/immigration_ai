@@ -1,41 +1,12 @@
-const REVIEW_TOKEN = process.env.LAWYER_REVIEW_TOKEN;
-const REVIEW_ASSERTION_SECRET = process.env.LAWYER_REVIEW_ASSERTION_SECRET;
-
-export function isAuthorized(
-  request: Request,
-  config: { reviewToken?: string; nodeEnv?: string } = {
-    reviewToken: REVIEW_TOKEN,
-    nodeEnv: process.env.NODE_ENV,
-  }
-) {
-  if (!config.reviewToken && config.nodeEnv !== "production") {
-    return true;
-  }
-  const provided = request.headers.get("x-review-token") ?? "";
-  return Boolean(config.reviewToken) && provided === config.reviewToken;
-}
-
-export function hasAuthenticatedLawyerToken(
-  request: Request,
-  reviewToken = REVIEW_TOKEN
-) {
-  const provided = request.headers.get("x-review-token") ?? "";
-  return Boolean(reviewToken) && provided === reviewToken;
-}
-
-export function trustedAssertionHeaders(
-  request: Request,
-  reviewToken = REVIEW_TOKEN,
-  assertionSecret = REVIEW_ASSERTION_SECRET
-): Record<string, string> {
-  if (!hasAuthenticatedLawyerToken(request, reviewToken) || !assertionSecret) {
-    return {};
-  }
-  return { "X-Lawyer-Review-Assertion": assertionSecret };
-}
+import { auth } from "@/app/(auth)/auth";
+import { reviewAuthorizationResponse, trustedAssertionHeaders } from "./access";
 
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
+}
+
+async function authorizeReviewRequest() {
+  return reviewAuthorizationResponse(await auth());
 }
 
 async function legalFetch(path: string, init: RequestInit = {}) {
@@ -71,9 +42,10 @@ async function legalFetch(path: string, init: RequestInit = {}) {
   return Response.json(body);
 }
 
-export function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return jsonError("Unauthorized lawyer-review request", 401);
+export async function GET(request: Request) {
+  const denied = await authorizeReviewRequest();
+  if (denied) {
+    return denied;
   }
   const url = new URL(request.url);
   const matterId = url.searchParams.get("matterId");
@@ -96,8 +68,9 @@ export function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return jsonError("Unauthorized lawyer-review request", 401);
+  const denied = await authorizeReviewRequest();
+  if (denied) {
+    return denied;
   }
   const body = await request.json();
   const traceId = String(body.traceId ?? "").trim();
@@ -119,14 +92,15 @@ export async function POST(request: Request) {
     {
       method: "POST",
       body: JSON.stringify(payload),
-      headers: trustedAssertionHeaders(request),
+      headers: trustedAssertionHeaders(),
     }
   );
 }
 
 export async function PATCH(request: Request) {
-  if (!isAuthorized(request)) {
-    return jsonError("Unauthorized lawyer-review request", 401);
+  const denied = await authorizeReviewRequest();
+  if (denied) {
+    return denied;
   }
   const body = await request.json();
   const reviewId = String(body.reviewId ?? "").trim();
@@ -146,6 +120,6 @@ export async function PATCH(request: Request) {
   return legalFetch(`/api/v1/review/reviews/${encodeURIComponent(reviewId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
-    headers: trustedAssertionHeaders(request),
+    headers: trustedAssertionHeaders(),
   });
 }

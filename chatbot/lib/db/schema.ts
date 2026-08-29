@@ -1,4 +1,4 @@
-import type { InferSelectModel } from "drizzle-orm";
+import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -7,15 +7,31 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 
-export const user = pgTable("User", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  email: varchar("email", { length: 64 }).notNull(),
-  password: varchar("password", { length: 64 }),
-});
+export const user = pgTable(
+  "User",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    email: varchar("email", { length: 64 }).notNull(),
+    password: varchar("password", { length: 64 }),
+    role: varchar("role", { enum: ["user", "admin"] })
+      .notNull()
+      .default("user"),
+    membershipTier: varchar("membershipTier", { enum: ["free", "vip"] })
+      .notNull()
+      .default("free"),
+    vipExpiresAt: timestamp("vipExpiresAt"),
+  },
+  (table) => ({
+    emailNormalizedUnique: uniqueIndex("User_email_normalized_unique").on(
+      sql`lower(trim(${table.email}))`
+    ),
+  })
+);
 
 export type User = InferSelectModel<typeof user>;
 

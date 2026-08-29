@@ -2,9 +2,9 @@ import { auth } from "@/app/(auth)/auth";
 import {
   getImmigrationConversationByChatId,
   getMessagesByChatId,
-  getOrCreateLocalImmigrationUserId,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
+import { ChatbotError } from "@/lib/errors";
 
 type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
@@ -12,7 +12,7 @@ type RouteContext = {
 
 async function currentConversationUserId() {
   const session = await auth();
-  return session?.user?.id ?? (await getOrCreateLocalImmigrationUserId());
+  return session?.user?.id ?? null;
 }
 
 async function getChatId(context: RouteContext) {
@@ -90,6 +90,9 @@ function extractMetadataFromParts(parts: unknown) {
 
 export async function GET(_request: Request, context: RouteContext) {
   const userId = await currentConversationUserId();
+  if (!userId) {
+    return new ChatbotError("unauthorized:chat").toResponse();
+  }
   const chatId = await getChatId(context);
   const conversation = await getImmigrationConversationByChatId({
     chatId,
@@ -123,6 +126,9 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const userId = await currentConversationUserId();
+  if (!userId) {
+    return new ChatbotError("unauthorized:chat").toResponse();
+  }
   const chatId = await getChatId(context);
   const body = await request.json();
 

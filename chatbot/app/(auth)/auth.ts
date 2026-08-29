@@ -7,12 +7,17 @@ import { createGuestUser, getUser } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
 
 export type UserType = "guest" | "regular";
+export type UserRole = "user" | "admin";
+export type MembershipTier = "free" | "vip";
 
 declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
       type: UserType;
+      role: UserRole;
+      membershipTier: MembershipTier;
+      vipExpiresAt: string | null;
     } & DefaultSession["user"];
   }
 
@@ -20,6 +25,9 @@ declare module "next-auth" {
     id?: string;
     email?: string | null;
     type: UserType;
+    role: UserRole;
+    membershipTier: MembershipTier;
+    vipExpiresAt?: Date | null;
   }
 }
 
@@ -27,6 +35,9 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
     type: UserType;
+    role: UserRole;
+    membershipTier: MembershipTier;
+    vipExpiresAt: string | null;
   }
 }
 
@@ -43,7 +54,9 @@ export const {
       async authorize({ email, password }: any) {
         const users = await getUser(email);
 
-        if (users.length === 0) {
+        // Do not guess which account to use if historical data contains
+        // duplicate normalized emails. Authentication fails closed instead.
+        if (users.length !== 1) {
           await compare(password, DUMMY_PASSWORD);
           return null;
         }
@@ -78,6 +91,9 @@ export const {
       if (user) {
         token.id = user.id as string;
         token.type = user.type;
+        token.role = user.role;
+        token.membershipTier = user.membershipTier;
+        token.vipExpiresAt = user.vipExpiresAt?.toISOString() ?? null;
       }
 
       return token;
@@ -86,6 +102,10 @@ export const {
       if (session.user) {
         session.user.id = token.id;
         session.user.type = token.type;
+        session.user.role = token.role ?? "user";
+        session.user.membershipTier = token.membershipTier ?? "free";
+        session.user.vipExpiresAt = (token.vipExpiresAt ??
+          null) as typeof session.user.vipExpiresAt;
       }
 
       return session;

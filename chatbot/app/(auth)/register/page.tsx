@@ -40,6 +40,7 @@ export default function Page() {
 
       setIsSuccessful(true);
       updateSession();
+      router.replace(state.redirectTo ?? "/ai-workspace");
       router.refresh();
     }
   }, [state.status]);
