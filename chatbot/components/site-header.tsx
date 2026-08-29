@@ -143,7 +143,8 @@ export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: session, status } = useSession();
   const sessionUser = session?.user;
-  const isGuest = guestRegex.test(sessionUser?.email ?? "");
+  const isGuest =
+    sessionUser?.type === "guest" || guestRegex.test(sessionUser?.email ?? "");
   const isAuthenticated =
     status === "authenticated" && Boolean(sessionUser) && !isGuest;
   const isAdmin = isAuthenticated && sessionUser?.role === "admin";

@@ -39,7 +39,8 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  const isGuest = guestRegex.test(token?.email ?? "");
+  const isGuest =
+    token?.type === "guest" || guestRegex.test(token?.email ?? "");
 
   if (token && !isGuest && ["/login", "/register"].includes(pathname)) {
     return NextResponse.redirect(

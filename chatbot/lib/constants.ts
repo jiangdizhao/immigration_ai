@@ -8,6 +8,7 @@ export const isTestEnvironment = Boolean(
     process.env.CI_PLAYWRIGHT
 );
 
-export const guestRegex = /^guest-\d+$/;
+export const guestRegex =
+  /^guest-\d+(?:-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$/i;
 
 export const DUMMY_PASSWORD = generateDummyPassword();
