@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { guestRegex } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -42,18 +42,26 @@ function AccountMenu({
   email,
   isAdmin,
   membershipTier,
+  vipExpiresAt,
+  activeVip,
+  expiredVip,
   mobile = false,
 }: {
   email: string;
   isAdmin: boolean;
   membershipTier: "free" | "vip";
+  vipExpiresAt: string | null;
+  activeVip: boolean;
+  expiredVip: boolean;
   mobile?: boolean;
 }) {
   const accountLabel = isAdmin
     ? "Administrator"
-    : membershipTier === "vip"
-      ? "VIP account"
-      : "Free account";
+    : membershipTier === "vip" && activeVip
+      ? `VIP until ${new Date(vipExpiresAt as string).toLocaleDateString()}`
+      : expiredVip
+        ? "VIP expired"
+        : "Free account";
 
   return (
     <DropdownMenu>
@@ -94,6 +102,13 @@ function AccountMenu({
             {isAdmin ? "AI Workspace" : "My conversations / AI Workspace"}
           </Link>
         </DropdownMenuItem>
+        {!isAdmin && !activeVip ? (
+          <DropdownMenuItem asChild>
+            <Link className="cursor-pointer" href="/vip">
+              {expiredVip ? "Renew VIP" : "Upgrade to VIP"}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         {isAdmin ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/admin-portal">
@@ -126,7 +141,53 @@ export function SiteHeader() {
     status === "authenticated" && Boolean(sessionUser) && !isGuest;
   const isAdmin = isAuthenticated && sessionUser?.role === "admin";
   const email = sessionUser?.email ?? "";
-  const membershipTier = sessionUser?.membershipTier ?? "free";
+  const [serverEntitlement, setServerEntitlement] = useState<{
+    membershipTier: "free" | "vip";
+    vipExpiresAt: string | null;
+    activeVip: boolean;
+    expiredVip: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setServerEntitlement(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/vip/status")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && data) {
+          setServerEntitlement({
+            membershipTier: data.membershipTier === "vip" ? "vip" : "free",
+            vipExpiresAt:
+              typeof data.vipExpiresAt === "string" ? data.vipExpiresAt : null,
+            activeVip: Boolean(data.activeVip),
+            expiredVip: Boolean(data.expiredVip),
+          });
+        }
+      })
+      .catch(() => {
+        // The session values remain a safe display fallback if status is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  const membershipTier =
+    serverEntitlement?.membershipTier ?? sessionUser?.membershipTier ?? "free";
+  const vipExpiresAt =
+    serverEntitlement?.vipExpiresAt ?? sessionUser?.vipExpiresAt ?? null;
+  const activeVip =
+    serverEntitlement?.activeVip ??
+    (membershipTier === "vip" &&
+      Boolean(vipExpiresAt && new Date(vipExpiresAt) > new Date()));
+  const expiredVip =
+    serverEntitlement?.expiredVip ??
+    (membershipTier === "vip" && !activeVip && Boolean(vipExpiresAt));
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#001736]/95 text-white shadow-[0_10px_40px_-22px_rgba(0,0,0,0.75)] backdrop-blur-2xl">
@@ -172,9 +233,12 @@ export function SiteHeader() {
         <div className="hidden items-center gap-3 md:flex">
           {isAuthenticated ? (
             <AccountMenu
+              activeVip={activeVip}
               email={email}
+              expiredVip={expiredVip}
               isAdmin={isAdmin}
               membershipTier={membershipTier}
+              vipExpiresAt={vipExpiresAt}
             />
           ) : (
             <>
@@ -243,10 +307,13 @@ export function SiteHeader() {
             </Button>
             {isAuthenticated ? (
               <AccountMenu
+                activeVip={activeVip}
                 email={email}
+                expiredVip={expiredVip}
                 isAdmin={isAdmin}
                 membershipTier={membershipTier}
                 mobile
+                vipExpiresAt={vipExpiresAt}
               />
             ) : (
               <div className="mt-2 grid grid-cols-2 gap-2">

@@ -4,6 +4,7 @@ import { auth } from "@/app/(auth)/auth";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
   getImmigrationConversationByChatId,
+  getUserEntitlementById,
   saveMessages,
   touchImmigrationConversation,
   updateImmigrationConversation,
@@ -16,6 +17,7 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
+import { isPremiumAllowed, premiumDeniedResponse } from "@/lib/vip/entitlement";
 
 export const maxDuration = 180;
 
@@ -117,6 +119,34 @@ function extractLatestUserText(
     .trim();
 
   return text.length > 0 ? text : null;
+}
+
+async function requirePremiumAccess() {
+  const session = await auth();
+  if (!session?.user) {
+    return new ChatbotError("unauthorized:chat").toResponse();
+  }
+
+  if (session.user.type === "guest") {
+    return Response.json(
+      {
+        error: "Premium AI requires a registered account with active VIP.",
+        loginPath: "/login",
+      },
+      { status: 401 }
+    );
+  }
+
+  const entitlement = await getUserEntitlementById(session.user.id);
+  if (!entitlement) {
+    return new ChatbotError("unauthorized:chat").toResponse();
+  }
+
+  if (!isPremiumAllowed(entitlement)) {
+    return premiumDeniedResponse();
+  }
+
+  return { session, entitlement };
 }
 
 function detectResponseLanguage(text: string): ResponseLanguage {
@@ -318,16 +348,20 @@ export async function POST(request: Request) {
       );
     }
 
+    // Premium authorization is database-authoritative and deliberately runs
+    // before rate limiting, ownership work, or any legal-service call.
+    const premiumAccess = await requirePremiumAccess();
+    if (premiumAccess instanceof Response) {
+      return premiumAccess;
+    }
+
     const safeMessages = sanitizePoliticalHistory(messages) as typeof messages;
 
     const assistantMode = normalizeAssistantMode(requestedAssistantMode);
 
     await checkIpRateLimit(ipAddress(request));
 
-    const session = await auth();
-    if (!session?.user) {
-      return new ChatbotError("unauthorized:chat").toResponse();
-    }
+    const { session } = premiumAccess;
     const frontendUserId = session.user.id;
     const activeFrontendChatId = frontendChatId ?? id;
     const ownedConversation = frontendChatId

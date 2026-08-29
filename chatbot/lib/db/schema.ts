@@ -2,6 +2,8 @@ import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
+  index,
+  integer,
   json,
   pgTable,
   primaryKey,
@@ -34,6 +36,41 @@ export const user = pgTable(
 );
 
 export type User = InferSelectModel<typeof user>;
+
+export const vipPurchase = pgTable(
+  "VipPurchase",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerPaymentId: varchar("providerPaymentId", { length: 255 }).notNull(),
+    amountMinor: integer("amountMinor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", {
+      enum: ["pending", "paid", "failed", "cancelled"],
+    })
+      .notNull()
+      .default("pending"),
+    purchasedAt: timestamp("purchasedAt"),
+    vipStartsAt: timestamp("vipStartsAt"),
+    vipExpiresAt: timestamp("vipExpiresAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    providerPaymentUnique: uniqueIndex(
+      "VipPurchase_provider_payment_unique"
+    ).on(table.provider, table.providerPaymentId),
+    userStatusIndex: index("VipPurchase_user_status_idx").on(
+      table.userId,
+      table.status
+    ),
+  })
+);
+
+export type VipPurchase = InferSelectModel<typeof vipPurchase>;
 
 export const chat = pgTable("Chat", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),

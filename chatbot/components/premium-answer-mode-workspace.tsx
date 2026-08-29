@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   ASSISTANT_MODE_STORAGE_KEY,
@@ -11,6 +12,7 @@ import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
 export function PremiumAnswerModeWorkspace() {
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("default");
   const [modeHydrated, setModeHydrated] = useState(false);
+  const [premiumAllowed, setPremiumAllowed] = useState(false);
 
   useEffect(() => {
     setAssistantMode(
@@ -27,6 +29,13 @@ export function PremiumAnswerModeWorkspace() {
     }
     window.localStorage.setItem(ASSISTANT_MODE_STORAGE_KEY, assistantMode);
   }, [assistantMode, modeHydrated]);
+
+  useEffect(() => {
+    fetch("/api/vip/status")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setPremiumAllowed(Boolean(data?.premiumAllowed)))
+      .catch(() => setPremiumAllowed(false));
+  }, []);
 
   return (
     <>
@@ -66,10 +75,20 @@ export function PremiumAnswerModeWorkspace() {
               <option value="premium">Premium direct answer</option>
             </select>
             {assistantMode === "premium" ? (
-              <p className="mt-2 text-xs leading-5 text-amber-700">
-                Fast mode is not source-verified. Use it for customer-friendly
-                first views, not final case advice.
-              </p>
+              <div className="mt-2 space-y-1 text-xs leading-5 text-amber-700">
+                <p>
+                  Fast mode is not source-verified. Use it for customer-friendly
+                  first views, not final case advice.
+                </p>
+                {premiumAllowed ? null : (
+                  <p className="font-semibold">
+                    Premium requires an active VIP membership.{" "}
+                    <Link className="underline" href="/vip">
+                      Upgrade to VIP
+                    </Link>
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="mt-2 text-xs leading-5 text-slate-500">
                 Safer default mode keeps the source-aware legal workflow.

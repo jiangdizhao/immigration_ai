@@ -78,6 +78,13 @@
       "when": 1788000000000,
       "tag": "0010_phase8_user_access",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788000000001,
+      "tag": "0011_phase8_vip_purchases",
+      "breakpoints": true
     }
   ]
 }

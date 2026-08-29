@@ -19,6 +19,7 @@ import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { ChatbotError } from "../errors";
 import { generateUUID } from "../utils";
+import { calculateVipWindow } from "../vip/entitlement";
 import {
   type Chat,
   chat,
@@ -31,6 +32,8 @@ import {
   suggestion,
   type User,
   user,
+  type VipPurchase,
+  vipPurchase,
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
@@ -55,6 +58,154 @@ export async function getUser(email: string): Promise<User[]> {
       "Failed to get user by email"
     );
   }
+}
+
+export async function getUserEntitlementById(userId: string) {
+  const [entitlement] = await db
+    .select({
+      id: user.id,
+      role: user.role,
+      membershipTier: user.membershipTier,
+      vipExpiresAt: user.vipExpiresAt,
+    })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  return entitlement ?? null;
+}
+
+export async function createVipPurchase({
+  userId,
+  provider,
+  providerPaymentId,
+  amountMinor,
+  currency,
+}: Pick<
+  VipPurchase,
+  "userId" | "provider" | "providerPaymentId" | "amountMinor" | "currency"
+>) {
+  const [purchase] = await db
+    .insert(vipPurchase)
+    .values({
+      userId,
+      provider,
+      providerPaymentId,
+      amountMinor,
+      currency,
+    })
+    .returning();
+
+  return purchase;
+}
+
+export async function getVipPurchaseForUser({
+  purchaseId,
+  userId,
+}: {
+  purchaseId: string;
+  userId: string;
+}) {
+  const [purchase] = await db
+    .select()
+    .from(vipPurchase)
+    .where(and(eq(vipPurchase.id, purchaseId), eq(vipPurchase.userId, userId)))
+    .limit(1);
+
+  return purchase ?? null;
+}
+
+export async function settleVipPurchase({
+  purchaseId,
+  userId,
+  provider,
+  providerPaymentId,
+  providerStatus,
+  durationDays,
+  now = new Date(),
+}: {
+  purchaseId: string;
+  userId: string;
+  provider: string;
+  providerPaymentId: string;
+  providerStatus: "paid" | "failed" | "cancelled";
+  durationDays: number;
+  now?: Date;
+}) {
+  return await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT "id" FROM "VipPurchase" WHERE "id" = ${purchaseId} AND "userId" = ${userId} FOR UPDATE`
+    );
+    const [purchase] = await tx
+      .select()
+      .from(vipPurchase)
+      .where(
+        and(eq(vipPurchase.id, purchaseId), eq(vipPurchase.userId, userId))
+      )
+      .limit(1);
+
+    if (
+      !purchase ||
+      purchase.provider !== provider ||
+      purchase.providerPaymentId !== providerPaymentId
+    ) {
+      return null;
+    }
+
+    if (
+      purchase.status === "paid" ||
+      purchase.status === "failed" ||
+      purchase.status === "cancelled"
+    ) {
+      return purchase;
+    }
+
+    if (providerStatus !== "paid") {
+      const [settled] = await tx
+        .update(vipPurchase)
+        .set({ status: providerStatus, updatedAt: now })
+        .where(eq(vipPurchase.id, purchase.id))
+        .returning();
+      return settled ?? null;
+    }
+
+    const [currentUser] = await tx
+      .select({
+        membershipTier: user.membershipTier,
+        vipExpiresAt: user.vipExpiresAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (!currentUser) {
+      return null;
+    }
+
+    const { vipStartsAt, vipExpiresAt } = calculateVipWindow(
+      currentUser.vipExpiresAt,
+      now,
+      durationDays
+    );
+
+    await tx
+      .update(user)
+      .set({ membershipTier: "vip", vipExpiresAt })
+      .where(eq(user.id, userId));
+
+    const [settled] = await tx
+      .update(vipPurchase)
+      .set({
+        status: "paid",
+        purchasedAt: now,
+        vipStartsAt,
+        vipExpiresAt,
+        updatedAt: now,
+      })
+      .where(eq(vipPurchase.id, purchase.id))
+      .returning();
+
+    return settled ?? null;
+  });
 }
 
 export async function createUser(email: string, password: string) {
