@@ -16,6 +16,8 @@ legal-service/.phase7_3b_runs/
 chatbot/.env.local
 chatbot/.env
 legal-service/.env
+legal-service/.env.before-timeout-fix-20260828
+
 
 # OS/editor junk
 .DS_Store
