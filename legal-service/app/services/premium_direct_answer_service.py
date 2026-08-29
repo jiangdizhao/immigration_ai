@@ -188,9 +188,8 @@ class PremiumDirectAnswerService:
                 os.getenv("PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS", "10000"),
             )
         )
-        self.max_tool_calls = self._env_int(
+        self.max_tool_calls = self._optional_env_int(
             "PREMIUM_DIRECT_MAX_TOOL_CALLS",
-            default=2,
             minimum=1,
             maximum=10,
         )
@@ -248,6 +247,33 @@ class PremiumDirectAnswerService:
                 default,
             )
             return default
+        return value
+
+    @staticmethod
+    def _optional_env_int(
+        name: str,
+        *,
+        minimum: int,
+        maximum: int,
+    ) -> int | None:
+        """Parse an optional bounded integer without changing other env ints."""
+        raw = os.getenv(name)
+        if raw is None or raw.strip().lower() in {"", "none", "null"}:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            logger.warning("Invalid %s=%r; using unlimited (omitted)", name, raw)
+            return None
+        if not minimum <= value <= maximum:
+            logger.warning(
+                "Invalid %s=%s; expected %s..%s or none, using unlimited (omitted)",
+                name,
+                value,
+                minimum,
+                maximum,
+            )
+            return None
         return value
 
     def _client(self, *, timeout_seconds: float, max_retries: int) -> OpenAI:
@@ -415,6 +441,7 @@ class PremiumDirectAnswerService:
                     "max_history_total_chars": self.max_history_total_chars,
                     "high_risk_detected": high_risk,
                     "max_tool_calls": self.max_tool_calls,
+                    "native_web_max_tool_calls": self.max_tool_calls,
                     "premium_lane_budget_ms": self.lane_budget_ms,
                     "absolute_deadline_ms": self.lane_budget_ms,
                     "research_stage_target_ms": self.research_stage_target_ms,
@@ -963,13 +990,14 @@ class PremiumDirectAnswerService:
                         }
                     ],
                     "tool_choice": "required" if effective_web_search_required else "auto",
-                    "max_tool_calls": self.max_tool_calls,
                     "include": [
                         "web_search_call.action.sources",
                         "web_search_call.results",
                     ],
                 }
             )
+            if self.max_tool_calls is not None:
+                request_kwargs["max_tool_calls"] = self.max_tool_calls
 
         try:
             response = create_response(request_kwargs)
@@ -1125,9 +1153,9 @@ class PremiumDirectAnswerService:
                 "准确的法规或立法文书措辞、决定性法律交叉引用、模型不确定的事实，或需要权威核实时，"
                 "才使用可用的网页搜索工具；如果无需研究即可可靠回答，不要调用研究工具。"
                 "需要研究时，优先使用澳大利亚联邦立法登记册、澳大利亚内政部、联邦法院及其他官方政府来源。"
-                "必要时追踪具有实质意义的法律交叉引用；普通法律咨询通常以2至5个权威来源为宜，"
-                "一旦足以回答实质问题就停止，不要为了增加来源数量继续检索。这是接待/客户答复流程，"
-                "不是详尽的法律研究备忘录。"
+                "必要时追踪具有实质意义的法律交叉引用；每次有意义的研究结果后重新评估，"
+                "一旦足以回答实质问题就停止，不要为了增加来源或搜索次数继续检索。这是接待/客户答复流程，"
+                "不是详尽的法律研究备忘录。优先使用权威的一手来源，而不是累积重复的二手来源。"
                 "不要因为工具可用就穷尽式研究，不要猜测，也不要编造引用或链接。"
             )
         return (
@@ -1136,11 +1164,13 @@ class PremiumDirectAnswerService:
             "cross-references, uncertain facts, or information requiring authoritative verification. Do not use "
             "research unnecessarily. When research is needed, prefer authoritative Australian primary and official "
             "sources such as the Federal Register of Legislation, the Department of Home Affairs, Federal Court "
-            "decisions, and other official government sources. For ordinary legal intake questions, usually 2-5 "
-            "strong authoritative sources are sufficient. Follow a material cross-reference only when needed "
-            "to answer the user's actual question, and stop researching once the material issues are sufficiently "
-            "supported. Do not collect sources merely for breadth. This is an intake/customer-answer workflow, "
-            "not an exhaustive legal research memorandum. Do not guess or fabricate citations or URLs."
+            "decisions, and other official government sources. Follow a material cross-reference only when needed "
+            "to answer the user's actual question. After each meaningful research result, reassess whether the "
+            "material issues already have sufficient authoritative support; stop researching once the material "
+            "issues are sufficiently supported, and then answer. "
+            "Do not continue merely because more search actions are available, and do not accumulate redundant "
+            "secondary sources. This is an intake/customer-answer workflow, not an exhaustive legal research "
+            "memorandum. Do not guess or fabricate citations or URLs."
         )
 
     @staticmethod

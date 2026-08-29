@@ -432,9 +432,32 @@ def test_default_native_web_search_max_tool_calls_is_propagated(monkeypatch) -> 
         lambda: SimpleNamespace(default_web_search_max_tool_calls=2),
     )
 
-    _call(adapter)
+    result = _call(adapter)
 
     assert responses.calls[0]["max_tool_calls"] == 2
+    assert result.native_web_max_tool_calls == 2
+
+
+def test_default_native_web_search_max_tool_calls_is_omitted_when_unlimited(monkeypatch) -> None:
+    import app.services.openai_responses_adapter as adapter_module
+
+    stream = FakeStream([
+        SimpleNamespace(
+            type="response.completed",
+            response=SimpleNamespace(id="unlimited-response", output=[]),
+        ),
+    ])
+    adapter, responses = _adapter(stream)
+    monkeypatch.setattr(
+        adapter_module,
+        "get_settings",
+        lambda: SimpleNamespace(default_web_search_max_tool_calls=None),
+    )
+
+    result = _call(adapter)
+
+    assert result.native_web_max_tool_calls is None
+    assert "max_tool_calls" not in responses.calls[0]
 
 
 def test_default_native_web_search_context_baseline_is_low_in_actual_request(monkeypatch) -> None:

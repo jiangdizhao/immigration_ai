@@ -110,6 +110,7 @@ class LocatorResolution:
     unresolved_count: int = 0
     ambiguous_count: int = 0
     schema_invalid_count: int = 0
+    match_category_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def rejection_codes(self) -> list[str]:
@@ -142,35 +143,57 @@ class NativeWebLocatorResolver:
     def resolve(self, locators: list[Any]) -> LocatorResolution:
         result = LocatorResolution()
         index = self.source_url_index()
+
+        def record(category: str) -> None:
+            result.match_category_counts[category] = (
+                result.match_category_counts.get(category, 0) + 1
+            )
+
         for loc in locators:
             validated, invalid_code = validate_locator_object(loc)
             if invalid_code is not None:
                 result.rejected[repr(loc)] = invalid_code
                 result.schema_invalid_count += 1
+                record("locator_schema_invalid")
                 continue
             url = validated.url
             if not url or not isinstance(url, str) or not url.startswith("https://"):
                 result.rejected[url] = "NATIVE_WEB_LOCATOR_NOT_OBSERVED"
                 result.unresolved_count += 1
+                record("locator_not_observed")
                 continue
             try:
                 key = normalize_source_url(url)
             except ValueError:
                 result.rejected[url] = "NATIVE_WEB_LOCATOR_NOT_OBSERVED"
                 result.unresolved_count += 1
+                record("locator_not_observed")
                 continue
             candidates = index.get(key, [])
             if not candidates:
                 result.rejected[url] = "NATIVE_WEB_LOCATOR_NOT_OBSERVED"
                 result.unresolved_count += 1
+                record("locator_not_observed")
                 continue
             unique = sorted(set(candidates))
             if len(unique) > 1:
                 result.rejected[url] = "NATIVE_WEB_LOCATOR_AMBIGUOUS"
                 result.ambiguous_count += 1
+                record("locator_ambiguous")
                 continue
+            try:
+                evidence_url = getattr(
+                    self._registry.resolve_evidence(unique[0]), "url", None
+                )
+            except Exception:
+                evidence_url = None
             result.resolved[url] = unique[0]
             result.resolved_count += 1
+            record(
+                "exact_locator_match"
+                if isinstance(evidence_url, str) and evidence_url == url
+                else "normalized_locator_match"
+            )
         return result
 
 

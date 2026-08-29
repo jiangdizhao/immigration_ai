@@ -1,4 +1,4 @@
-"""Local Stage B1 H/S/D comparison harness.
+"""Local Stage B1/B2 H/S/D comparison harness.
 
 This is an experiment runner, not a serving path.  H and S make one direct
 Responses call with the historical control shape (Terra or Sol); D runs the
@@ -13,7 +13,11 @@ Run later, outside the Codex sandbox, for example:
 
     /home/rico/anaconda3/envs/torch/bin/python -m scripts.stage_b1_control_harness \
       --cases tests/eval/stage_b1_control_cases.json --arms H,S,D \
+      --native-web-max-tool-calls 2 \
       --output artifacts/stage_b1/control_results.jsonl
+
+Use ``--native-web-max-tool-calls none`` for the native-autonomy comparison;
+``H`` always remains the historical no-cap Terra control.
 
 H and S require the user's configured OpenAI API access.  D requires the
 authoritative local database at 127.0.0.1:5432/immigration_legal.  No calls are
@@ -39,6 +43,7 @@ from app.schemas.agent import ExecutionBudget
 from app.services.agent_observability_service import AbsoluteTurnDeadline
 from app.services.agent_runtime_service import AgentRuntimeService
 from app.services.openai_responses_adapter import OpenAIResponsesAdapter
+from app.services.openai_responses_adapter import _UNSET_NATIVE_WEB_MAX_TOOL_CALLS
 from app.services.request_evidence_registry import create_registry
 from app.services.shadow_agent_service import ShadowAgentService
 
@@ -150,6 +155,7 @@ def _direct_result(case: dict[str, Any], arm: str, response: Any, elapsed_ms: fl
             "open_page": response.web_action_open_page_count,
             "find_in_page": response.web_action_find_in_page_count,
         },
+        "native_web_max_tool_calls": response.native_web_max_tool_calls,
         "web_search_query_count": response.web_search_query_count,
         "web_sources_observed_count": response.web_sources_observed_count,
         "web_citations_observed_count": response.web_citations_observed_count,
@@ -176,13 +182,27 @@ def _direct_result(case: dict[str, Any], arm: str, response: Any, elapsed_ms: fl
     }
 
 
-async def run_direct_case(case: dict[str, Any], arm: str) -> dict[str, Any]:
+async def run_direct_case(
+    case: dict[str, Any],
+    arm: str,
+    native_web_max_tool_calls: int | None | object = _UNSET_NATIVE_WEB_MAX_TOOL_CALLS,
+) -> dict[str, Any]:
     model = "gpt-5.6-terra" if arm == "H" else "gpt-5.6-sol"
     settings = get_settings()
     registry = create_registry(f"stage-b1-{uuid4()}")
     started = time.perf_counter()
     try:
-        response = await OpenAIResponsesAdapter().call(
+        # Terra remains the historical no-cap control.  The override is used
+        # for the Sol comparison arm without changing the control shape.
+        adapter_override = None if arm == "H" else native_web_max_tool_calls
+        adapter = (
+            OpenAIResponsesAdapter()
+            if adapter_override is _UNSET_NATIVE_WEB_MAX_TOOL_CALLS
+            else OpenAIResponsesAdapter(
+                native_web_max_tool_calls=adapter_override,
+            )
+        )
+        response = await adapter.call(
             system_prompt=DIRECT_SYSTEM_PROMPT,
             user_text=str(case["question"]),
             model=model,
@@ -213,9 +233,7 @@ def _default_result(case: dict[str, Any], trace: Any) -> dict[str, Any]:
         "reasoning_effort": trace.reasoning_effort,
         "status": trace.status,
         "timeout": trace.status == "timeout",
-        "completion_status": (
-            "recovered" if trace.terminal_continuation_triggered else trace.status
-        ),
+        "completion_status": trace.completion_status,
         "research_status": trace.research_status,
         "total_latency_ms": round(trace.total_duration_ms, 3),
         "provider_latency_ms": round(trace.total_provider_duration_ms, 3),
@@ -224,6 +242,7 @@ def _default_result(case: dict[str, Any], trace: Any) -> dict[str, Any]:
             "open_page": trace.web_action_open_page_count,
             "find_in_page": trace.web_action_find_in_page_count,
         },
+        "native_web_max_tool_calls": trace.native_web_max_tool_calls,
         "web_search_query_count": trace.web_search_query_count,
         "web_sources_observed_count": trace.web_sources_observed_count,
         "web_citations_observed_count": trace.web_citations_observed_count,
@@ -243,6 +262,26 @@ def _default_result(case: dict[str, Any], trace: Any) -> dict[str, Any]:
         ],
         "duplicate_tool_call_suppressed_count": trace.duplicate_tool_call_suppressed_count,
         "duplicate_tool_names": list(trace.duplicate_tool_names),
+        "terminal_submission_continuation_count": (
+            trace.terminal_submission_continuation_count
+        ),
+        "submission_attempt_count": trace.submission_attempt_count,
+        "submission_accepted_count": trace.submission_accepted_count,
+        "submission_rejection_categories_by_attempt": (
+            trace.submission_rejection_categories_by_attempt
+        ),
+        "registered_evidence_count_before_submit": (
+            trace.registered_evidence_count_before_submit
+        ),
+        "registered_native_web_evidence_count_before_submit": (
+            trace.registered_native_web_evidence_count_before_submit
+        ),
+        "submitted_evidence_ref_count": trace.submitted_evidence_ref_count,
+        "accepted_evidence_ref_count": trace.accepted_evidence_ref_count,
+        "rejected_evidence_ref_count": trace.rejected_evidence_ref_count,
+        "native_web_locator_resolution_categories_by_attempt": (
+            trace.native_web_locator_resolution_categories_by_attempt
+        ),
         "search_privacy_pii_violation_count": trace.search_privacy_violation_count,
         "search_privacy_violation_categories": dict(
             trace.search_privacy_violation_categories
@@ -258,10 +297,20 @@ def _default_result(case: dict[str, Any], trace: Any) -> dict[str, Any]:
     }
 
 
-async def run_default_case(case: dict[str, Any]) -> dict[str, Any]:
+async def run_default_case(
+    case: dict[str, Any],
+    native_web_max_tool_calls: int | None | object = _UNSET_NATIVE_WEB_MAX_TOOL_CALLS,
+) -> dict[str, Any]:
     _authoritative_database_guard()
     settings = get_settings()
-    runtime = AgentRuntimeService(provider=OpenAIResponsesAdapter())
+    adapter = (
+        OpenAIResponsesAdapter()
+        if native_web_max_tool_calls is _UNSET_NATIVE_WEB_MAX_TOOL_CALLS
+        else OpenAIResponsesAdapter(
+            native_web_max_tool_calls=native_web_max_tool_calls,
+        )
+    )
+    runtime = AgentRuntimeService(provider=adapter)
     shadow = ShadowAgentService(runtime)
     deadline = AbsoluteTurnDeadline(
         started_at=time.perf_counter(),
@@ -296,6 +345,25 @@ async def run_default_case(case: dict[str, Any]) -> dict[str, Any]:
     return _default_result(case, trace)
 
 
+def _parse_native_web_max_tool_calls(raw: str) -> int | None | object:
+    value = str(raw or "settings").strip().lower()
+    if value in {"settings", "configured"}:
+        return _UNSET_NATIVE_WEB_MAX_TOOL_CALLS
+    if value in {"none", "null", "unlimited"}:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(
+            "--native-web-max-tool-calls must be settings, none, or an integer 1..10"
+        ) from exc
+    if not 1 <= parsed <= 10:
+        raise ValueError(
+            "--native-web-max-tool-calls integer must be between 1 and 10"
+        )
+    return parsed
+
+
 async def run(args: argparse.Namespace) -> None:
     cases = load_cases(Path(args.cases))
     if args.case:
@@ -307,10 +375,17 @@ async def run(args: argparse.Namespace) -> None:
         raise ValueError("--arms must contain only H,S,D")
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    native_web_max_tool_calls = _parse_native_web_max_tool_calls(
+        args.native_web_max_tool_calls
+    )
     with output.open("w", encoding="utf-8") as handle:
         for case in cases:
             for arm in arms:
-                row = await run_direct_case(case, arm) if arm in {"H", "S"} else await run_default_case(case)
+                row = (
+                    await run_direct_case(case, arm, native_web_max_tool_calls)
+                    if arm in {"H", "S"}
+                    else await run_default_case(case, native_web_max_tool_calls)
+                )
                 handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
                 handle.flush()
 
@@ -321,6 +396,11 @@ def main() -> None:
     parser.add_argument("--arms", default="H,S,D", help="comma-separated H,S,D")
     parser.add_argument("--output", required=True, help="JSONL result path")
     parser.add_argument("--case", help="run exactly one fixture case by case_id")
+    parser.add_argument(
+        "--native-web-max-tool-calls",
+        default="settings",
+        help="native web cap: settings, none, or integer 1..10",
+    )
     asyncio.run(run(parser.parse_args()))
 
 

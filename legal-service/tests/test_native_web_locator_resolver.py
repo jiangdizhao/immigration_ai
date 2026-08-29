@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from app.schemas.evidence import NativeWebEvidenceRef
 from app.services.native_web_locator_resolver import (
@@ -57,6 +57,18 @@ def test_same_request_resolves() -> None:
     ref = _register(reg, "https://example.gov.au/page")
     r = NativeWebLocatorResolver(reg).resolve([NativeWebLocator(url="https://example.gov.au/page")])
     assert r.resolved_count == 1 and list(r.resolved.values()) == [ref]
+    assert r.match_category_counts == {"exact_locator_match": 1}
+
+
+def test_equivalent_trailing_slash_locator_resolves_as_normalized_match() -> None:
+    reg = create_registry("v212-normalized")
+    ref = _register(reg, "https://example.gov.au/page")
+    result = NativeWebLocatorResolver(reg).resolve(
+        [NativeWebLocator(url="https://example.gov.au/page/")]
+    )
+    assert result.resolved_count == 1
+    assert list(result.resolved.values()) == [ref]
+    assert result.match_category_counts == {"normalized_locator_match": 1}
 
 
 def test_unobserved_rejected() -> None:
@@ -65,6 +77,7 @@ def test_unobserved_rejected() -> None:
     r = NativeWebLocatorResolver(reg).resolve([NativeWebLocator(url="https://x/fake")])
     assert r.resolved_count == 0
     assert "NATIVE_WEB_LOCATOR_NOT_OBSERVED" in r.rejection_codes
+    assert r.match_category_counts == {"locator_not_observed": 1}
 
 
 def test_cross_request_rejected() -> None:
@@ -82,6 +95,7 @@ def test_ambiguous_rejected() -> None:
     _register(reg, "https://example.gov.au/p", call="b")
     r = NativeWebLocatorResolver(reg).resolve([NativeWebLocator(url="https://example.gov.au/p")])
     assert "NATIVE_WEB_LOCATOR_AMBIGUOUS" in r.rejection_codes
+    assert r.match_category_counts == {"locator_ambiguous": 1}
 
 
 def test_source_only_can_resolve() -> None:

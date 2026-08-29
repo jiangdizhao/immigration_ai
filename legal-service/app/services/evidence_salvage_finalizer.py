@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Iterable
 from urllib.parse import urlsplit
 
@@ -61,11 +62,10 @@ class EvidenceSalvageFinalizer:
         display_items: list[tuple[str, CitationOut]] = []
         for entry in local:
             record = getattr(entry, "evidence_record", None)
-            title = str(
-                getattr(entry, "canonical_source_id", None)
-                or "Recovered local legal evidence"
-            )
-            section = getattr(entry, "provision_or_span", None)
+            title = cls._display_text(
+                getattr(record, "title", None),
+            ) or cls._display_text(getattr(record, "document_id", None)) or "Recovered local legal evidence"
+            section = cls._display_text(getattr(entry, "provision_or_span", None))
             url = str(getattr(record, "canonical_url", None) or "")
             citation = CitationOut(
                 source_id=str(getattr(entry, "evidence_ref", "")),
@@ -77,16 +77,19 @@ class EvidenceSalvageFinalizer:
                 url=url,
                 rationale="Request-scoped evidence recovered before terminal synthesis failed",
             )
-            display_items.append((f"local:{citation.source_id}", citation))
+            display_items.append((f"local:{title.lower()}:{(section or '').lower()}", citation))
 
         for source in web:
             url = str(source.get("url") or "").strip()
             if not url:
                 continue
+            title = cls._display_text(source.get("title"))
+            if not title:
+                title = urlsplit(url).netloc or "Recovered web source"
             citation = CitationOut(
                 source_id=str(source.get("evidence_ref") or url),
                 chunk_id=source.get("search_call_id"),
-                title=str(source.get("title") or url),
+                title=title,
                 authority="web",
                 citation_text="Recovered official/web source",
                 url=url,
@@ -94,9 +97,11 @@ class EvidenceSalvageFinalizer:
             )
             display_items.append((f"web:{url.rstrip('/').lower()}", citation))
 
-        for key, citation in display_items[:MAX_DISPLAYED_SOURCES]:
+        for key, citation in display_items:
             if key in seen_display:
                 continue
+            if len(citations) >= MAX_DISPLAYED_SOURCES:
+                break
             seen_display.add(key)
             citations.append(citation)
             label = citation.title
@@ -132,6 +137,23 @@ class EvidenceSalvageFinalizer:
             recovered_citation_count=max(0, int(citation_count)),
             displayed_source_count=len(citations),
         )
+
+    @staticmethod
+    def _display_text(value: Any) -> str | None:
+        """Return human-readable source metadata, never internal diagnostics."""
+        text = " ".join(str(value or "").split()).strip()
+        if not text or len(text) > 500 or text.startswith(("{", "[")):
+            return None
+        lowered = text.lower()
+        if re.search(r"(?:^|[\s:/_-])(?:page|chunk)[_-]?\d+(?:$|[\s:/_-])", lowered):
+            return None
+        if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f-]{27,}", lowered):
+            return None
+        if re.search(r"(?:^|[\s:/_-])(?:request|tool)[_-]?(?:id|call)?[\s:/_-]*[0-9a-f-]{8,}", lowered):
+            return None
+        if lowered.startswith(("exact:", "web:", "graph:")):
+            return None
+        return text
 
     @staticmethod
     def _is_local_evidence(entry: Any) -> bool:

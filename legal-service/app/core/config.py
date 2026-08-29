@@ -79,8 +79,8 @@ class Settings(BaseSettings):
     )
     agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
     agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
-    default_web_search_max_tool_calls: int = Field(
-        default=2, ge=1, le=10, alias="DEFAULT_WEB_SEARCH_MAX_TOOL_CALLS"
+    default_web_search_max_tool_calls: int | None = Field(
+        default=None, ge=1, le=10, alias="DEFAULT_WEB_SEARCH_MAX_TOOL_CALLS"
     )
     default_web_search_context_size: Literal["low", "medium", "high"] = Field(
         default="low", alias="DEFAULT_WEB_SEARCH_CONTEXT_SIZE"

@@ -69,6 +69,32 @@ def test_salvage_does_not_expose_partial_prose_or_diagnostic_metadata():
     assert "https://example.gov.au/page" in result.answer
 
 
+def test_salvage_uses_displayable_labels_and_deduplicates_local_provisions():
+    first = _entry(origin="canonical_local", ref="exact:one", url="")
+    first.canonical_source_id = "9f4a9d8e-6b8e-4f2d-9f4b-123456789abc"
+    first.provision_or_span = "s 347"
+    first.evidence_record.title = "Migration Act 1958"
+    second = _entry(origin="canonical_local", ref="exact:two", url="")
+    second.canonical_source_id = first.canonical_source_id
+    second.provision_or_span = first.provision_or_span
+    second.evidence_record.title = first.evidence_record.title
+
+    result = EvidenceSalvageFinalizer.build(
+        is_zh=False,
+        local_entries=[first, second],
+        web_sources=[
+            {"title": "page_333", "url": "https://www.homeaffairs.gov.au/visa"},
+            {"title": "duplicate", "url": "https://www.homeaffairs.gov.au/visa/"},
+        ],
+    )
+
+    assert result is not None
+    assert result.answer.count("Migration Act 1958 — s 347") == 1
+    assert "9f4a9d8e-6b8e-4f2d-9f4b-123456789abc" not in result.answer
+    assert "page_333" not in result.answer
+    assert result.answer.count("https://www.homeaffairs.gov.au/visa") == 1
+
+
 def test_default_failure_path_uses_salvage_for_recovered_registry_evidence():
     from app.services.default_agent_serving_service import DefaultAgentServingService
 

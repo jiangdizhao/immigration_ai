@@ -17,6 +17,8 @@ from app.services.request_evidence_registry import create_registry
 from app.services.tool_executor_service import ToolCallRequest, normalized_tool_call_key
 from scripts.stage_b1_control_harness import (
     _authoritative_database_guard,
+    _default_result,
+    _parse_native_web_max_tool_calls,
     build_direct_request_shape,
 )
 
@@ -98,6 +100,28 @@ def test_default_budget_defaults_are_calibrated_without_changing_premium_control
     assert settings.premium_answer_research_target_ms == 40000
     assert settings.terminal_synthesis_target_ms == 15000
     assert settings.final_response_reserve_ms == 3000
+
+    capped = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+        DEFAULT_WEB_SEARCH_MAX_TOOL_CALLS=2,
+    )
+    assert capped.default_web_search_max_tool_calls == 2
+
+
+def test_harness_native_web_cap_override_supports_explicit_cap_or_omission():
+    assert _parse_native_web_max_tool_calls("2") == 2
+    assert _parse_native_web_max_tool_calls("none") is None
+
+
+def test_default_web_max_tool_calls_defaults_to_unlimited_without_dotenv():
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+    )
+    assert settings.default_web_search_max_tool_calls is None
 
 
 def test_same_round_duplicate_normalization_is_structural_only():
@@ -393,3 +417,38 @@ def test_custom_tool_round_telemetry_is_content_free():
         ["submit_answer"],
     ]
     assert all("current private query" not in str(item) for item in names)
+
+
+def test_harness_preserves_customer_completion_status_after_internal_recovery():
+    class Trace:
+        status = "completed"
+        completion_status = "complete"
+        model = "gpt-5.6-luna"
+        reasoning_effort = "low"
+        research_status = "complete"
+        terminal_continuation_triggered = True
+        terminal_submission_continuation_count = 1
+        provider_calls = []
+        tool_calls = []
+        submission = None
+
+        def __getattr__(self, name):
+            if name.endswith("categories"):
+                return {}
+            if (
+                name.endswith("names")
+                or name.endswith("_by_round")
+                or name.endswith("_by_attempt")
+                or name == "custom_tool_calls_per_round"
+            ):
+                return []
+            if name == "native_web_max_tool_calls":
+                return None
+            if name.startswith("duplicate_"):
+                return 0 if name.endswith("count") else []
+            return 0
+
+    row = _default_result({"case_id": "status-case"}, Trace())
+    assert row["status"] == "completed"
+    assert row["completion_status"] == "complete"
+    assert row["terminal_submission_continuation_count"] == 1

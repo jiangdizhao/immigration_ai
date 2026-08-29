@@ -86,11 +86,15 @@ def test_stage_a_premium_research_defaults_are_bounded(monkeypatch) -> None:
     assert service.primary_model == "gpt-5.6-sol"
     assert service.primary_reasoning_effort == "medium"
     assert service.web_search_context_size == "medium"
-    assert service.max_tool_calls == 2
+    assert service.max_tool_calls is None
     assert service.research_stage_target_ms == 40000
     assert service.minimum_fallback_budget_ms == 10000
     assert service.terminal_reasoning_effort == "low"
     assert service.terminal_synthesis_target_ms == 20000
+    instructions = service._model_instructions(is_zh=False)
+    assert "sufficiently supported" in instructions
+    assert "more search actions are available" in instructions
+    assert "2-5" not in instructions
 
 
 def test_normal_premium_exposes_optional_web_search_with_auto_tool_choice(monkeypatch) -> None:
@@ -150,9 +154,25 @@ def test_max_tool_calls_is_configurable_with_safe_default(monkeypatch) -> None:
     assert calls[-1]["max_tool_calls"] == 2
 
 
+def test_max_tool_calls_none_omits_native_request_parameter(monkeypatch) -> None:
+    service = _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS="none")
+    calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
+
+    service._call_model(
+        model="gpt-5.6-sol",
+        reasoning_effort="high",
+        timeout_seconds=10,
+        max_retries=0,
+        model_input="question",
+    )
+
+    assert service.max_tool_calls is None
+    assert "max_tool_calls" not in calls[-1]
+
+
 @pytest.mark.parametrize("value", ["0", "11", "not-an-int"])
-def test_max_tool_calls_invalid_values_use_safe_default(monkeypatch, value: str) -> None:
-    assert _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS=value).max_tool_calls == 2
+def test_max_tool_calls_invalid_values_use_unlimited(monkeypatch, value: str) -> None:
+    assert _service(monkeypatch, PREMIUM_DIRECT_MAX_TOOL_CALLS=value).max_tool_calls is None
 
 
 def test_required_search_is_only_an_explicit_override(monkeypatch) -> None:

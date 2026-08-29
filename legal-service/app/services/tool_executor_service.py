@@ -723,6 +723,8 @@ class ToolExecutorContext:
     # Safe request/result trace for evaluation diagnostics.  The normalizer
     # excludes raw free-form query text and provider reasoning from this data.
     exact_lookup_requests: list[dict[str, Any]] = field(default_factory=list)
+    # Content-free outcome counts for the latest native locator resolution.
+    native_web_locator_resolution_categories: dict[str, int] = field(default_factory=dict)
     schedule2_navigation_denied_call_count: int = 0
     exact_legal_lookup_denied_call_count: int = 0
 
@@ -1184,6 +1186,8 @@ class ToolExecutorService:
                 args=args,
                 context=context,
             )
+            for category, count in context.native_web_locator_resolution_categories.items():
+                contract_diagnostics[f"native_web_locator_{category}_count"] = count
             if locator_error is not None:
                 return self._reject_submission(
                     tool_call=tool_call,
@@ -1253,10 +1257,6 @@ class ToolExecutorService:
                     contract_diagnostics,
                     validation_result.errors,
                 )
-                errors = [
-                    {"code": e.code, "field": e.field, "affected_claim_ids": e.affected_claim_ids}
-                    for e in validation_result.errors
-                ]
                 _action = context.terminal_policy.handle_invalid_submission(
                     context.terminal_record,
                     errors=[e.code for e in validation_result.errors],
@@ -1364,6 +1364,15 @@ class ToolExecutorService:
         not consume the repair allowance.
         """
         resolver = NativeWebLocatorResolver(context.registry)
+        context.native_web_locator_resolution_categories = {}
+
+        def record_resolution(resolution: Any) -> None:
+            for category, count in resolution.match_category_counts.items():
+                context.native_web_locator_resolution_categories[category] = (
+                    context.native_web_locator_resolution_categories.get(category, 0)
+                    + count
+                )
+
         claims = args.get("claims")
         if isinstance(claims, list):
             for i, claim in enumerate(claims):
@@ -1381,6 +1390,7 @@ class ToolExecutorService:
                     return SubmissionError(code="SUBMISSION_SCHEMA_INVALID",
                                            field=f"claims.{i}.evidence_refs")
                 resolution = resolver.resolve(locators)
+                record_resolution(resolution)
                 if resolution.schema_invalid_count > 0:
                     return SubmissionError(code=LOCATOR_SCHEMA_INVALID,
                                            field=f"claims.{i}.native_web_locators")
@@ -1405,6 +1415,7 @@ class ToolExecutorService:
                 if not has_locator:
                     continue
                 res = resolver.resolve([citation.get("native_web_locator")])
+                record_resolution(res)
                 if res.schema_invalid_count > 0:
                     return SubmissionError(code=LOCATOR_SCHEMA_INVALID,
                                            field=f"citations.{i}.native_web_locator")

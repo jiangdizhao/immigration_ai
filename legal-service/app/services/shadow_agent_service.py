@@ -85,6 +85,7 @@ class ShadowTrace:
     native_web_search_call_count: int = 0
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
+    native_web_max_tool_calls: int | None = None
     web_action_search_count: int = 0
     web_action_open_page_count: int = 0
     web_action_find_in_page_count: int = 0
@@ -123,6 +124,17 @@ class ShadowTrace:
     terminal_submission_continuation_count: int = 0
     terminal_continuation_triggered: bool = False
     terminal_continuation_reason: str | None = None
+    submission_attempt_count: int = 0
+    submission_accepted_count: int = 0
+    submission_rejection_categories_by_attempt: list[list[str]] = field(default_factory=list)
+    registered_evidence_count_before_submit: list[int] = field(default_factory=list)
+    registered_native_web_evidence_count_before_submit: list[int] = field(default_factory=list)
+    submitted_evidence_ref_count: list[int] = field(default_factory=list)
+    accepted_evidence_ref_count: list[int] = field(default_factory=list)
+    rejected_evidence_ref_count: list[int] = field(default_factory=list)
+    native_web_locator_resolution_categories_by_attempt: list[dict[str, int]] = field(
+        default_factory=list
+    )
     completion_status: str = "safe_failure"
     terminal_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     reasoning_bank: dict[str, Any] = field(default_factory=dict)
@@ -406,6 +418,7 @@ class ShadowAgentService:
             native_web_search_call_count=result.metrics.native_web_search_call_count,
             native_web_source_count=result.metrics.native_web_source_count,
             native_web_citation_count=result.metrics.native_web_citation_count,
+            native_web_max_tool_calls=result.metrics.native_web_max_tool_calls,
             web_action_search_count=result.metrics.web_action_search_count,
             web_action_open_page_count=result.metrics.web_action_open_page_count,
             web_action_find_in_page_count=result.metrics.web_action_find_in_page_count,
@@ -444,6 +457,23 @@ class ShadowAgentService:
             terminal_submission_continuation_count=result.terminal_submission_continuation_count,
             terminal_continuation_triggered=result.terminal_continuation_triggered,
             terminal_continuation_reason=result.terminal_continuation_reason,
+            submission_attempt_count=result.metrics.submission_attempt_count,
+            submission_accepted_count=result.metrics.submission_accepted_count,
+            submission_rejection_categories_by_attempt=(
+                result.metrics.submission_rejection_categories_by_attempt
+            ),
+            registered_evidence_count_before_submit=(
+                result.metrics.registered_evidence_count_before_submit
+            ),
+            registered_native_web_evidence_count_before_submit=(
+                result.metrics.registered_native_web_evidence_count_before_submit
+            ),
+            submitted_evidence_ref_count=result.metrics.submitted_evidence_ref_count,
+            accepted_evidence_ref_count=result.metrics.accepted_evidence_ref_count,
+            rejected_evidence_ref_count=result.metrics.rejected_evidence_ref_count,
+            native_web_locator_resolution_categories_by_attempt=(
+                result.metrics.native_web_locator_resolution_categories_by_attempt
+            ),
             completion_status=result.completion_status,
             terminal_tool_calls=[
                 tc.model_dump(mode="json") for tc in result.terminal_tool_calls

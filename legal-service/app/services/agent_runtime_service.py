@@ -61,6 +61,74 @@ TERMINAL_RECOVERY_INSTRUCTION = (
     "Submit the answer through submit_answer. research_status must be incomplete because research was incomplete."
 )
 
+
+def _submission_evidence_refs(arguments: Any) -> set[str]:
+    """Count submitted canonical evidence refs without retaining their values."""
+    if not isinstance(arguments, dict):
+        return set()
+    refs: set[str] = set()
+    claims = arguments.get("claims")
+    if isinstance(claims, list):
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+            values = claim.get("evidence_refs")
+            if isinstance(values, list):
+                refs.update(value for value in values if isinstance(value, str))
+    citations = arguments.get("citations")
+    if isinstance(citations, list):
+        for citation in citations:
+            if isinstance(citation, dict):
+                value = citation.get("evidence_ref")
+                if isinstance(value, str):
+                    refs.add(value)
+    return refs
+
+
+def _accepted_submission_evidence_refs(submission: Any) -> set[str]:
+    """Count accepted refs without exposing request-scoped identifiers."""
+    if submission is None:
+        return set()
+    refs: set[str] = set()
+    for claim in list(getattr(submission, "claims", []) or []):
+        refs.update(
+            value
+            for value in (getattr(claim, "evidence_refs", []) or [])
+            if isinstance(value, str)
+        )
+    for citation in list(getattr(submission, "citations", []) or []):
+        value = getattr(citation, "evidence_ref", None)
+        if isinstance(value, str):
+            refs.add(value)
+    return refs
+
+
+def _submission_rejection_categories(tool_result: Any, action: Any) -> list[str]:
+    """Extract stable rejection codes from a submit tool result only."""
+    categories: list[str] = []
+
+    def add(code: Any) -> None:
+        if isinstance(code, str) and code and code not in categories:
+            categories.append(code)
+
+    add(getattr(getattr(tool_result, "error", None), "code", None))
+    data = getattr(tool_result, "data", {})
+    if isinstance(data, dict):
+        for item in data.get("errors", []):
+            if isinstance(item, dict):
+                add(item.get("code"))
+    if getattr(action, "action", None) == "fail_closed":
+        reason = getattr(action, "reason", None)
+        if reason == "Correction allowance consumed by invalid submission":
+            add("TERMINAL_SUBMISSION_CORRECTION_EXHAUSTED")
+        elif reason == "Deadline exceeded; no continuation allowed":
+            add("TERMINAL_SUBMISSION_DEADLINE_EXCEEDED")
+        else:
+            add("TERMINAL_SUBMISSION_FAIL_CLOSED")
+    if not categories:
+        add("SUBMISSION_REJECTION_UNCLASSIFIED")
+    return categories
+
 # ---------------------------------------------------------------------------
 # Provider interface
 # ---------------------------------------------------------------------------
@@ -95,6 +163,8 @@ class ProviderResponse:
     native_web_search_call_count: int = 0
     native_web_source_count: int = 0
     native_web_citation_count: int = 0
+    # None means max_tool_calls was omitted from the provider request.
+    native_web_max_tool_calls: int | None = None
     # Content-free native web action telemetry. Timing fields are elapsed
     # milliseconds within this provider call and remain null when the SDK did
     # not expose the corresponding lifecycle event.
@@ -385,6 +455,15 @@ class AgentRuntimeService:
         recovered_artifact_context_added = False
         duplicate_tool_call_suppressed_count = 0
         duplicate_tool_names: list[str] = []
+        submission_attempt_count = 0
+        submission_accepted_count = 0
+        submission_rejection_categories_by_attempt: list[list[str]] = []
+        registered_evidence_count_before_submit: list[int] = []
+        registered_native_web_evidence_count_before_submit: list[int] = []
+        submitted_evidence_ref_count: list[int] = []
+        accepted_evidence_ref_count: list[int] = []
+        rejected_evidence_ref_count: list[int] = []
+        native_web_locator_resolution_categories_by_attempt: list[dict[str, int]] = []
 
         # Phase 5 resource governance: the answer/research target is a NON-RESETTING
         # stage budget inherited from the SAME original turn start, not a per-call
@@ -702,6 +781,7 @@ class AgentRuntimeService:
                     native_web_search_call_count=response.native_web_search_call_count,
                     native_web_source_count=response.native_web_source_count,
                     native_web_citation_count=response.native_web_citation_count,
+                    native_web_max_tool_calls=response.native_web_max_tool_calls,
                     web_action_search_count=response.web_action_search_count,
                     web_action_open_page_count=response.web_action_open_page_count,
                     web_action_find_in_page_count=response.web_action_find_in_page_count,
@@ -959,8 +1039,72 @@ class AgentRuntimeService:
                             ))
                             continue
 
+                        submitted_refs_before_submit: set[str] = set()
+                        registered_refs_before_submit = 0
+                        registered_native_refs_before_submit = 0
+                        if tc.name == "submit_answer":
+                            submitted_refs_before_submit = _submission_evidence_refs(
+                                tc.arguments
+                            )
+                            try:
+                                registered_refs_before_submit = len(
+                                    tool_context.registry.get_all_refs()
+                                )
+                                registered_native_refs_before_submit = len(
+                                    tool_context.registry.get_refs_by_origin(
+                                        "openai_web_native"
+                                    )
+                                )
+                            except Exception:
+                                pass
+
                         result = self._tool_executor.execute_tool(tc, tool_context)
                         tool_outputs.append(result.result)
+                        if tc.name == "submit_answer":
+                            locator_categories = dict(
+                                tool_context.native_web_locator_resolution_categories
+                            )
+                            tool_context.native_web_locator_resolution_categories = {}
+                            submission_was_accepted = (
+                                result.submission_action is not None
+                                and result.submission_action.action == "accept_submission"
+                                and result.submission is not None
+                            )
+                            accepted_refs = (
+                                _accepted_submission_evidence_refs(result.submission)
+                                if submission_was_accepted
+                                else set()
+                            )
+                            submission_attempt_count += 1
+                            submitted_evidence_ref_count.append(
+                                len(submitted_refs_before_submit)
+                            )
+                            registered_evidence_count_before_submit.append(
+                                registered_refs_before_submit
+                            )
+                            registered_native_web_evidence_count_before_submit.append(
+                                registered_native_refs_before_submit
+                            )
+                            accepted_evidence_ref_count.append(len(accepted_refs))
+                            rejected_evidence_ref_count.append(
+                                max(
+                                    0,
+                                    len(submitted_refs_before_submit)
+                                    - len(accepted_refs),
+                                )
+                            )
+                            native_web_locator_resolution_categories_by_attempt.append(
+                                locator_categories
+                            )
+                            if submission_was_accepted:
+                                submission_accepted_count += 1
+                                submission_rejection_categories_by_attempt.append([])
+                            else:
+                                submission_rejection_categories_by_attempt.append(
+                                    _submission_rejection_categories(
+                                        result.result, result.submission_action
+                                    )
+                                )
                         if tc.name == "exact_legal_lookup" and result.result.error is not None:
                             if result.result.error.code in {
                                 "EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
@@ -1351,6 +1495,15 @@ class AgentRuntimeService:
             native_web_citation_count=sum(
                 pc.native_web_citation_count for pc in provider_call_observations
             ),
+            native_web_max_tool_calls=next(
+                (
+                    pc.native_web_max_tool_calls
+                    for pc in provider_call_observations
+                    if pc.stage != "phase6_checker"
+                    and pc.native_web_max_tool_calls is not None
+                ),
+                None,
+            ),
             web_action_search_count=sum(
                 pc.web_action_search_count for pc in provider_call_observations
             ),
@@ -1429,6 +1582,19 @@ class AgentRuntimeService:
             flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
             submit_answer_call_count=1 if submission_received else 0,
+            submission_attempt_count=submission_attempt_count,
+            submission_accepted_count=submission_accepted_count,
+            submission_rejection_categories_by_attempt=submission_rejection_categories_by_attempt,
+            registered_evidence_count_before_submit=registered_evidence_count_before_submit,
+            registered_native_web_evidence_count_before_submit=(
+                registered_native_web_evidence_count_before_submit
+            ),
+            submitted_evidence_ref_count=submitted_evidence_ref_count,
+            accepted_evidence_ref_count=accepted_evidence_ref_count,
+            rejected_evidence_ref_count=rejected_evidence_ref_count,
+            native_web_locator_resolution_categories_by_attempt=(
+                native_web_locator_resolution_categories_by_attempt
+            ),
             checker_call_count=checker_call_count,
             checker_provider_call_count=checker_provider_call_count,
             checker_result_tool_call_count=checker_result_tool_call_count,
@@ -1500,6 +1666,21 @@ class AgentRuntimeService:
             "provider_call_count": provider_call_count,
             "tool_round_count": tool_round_count,
             "tool_call_count": len(tool_outputs),
+            "submission_attempt_count": submission_attempt_count,
+            "submission_accepted_count": submission_accepted_count,
+            "submission_rejection_categories_by_attempt": (
+                submission_rejection_categories_by_attempt
+            ),
+            "registered_evidence_count_before_submit": registered_evidence_count_before_submit,
+            "registered_native_web_evidence_count_before_submit": (
+                registered_native_web_evidence_count_before_submit
+            ),
+            "submitted_evidence_ref_count": submitted_evidence_ref_count,
+            "accepted_evidence_ref_count": accepted_evidence_ref_count,
+            "rejected_evidence_ref_count": rejected_evidence_ref_count,
+            "native_web_locator_resolution_categories_by_attempt": (
+                native_web_locator_resolution_categories_by_attempt
+            ),
             "terminal_submission_missing": terminal_missing,
             "terminal_submission_continuation_count": terminal_submission_continuation_count,
             "terminal_continuation_triggered": terminal_continuation_triggered,

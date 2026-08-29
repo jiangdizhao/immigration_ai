@@ -38,6 +38,7 @@ from app.services.tool_executor_service import ToolCallRequest
 from app.services.web_evidence_normalizer import WebEvidenceNormalizer
 
 logger = logging.getLogger(__name__)
+_UNSET_NATIVE_WEB_MAX_TOOL_CALLS = object()
 
 
 # Fresh terminal recovery must carry enough completed local evidence to remain
@@ -649,11 +650,13 @@ class OpenAIResponsesAdapter(ProviderInterface):
         client: OpenAI | None = None,
         privacy_guard: SearchPrivacyGuard | None = None,
         web_normalizer: WebEvidenceNormalizer | None = None,
+        native_web_max_tool_calls: int | None | object = _UNSET_NATIVE_WEB_MAX_TOOL_CALLS,
     ) -> None:
         settings = get_settings()
         self._client = client or OpenAI(api_key=settings.openai_api_key, max_retries=0)
         self._privacy_guard = privacy_guard or SearchPrivacyGuard()
         self._web_normalizer = web_normalizer or WebEvidenceNormalizer()
+        self._native_web_max_tool_calls = native_web_max_tool_calls
 
     async def call(
         self,
@@ -681,6 +684,11 @@ class OpenAIResponsesAdapter(ProviderInterface):
             registry=registry,
             privacy_guard=self._privacy_guard,
             web_normalizer=self._web_normalizer,
+        )
+        native_web_max_tool_calls: int | None = (
+            None
+            if self._native_web_max_tool_calls is _UNSET_NATIVE_WEB_MAX_TOOL_CALLS
+            else self._native_web_max_tool_calls
         )
 
         try:
@@ -714,7 +722,10 @@ class OpenAIResponsesAdapter(ProviderInterface):
                     "web_search_call.action.sources",
                     "web_search_call.results",
                 ]
-                params["max_tool_calls"] = get_settings().default_web_search_max_tool_calls
+                if self._native_web_max_tool_calls is _UNSET_NATIVE_WEB_MAX_TOOL_CALLS:
+                    native_web_max_tool_calls = get_settings().default_web_search_max_tool_calls
+                if native_web_max_tool_calls is not None:
+                    params["max_tool_calls"] = native_web_max_tool_calls
             for ft in function_tools:
                 params["tools"].append(ft)
             if previous_response_id:
@@ -771,6 +782,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 native_web_search_call_count=len(ctx.search_call_ids),
                 native_web_source_count=len(materialized_sources),
                 native_web_citation_count=len(ctx.citation_annotations),
+                native_web_max_tool_calls=native_web_max_tool_calls,
                 web_action_search_count=accumulator.web_action_search_count,
                 web_action_open_page_count=accumulator.web_action_open_page_count,
                 web_action_find_in_page_count=accumulator.web_action_find_in_page_count,
@@ -802,6 +814,7 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 duration_ms=duration_ms, pii_violation_count=ctx.pii_violation_count,
                 search_privacy_violation_categories=dict(ctx.search_privacy_violation_categories),
                 effort=reasoning_effort,
+                native_web_max_tool_calls=native_web_max_tool_calls,
                 native_web_search_call_count=len(ctx.search_call_ids),
                 native_web_source_count=len(ctx.native_sources),
                 native_web_citation_count=len(ctx.citation_annotations),

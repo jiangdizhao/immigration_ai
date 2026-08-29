@@ -148,6 +148,9 @@ class ProviderCallObservation(StrictContract):
     native_web_search_call_count: int = Field(default=0, ge=0)
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
+    # None means the provider-native max_tool_calls request parameter was
+    # omitted (native autonomy), not that telemetry was unavailable.
+    native_web_max_tool_calls: int | None = Field(default=None, ge=1, le=10)
     web_action_search_count: int = Field(default=0, ge=0)
     web_action_open_page_count: int = Field(default=0, ge=0)
     web_action_find_in_page_count: int = Field(default=0, ge=0)
@@ -235,6 +238,8 @@ class AgentExecutionMetrics(StrictContract):
     native_web_search_call_count: int = Field(default=0, ge=0)
     native_web_source_count: int = Field(default=0, ge=0)
     native_web_citation_count: int = Field(default=0, ge=0)
+    # None means max_tool_calls was omitted from the native web request.
+    native_web_max_tool_calls: int | None = Field(default=None, ge=1, le=10)
     web_action_search_count: int = Field(default=0, ge=0)
     web_action_open_page_count: int = Field(default=0, ge=0)
     web_action_find_in_page_count: int = Field(default=0, ge=0)
@@ -274,6 +279,25 @@ class AgentExecutionMetrics(StrictContract):
     flat_rag_call_count: int = Field(default=0, ge=0)
     utility_call_count: int = Field(default=0, ge=0)
     submit_answer_call_count: int = Field(default=0, ge=0)
+    # Content-free diagnostics for each terminal submission attempt. The
+    # lists are in attempt order and contain only stable codes/counts.
+    submission_attempt_count: int = Field(default=0, ge=0)
+    submission_accepted_count: int = Field(default=0, ge=0)
+    submission_rejection_categories_by_attempt: list[list[str]] = Field(
+        default_factory=list, max_length=20
+    )
+    registered_evidence_count_before_submit: list[int] = Field(
+        default_factory=list, max_length=20
+    )
+    registered_native_web_evidence_count_before_submit: list[int] = Field(
+        default_factory=list, max_length=20
+    )
+    submitted_evidence_ref_count: list[int] = Field(default_factory=list, max_length=20)
+    accepted_evidence_ref_count: list[int] = Field(default_factory=list, max_length=20)
+    rejected_evidence_ref_count: list[int] = Field(default_factory=list, max_length=20)
+    native_web_locator_resolution_categories_by_attempt: list[dict[str, int]] = Field(
+        default_factory=list, max_length=20
+    )
     checker_call_count: int = Field(default=0, ge=0)
     checker_provider_call_count: int = Field(default=0, ge=0, le=1)
     checker_result_tool_call_count: int = Field(default=0, ge=0)

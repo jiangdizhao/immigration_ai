@@ -515,6 +515,86 @@ class TestTerminalSubmission:
         ]
         assert len(matching_outputs) == 1
 
+    async def test_submit_diagnostics_capture_rejection_and_accepted_attempts(self):
+        invalid_args = make_greeting_response().tool_calls[0].arguments | {
+            "answer_class": "substantive_legal",
+            "research_status": "not_required",
+        }
+        provider = MockProvider([
+            ProviderResponse(
+                response_id="resp-invalid-diagnostics",
+                model="gpt-5.6-luna",
+                status="ok",
+                tool_calls=[ToolCallRequest(
+                    call_id="submit-diagnostics-1",
+                    name="submit_answer",
+                    arguments=invalid_args,
+                )],
+            ),
+            make_greeting_response(),
+        ])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(
+                started_at=time.perf_counter(), turn_deadline_ms=40000
+            ),
+            registry=create_registry(),
+        )
+
+        metrics = result.metrics
+        assert metrics.submission_attempt_count == 2
+        assert metrics.submission_accepted_count == 1
+        assert len(metrics.submission_rejection_categories_by_attempt) == 2
+        assert "SUBMISSION_INVALID" in metrics.submission_rejection_categories_by_attempt[0]
+        assert "RESEARCH_STATUS_INCONSISTENT" in (
+            metrics.submission_rejection_categories_by_attempt[0]
+        )
+        assert metrics.submission_rejection_categories_by_attempt[1] == []
+        assert metrics.registered_evidence_count_before_submit == [0, 0]
+        assert metrics.registered_native_web_evidence_count_before_submit == [0, 0]
+        assert metrics.submitted_evidence_ref_count == [0, 0]
+        assert metrics.accepted_evidence_ref_count == [0, 0]
+        assert metrics.rejected_evidence_ref_count == [0, 0]
+
+    async def test_submit_diagnostics_capture_terminal_correction_exhaustion(self):
+        invalid_args = make_greeting_response().tool_calls[0].arguments | {
+            "answer_class": "substantive_legal",
+            "research_status": "not_required",
+        }
+        invalid_response = ProviderResponse(
+            response_id="resp-invalid-twice",
+            model="gpt-5.6-luna",
+            status="ok",
+            tool_calls=[ToolCallRequest(
+                call_id="submit-diagnostics-invalid",
+                name="submit_answer",
+                arguments=invalid_args,
+            )],
+        )
+        provider = MockProvider([invalid_response, invalid_response])
+        runtime = AgentRuntimeService(provider=provider)
+        result = await runtime.run_shadow(
+            make_runtime_request(user_text="Hello"),
+            deadline=AbsoluteTurnDeadline(
+                started_at=time.perf_counter(), turn_deadline_ms=40000
+            ),
+            registry=create_registry(),
+        )
+
+        metrics = result.metrics
+        assert metrics.submission_attempt_count == 2
+        assert metrics.submission_accepted_count == 0
+        assert len(metrics.submission_rejection_categories_by_attempt) == 2
+        assert all(
+            "SUBMISSION_INVALID" in categories
+            for categories in metrics.submission_rejection_categories_by_attempt
+        )
+        assert (
+            "TERMINAL_SUBMISSION_CORRECTION_EXHAUSTED"
+            in metrics.submission_rejection_categories_by_attempt[1]
+        )
+
     async def test_deterministic_utility_sends_matching_output_and_continues(self):
         provider = MockProvider([
             ProviderResponse(
