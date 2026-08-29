@@ -450,12 +450,14 @@ export async function POST(request: Request) {
         : null,
     };
 
+    let persistedAssistantMessageId: string | null = null;
     if (frontendChatId) {
       try {
         const latestUserMessage = [...messages]
           .reverse()
           .find((message) => message.role === "user");
         const userMessageId = latestUserMessage?.id ?? crypto.randomUUID();
+        const assistantMessageId = crypto.randomUUID();
         const userCreatedAt = new Date();
         const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1);
         await saveMessages({
@@ -470,7 +472,7 @@ export async function POST(request: Request) {
             },
             {
               chatId: frontendChatId,
-              id: crypto.randomUUID(),
+              id: assistantMessageId,
               role: "assistant",
               parts: [
                 { type: "text", text: finalText },
@@ -481,6 +483,7 @@ export async function POST(request: Request) {
             },
           ],
         });
+        persistedAssistantMessageId = assistantMessageId;
       } catch (error) {
         console.warn(
           "Failed to persist premium direct workspace messages",
@@ -513,6 +516,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       text: finalText,
+      assistantMessageId: persistedAssistantMessageId,
       responseLanguage: finalResponseLanguage,
       researchStatus: data.research_status ?? null,
       citations: normalizedCitations,

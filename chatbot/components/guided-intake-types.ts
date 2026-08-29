@@ -105,6 +105,8 @@ export interface WidgetAssistantMessage {
   id: string;
   role: "assistant";
   text: string;
+  /** The database message ID used by persisted actions such as lawyer review. */
+  persistedAssistantMessageId?: string | null;
   isStreaming?: boolean;
   responseLanguage?: ResponseLanguage | null;
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
@@ -135,6 +137,7 @@ export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 
 export interface WidgetRouteResponse {
   text: string;
+  assistantMessageId?: string | null;
   responseLanguage?: ResponseLanguage | null;
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];

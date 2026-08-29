@@ -72,6 +72,72 @@ export const vipPurchase = pgTable(
 
 export type VipPurchase = InferSelectModel<typeof vipPurchase>;
 
+export const lawyerClarificationRequest = pgTable(
+  "LawyerClarificationRequest",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    chatId: uuid("chatId"),
+    userMessageId: uuid("userMessageId"),
+    assistantMessageId: uuid("assistantMessageId"),
+    legalMatterId: varchar("legalMatterId", { length: 255 }),
+    requestSource: varchar("requestSource", {
+      enum: ["vip_customer", "admin_test"],
+    }).notNull(),
+    assistantMode: varchar("assistantMode", {
+      enum: ["default", "premium", "unknown"],
+    })
+      .notNull()
+      .default("unknown"),
+    status: varchar("status", {
+      enum: [
+        "pending",
+        "in_review",
+        "confirmed",
+        "corrected",
+        "needs_more_information",
+        "closed",
+      ],
+    })
+      .notNull()
+      .default("pending"),
+    snapshotVersion: varchar("snapshotVersion", { length: 32 })
+      .notNull()
+      .default("phase8.m3.v1"),
+    questionSnapshot: text("questionSnapshot").notNull(),
+    answerSnapshot: text("answerSnapshot").notNull(),
+    evidenceSnapshot: json("evidenceSnapshot").notNull(),
+    contextSnapshot: json("contextSnapshot").notNull(),
+    customerNote: text("customerNote"),
+    reviewerUserId: uuid("reviewerUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    lawyerResponse: text("lawyerResponse"),
+    correctedAnswer: text("correctedAnswer"),
+    reviewedAt: timestamp("reviewedAt"),
+    closedAt: timestamp("closedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    userAssistantUnique: uniqueIndex(
+      "LawyerClarificationRequest_user_assistant_unique"
+    ).on(table.userId, table.assistantMessageId),
+    userCreatedStatusIndex: index(
+      "LawyerClarificationRequest_user_created_status_idx"
+    ).on(table.userId, table.createdAt, table.status),
+    statusCreatedIndex: index(
+      "LawyerClarificationRequest_status_created_idx"
+    ).on(table.status, table.createdAt),
+  })
+);
+
+export type LawyerClarificationRequest = InferSelectModel<
+  typeof lawyerClarificationRequest
+>;
+
 export const chat = pgTable("Chat", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   createdAt: timestamp("createdAt").notNull(),

@@ -26,6 +26,8 @@ import {
   type DBMessage,
   document,
   immigrationConversation,
+  type LawyerClarificationRequest,
+  lawyerClarificationRequest,
   message,
   type Suggestion,
   stream,
@@ -73,6 +75,150 @@ export async function getUserEntitlementById(userId: string) {
     .limit(1);
 
   return entitlement ?? null;
+}
+
+export async function listLawyerClarificationRequestsForUser({
+  userId,
+  chatId,
+}: {
+  userId: string;
+  chatId?: string;
+}) {
+  const conditions = [eq(lawyerClarificationRequest.userId, userId)];
+  if (chatId) {
+    conditions.push(eq(lawyerClarificationRequest.chatId, chatId));
+  }
+
+  return await db
+    .select()
+    .from(lawyerClarificationRequest)
+    .where(and(...conditions))
+    .orderBy(desc(lawyerClarificationRequest.createdAt))
+    .limit(100);
+}
+
+export async function getLawyerClarificationRequestForUser({
+  id,
+  userId,
+}: {
+  id: string;
+  userId: string;
+}) {
+  const [request] = await db
+    .select()
+    .from(lawyerClarificationRequest)
+    .where(
+      and(
+        eq(lawyerClarificationRequest.id, id),
+        eq(lawyerClarificationRequest.userId, userId)
+      )
+    )
+    .limit(1);
+  return request ?? null;
+}
+
+export async function getLawyerClarificationRequestByUserAndAssistantMessage({
+  userId,
+  assistantMessageId,
+}: {
+  userId: string;
+  assistantMessageId: string;
+}) {
+  const [request] = await db
+    .select()
+    .from(lawyerClarificationRequest)
+    .where(
+      and(
+        eq(lawyerClarificationRequest.userId, userId),
+        eq(lawyerClarificationRequest.assistantMessageId, assistantMessageId)
+      )
+    )
+    .limit(1);
+  return request ?? null;
+}
+
+export async function createLawyerClarificationRequest({
+  values,
+}: {
+  values: typeof lawyerClarificationRequest.$inferInsert;
+}) {
+  const [request] = await db
+    .insert(lawyerClarificationRequest)
+    .values(values)
+    .returning();
+  return request;
+}
+
+export async function updateLawyerClarificationRequest({
+  id,
+  expectedStatus,
+  values,
+}: {
+  id: string;
+  expectedStatus: LawyerClarificationRequest["status"];
+  values: Partial<
+    Pick<
+      LawyerClarificationRequest,
+      | "status"
+      | "reviewerUserId"
+      | "lawyerResponse"
+      | "correctedAnswer"
+      | "reviewedAt"
+      | "closedAt"
+      | "updatedAt"
+    >
+  >;
+}) {
+  const [request] = await db
+    .update(lawyerClarificationRequest)
+    .set(values)
+    .where(
+      and(
+        eq(lawyerClarificationRequest.id, id),
+        eq(lawyerClarificationRequest.status, expectedStatus)
+      )
+    )
+    .returning();
+  return request ?? null;
+}
+
+export async function listLawyerClarificationRequestsForAdmin({
+  status,
+}: {
+  status?: LawyerClarificationRequest["status"];
+}) {
+  const condition = status
+    ? eq(lawyerClarificationRequest.status, status)
+    : undefined;
+  const query = db
+    .select({
+      request: lawyerClarificationRequest,
+      customerEmail: user.email,
+    })
+    .from(lawyerClarificationRequest)
+    .innerJoin(user, eq(lawyerClarificationRequest.userId, user.id));
+
+  return condition
+    ? await query
+        .where(condition)
+        .orderBy(desc(lawyerClarificationRequest.createdAt))
+        .limit(100)
+    : await query
+        .orderBy(desc(lawyerClarificationRequest.createdAt))
+        .limit(100);
+}
+
+export async function getLawyerClarificationRequestForAdmin(id: string) {
+  const [result] = await db
+    .select({
+      request: lawyerClarificationRequest,
+      customerEmail: user.email,
+    })
+    .from(lawyerClarificationRequest)
+    .innerJoin(user, eq(lawyerClarificationRequest.userId, user.id))
+    .where(eq(lawyerClarificationRequest.id, id))
+    .limit(1);
+  return result ?? null;
 }
 
 export async function createVipPurchase({

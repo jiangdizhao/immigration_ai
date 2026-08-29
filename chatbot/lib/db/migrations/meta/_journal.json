@@ -85,6 +85,13 @@
       "when": 1788000000001,
       "tag": "0011_phase8_vip_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788000000002,
+      "tag": "0012_early_lethal_legion",
+      "breakpoints": true
     }
   ]
 }

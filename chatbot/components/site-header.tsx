@@ -102,6 +102,13 @@ function AccountMenu({
             {isAdmin ? "AI Workspace" : "My conversations / AI Workspace"}
           </Link>
         </DropdownMenuItem>
+        {isAdmin ? null : (
+          <DropdownMenuItem asChild>
+            <Link className="cursor-pointer" href="/lawyer-requests">
+              My lawyer requests
+            </Link>
+          </DropdownMenuItem>
+        )}
         {!isAdmin && !activeVip ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/vip">

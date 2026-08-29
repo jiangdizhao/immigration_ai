@@ -24,6 +24,7 @@ import {
   widgetRouteForAssistantMode,
 } from "@/lib/assistant-mode";
 import { ChatbotError } from "@/lib/errors";
+import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -40,6 +41,7 @@ import type {
   WidgetMessage,
   WidgetRouteResponse,
 } from "./guided-intake-types";
+import { LawyerRequestAction } from "./lawyer-request-action";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
@@ -330,6 +332,7 @@ function assistantFromStoredMessage(
     id: message.id,
     role: "assistant",
     text: message.text,
+    persistedAssistantMessageId: message.id,
     isStreaming: false,
     responseLanguage: looksChineseText(message.text) ? "zh" : "en",
     researchStatus: message.researchStatus ?? null,
@@ -657,11 +660,13 @@ export function ImmigrationAIWorkspace({
           ? "抱歉，我现在无法生成回复。"
           : "Sorry, I could not generate a response right now.";
 
-    const assistantMessageId = generateUUID();
+    const persistedAssistantMessageId = data.assistantMessageId ?? null;
+    const assistantMessageId = persistedAssistantMessageId ?? generateUUID();
     const assistantMessage: WidgetAssistantMessage = {
       id: assistantMessageId,
       role: "assistant",
       text: "",
+      persistedAssistantMessageId,
       isStreaming: true,
       responseLanguage: data.responseLanguage ?? null,
       researchStatus: data.researchStatus ?? null,
@@ -1282,6 +1287,20 @@ export function ImmigrationAIWorkspace({
                               </div>
                             </CardContent>
                           </Card>
+                        ) : null}
+
+                        {isAssistant &&
+                        !message.isStreaming &&
+                        conversationId &&
+                        persistedAssistantMessageIdForReview(message) ? (
+                          <LawyerRequestAction
+                            answerPreview={message.text}
+                            assistantMessageId={
+                              persistedAssistantMessageIdForReview(message) ??
+                              ""
+                            }
+                            chatId={conversationId}
+                          />
                         ) : null}
 
                         {isAssistant &&
