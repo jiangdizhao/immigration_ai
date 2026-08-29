@@ -1,11 +1,20 @@
 import { ArrowRight, BriefcaseBusiness, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
 
-export default async function AdminPortalPage() {
+export default function AdminPortalPage() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-slate-50" />}>
+      <AdminPortalPageContent />
+    </Suspense>
+  );
+}
+
+async function AdminPortalPageContent() {
   const session = await auth();
 
   if (!session?.user || guestRegex.test(session.user.email ?? "")) {

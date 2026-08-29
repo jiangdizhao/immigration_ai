@@ -1,11 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { LawyerRequestDetail } from "@/components/lawyer-request-detail";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
 
-export default async function LawyerRequestDetailPage({
+export default function LawyerRequestDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-slate-50" />}>
+      <LawyerRequestDetailPageContent params={params} />
+    </Suspense>
+  );
+}
+
+async function LawyerRequestDetailPageContent({
   params,
 }: {
   params: Promise<{ id: string }>;

@@ -1,9 +1,18 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { VipMembershipClient } from "@/components/vip-membership-client";
 import { guestRegex } from "@/lib/constants";
 
-export default async function VipPage() {
+export default function VipPage() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-slate-50" />}>
+      <VipPageContent />
+    </Suspense>
+  );
+}
+
+async function VipPageContent() {
   const session = await auth();
   if (!session?.user || guestRegex.test(session.user.email ?? "")) {
     redirect("/login");

@@ -1,8 +1,19 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { reviewAccessDecision } from "@/app/api/lawyer-review/access";
 
-export default async function LawyerReviewLayout({
+export default function LawyerReviewLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-slate-50" />}>
+      <LawyerReviewLayoutContent>{children}</LawyerReviewLayoutContent>
+    </Suspense>
+  );
+}
+
+async function LawyerReviewLayoutContent({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
@@ -16,5 +27,5 @@ export default async function LawyerReviewLayout({
     redirect("/ai-workspace");
   }
 
-  return children;
+  return <>{children}</>;
 }

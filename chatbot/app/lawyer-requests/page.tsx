@@ -1,10 +1,19 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { LawyerRequestHistory } from "@/components/lawyer-request-history";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
 
-export default async function LawyerRequestsPage() {
+export default function LawyerRequestsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-slate-50" />}>
+      <LawyerRequestsPageContent />
+    </Suspense>
+  );
+}
+
+async function LawyerRequestsPageContent() {
   const session = await auth();
   if (!session?.user || guestRegex.test(session.user.email ?? "")) {
     redirect("/login");
