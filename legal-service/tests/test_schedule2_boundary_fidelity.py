@@ -167,6 +167,32 @@ def test_nested_locator_terminates_at_punctuation_or_end(text: str) -> None:
     assert references[0].provision_ref == "2.21A(1)"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    (
+        ("subregulation 2.20B(2)—bridging visa", "2.20B(2)"),
+        ("subregulation 2.72(13)—text", "2.72(13)"),
+        ("subregulation 2.08G(1)—text", "2.08G(1)"),
+        ("subclause 590.211(4)—text", "590.211(4)"),
+        ("subregulation 2.20B(2)–bridging visa", "2.20B(2)"),
+    ),
+)
+def test_nested_locator_accepts_legislative_dash_boundaries(text: str, expected: str) -> None:
+    references = _references(text)
+
+    assert len(references) == 1
+    assert references[0].provision_ref == expected
+    assert references[0].locator_type in {"subregulation", "subclause"}
+
+
+def test_nested_subregulation_does_not_degrade_to_overlapping_regulation() -> None:
+    references = _references("subregulation 2.08G(1)—text")
+
+    assert [(item.locator_type, item.provision_ref) for item in references] == [
+        ("subregulation", "2.08G(1)")
+    ]
+
+
 def test_existing_typed_references_still_extract() -> None:
     references = _references(
         "public interest criterion 4007; condition 8107; regulation 1.03; "
