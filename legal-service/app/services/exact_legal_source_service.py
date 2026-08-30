@@ -56,6 +56,28 @@ from app.services.request_evidence_registry import RequestEvidenceRegistry
 logger = logging.getLogger(__name__)
 
 
+# Current official Schedule-2 volume chunks preserve clause starts in the
+# first structural lines, while continuation chunks contain subsection text
+# only.  This deliberately recognizes only the Schedule-2 clause form here;
+# other legal families retain their existing exact-lookup semantics until an
+# equivalent structural boundary contract is established for them.
+_SCHEDULE2_PROVISION_START_RE = re.compile(
+    r"(?im)^\s*(?:(?P<label>clause)\s+)?"
+    r"(?P<provision>[0-9]{3}\.[0-9A-Z]+)"
+    r"(?:[ \t]*(?:[—–-].*)?)\s*$"
+)
+_SCHEDULE2_SUBSECTION_START_RE = re.compile(
+    r"(?i)^\s*\([0-9A-Z]+\)(?:\s|$)"
+)
+_SCHEDULE_MARKER_RE = re.compile(r"(?i)\bschedule\s+(?P<schedule>[0-9]+[A-Z]?)\b")
+_SUBCLASS_MARKER_RE = re.compile(r"(?i)\bsubclass\s+(?P<subclass>[0-9]{3})\b")
+
+# Backend-owned cap for one identified Schedule-2 provision block.  Keep this
+# aligned with the existing maximum serialized exact matches; model-supplied
+# ``max_hits`` must not lower this completeness cap.
+SCHEDULE2_PROVISION_BLOCK_MAX_CHUNKS = 20
+
+
 class ExactLookupError(Exception):
     """Error during exact legal lookup."""
 
@@ -169,11 +191,16 @@ class ExactLegalSourceService:
                 duration_ms=(time.monotonic() - start_time) * 1000,
             )
 
+        block_metadata: dict[str, bool | None] = {
+            "provision_block_complete": None,
+            "provision_block_backend_cap_reached": False,
+        }
         matches = self._find_matches(
             request=request,
             family_id=family_id,
             registry=registry,
             tool_call_id=tool_call_id,
+            block_metadata=block_metadata,
         )
 
         resolved_refs: list[tuple[str, list[str]]] = []
@@ -199,6 +226,10 @@ class ExactLegalSourceService:
             coverage_status=coverage_status,
             gap_reason=gap_reason,
             duration_ms=duration_ms,
+            provision_block_complete=block_metadata["provision_block_complete"],
+            provision_block_backend_cap_reached=bool(
+                block_metadata["provision_block_backend_cap_reached"]
+            ),
         )
         registry.record_exact_lookup_outcome(
             tool_call_id=tool_call_id,
@@ -262,10 +293,21 @@ class ExactLegalSourceService:
         family_id: str | None,
         registry: RequestEvidenceRegistry,
         tool_call_id: str,
+        block_metadata: dict[str, bool | None] | None = None,
     ) -> list[tuple[CanonicalLocalEvidenceRef, str, str]]:
         """Find matching chunks in canonical corpus."""
         matches: list[tuple[CanonicalLocalEvidenceRef, str, str]] = []
 
+        provision_block_lookup = self._is_schedule2_provision_block_lookup(
+            request=request,
+            family_id=family_id,
+        )
+
+        candidate_limit = (
+            SCHEDULE2_PROVISION_BLOCK_MAX_CHUNKS
+            if provision_block_lookup
+            else request.max_hits
+        )
         stmt = (
             select(SourceChunk)
             .join(LegalSource, LegalSource.id == SourceChunk.source_id)
@@ -278,7 +320,7 @@ class ExactLegalSourceService:
                 SourceChunk.chunk_index.asc(),
                 SourceChunk.id.asc(),
             )
-            .limit(request.max_hits)
+            .limit(candidate_limit)
         )
 
         family_condition = self._family_source_condition(family_id)
@@ -342,6 +384,19 @@ class ExactLegalSourceService:
             logger.error("Exact lookup query failed: %s", exc)
             return []
 
+        if provision_block_lookup:
+            chunks, block_complete, cap_reached = self._expand_schedule2_provision_blocks(
+                request=request,
+                candidate_chunks=chunks,
+            )
+            if block_metadata is not None:
+                block_metadata.update({
+                    "provision_block_complete": block_complete,
+                    "provision_block_backend_cap_reached": cap_reached,
+                })
+        else:
+            chunks = chunks[: request.max_hits]
+
         for chunk in chunks:
             try:
                 evidence, ref = self._evidence_service.build_evidence_from_chunk(
@@ -358,6 +413,238 @@ class ExactLegalSourceService:
                 continue
 
         return matches
+
+    @staticmethod
+    def _is_schedule2_provision_block_lookup(
+        *,
+        request: ExactLegalLookupRequest,
+        family_id: str | None,
+    ) -> bool:
+        """Return whether the safe Schedule-2 block contract applies.
+
+        A free-form query can intentionally search within a provision and
+        must retain the existing query semantics.  Block expansion is limited
+        to structured provision requests in the Schedule-2 family.
+        """
+        return bool(
+            request.provision
+            and request.query is None
+            and family_id == "migration_regulations_schedule_2"
+        )
+
+    @classmethod
+    def _schedule2_provision_markers(cls, chunk: SourceChunk) -> list[str]:
+        """Extract structural Schedule-2 provision starts from one chunk."""
+        return [
+            marker
+            for marker, _ in cls._schedule2_provision_start_candidates(chunk)
+        ]
+
+    @classmethod
+    def _schedule2_provision_start_candidates(
+        cls,
+        chunk: SourceChunk,
+    ) -> list[tuple[str, int]]:
+        """Return provision markers with deterministic structural strength.
+
+        An explicit ``Clause`` line is the strongest signal.  A bare line is
+        also strong when the next non-empty line begins a subsection, which
+        matches the persisted Schedule-2 layout for bare starts such as
+        ``030.613``.  Other bare markers remain weak candidates so direct-prose
+        provisions retain compatibility, but a later strong start can displace
+        an earlier line-broken incidental reference.
+        """
+        heading = str(getattr(chunk, "heading", "") or "")
+        prefix = str(getattr(chunk, "text", "") or "")[:1200]
+        content = f"{heading}\n{prefix}"
+        candidates: list[tuple[str, int]] = []
+        for match in _SCHEDULE2_PROVISION_START_RE.finditer(content):
+            provision = match.group("provision").upper()
+            if match.group("label"):
+                candidates.append((provision, 2))
+                continue
+
+            next_text = content[match.end():]
+            next_nonempty = next(
+                (line for line in next_text.splitlines() if line.strip()),
+                "",
+            )
+            strength = 2 if _SCHEDULE2_SUBSECTION_START_RE.match(next_nonempty) else 1
+            candidates.append((provision, strength))
+        return candidates
+
+    @classmethod
+    def _schedule2_provision_start_matches(
+        cls,
+        chunk: SourceChunk,
+        requested_provision: str,
+    ) -> bool:
+        """Return whether a chunk has a structural start for the request."""
+        normalized = re.sub(
+            r"(?:\([0-9A-Z]+\))+$",
+            "",
+            requested_provision.strip().upper(),
+        )
+        return normalized in cls._schedule2_provision_markers(chunk)
+
+    @staticmethod
+    def _schedule2_requested_subclass(
+        request: ExactLegalLookupRequest,
+    ) -> str | None:
+        if request.subclass:
+            return str(request.subclass).strip()
+        provision = re.sub(
+            r"(?:\([0-9A-Z]+\))+$",
+            "",
+            str(request.provision or "").strip().upper(),
+        )
+        match = re.match(r"^(?P<subclass>[0-9]{3})\.", provision)
+        return match.group("subclass") if match else None
+
+    @staticmethod
+    def _chunk_schedule_markers(chunk: SourceChunk) -> set[str]:
+        heading = str(getattr(chunk, "heading", "") or "")
+        return {
+            match.group("schedule").upper()
+            for match in _SCHEDULE_MARKER_RE.finditer(heading)
+        }
+
+    @staticmethod
+    def _chunk_subclass_markers(chunk: SourceChunk) -> set[str]:
+        heading = str(getattr(chunk, "heading", "") or "")
+        prefix = str(getattr(chunk, "text", "") or "")[:500]
+        heading_markers = {
+            match.group("subclass")
+            for match in _SUBCLASS_MARKER_RE.finditer(heading)
+        }
+        line_start_markers = {
+            match.group("subclass")
+            for match in re.finditer(
+                r"(?im)^\s*subclass\s+(?P<subclass>[0-9]{3})\b",
+                prefix,
+            )
+        }
+        return heading_markers | line_start_markers
+
+    def _expand_schedule2_provision_blocks(
+        self,
+        *,
+        request: ExactLegalLookupRequest,
+        candidate_chunks: list[SourceChunk],
+    ) -> tuple[list[SourceChunk], bool | None, bool]:
+        """Expand the earliest structural start to the next peer boundary.
+
+        The database query identifies candidate chunks using the existing
+        structural predicate.  This method then chooses the earliest genuine
+        start per canonical source and walks ordered chunks from that point.
+        A different structural provision, Schedule, or subclass ends the
+        block.  Repeated page headers for the requested provision are treated
+        as continuation ownership, not as new starts.
+        """
+        requested = str(request.provision or "").strip().upper()
+        requested_subclass = self._schedule2_requested_subclass(request)
+        requested_base = re.sub(r"(?:\([0-9A-Z]+\))+$", "", requested)
+        starts_by_source: dict[str, tuple[SourceChunk, int]] = {}
+        source_order: list[str] = []
+        for chunk in candidate_chunks:
+            candidates = self._schedule2_provision_start_candidates(chunk)
+            strengths = [
+                strength
+                for marker, strength in candidates
+                if marker == requested_base
+            ]
+            if not strengths:
+                continue
+            strength = max(strengths)
+            source_id = str(chunk.source_id)
+            prior_entry = starts_by_source.get(source_id)
+            if prior_entry is None:
+                source_order.append(source_id)
+                starts_by_source[source_id] = (chunk, strength)
+            else:
+                prior, prior_strength = prior_entry
+                if strength > prior_strength or (
+                    strength == prior_strength
+                    and (chunk.chunk_index, str(chunk.id))
+                    < (prior.chunk_index, str(prior.id))
+                ):
+                    starts_by_source[source_id] = (chunk, strength)
+
+        if not starts_by_source:
+            # Preserve the existing bounded fallback when a confident
+            # structural start cannot be identified.
+            return candidate_chunks[: request.max_hits], None, False
+
+        selected: list[SourceChunk] = []
+        for source_id in source_order:
+            start, _ = starts_by_source[source_id]
+            source_stmt = (
+                select(SourceChunk)
+                .where(
+                    SourceChunk.source_id == source_id,
+                    SourceChunk.chunk_index >= start.chunk_index,
+                )
+                .order_by(SourceChunk.chunk_index.asc(), SourceChunk.id.asc())
+            )
+            try:
+                source_chunks = self._db.scalars(source_stmt)
+            except Exception as exc:
+                logger.warning(
+                    "Schedule-2 provision block expansion failed for source %s: %s",
+                    source_id,
+                    exc,
+                )
+                continue
+
+            try:
+                source_chunk_iterator = iter(source_chunks)
+            except TypeError as exc:
+                logger.warning(
+                    "Schedule-2 provision block expansion returned a non-iterable for source %s: %s",
+                    source_id,
+                    exc,
+                )
+                continue
+
+            for chunk in source_chunk_iterator:
+                if chunk.chunk_index < start.chunk_index:
+                    continue
+
+                heading = str(getattr(chunk, "heading", "") or "").casefold()
+                prefix = str(getattr(chunk, "text", "") or "")[:1200].casefold()
+                if any(
+                    marker in heading or marker in prefix
+                    for marker in ("contents", "endnote", "amendment history")
+                ):
+                    break
+
+                schedule_markers = self._chunk_schedule_markers(chunk)
+                if schedule_markers and "2" not in schedule_markers:
+                    break
+
+                subclass_markers = self._chunk_subclass_markers(chunk)
+                if requested_subclass and subclass_markers and requested_subclass not in subclass_markers:
+                    break
+
+                provision_markers = self._schedule2_provision_markers(chunk)
+                if chunk.chunk_index > start.chunk_index:
+                    peer_markers = [
+                        marker
+                        for marker in provision_markers
+                        if marker != requested_base
+                    ]
+                    if peer_markers:
+                        break
+
+                if len(selected) >= SCHEDULE2_PROVISION_BLOCK_MAX_CHUNKS:
+                    # Boundary checks above establish that this is a
+                    # continuation chunk, so reaching the cap is partial.
+                    return selected, False, True
+                selected.append(chunk)
+
+        if selected:
+            return selected, True, False
+        return candidate_chunks[: request.max_hits], None, False
 
     @staticmethod
     def _schedule_locator_pattern(schedule: str) -> str:
@@ -799,6 +1086,8 @@ class ExactLegalSourceService:
         coverage_status: str,
         gap_reason: str | None,
         duration_ms: float,
+        provision_block_complete: bool | None = None,
+        provision_block_backend_cap_reached: bool = False,
     ) -> ExactLegalLookupOutput:
         """Build the final lookup output."""
         exact_matches = [
@@ -827,6 +1116,8 @@ class ExactLegalSourceService:
             matches=exact_matches,
             resolved_cross_references=resolved_cross_refs,
             unresolved_cross_references=unresolved_cross_refs,
+            provision_block_complete=provision_block_complete,
+            provision_block_backend_cap_reached=provision_block_backend_cap_reached,
             coverage=CorpusCoverage(
                 family=family_name,
                 status=coverage_status,  # type: ignore[arg-type]

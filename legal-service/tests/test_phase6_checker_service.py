@@ -614,7 +614,11 @@ def test_derived_graph_evidence_is_invalid_even_with_text() -> None:
 
 
 def test_checker_model_configuration_defaults_are_explicit_and_disabled() -> None:
-    settings = Settings(DATABASE_URL="postgresql://test", OPENAI_API_KEY="test")
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+    )
     assert settings.compact_checker_model == "gpt-5.6-luna"
     assert settings.compact_checker_reasoning_effort == "low"
     assert settings.compact_checker_enabled is False

@@ -35,6 +35,8 @@ from app.services.tool_executor_service import (
     ToolCallRequest,
     ToolExecutorContext,
     ToolExecutorService,
+    _sanitize_schema_error_location,
+    _sanitize_schema_error_type,
     normalized_tool_call_key,
 )
 from app.tools.base import build_tool_result
@@ -113,6 +115,8 @@ def _submission_rejection_categories(tool_result: Any, action: Any) -> list[str]
 
     add(getattr(getattr(tool_result, "error", None), "code", None))
     data = getattr(tool_result, "data", {})
+    if not isinstance(data, dict):
+        data = {}
     if isinstance(data, dict):
         for item in data.get("errors", []):
             if isinstance(item, dict):
@@ -128,6 +132,47 @@ def _submission_rejection_categories(tool_result: Any, action: Any) -> list[str]
     if not categories:
         add("SUBMISSION_REJECTION_UNCLASSIFIED")
     return categories
+
+
+def _submission_schema_diagnostics_for_attempt(
+    tool_result: Any,
+    *,
+    attempt_index: int,
+) -> dict[str, Any]:
+    """Return only the bounded schema diagnostics produced by the executor."""
+
+    data = getattr(tool_result, "data", {})
+    terminal_diagnostics = data.get("terminal_contract_diagnostics", {})
+    if not isinstance(terminal_diagnostics, dict):
+        terminal_diagnostics = {}
+    count = terminal_diagnostics.get("submission_schema_error_count", 0)
+    locations = terminal_diagnostics.get("submission_schema_error_locations", [])
+    types = terminal_diagnostics.get("submission_schema_error_types", [])
+    if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+        count = 0
+    if not isinstance(locations, list):
+        locations = []
+    if not isinstance(types, list):
+        types = []
+    bounded_errors = [
+        {
+            "location": _sanitize_schema_error_location(location),
+            "type": _sanitize_schema_error_type(error_type),
+        }
+        for location, error_type in zip(locations[:12], types[:12])
+    ]
+    if count:
+        count = min(count, len(bounded_errors))
+    return {
+        "attempt_index": max(1, min(attempt_index, 20)),
+        "submission_schema_error_count": count,
+        "submission_schema_error_locations": [
+            item["location"] for item in bounded_errors[:count]
+        ],
+        "submission_schema_error_types": [
+            item["type"] for item in bounded_errors[:count]
+        ],
+    }
 
 # ---------------------------------------------------------------------------
 # Provider interface
@@ -327,6 +372,11 @@ class AgentRuntimeService:
         policy = self._policy_service.build_policy(
             mode=request.mode,
             experiment_arm=request.experiment_arm,
+            applicability_protocol_enabled=(
+                request.applicability_protocol_enabled
+                if request.mode == "default"
+                else True
+            ),
         )
         budget = request.execution_budget
 
@@ -338,12 +388,18 @@ class AgentRuntimeService:
             allow_model_canonical_refs=request.experiment_arm not in {"A", "L"},
             lightweight_submission=request.experiment_arm == "L",
             allow_overlapping_claims=request.experiment_arm == "N",
+            residual_branch_guard_enabled=(
+                request.mode == "default"
+                and request.applicability_protocol_enabled
+            ),
             flat_rag_search_fn=flat_rag_search_fn,
             db_session=db_session,
             privacy_guard=self._privacy_guard,
             web_normalizer=self._web_normalizer,
             schedule2_navigation_map=schedule2_navigation_map,
             exact_legal_lookup_service=exact_legal_lookup_service,
+            max_schedule2_navigation_calls=budget.max_schedule2_navigation_calls,
+            max_exact_legal_lookup_calls=budget.max_exact_legal_lookup_calls,
         )
         if request.mode == "default" and request.experiment_arm == "N":
             # Arm N is the bounded Default research capability profile. Loading
@@ -458,6 +514,7 @@ class AgentRuntimeService:
         submission_attempt_count = 0
         submission_accepted_count = 0
         submission_rejection_categories_by_attempt: list[list[str]] = []
+        submission_schema_diagnostics_by_attempt: list[dict[str, Any]] = []
         registered_evidence_count_before_submit: list[int] = []
         registered_native_web_evidence_count_before_submit: list[int] = []
         submitted_evidence_ref_count: list[int] = []
@@ -626,7 +683,10 @@ class AgentRuntimeService:
                     policy.tools,
                     flat_rag_executed_count=flat_rag_executed_count,
                     max_flat_rag_calls=budget.max_flat_rag_calls,
-                    exact_legal_lookup_used=tool_context.exact_legal_lookup_call_count >= 1,
+                    schedule2_navigation_call_count=tool_context.schedule2_navigation_call_count,
+                    max_schedule2_navigation_calls=budget.max_schedule2_navigation_calls,
+                    exact_legal_lookup_call_count=tool_context.exact_legal_lookup_call_count,
+                    max_exact_legal_lookup_calls=budget.max_exact_legal_lookup_calls,
                     terminal_phase=terminal_phase,
                 )
                 if terminal_phase:
@@ -1105,18 +1165,12 @@ class AgentRuntimeService:
                                         result.result, result.submission_action
                                     )
                                 )
-                        if tc.name == "exact_legal_lookup" and result.result.error is not None:
-                            if result.result.error.code in {
-                                "EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
-                                "EXACT_NO_USABLE_LOCATOR",
-                            }:
-                                # Exact lookup is one-shot. Once the call is
-                                # denied or has no usable identity, close
-                                # research for the next provider continuation
-                                # so the model can only submit the bounded
-                                # answer and cannot reopen exact research.
-                                terminal_phase = True
-                                research_round_available = False
+                            submission_schema_diagnostics_by_attempt.append(
+                                _submission_schema_diagnostics_for_attempt(
+                                    result.result,
+                                    attempt_index=submission_attempt_count,
+                                )
+                            )
                         if tc.name == "submit_answer":
                             terminal_tool_call_observations.append(ToolCallObservation(
                                 tool_name="submit_answer",
@@ -1132,11 +1186,14 @@ class AgentRuntimeService:
                                 governor_denied=False,
                                 is_retry=False,
                             ))
+                        actually_executed_research_tool = (
+                            tc.name != "submit_answer"
+                            and result.execution_started
+                        )
                         if (
-                            tc.name == "flat_rag_search"
+                            actually_executed_research_tool
                             and not research_round_counted
-                            and result.result.status == "ok"
-                            and result.result.error is None
+                            and research_round_available
                         ):
                             tool_round_count += 1
                             research_round_counted = True
@@ -1337,6 +1394,11 @@ class AgentRuntimeService:
                                 registry=registry,
                                 compact_matter_facts=request.matter_state,
                                 additional_relevant_evidence_refs=None,
+                                applicability_resolutions=submission.applicability_resolutions,
+                                include_applicability_resolutions=(
+                                    request.mode != "default"
+                                    or request.applicability_protocol_enabled
+                                ),
                             )
                         except Exception:
                             checker_status = "failed"
@@ -1475,6 +1537,10 @@ class AgentRuntimeService:
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
         metrics = AgentExecutionMetrics(
+            applicability_protocol_enabled=(
+                request.mode != "default"
+                or request.applicability_protocol_enabled
+            ),
             logical_llm_stage_count=1 + int(checker_provider_call_count > 0),
             provider_api_call_count=provider_call_count,
             tool_call_count=len(tool_outputs) + checker_result_tool_call_count,
@@ -1578,6 +1644,12 @@ class AgentRuntimeService:
             schedule2_navigation_target_count=tool_context.schedule2_navigation_target_count,
             exact_lookup_denied_call_count=tool_context.exact_legal_lookup_denied_call_count,
             schedule2_navigation_denied_call_count=tool_context.schedule2_navigation_denied_call_count,
+            residual_branch_guard_trigger_count=tool_context.residual_branch_guard_trigger_count,
+            residual_branch_submission_rejection_count=(
+                tool_context.residual_branch_submission_rejection_count
+            ),
+            applicability_resolution_count=tool_context.applicability_resolution_count,
+            unresolved_applicability_count=tool_context.unresolved_applicability_count,
             lightrag_call_count=0,
             flat_rag_call_count=flat_rag_executed_count,
             utility_call_count=sum(1 for t in tool_outputs if "deterministic_utility" in str(t.data)),
@@ -1585,6 +1657,7 @@ class AgentRuntimeService:
             submission_attempt_count=submission_attempt_count,
             submission_accepted_count=submission_accepted_count,
             submission_rejection_categories_by_attempt=submission_rejection_categories_by_attempt,
+            submission_schema_diagnostics_by_attempt=submission_schema_diagnostics_by_attempt,
             registered_evidence_count_before_submit=registered_evidence_count_before_submit,
             registered_native_web_evidence_count_before_submit=(
                 registered_native_web_evidence_count_before_submit
@@ -1660,6 +1733,10 @@ class AgentRuntimeService:
             "request_id": request.request_id,
             "turn_id": request.turn_id,
             "experiment_arm": request.experiment_arm,
+            "applicability_protocol_enabled": (
+                request.mode != "default"
+                or request.applicability_protocol_enabled
+            ),
             "model": policy.model,
             "prompt_version": policy.prompt_version,
             "status": status,
@@ -1670,6 +1747,9 @@ class AgentRuntimeService:
             "submission_accepted_count": submission_accepted_count,
             "submission_rejection_categories_by_attempt": (
                 submission_rejection_categories_by_attempt
+            ),
+            "submission_schema_diagnostics_by_attempt": (
+                submission_schema_diagnostics_by_attempt
             ),
             "registered_evidence_count_before_submit": registered_evidence_count_before_submit,
             "registered_native_web_evidence_count_before_submit": (
@@ -1707,6 +1787,14 @@ class AgentRuntimeService:
             "exact_lookup_requests": tool_context.exact_lookup_requests,
             "exact_invalid_empty_request_count": tool_context.exact_invalid_empty_request_count,
             "exact_no_usable_locator_count": tool_context.exact_no_usable_locator_count,
+            "residual_branch_guard_trigger_count": (
+                tool_context.residual_branch_guard_trigger_count
+            ),
+            "residual_branch_submission_rejection_count": (
+                tool_context.residual_branch_submission_rejection_count
+            ),
+            "applicability_resolution_count": tool_context.applicability_resolution_count,
+            "unresolved_applicability_count": tool_context.unresolved_applicability_count,
             "checker_status": checker_status,
             "checker_call_count": checker_call_count,
             "checker_provider_call_count": checker_provider_call_count,
@@ -1901,7 +1989,11 @@ class AgentRuntimeService:
         *,
         flat_rag_executed_count: int,
         max_flat_rag_calls: int,
-        exact_legal_lookup_used: bool = False,
+        schedule2_navigation_call_count: int = 0,
+        max_schedule2_navigation_calls: int = 2,
+        exact_legal_lookup_call_count: int = 0,
+        max_exact_legal_lookup_calls: int = 2,
+        exact_legal_lookup_used: bool | None = None,
         terminal_phase: bool = False,
     ) -> list[dict[str, Any]]:
         """Return continuation-visible tools after deterministic budgets apply."""
@@ -1915,7 +2007,13 @@ class AgentRuntimeService:
                 tool for tool in tools
                 if tool.get("name") != "flat_rag_search"
             ]
-        if exact_legal_lookup_used:
+        # Backward-compatible support for callers/tests that still provide the
+        # former one-shot boolean. New runtime calls use the explicit count.
+        if exact_legal_lookup_used is not None and exact_legal_lookup_used:
+            exact_legal_lookup_call_count = max(exact_legal_lookup_call_count, 1)
+        if schedule2_navigation_call_count >= max_schedule2_navigation_calls:
+            filtered = [tool for tool in filtered if tool.get("name") != "schedule2_navigation"]
+        if exact_legal_lookup_call_count >= max_exact_legal_lookup_calls:
             filtered = [tool for tool in filtered if tool.get("name") != "exact_legal_lookup"]
         return filtered
 

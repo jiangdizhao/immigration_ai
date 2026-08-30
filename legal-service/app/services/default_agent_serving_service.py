@@ -72,6 +72,8 @@ class DefaultAgentServingService:
                 answer_research_target_ms=settings.default_answer_research_target_ms,
                 checker_target_ms=settings.legal_fact_check_target_ms,
                 max_flat_rag_calls=settings.agent_max_flat_rag_calls,
+                max_schedule2_navigation_calls=settings.agent_max_schedule2_navigation_calls,
+                max_exact_legal_lookup_calls=settings.agent_max_exact_legal_lookup_calls,
                 retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
                 terminal_synthesis_target_ms=settings.default_terminal_synthesis_target_ms,
                 final_response_reserve_ms=settings.default_final_response_reserve_ms,
@@ -93,6 +95,9 @@ class DefaultAgentServingService:
                 matter_state=runtime_state,
                 execution_budget=budget,
                 experiment_arm=self.RUNTIME_ARM,
+                applicability_protocol_enabled=(
+                    settings.default_applicability_protocol_enabled
+                ),
             )
             registry = create_registry(request_id)
 
@@ -502,6 +507,9 @@ class DefaultAgentServingService:
             "model": result.model,
             "reasoning_effort": settings.default_agent_reasoning_effort,
             "experiment_arm": self.RUNTIME_ARM,
+            "applicability_protocol_enabled": metrics.get(
+                "applicability_protocol_enabled", True
+            ),
             "legacy_pfvd_skipped": True,
             "fallback_to_pfvd": False,
             "tool_policy": {

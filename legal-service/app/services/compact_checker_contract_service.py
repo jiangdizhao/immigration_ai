@@ -13,7 +13,12 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from app.schemas.agent import AgentClaim, AgentRuntimeRequest, AgentSubmissionV2
+from app.schemas.agent import (
+    AgentClaim,
+    AgentRuntimeRequest,
+    AgentSubmissionV2,
+    ApplicabilityResolution,
+)
 from app.schemas.checker import (
     PHASE6_CHECKER_INPUT_SCHEMA_VERSION,
     Phase6AcceptedDraft,
@@ -22,6 +27,7 @@ from app.schemas.checker import (
     Phase6CheckerEvidence,
     Phase6CheckerInput,
     Phase6CheckerMateriality,
+    Phase6ApplicabilityResolution,
     Phase6CheckerReasonCode,
     Phase6CheckerResult,
     Phase6CheckerVerdict,
@@ -227,6 +233,8 @@ def build_phase6_checker_input(
     registry: RequestEvidenceRegistry,
     compact_matter_facts: dict[str, object] | None = None,
     additional_relevant_evidence_refs: list[str] | None = None,
+    applicability_resolutions: list[ApplicabilityResolution] | None = None,
+    include_applicability_resolutions: bool = True,
     max_evidence_items: int = DEFAULT_MAX_CHECKER_EVIDENCE_ITEMS,
     max_total_evidence_text_chars: int = DEFAULT_MAX_CHECKER_EVIDENCE_TEXT_CHARS,
     max_compact_matter_facts_chars: int = DEFAULT_MAX_CHECKER_MATTER_FACTS_CHARS,
@@ -269,6 +277,25 @@ def build_phase6_checker_input(
     for evidence_ref in additional_relevant_evidence_refs or []:
         if evidence_ref not in refs:
             refs.append(evidence_ref)
+    selected_claim_ids = {claim.claim_id for claim in selected_claims}
+    resolution_source = (
+        applicability_resolutions
+        if applicability_resolutions is not None
+        else submission.applicability_resolutions
+    )
+    selected_resolutions = [
+        resolution
+        for resolution in (resolution_source if include_applicability_resolutions else [])
+        if resolution.claim_id in selected_claim_ids
+    ]
+    for resolution in selected_resolutions:
+        for evidence_ref in (
+            [resolution.selected_branch_evidence_ref]
+            + list(resolution.competing_branch_evidence_refs)
+            + list(resolution.applicability_basis_evidence_refs)
+        ):
+            if evidence_ref not in refs:
+                refs.append(evidence_ref)
     if len(refs) > max_evidence_items:
         raise Phase6CheckerContractError("checker evidence packet exceeds deterministic bound")
 
@@ -327,6 +354,12 @@ def build_phase6_checker_input(
             ),
             material_claims=compact_claims,
             evidence=evidence,
+            applicability_resolutions=[
+                Phase6ApplicabilityResolution(
+                    **resolution.model_dump(mode="python")
+                )
+                for resolution in selected_resolutions
+            ],
         )
         serialized_packet_chars = len(json.dumps(
             checker_input.model_dump(mode="json"),

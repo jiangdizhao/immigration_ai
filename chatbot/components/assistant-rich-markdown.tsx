@@ -2,6 +2,10 @@
 
 import type { ReactNode } from "react";
 import { Fragment } from "react";
+import {
+  CollapsibleSourceList,
+  type SourceListItem,
+} from "./collapsible-source-list";
 
 function stableTextKey(value: string) {
   let hash = 0;
@@ -86,6 +90,72 @@ function isMarkdownTableStart(lines: string[], index: number) {
     isPotentialMarkdownTableRow(lines[index] ?? "") &&
     isMarkdownTableSeparatorLine(lines[index + 1] ?? "")
   );
+}
+
+const TERMINAL_REFERENCE_HEADINGS = new Map([
+  ["actual web-search sources", "References / sources"],
+  ["实际网页搜索来源", "参考来源"],
+]);
+
+function terminalReferenceHeading(line: string) {
+  const match = line.trim().match(/^#{2,6}\s+(.+?)\s*$/);
+  if (!match) {
+    return null;
+  }
+  return (
+    TERMINAL_REFERENCE_HEADINGS.get(match[1]?.trim().toLowerCase()) ?? null
+  );
+}
+
+function splitTerminalReferenceSection(text: string): {
+  mainText: string;
+  references: SourceListItem[];
+  label: string;
+} | null {
+  const lines = text.split(/\r?\n/);
+  let headingIndex = -1;
+  let label: string | null = null;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const nextLabel = terminalReferenceHeading(lines[index] ?? "");
+    if (nextLabel) {
+      headingIndex = index;
+      label = nextLabel;
+    }
+  }
+
+  if (headingIndex < 0 || !label) {
+    return null;
+  }
+
+  const references: SourceListItem[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const match = trimmed.match(
+      /^[-*]\s+\[([^\]]+)\]\((https?:\/\/[^)]+)\)\s*$/i
+    );
+    if (!match || !match[1] || !match[2]) {
+      return null;
+    }
+    references.push({ label: match[1], href: match[2] });
+  }
+
+  if (!references.length) {
+    return null;
+  }
+
+  return {
+    mainText: lines.slice(0, headingIndex).join("\n").replace(/\s+$/, ""),
+    references,
+    label,
+  };
+}
+
+export function hasTerminalReferenceSection(text: string) {
+  return splitTerminalReferenceSection(text) !== null;
 }
 
 function normalizeTableRows(rows: string[][], columnCount: number) {
@@ -287,7 +357,8 @@ function renderLine(line: string, key: string): ReactNode {
 }
 
 export function AssistantRichMarkdown({ text }: { text: string }) {
-  const lines = text.split(/\r?\n/);
+  const terminalReferences = splitTerminalReferenceSection(text);
+  const lines = (terminalReferences?.mainText ?? text).split(/\r?\n/);
   const blocks: ReactNode[] = [];
   let index = 0;
 
@@ -326,6 +397,13 @@ export function AssistantRichMarkdown({ text }: { text: string }) {
   return (
     <div className="min-w-0 max-w-full space-y-2 whitespace-normal">
       {blocks}
+      {terminalReferences ? (
+        <CollapsibleSourceList
+          className="mt-3"
+          items={terminalReferences.references}
+          label={terminalReferences.label}
+        />
+      ) : null}
     </div>
   );
 }

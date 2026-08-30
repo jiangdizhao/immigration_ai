@@ -24,7 +24,7 @@ def test_boundary_fidelity_prompt_contract_is_generic_and_gap_driven() -> None:
     assert "subclass 417" not in prompt
     assert "subclass 186" not in prompt
     assert "417 -> 186" not in prompt
-    assert LUNA_PROMPT_VERSION.endswith("b2-boundary-fidelity-v2")
+    assert LUNA_PROMPT_VERSION.endswith("b3-default-runtime-governance")
 
 
 def test_boundary_fidelity_prompt_does_not_change_tool_autonomy() -> None:

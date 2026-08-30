@@ -21,6 +21,8 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from app.schemas.agent import AgentSubmissionV2
 from app.schemas.tools import (
     DeterministicUtilityRequest,
@@ -39,6 +41,9 @@ from app.services.native_web_locator_resolver import (
     validate_locator_object,
 )
 from app.services.request_evidence_registry import RequestEvidenceRegistry
+from app.services.residual_branch_applicability_service import (
+    evaluate_applicability_guard,
+)
 from app.services.search_privacy_guard import SearchPrivacyGuard
 from app.services.terminal_submission_policy import (
     TerminalSubmissionAction,
@@ -50,6 +55,120 @@ from app.tools.base import ToolExecutionError, build_tool_result
 from app.tools.deterministic_utility import execute_utility
 
 logger = logging.getLogger(__name__)
+
+
+_MAX_SUBMISSION_SCHEMA_ERRORS = 12
+_MAX_SCHEMA_ERROR_LOCATION_DEPTH = 8
+_MAX_SCHEMA_ERROR_INDEX = 999
+_SAFE_SCHEMA_LOCATION_COMPONENTS = frozenset({
+    "submission",
+    "schema_version",
+    "answer_class",
+    "draft_markdown",
+    "next_action",
+    "user_display_mode",
+    "as_of_date",
+    "claims",
+    "claim_id",
+    "claim_type",
+    "materiality",
+    "text",
+    "draft_start",
+    "draft_end",
+    "evidence_refs",
+    "depends_on",
+    "citations",
+    "display_label",
+    "native_web_locators",
+    "applicability_resolutions",
+    "selected_branch_evidence_ref",
+    "resolution_kind",
+    "status",
+    "applicability_basis_evidence_refs",
+    "competing_branch_evidence_refs",
+    "research_status",
+    "state_patch",
+})
+_SAFE_SCHEMA_ERROR_TYPES = frozenset({
+    "missing",
+    "extra_forbidden",
+    "literal_error",
+    "list_type",
+    "dict_type",
+    "string_type",
+    "int_type",
+    "bool_type",
+    "date_type",
+    "model_type",
+    "too_short",
+    "too_long",
+    "value_error",
+    "int_parsing",
+    "date_parsing",
+    "greater_than_equal",
+    "less_than_equal",
+    "schema_precheck",
+    "evidence_ref_shape",
+})
+
+
+def _sanitize_schema_error_location(location: Any) -> str:
+    """Convert a Pydantic location into a bounded structural path only."""
+
+    if isinstance(location, str):
+        location = location.split(".")
+    if not isinstance(location, (tuple, list)):
+        return "<unknown>"
+    if not location or len(location) > _MAX_SCHEMA_ERROR_LOCATION_DEPTH:
+        return "<unknown>"
+
+    components: list[str] = []
+    for component in location:
+        if isinstance(component, int) and not isinstance(component, bool):
+            components.append(str(min(max(component, 0), _MAX_SCHEMA_ERROR_INDEX)))
+        elif isinstance(component, str) and component.isdigit():
+            components.append(str(min(int(component), _MAX_SCHEMA_ERROR_INDEX)))
+        elif (
+            isinstance(component, str)
+            and len(component) <= 80
+            and component in _SAFE_SCHEMA_LOCATION_COMPONENTS
+        ):
+            components.append(component)
+        else:
+            components.append("<unknown>")
+    return ".".join(components)
+
+
+def _sanitize_schema_error_type(error_type: Any) -> str:
+    """Return only an allowlisted structural error type."""
+
+    if isinstance(error_type, str) and error_type in _SAFE_SCHEMA_ERROR_TYPES:
+        return error_type
+    return "value_error"
+
+
+def _record_submission_schema_error(
+    diagnostics: dict[str, Any],
+    *,
+    location: Any,
+    error_type: Any,
+) -> None:
+    """Append bounded, content-free schema diagnostics to terminal telemetry."""
+
+    count = diagnostics.get("submission_schema_error_count", 0)
+    if not isinstance(count, int) or isinstance(count, bool):
+        count = 0
+    if count >= _MAX_SUBMISSION_SCHEMA_ERRORS:
+        return
+
+    locations = diagnostics.setdefault("submission_schema_error_locations", [])
+    types = diagnostics.setdefault("submission_schema_error_types", [])
+    if not isinstance(locations, list) or not isinstance(types, list):
+        diagnostics["submission_schema_error_locations"] = locations = []
+        diagnostics["submission_schema_error_types"] = types = []
+    locations.append(_sanitize_schema_error_location(location))
+    types.append(_sanitize_schema_error_type(error_type))
+    diagnostics["submission_schema_error_count"] = count + 1
 
 
 def _dedup_ordered(refs: list[str]) -> list[str]:
@@ -117,6 +236,84 @@ def _has_usable_exact_locator(value: Any) -> bool:
         isinstance(value.get(field), str) and value[field].strip()
         for field in _EXACT_IDENTITY_FIELDS
     )
+
+
+_EXACT_ATTEMPT_FIELDS = (
+    ("locator_type", 100),
+    ("locator", 500),
+    ("target_document", 500),
+    ("node_type", 100),
+    ("provision_ref", 255),
+    ("schedule", 100),
+    ("provision", 255),
+    ("subclass", 50),
+    ("source_type", 100),
+    ("case_citation", 500),
+)
+
+
+def _safe_exact_attempt_text(value: Any, *, limit: int) -> str | None:
+    """Return a bounded structured locator value without preserving prose."""
+    if not isinstance(value, str):
+        return None
+    return " ".join(value.split())[:limit] or None
+
+
+def _summarize_exact_lookup_attempt(tool_call: ToolCallRequest) -> dict[str, Any]:
+    """Create content-safe diagnostics before exact-lookup quota enforcement."""
+    arguments = tool_call.arguments if isinstance(tool_call.arguments, dict) else {}
+    raw_requests = arguments.get("requests")
+    if not isinstance(raw_requests, list):
+        return {
+            "tool_call_id": tool_call.call_id,
+            "execution_status": "governor_denied",
+            "governor_denied": True,
+            "denial_code": "EXACT_LOOKUP_BUDGET_EXHAUSTED",
+            "arguments_shape": (
+                "missing_requests"
+                if "requests" not in arguments
+                else type(raw_requests).__name__
+            ),
+            "requested_item_count": 0,
+            "model_requests": [],
+        }
+
+    bounded_requests = raw_requests[:8]
+    model_requests: list[dict[str, Any]] = []
+    for raw_item in bounded_requests:
+        if not isinstance(raw_item, dict):
+            model_requests.append({"item_shape": type(raw_item).__name__})
+            continue
+
+        summary = {
+            field: _safe_exact_attempt_text(raw_item.get(field), limit=limit)
+            for field, limit in _EXACT_ATTEMPT_FIELDS
+        }
+        source_types = raw_item.get("source_types")
+        summary["source_types"] = (
+            [
+                _safe_exact_attempt_text(value, limit=100)
+                for value in source_types[:20]
+                if isinstance(value, str)
+            ]
+            if isinstance(source_types, list)
+            else []
+        )
+        query = raw_item.get("query")
+        summary["query_present"] = query is not None
+        summary["query_length"] = len(query) if isinstance(query, str) else 0
+        model_requests.append(summary)
+
+    return {
+        "tool_call_id": tool_call.call_id,
+        "execution_status": "governor_denied",
+        "governor_denied": True,
+        "denial_code": "EXACT_LOOKUP_BUDGET_EXHAUSTED",
+        "arguments_shape": "list",
+        "requested_item_count": min(len(raw_requests), 8),
+        "requested_item_count_truncated": len(raw_requests) > 8,
+        "model_requests": model_requests,
+    }
 
 
 def _find_claim_text_spans(*, draft: str, claim_text: str) -> list[tuple[int, int]]:
@@ -479,11 +676,21 @@ def _submission_contract_diagnostics(
 
 
 def _add_submission_error_diagnostics(
-    diagnostics: dict[str, int],
+    diagnostics: dict[str, Any],
     errors: list[SubmissionError],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     for error in errors:
-        if error.code == "CLAIM_TEXT_NOT_FOUND":
+        if error.code == "SUBMISSION_SCHEMA_INVALID":
+            _record_submission_schema_error(
+                diagnostics,
+                location=error.field,
+                error_type=(
+                    "evidence_ref_shape"
+                    if str(error.field or "").endswith("evidence_refs")
+                    else "schema_precheck"
+                ),
+            )
+        elif error.code == "CLAIM_TEXT_NOT_FOUND":
             diagnostics["claim_text_not_found_count"] = max(
                 diagnostics["claim_text_not_found_count"], 1
             )
@@ -672,6 +879,10 @@ class ToolCallResult:
     # For submit_answer: the parsed submission if valid
     submission: AgentSubmissionV2 | None = None
     submission_action: TerminalSubmissionAction | None = None
+    # True once the handler begins the underlying service execution. This
+    # distinguishes real zero-result/error executions from invalid or
+    # unavailable requests.
+    execution_started: bool = False
 
 
 @dataclass(slots=True)
@@ -689,6 +900,7 @@ class ToolExecutorContext:
     allow_model_canonical_refs: bool = True
     lightweight_submission: bool = False
     allow_overlapping_claims: bool = False
+    residual_branch_guard_enabled: bool = False
     deadline_monotonic: float | None = None
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
@@ -711,8 +923,10 @@ class ToolExecutorContext:
     # navigation never receives or writes to the evidence registry.
     schedule2_navigation_map: Any = None
     exact_legal_lookup_service: Any = None
+    max_schedule2_navigation_calls: int = 2
     schedule2_navigation_call_count: int = 0
     schedule2_navigation_target_count: int = 0
+    max_exact_legal_lookup_calls: int = 2
     exact_legal_lookup_call_count: int = 0
     exact_lookup_requested_locator_count: int = 0
     exact_lookup_resolved_locator_count: int = 0
@@ -727,6 +941,11 @@ class ToolExecutorContext:
     native_web_locator_resolution_categories: dict[str, int] = field(default_factory=dict)
     schedule2_navigation_denied_call_count: int = 0
     exact_legal_lookup_denied_call_count: int = 0
+    residual_branch_guard_trigger_count: int = 0
+    residual_branch_submission_rejection_count: int = 0
+    applicability_resolution_count: int = 0
+    unresolved_applicability_count: int = 0
+    execution_started_tool_call_ids: set[str] = field(default_factory=set)
 
 
 class ToolExecutorService:
@@ -751,6 +970,7 @@ class ToolExecutorService:
         start = time.perf_counter()
         submission: AgentSubmissionV2 | None = None
         submission_action: TerminalSubmissionAction | None = None
+        context.execution_started_tool_call_ids.discard(tool_call.call_id)
 
         try:
             if tool_call.name == "deterministic_utility":
@@ -802,6 +1022,7 @@ class ToolExecutorService:
             duration_ms=duration_ms,
             submission=submission,
             submission_action=submission_action,
+            execution_started=tool_call.call_id in context.execution_started_tool_call_ids,
         )
 
     @staticmethod
@@ -821,15 +1042,16 @@ class ToolExecutorService:
         tool_call: ToolCallRequest,
         context: ToolExecutorContext,
     ) -> ToolResultEnvelope:
-        if context.schedule2_navigation_call_count >= 1:
+        if context.schedule2_navigation_call_count >= context.max_schedule2_navigation_calls:
             context.schedule2_navigation_denied_call_count += 1
             return self._budget_denied(
                 tool_call=tool_call,
                 code="SCHEDULE2_NAVIGATION_BUDGET_EXHAUSTED",
-                message="Schedule-2 navigation is limited to one invocation per turn.",
+                message=(
+                    "Schedule-2 navigation execution budget exhausted for this turn."
+                ),
                 data={"navigation_only": True, "results": [], "denied_reason": "PER_TURN_LIMIT"},
             )
-        context.schedule2_navigation_call_count += 1
         if context.schedule2_navigation_map is None:
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
@@ -841,8 +1063,22 @@ class ToolExecutorService:
         try:
             request = Schedule2NavigationBatchRequest(**tool_call.arguments)
             from app.services.schedule2_navigation_service import Schedule2NavigationService
+            service = Schedule2NavigationService(context.schedule2_navigation_map)
+        except Exception as exc:
+            return build_tool_result(
+                tool_call_id=tool_call.call_id,
+                status="invalid_request",
+                data={"navigation_only": True, "results": [], "evidence_refs": []},
+                duration_ms=0,
+                error={"code": "INVALID_SCHEDULE2_NAVIGATION_REQUEST", "message": str(exc)},
+            )
 
-            data = Schedule2NavigationService(context.schedule2_navigation_map).query(request)
+        # The allowance is consumed only once the adapter and deterministic
+        # request validation have succeeded and execution is about to begin.
+        context.schedule2_navigation_call_count += 1
+        context.execution_started_tool_call_ids.add(tool_call.call_id)
+        try:
+            data = service.query(request)
             context.schedule2_navigation_target_count += sum(
                 len(item.get("edges", [])) + len(item.get("targets", [])) + len(item.get("matches", []))
                 for item in data.get("results", [])
@@ -857,10 +1093,10 @@ class ToolExecutorService:
         except Exception as exc:
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
-                status="invalid_request",
+                status="error",
                 data={"navigation_only": True, "results": [], "evidence_refs": []},
                 duration_ms=0,
-                error={"code": "INVALID_SCHEDULE2_NAVIGATION_REQUEST", "message": str(exc)},
+                error={"code": "SCHEDULE2_NAVIGATION_ERROR", "message": str(exc)},
             )
 
     def _execute_exact_legal_lookup(
@@ -868,15 +1104,17 @@ class ToolExecutorService:
         tool_call: ToolCallRequest,
         context: ToolExecutorContext,
     ) -> ToolResultEnvelope:
-        if context.exact_legal_lookup_call_count >= 1:
+        if context.exact_legal_lookup_call_count >= context.max_exact_legal_lookup_calls:
             context.exact_legal_lookup_denied_call_count += 1
+            context.exact_lookup_requests.append(
+                _summarize_exact_lookup_attempt(tool_call)
+            )
             return self._budget_denied(
                 tool_call=tool_call,
                 code="EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED",
-                message="Exact legal lookup is limited to one invocation per turn.",
+                message="Exact legal lookup execution budget exhausted for this turn.",
                 data={"lookups": [], "denied_reason": "PER_TURN_LIMIT"},
             )
-        context.exact_legal_lookup_call_count += 1
         if context.exact_legal_lookup_service is None and context.db_session is None:
             return build_tool_result(
                 tool_call_id=tool_call.call_id,
@@ -887,8 +1125,17 @@ class ToolExecutorService:
             )
         try:
             raw_requests = tool_call.arguments.get("requests")
-            if not isinstance(raw_requests, list):
-                raw_requests = []
+            if not isinstance(raw_requests, list) or len(raw_requests) > 8:
+                return build_tool_result(
+                    tool_call_id=tool_call.call_id,
+                    status="invalid_request",
+                    data={"lookups": []},
+                    duration_ms=0,
+                    error={
+                        "code": "INVALID_EXACT_LEGAL_LOOKUP_REQUEST",
+                        "message": "requests must be a list containing at most 8 items",
+                    },
+                )
             usable_requests = []
             skipped_empty_count = 0
             for raw_item in raw_requests:
@@ -941,6 +1188,7 @@ class ToolExecutorService:
                 service = context.exact_legal_lookup_service
             lookups = []
             skipped_normalization_count = 0
+            execution_counted = False
             for index, item in enumerate(batch.requests):
                 from app.services.exact_lookup_locator_normalizer import (
                     expand_exact_lookup_item,
@@ -971,6 +1219,13 @@ class ToolExecutorService:
                     })
                     continue
                 for expanded_index, normalized in enumerate(normalized_items):
+                    if not execution_counted:
+                        # Count the invocation at the first real lookup. Empty,
+                        # malformed, unavailable, and normalization-only calls
+                        # therefore leave the allowance untouched.
+                        context.exact_legal_lookup_call_count += 1
+                        context.execution_started_tool_call_ids.add(tool_call.call_id)
+                        execution_counted = True
                     context.exact_lookup_requested_locator_count += 1
                     output = service.lookup(
                         normalized.request,
@@ -1010,6 +1265,10 @@ class ToolExecutorService:
                             "matches_count": len(output.matches),
                             "resolved_cross_references_count": len(output.resolved_cross_references),
                             "unresolved_cross_references_count": len(output.unresolved_cross_references),
+                            "provision_block_complete": output.provision_block_complete,
+                            "provision_block_backend_cap_reached": (
+                                output.provision_block_backend_cap_reached
+                            ),
                             "corpus_version": output.corpus_version,
                             "index_version": output.index_version,
                         },
@@ -1108,6 +1367,7 @@ class ToolExecutorService:
                     error={"code": "PII_IN_QUERY", "message": "Search query contains prohibited personal information"},
                 )
 
+            context.execution_started_tool_call_ids.add(tool_call.call_id)
             result = context.flat_rag_search_fn(
                 query=query,
                 registry=context.registry,
@@ -1189,6 +1449,10 @@ class ToolExecutorService:
             for category, count in context.native_web_locator_resolution_categories.items():
                 contract_diagnostics[f"native_web_locator_{category}_count"] = count
             if locator_error is not None:
+                _add_submission_error_diagnostics(
+                    contract_diagnostics,
+                    [locator_error],
+                )
                 return self._reject_submission(
                     tool_call=tool_call,
                     context=context,
@@ -1198,7 +1462,30 @@ class ToolExecutorService:
 
             try:
                 submission = AgentSubmissionV2(**args)
+            except ValidationError as exc:
+                for error in exc.errors():
+                    _record_submission_schema_error(
+                        contract_diagnostics,
+                        location=error.get("loc"),
+                        error_type=error.get("type"),
+                    )
+                return self._reject_submission(
+                    tool_call=tool_call,
+                    context=context,
+                    errors=[
+                        SubmissionError(
+                            code="SUBMISSION_SCHEMA_INVALID",
+                            field="submission",
+                        )
+                    ],
+                    contract_diagnostics=contract_diagnostics,
+                )
             except (TypeError, ValueError):
+                _record_submission_schema_error(
+                    contract_diagnostics,
+                    location="submission",
+                    error_type="value_error",
+                )
                 return self._reject_submission(
                     tool_call=tool_call,
                     context=context,
@@ -1286,6 +1573,25 @@ class ToolExecutorService:
                     duration_ms=0,
                     error={"code": "SUBMISSION_INVALID", "message": "Submission validation failed"},
                 ), submission, _action
+
+            if context.residual_branch_guard_enabled:
+                residual_guard = evaluate_applicability_guard(
+                    submission,
+                    context.registry,
+                )
+                context.residual_branch_guard_trigger_count += residual_guard.trigger_count
+                context.applicability_resolution_count += (
+                    residual_guard.applicability_resolution_count
+                )
+                context.unresolved_applicability_count += residual_guard.unresolved_count
+                if not residual_guard.valid:
+                    context.residual_branch_submission_rejection_count += 1
+                    return self._reject_submission(
+                        tool_call=tool_call,
+                        context=context,
+                        errors=residual_guard.errors,
+                        contract_diagnostics=contract_diagnostics,
+                    )
 
             # Run evidence postcondition
             postcondition = EvidencePostconditionService(context.registry)
@@ -1513,6 +1819,16 @@ class ToolExecutorService:
             "verified evidence is unavailable, submit an evidence-insufficient or "
             "incomplete answer rather than inventing evidence."
         )
+        if any(
+            error.code == "APPLICABILITY_EVIDENCE_UNRESOLVED"
+            for error in rejected.errors
+        ):
+            data["repair_instruction"] += (
+                " The decisive legal branch depends on a legal classification or "
+                "applicability dependency that is not grounded in authoritative "
+                "evidence. Resolve that dependency and provide the structured "
+                "applicability evidence before resubmitting."
+            )
         if not context.allow_model_canonical_refs:
             data["repair_instruction"] = (
                 "This Arm-A run has no model-visible canonical evidence refs. "

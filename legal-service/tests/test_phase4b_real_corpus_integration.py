@@ -215,6 +215,80 @@ def test_official_volume_schedule_provisions_resolve_with_structural_scope(
         assert provision in chunk.text or provision in (chunk.section_ref or "")
 
 
+@pytest.mark.parametrize("max_hits", [1, 2, 3, 5, 8, 10])
+def test_schedule2_010611_block_is_complete_independent_of_model_max_hits(
+    canonical_read_only_db,
+    max_hits: int,
+):
+    db, _ = canonical_read_only_db
+    output, _ = _lookup(
+        db,
+        request=ExactLegalLookupRequest(
+            schedule="2",
+            provision="010.611",
+            subclass="010",
+            as_of_date=date(2026, 8, 30),
+            follow_cross_references=False,
+            max_hits=max_hits,
+        ),
+        call_id=f"schedule2-010-611-max-{max_hits}",
+    )
+
+    chunks = [
+        db.get(SourceChunk, match.canonical_evidence_ref.canonical_chunk_id)
+        for match in output.matches
+    ]
+    assert [chunk.chunk_index for chunk in chunks] == list(range(28, 37))
+    block_text = "\n".join(chunk.text or "" for chunk in chunks)
+    assert "(3A)" in block_text
+    assert "(3B)" in block_text
+    assert "(4) In any other case" in block_text
+    assert all(chunk.chunk_index != 37 for chunk in chunks)
+    assert output.provision_block_complete is True
+    assert output.provision_block_backend_cap_reached is False
+
+
+@pytest.mark.parametrize(
+    ("provision", "subclass"),
+    [("020.611", "020"), ("030.613", "030")],
+)
+def test_other_schedule2_provision_blocks_remain_boundary_complete(
+    canonical_read_only_db,
+    provision: str,
+    subclass: str,
+):
+    db, _ = canonical_read_only_db
+    outputs = []
+    for max_hits in (1, 10):
+        output, _ = _lookup(
+            db,
+            request=ExactLegalLookupRequest(
+                schedule="2",
+                provision=provision,
+                subclass=subclass,
+                as_of_date=date(2026, 8, 30),
+                follow_cross_references=False,
+                max_hits=max_hits,
+            ),
+            call_id=f"schedule2-{provision}-max-{max_hits}",
+        )
+        outputs.append(output)
+
+    indexes = [
+        [
+            db.get(SourceChunk, match.canonical_evidence_ref.canonical_chunk_id).chunk_index
+            for match in output.matches
+        ]
+        for output in outputs
+    ]
+    assert indexes[0] == indexes[1]
+    assert outputs[0].matches
+    assert all(output.provision_block_complete is True for output in outputs)
+    assert all(
+        output.provision_block_backend_cap_reached is False for output in outputs
+    )
+
+
 def test_schedule_scope_does_not_use_cross_schedule_body_references() -> None:
     source = LegalSource(
         title="Migration Regulations 1994 - F2026C00667 Volume 2",

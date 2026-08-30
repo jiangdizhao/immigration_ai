@@ -55,11 +55,11 @@ class Settings(BaseSettings):
     answer_engine: str = Field(default="v1", alias="ANSWER_ENGINE")
     default_agent_model: str = Field(default="gpt-5.6-luna", alias="DEFAULT_AGENT_MODEL")
     # Phase 5.1A: make GPT-5.6 Luna reasoning effort explicit and configurable.
-    # The approved current calibration baseline is "low". This remains a
+    # The approved current calibration baseline is "high". This remains a
     # configuration field, not a quality decision or a second configuration
     # system.
     default_agent_reasoning_effort: Literal["none", "low", "medium", "high"] = Field(
-        default="low", alias="DEFAULT_AGENT_REASONING_EFFORT"
+        default="high", alias="DEFAULT_AGENT_REASONING_EFFORT"
     )
     premium_agent_model: str = Field(default="gpt-5.6-sol", alias="PREMIUM_AGENT_MODEL")
     legal_fact_check_model: str = Field(
@@ -78,7 +78,13 @@ class Settings(BaseSettings):
         default=1000, ge=0, alias="COMPACT_CHECKER_POST_RESERVE_MS"
     )
     agent_tool_choice: Literal["auto"] = Field(default="auto", alias="AGENT_TOOL_CHOICE")
-    agent_max_tool_rounds: int = Field(default=2, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
+    agent_max_tool_rounds: int = Field(default=4, ge=0, le=20, alias="AGENT_MAX_TOOL_ROUNDS")
+    agent_max_schedule2_navigation_calls: int = Field(
+        default=2, ge=0, le=20, alias="AGENT_MAX_SCHEDULE2_NAVIGATION_CALLS"
+    )
+    agent_max_exact_legal_lookup_calls: int = Field(
+        default=2, ge=0, le=20, alias="AGENT_MAX_EXACT_LEGAL_LOOKUP_CALLS"
+    )
     default_web_search_max_tool_calls: int | None = Field(
         default=None, ge=1, le=10, alias="DEFAULT_WEB_SEARCH_MAX_TOOL_CALLS"
     )
@@ -86,7 +92,7 @@ class Settings(BaseSettings):
         default="low", alias="DEFAULT_WEB_SEARCH_CONTEXT_SIZE"
     )
     agent_max_provider_calls: int = Field(
-        default=3, ge=1, le=20, alias="AGENT_MAX_PROVIDER_CALLS"
+        default=5, ge=1, le=20, alias="AGENT_MAX_PROVIDER_CALLS"
     )
     agent_max_retries: int = Field(default=1, ge=0, le=10, alias="AGENT_MAX_RETRIES")
     agent_max_flat_rag_calls: int = Field(
@@ -96,21 +102,21 @@ class Settings(BaseSettings):
         default=8000, ge=0, le=40000, alias="AGENT_RETRY_VIABILITY_THRESHOLD_MS"
     )
     default_turn_deadline_ms: int = Field(
-        default=75000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
+        default=300000, ge=1, alias="DEFAULT_TURN_DEADLINE_MS"
     )
     premium_turn_deadline_ms: int = Field(
         default=90000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
     )
     default_answer_research_target_ms: int = Field(
-        default=45000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
+        default=240000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
     )
     # Default-only terminal allocation.  Premium Direct has its own explicit
     # PREMIUM_DIRECT_* controls and must not inherit this calibration.
     default_terminal_synthesis_target_ms: int = Field(
-        default=20000, ge=1, alias="DEFAULT_TERMINAL_SYNTHESIS_TARGET_MS"
+        default=45000, ge=1, alias="DEFAULT_TERMINAL_SYNTHESIS_TARGET_MS"
     )
     default_final_response_reserve_ms: int = Field(
-        default=5000, ge=0, alias="DEFAULT_FINAL_RESPONSE_RESERVE_MS"
+        default=15000, ge=0, alias="DEFAULT_FINAL_RESPONSE_RESERVE_MS"
     )
     premium_answer_research_target_ms: int = Field(
         default=40000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
@@ -153,6 +159,11 @@ class Settings(BaseSettings):
     # bounded AgentRuntime becomes the customer-serving Default path.
     default_agent_serving_enabled: bool = Field(
         default=False, alias="DEFAULT_AGENT_SERVING_ENABLED"
+    )
+    # Default-only A/B switch for the structured applicability protocol. The
+    # Default serving keeps the applicability protocol disabled unless explicitly enabled.
+    default_applicability_protocol_enabled: bool = Field(
+        default=False, alias="DEFAULT_APPLICABILITY_PROTOCOL_ENABLED"
     )
     agent_shadow_enabled: bool = Field(default=False, alias="AGENT_SHADOW_ENABLED")
     agent_rollout_percent_default: int = Field(

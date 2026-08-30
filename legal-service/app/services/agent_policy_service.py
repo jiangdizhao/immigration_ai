@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.core.config import get_settings
-from app.services.luna_prompts import LUNA_SYSTEM_PROMPT_V2, LUNA_PROMPT_VERSION
+from app.services.luna_prompts import (
+    DEFAULT_APPLICABILITY_BRANCH_POLICY,
+    DEFAULT_GENERIC_BRANCH_GUIDANCE,
+    LUNA_SYSTEM_PROMPT_V2,
+    LUNA_PROMPT_VERSION,
+)
 
 ExperimentArm = Literal["A", "B", "L", "N", "C", "D"] | None
 ReasoningEffort = Literal["none", "low", "medium", "high"]
@@ -130,6 +135,43 @@ SUBMIT_ANSWER_TOOL = {
                     "additionalProperties": False,
                 },
             },
+            "applicability_resolutions": {
+                "type": "array",
+                "maxItems": 100,
+                "description": "Structured applicability evidence for a decisive legal branch whose applicability depends on another legal classification or dependency.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "claim_id": {"type": "string"},
+                        "selected_branch_evidence_ref": {"type": "string"},
+                        "resolution_kind": {
+                            "type": "string",
+                            "enum": ["specific_branch", "residual_branch"],
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["resolved", "unresolved"],
+                        },
+                        "competing_branch_evidence_refs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 20,
+                        },
+                        "applicability_basis_evidence_refs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 20,
+                        },
+                    },
+                    "required": [
+                        "claim_id",
+                        "selected_branch_evidence_ref",
+                        "resolution_kind",
+                        "status",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
             "research_status": {
                 "type": "string",
                 "enum": ["not_required", "complete", "incomplete"],
@@ -227,6 +269,8 @@ SCHEDULE2_NAVIGATION_TOOL = {
         "Read-only forward structural navigation and reverse explicit-reference "
         "lookup over the experimental Schedule-2 sidecar. Use find_mentions to "
         "locate Schedule-2 provisions that explicitly reference a known target. "
+        "It may be called again for a newly discovered material explicit target; "
+        "do not repeat an equivalent request. "
         "Navigation only: it never returns legal evidence, establishes eligibility "
         "or applicability, or infers semantics. Locator-index availability does not "
         "mean that law or a source is absent; use exact_legal_lookup for evidence."
@@ -273,8 +317,9 @@ EXACT_LEGAL_LOOKUP_TOOL = {
         "Look up exact local legal source content for up to 8 known legal locators "
         "in one bounded invocation. Use this only for locators already known from "
         "the question, navigation, or other research; put each distinct provision "
-        "in its own request item. Do not retry this tool after its one invocation; "
-        "use discovery tools for unknown or open-world targets. The backend accepts "
+        "in its own request item. Call it again only when a subsequent research "
+        "result supplies new concrete locators; do not repeat an equivalent failed "
+        "lookup. Use discovery tools for unknown or open-world targets. The backend accepts "
         "canonical forms such as Schedule 3/3, criterion 3001, regulation/reg 1.03, "
         "Migration Act s 48, PIC 4019, and visa condition 8101, and performs only "
         "bounded deterministic normalization. "
@@ -336,6 +381,7 @@ def build_submit_answer_tool(
     *,
     allow_canonical_refs: bool = True,
     lightweight_claims: bool = False,
+    applicability_protocol_enabled: bool = True,
 ) -> dict[str, Any]:
     """Build the model-facing terminal contract for an evidence context.
 
@@ -346,6 +392,8 @@ def build_submit_answer_tool(
     """
 
     tool = deepcopy(SUBMIT_ANSWER_TOOL)
+    if not applicability_protocol_enabled:
+        tool["parameters"]["properties"].pop("applicability_resolutions", None)
     if allow_canonical_refs:
         return tool
 
@@ -416,9 +464,9 @@ class AgentPolicy:
     model: str
     tools: list[dict[str, Any]]
     tool_choice: Literal["auto"] = "auto"
-    # Phase 5.1A explicit reasoning effort for the default (Luna) agent.
-    # Baseline-preserving default is "medium". Passed verbatim to the
-    # OpenAI Responses request as reasoning.effort.
+    # Phase 5.1A explicit reasoning effort for the Default (Luna) agent.
+    # The dataclass fallback remains baseline-neutral; Default construction
+    # injects the configured calibration value explicitly.
     reasoning_effort: ReasoningEffort = "medium"
     experiment_arm: ExperimentArm = None
     max_tool_rounds: int = 2
@@ -440,6 +488,7 @@ class AgentPolicyService:
         *,
         mode: Literal["default", "premium"],
         experiment_arm: ExperimentArm = None,
+        applicability_protocol_enabled: bool = True,
     ) -> AgentPolicy:
         """Build agent policy for the given mode and experiment arm.
 
@@ -453,11 +502,20 @@ class AgentPolicyService:
             model = settings.premium_agent_model
         else:
             # Default: tools depend on experiment arm
-            tools = self._build_default_tools(experiment_arm)
+            tools = self._build_default_tools(
+                experiment_arm,
+                applicability_protocol_enabled=applicability_protocol_enabled,
+            )
             model = settings.default_agent_model
 
         system_prompt = LUNA_SYSTEM_PROMPT_V2
         prompt_version = LUNA_PROMPT_VERSION
+        if mode == "default":
+            system_prompt += (
+                DEFAULT_APPLICABILITY_BRANCH_POLICY
+                if applicability_protocol_enabled
+                else DEFAULT_GENERIC_BRANCH_GUIDANCE
+            )
         if mode == "default" and experiment_arm == "A":
             system_prompt += ARM_A_NATIVE_WEB_PROMPT_SUFFIX
             prompt_version = f"{LUNA_PROMPT_VERSION}.arm-a-native-locator"
@@ -468,24 +526,35 @@ class AgentPolicyService:
             system_prompt += ARM_N_RESEARCH_PROMPT_SUFFIX
             prompt_version = f"{LUNA_PROMPT_VERSION}.arm-n-research"
 
+        # Default calibration is explicit. Premium shadow uses the frozen
+        # baseline values because the Default settings are intentionally not
+        # Premium controls; Premium Direct has its own independent path.
+        reasoning_effort = settings.default_agent_reasoning_effort if mode == "default" else "low"
+        max_tool_rounds = settings.agent_max_tool_rounds if mode == "default" else 2
+        max_provider_calls = settings.agent_max_provider_calls if mode == "default" else 3
+
         return AgentPolicy(
             system_prompt=system_prompt,
             prompt_version=prompt_version,
             model=model,
             tools=tools,
             tool_choice="auto",
-            # Phase 5.1A: explicit, configurable reasoning effort. The default is
-            # "medium" so introducing the field does not change inference behavior.
-            reasoning_effort=settings.default_agent_reasoning_effort,
+            # Phase 5.1A: explicit, configurable Default reasoning effort.
+            reasoning_effort=reasoning_effort,
             experiment_arm=experiment_arm,
-            max_tool_rounds=settings.agent_max_tool_rounds,
-            max_provider_calls=settings.agent_max_provider_calls,
+            max_tool_rounds=max_tool_rounds,
+            max_provider_calls=max_provider_calls,
             max_retries=settings.agent_max_retries,
             max_flat_rag_calls=settings.agent_max_flat_rag_calls,
             retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
         )
 
-    def _build_default_tools(self, experiment_arm: ExperimentArm) -> list[dict[str, Any]]:
+    def _build_default_tools(
+        self,
+        experiment_arm: ExperimentArm,
+        *,
+        applicability_protocol_enabled: bool = True,
+    ) -> list[dict[str, Any]]:
         """Build tool list for default mode based on experiment arm.
 
         Arm A: web_search + deterministic_utility + native-locator submit
@@ -512,6 +581,7 @@ class AgentPolicyService:
                 build_submit_answer_tool(
                     allow_canonical_refs=experiment_arm in {"B", "N"},
                     lightweight_claims=experiment_arm == "L",
+                    applicability_protocol_enabled=applicability_protocol_enabled,
                 ),
             ])
             return tools
@@ -520,7 +590,10 @@ class AgentPolicyService:
         return [
             web_search_tool,
             DETERMINISTIC_UTILITY_TOOL,
-            build_submit_answer_tool(allow_canonical_refs=experiment_arm != "A"),
+            build_submit_answer_tool(
+                allow_canonical_refs=experiment_arm != "A",
+                applicability_protocol_enabled=applicability_protocol_enabled,
+            ),
         ]
 
     def get_tool_names(self, policy: AgentPolicy) -> list[str]:

@@ -42,6 +42,29 @@ class AgentCitation(StrictContract):
     display_label: str = Field(min_length=1, max_length=500)
 
 
+class ApplicabilityResolution(StrictContract):
+    """Bounded evidence bookkeeping for an applicable legal branch."""
+
+    claim_id: str = Field(min_length=1, max_length=100)
+    selected_branch_evidence_ref: str = Field(min_length=3, max_length=255)
+    resolution_kind: Literal["specific_branch", "residual_branch"]
+    status: Literal["resolved", "unresolved"]
+    competing_branch_evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    applicability_basis_evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_reference_lists(self):
+        if len(set(self.competing_branch_evidence_refs)) != len(self.competing_branch_evidence_refs):
+            raise ValueError("competing_branch_evidence_refs must not contain duplicates")
+        if len(set(self.applicability_basis_evidence_refs)) != len(self.applicability_basis_evidence_refs):
+            raise ValueError("applicability_basis_evidence_refs must not contain duplicates")
+        if self.selected_branch_evidence_ref in self.competing_branch_evidence_refs:
+            raise ValueError("selected_branch_evidence_ref must not be a competing branch ref")
+        if self.selected_branch_evidence_ref in self.applicability_basis_evidence_refs:
+            raise ValueError("selected_branch_evidence_ref must not be an applicability basis ref")
+        return self
+
+
 class AgentSubmissionV2(StrictContract):
     schema_version: Literal["agent_submission.v2"]
     answer_class: Literal["general", "procedural", "substantive_legal", "safety_blocked"]
@@ -70,6 +93,9 @@ class AgentSubmissionV2(StrictContract):
 
     claims: list[AgentClaim] = Field(default_factory=list, max_length=100)
     citations: list[AgentCitation] = Field(default_factory=list, max_length=100)
+    applicability_resolutions: list[ApplicabilityResolution] = Field(
+        default_factory=list, max_length=100
+    )
     research_status: Literal["not_required", "complete", "incomplete"]
     # Phase 1 freezes the envelope only. Patch authorization/semantics arrive in Phase 3.
     state_patch: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
@@ -87,6 +113,8 @@ class AgentSubmissionV2(StrictContract):
 
 
 class ExecutionBudget(StrictContract):
+    # Keep schema construction baseline-neutral. Default AgentRuntime supplies
+    # its calibrated values explicitly from Settings.
     max_tool_rounds: int = Field(default=2, ge=0, le=20)
     max_provider_calls: int = Field(default=3, ge=1, le=20)
     max_retries: int = Field(default=1, ge=0, le=10)
@@ -96,6 +124,8 @@ class ExecutionBudget(StrictContract):
     # Phase 5 resource governance. Per-turn Flat-RAG execution bound (Arm B only).
     # The bound applies to actual flat_rag_search executions, not merely tool rounds.
     max_flat_rag_calls: int = Field(default=1, ge=0, le=100)
+    max_schedule2_navigation_calls: int = Field(default=2, ge=0, le=20)
+    max_exact_legal_lookup_calls: int = Field(default=2, ge=0, le=20)
     # A provider retry is launched only when the remaining absolute deadline still
     # exceeds this threshold. Prevents a futile late provider call from burning the
     # residual budget after a first attempt consumed most of the research budget.
@@ -126,6 +156,8 @@ class AgentRuntimeRequest(StrictContract):
     matter_state: dict[str, Any]
     execution_budget: ExecutionBudget
     experiment_arm: Literal["A", "B", "L", "N", "C", "D"] | None = None
+    # Default-only applicability A/B switch. Premium ignores this field.
+    applicability_protocol_enabled: bool = True
 
 
 class DeadlineCheckpoint(StrictContract):
@@ -221,6 +253,7 @@ class ToolCallObservation(StrictContract):
 
 
 class AgentExecutionMetrics(StrictContract):
+    applicability_protocol_enabled: bool = True
     logical_llm_stage_count: int = Field(default=0, ge=0)
     provider_api_call_count: int = Field(default=0, ge=0)
     tool_call_count: int = Field(default=0, ge=0)
@@ -275,6 +308,10 @@ class AgentExecutionMetrics(StrictContract):
     schedule2_navigation_target_count: int = Field(default=0, ge=0)
     exact_lookup_denied_call_count: int = Field(default=0, ge=0)
     schedule2_navigation_denied_call_count: int = Field(default=0, ge=0)
+    residual_branch_guard_trigger_count: int = Field(default=0, ge=0)
+    residual_branch_submission_rejection_count: int = Field(default=0, ge=0)
+    applicability_resolution_count: int = Field(default=0, ge=0)
+    unresolved_applicability_count: int = Field(default=0, ge=0)
     lightrag_call_count: int = Field(default=0, ge=0)
     flat_rag_call_count: int = Field(default=0, ge=0)
     utility_call_count: int = Field(default=0, ge=0)
@@ -284,6 +321,9 @@ class AgentExecutionMetrics(StrictContract):
     submission_attempt_count: int = Field(default=0, ge=0)
     submission_accepted_count: int = Field(default=0, ge=0)
     submission_rejection_categories_by_attempt: list[list[str]] = Field(
+        default_factory=list, max_length=20
+    )
+    submission_schema_diagnostics_by_attempt: list[dict[str, Any]] = Field(
         default_factory=list, max_length=20
     )
     registered_evidence_count_before_submit: list[int] = Field(

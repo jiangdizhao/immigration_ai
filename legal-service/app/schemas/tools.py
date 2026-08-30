@@ -182,6 +182,10 @@ class ExactLegalLookupOutput(StrictContract):
     matches: list[ExactLegalMatch] = Field(default_factory=list, max_length=20)
     resolved_cross_references: list[ResolvedCrossReference] = Field(default_factory=list, max_length=50)
     unresolved_cross_references: list[str] = Field(default_factory=list, max_length=50)
+    # These fields describe only the bounded structural retrieval contract;
+    # they do not make a legal completeness or applicability judgment.
+    provision_block_complete: bool | None = None
+    provision_block_backend_cap_reached: bool = False
     coverage: CorpusCoverage
     corpus_version: str = Field(min_length=1, max_length=255)
     index_version: str = Field(min_length=1, max_length=255)

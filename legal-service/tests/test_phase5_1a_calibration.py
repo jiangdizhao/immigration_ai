@@ -282,10 +282,14 @@ def test_arm_b_tools_unchanged() -> None:
 
 
 def test_flat_rag_cap_and_deadlines_unchanged() -> None:
-    settings = _settings()
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+    )
     assert settings.agent_max_flat_rag_calls == 1
-    assert settings.default_turn_deadline_ms == 75000
-    assert settings.default_answer_research_target_ms == 45000
-    assert settings.default_terminal_synthesis_target_ms == 20000
-    assert settings.default_final_response_reserve_ms == 5000
+    assert settings.default_turn_deadline_ms == 300000
+    assert settings.default_answer_research_target_ms == 240000
+    assert settings.default_terminal_synthesis_target_ms == 45000
+    assert settings.default_final_response_reserve_ms == 15000
     assert settings.agent_retry_viability_threshold_ms == 8000

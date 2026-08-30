@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bot,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   Clock3,
   ExternalLink,
@@ -32,7 +31,11 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
-import { AssistantRichMarkdown } from "./assistant-rich-markdown";
+import {
+  AssistantRichMarkdown,
+  hasTerminalReferenceSection,
+} from "./assistant-rich-markdown";
+import { CollapsibleSourceList } from "./collapsible-source-list";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
   AnswerPreference,
@@ -150,7 +153,7 @@ function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
     return [];
   }
   if (message.compactSources?.length) {
-    return message.compactSources.slice(0, 4);
+    return message.compactSources;
   }
 
   const fallback = (message.citations ?? [])
@@ -164,7 +167,7 @@ function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
     })
     .filter(Boolean);
 
-  return Array.from(new Set(fallback)).slice(0, 4);
+  return Array.from(new Set(fallback));
 }
 
 function formatKey(value?: string | null) {
@@ -1249,25 +1252,13 @@ export function ImmigrationAIWorkspace({
 
                         {isAssistant &&
                         !message.isStreaming &&
+                        !hasTerminalReferenceSection(message.text) &&
                         compactSourcesForMessage(message).length ? (
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              Sources considered
-                            </p>
-                            <div className="space-y-1.5">
-                              {compactSourcesForMessage(message).map(
-                                (source) => (
-                                  <div
-                                    className="flex items-start gap-2 text-xs leading-5 text-slate-600"
-                                    key={source}
-                                  >
-                                    <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                                    <span>{source}</span>
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </div>
+                          <CollapsibleSourceList
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                            items={compactSourcesForMessage(message)}
+                            label="Sources considered"
+                          />
                         ) : null}
 
                         {isAssistant &&
@@ -1499,17 +1490,11 @@ export function ImmigrationAIWorkspace({
                   Latest authorities
                 </h4>
                 {latestSources.length ? (
-                  <div className="mt-4 space-y-2">
-                    {latestSources.map((source) => (
-                      <div
-                        className="flex items-start gap-2 rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-600"
-                        key={source}
-                      >
-                        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                        <span>{source}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <CollapsibleSourceList
+                    className="mt-4 rounded-2xl bg-slate-50 p-3"
+                    items={latestSources}
+                    label="Latest authorities"
+                  />
                 ) : (
                   <p className="mt-3 text-sm leading-6 text-slate-500">
                     Relevant source titles will appear after retrieval-backed

@@ -64,6 +64,7 @@ class ShadowTrace:
     model: str
     status: Literal["completed", "timeout", "error", "incomplete", "disabled", "blocked"]
     submission: AgentSubmissionV2 | None
+    applicability_protocol_enabled: bool = True
     candidate_state_patch: list[dict[str, Any]] | None = None
     research_status: str | None = None
     evidence_refs: list[str] = field(default_factory=list)
@@ -127,6 +128,7 @@ class ShadowTrace:
     submission_attempt_count: int = 0
     submission_accepted_count: int = 0
     submission_rejection_categories_by_attempt: list[list[str]] = field(default_factory=list)
+    submission_schema_diagnostics_by_attempt: list[dict[str, Any]] = field(default_factory=list)
     registered_evidence_count_before_submit: list[int] = field(default_factory=list)
     registered_native_web_evidence_count_before_submit: list[int] = field(default_factory=list)
     submitted_evidence_ref_count: list[int] = field(default_factory=list)
@@ -236,6 +238,11 @@ class ShadowAgentService:
                 model=settings.default_agent_model,
                 status="blocked",
                 submission=None,
+                applicability_protocol_enabled=(
+                    settings.default_applicability_protocol_enabled
+                    if mode == "default"
+                    else True
+                ),
                 errors=["Shadow execution blocked: upstream political gate not passed"],
                 created_at=str(time.perf_counter()),
                 completed_at=str(time.perf_counter()),
@@ -268,9 +275,7 @@ class ShadowAgentService:
                 settings.premium_answer_research_target_ms if is_premium
                 else settings.default_answer_research_target_ms
             )
-            execution_budget = ExecutionBudget(
-                max_tool_rounds=settings.agent_max_tool_rounds,
-                max_provider_calls=settings.agent_max_provider_calls,
+            budget_kwargs = dict(
                 max_retries=settings.agent_max_retries,
                 turn_deadline_ms=turn_deadline_ms,
                 answer_research_target_ms=answer_research_target_ms,
@@ -289,6 +294,14 @@ class ShadowAgentService:
                 ),
                 terminal_synthesis_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
             )
+            if not is_premium:
+                budget_kwargs.update(
+                    max_tool_rounds=settings.agent_max_tool_rounds,
+                    max_provider_calls=settings.agent_max_provider_calls,
+                    max_schedule2_navigation_calls=settings.agent_max_schedule2_navigation_calls,
+                    max_exact_legal_lookup_calls=settings.agent_max_exact_legal_lookup_calls,
+                )
+            execution_budget = ExecutionBudget(**budget_kwargs)
 
         # Create fresh registry for this shadow run
         registry = create_registry(request_id)
@@ -304,6 +317,11 @@ class ShadowAgentService:
             matter_state=deepcopy(matter_state) if matter_state is not None else {},
             execution_budget=execution_budget,
             experiment_arm=experiment_arm,
+            applicability_protocol_enabled=(
+                settings.default_applicability_protocol_enabled
+                if mode == "default"
+                else True
+            ),
         )
 
         # Create fresh DB session if factory provided
@@ -370,6 +388,11 @@ class ShadowAgentService:
                 model=settings.default_agent_model,
                 status="error",
                 submission=None,
+                applicability_protocol_enabled=(
+                    settings.default_applicability_protocol_enabled
+                    if mode == "default"
+                    else True
+                ),
                 errors=["Shadow run exception"],
                 evidence_refs=evidence_refs,
                 created_at=str(created_at),
@@ -386,6 +409,7 @@ class ShadowAgentService:
             model=result.model,
             status=result.status,
             submission=result.submission,
+            applicability_protocol_enabled=result.metrics.applicability_protocol_enabled,
             candidate_state_patch=(
                 result.submission.state_patch if result.submission else None
             ),
@@ -461,6 +485,9 @@ class ShadowAgentService:
             submission_accepted_count=result.metrics.submission_accepted_count,
             submission_rejection_categories_by_attempt=(
                 result.metrics.submission_rejection_categories_by_attempt
+            ),
+            submission_schema_diagnostics_by_attempt=(
+                result.metrics.submission_schema_diagnostics_by_attempt
             ),
             registered_evidence_count_before_submit=(
                 result.metrics.registered_evidence_count_before_submit

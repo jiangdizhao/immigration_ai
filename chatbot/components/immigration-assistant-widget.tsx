@@ -21,7 +21,11 @@ import {
   type PoliticalGateResult,
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
-import { AssistantRichMarkdown } from "./assistant-rich-markdown";
+import {
+  AssistantRichMarkdown,
+  hasTerminalReferenceSection,
+} from "./assistant-rich-markdown";
+import { CollapsibleSourceList } from "./collapsible-source-list";
 import { GuidedIntakeCard } from "./guided-intake-card";
 import type {
   IntakeFacts,
@@ -117,7 +121,7 @@ function compactSourcesForMessage(
   message: Extract<WidgetMessage, { role: "assistant" }>
 ) {
   if (message.compactSources?.length) {
-    return message.compactSources.slice(0, 4);
+    return message.compactSources;
   }
 
   const fallback = (message.citations ?? [])
@@ -131,7 +135,7 @@ function compactSourcesForMessage(
     })
     .filter(Boolean);
 
-  return Array.from(new Set(fallback)).slice(0, 4);
+  return Array.from(new Set(fallback));
 }
 
 function stableTextKey(value: string) {
@@ -1038,17 +1042,14 @@ export function ImmigrationAssistantWidget() {
                           </div>
                         ) : null}
 
-                        {assistantReady && visibleSources.length ? (
-                          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              {messageZh ? "参考来源" : "Sources"}
-                            </p>
-                            <ul className="space-y-1">
-                              {visibleSources.map((source) => (
-                                <li key={source}>{source}</li>
-                              ))}
-                            </ul>
-                          </div>
+                        {assistantReady &&
+                        !hasTerminalReferenceSection(message.text) &&
+                        visibleSources.length ? (
+                          <CollapsibleSourceList
+                            className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
+                            items={visibleSources}
+                            label={messageZh ? "参考来源" : "Sources"}
+                          />
                         ) : null}
 
                         {SHOW_WIDGET_DEBUG &&

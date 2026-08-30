@@ -46,16 +46,37 @@ def _schedule_shadow_run(
             turn_deadline_ms=turn_deadline_ms,
         )
 
-        budget = ExecutionBudget(
-            max_tool_rounds=get_settings().agent_max_tool_rounds,
-            max_provider_calls=get_settings().agent_max_provider_calls,
-            max_retries=get_settings().agent_max_retries,
+        settings = get_settings()
+        budget_kwargs = dict(
+            max_retries=settings.agent_max_retries,
             turn_deadline_ms=turn_deadline_ms,
             answer_research_target_ms=answer_research_target_ms,
             checker_target_ms=checker_target_ms,
-            max_flat_rag_calls=get_settings().agent_max_flat_rag_calls,
-            retry_viability_threshold_ms=get_settings().agent_retry_viability_threshold_ms,
+            max_flat_rag_calls=settings.agent_max_flat_rag_calls,
+            retry_viability_threshold_ms=settings.agent_retry_viability_threshold_ms,
+            terminal_synthesis_target_ms=(
+                getattr(settings, "default_terminal_synthesis_target_ms", 15000)
+                if mode == "default"
+                else getattr(settings, "terminal_synthesis_target_ms", 15000)
+            ),
+            final_response_reserve_ms=(
+                getattr(settings, "default_final_response_reserve_ms", 3000)
+                if mode == "default"
+                else getattr(settings, "final_response_reserve_ms", 3000)
+            ),
         )
+        if mode == "default":
+            budget_kwargs.update(
+                max_tool_rounds=settings.agent_max_tool_rounds,
+                max_provider_calls=settings.agent_max_provider_calls,
+                max_schedule2_navigation_calls=getattr(
+                    settings, "agent_max_schedule2_navigation_calls", 2
+                ),
+                max_exact_legal_lookup_calls=getattr(
+                    settings, "agent_max_exact_legal_lookup_calls", 2
+                ),
+            )
+        budget = ExecutionBudget(**budget_kwargs)
 
         def _run_in_thread() -> None:
             """Run the async shadow task in a dedicated event loop."""

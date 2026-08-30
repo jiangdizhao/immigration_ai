@@ -189,6 +189,31 @@ class Phase6MaterialClaim(StrictCheckerContract):
         return self
 
 
+class Phase6ApplicabilityResolution(StrictCheckerContract):
+    """Structured applicable-branch evidence links supplied to the checker."""
+
+    claim_id: str = Field(min_length=1, max_length=100)
+    selected_branch_evidence_ref: str = Field(
+        pattern=r"^(exact|web):[A-Za-z0-9._~-]+$", max_length=255
+    )
+    resolution_kind: Literal["specific_branch", "residual_branch"]
+    status: Literal["resolved", "unresolved"]
+    competing_branch_evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    applicability_basis_evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_reference_lists(self):
+        if len(set(self.competing_branch_evidence_refs)) != len(self.competing_branch_evidence_refs):
+            raise ValueError("competing_branch_evidence_refs must not contain duplicates")
+        if len(set(self.applicability_basis_evidence_refs)) != len(self.applicability_basis_evidence_refs):
+            raise ValueError("applicability_basis_evidence_refs must not contain duplicates")
+        if self.selected_branch_evidence_ref in self.competing_branch_evidence_refs:
+            raise ValueError("selected_branch_evidence_ref must not be a competing branch ref")
+        if self.selected_branch_evidence_ref in self.applicability_basis_evidence_refs:
+            raise ValueError("selected_branch_evidence_ref must not be an applicability basis ref")
+        return self
+
+
 class Phase6CheckerInput(StrictCheckerContract):
     schema_version: Literal["phase6_checker.input.v1"]
     request_id: str = Field(min_length=1, max_length=255)
@@ -199,6 +224,9 @@ class Phase6CheckerInput(StrictCheckerContract):
     accepted_draft: Phase6AcceptedDraft
     material_claims: list[Phase6MaterialClaim] = Field(min_length=1, max_length=100)
     evidence: list[Phase6CheckerEvidence] = Field(max_length=60)
+    applicability_resolutions: list[Phase6ApplicabilityResolution] = Field(
+        default_factory=list, max_length=100
+    )
 
     @model_validator(mode="after")
     def validate_claim_spans_and_dependencies(self):
@@ -210,6 +238,18 @@ class Phase6CheckerInput(StrictCheckerContract):
         if len(set(evidence_refs)) != len(evidence_refs):
             raise ValueError("checker evidence refs must be unique")
         evidence_ref_set = set(evidence_refs)
+        for resolution in self.applicability_resolutions:
+            if resolution.claim_id not in claim_id_set:
+                raise ValueError(
+                    f"applicability resolution references unknown claim {resolution.claim_id}"
+                )
+            resolution_refs = {
+                resolution.selected_branch_evidence_ref,
+                *resolution.competing_branch_evidence_refs,
+                *resolution.applicability_basis_evidence_refs,
+            }
+            if not resolution_refs <= evidence_ref_set:
+                raise ValueError("applicability resolution has evidence outside the packet")
         for claim in self.material_claims:
             if claim.draft_start >= len(self.accepted_draft.draft_markdown):
                 raise ValueError(f"claim {claim.claim_id} starts beyond draft_markdown")

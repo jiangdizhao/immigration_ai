@@ -48,6 +48,7 @@ class TimedEvents:
 
 def test_default_arm_n_exposes_optional_research_capabilities_and_required_submit():
     settings = Settings(
+        _env_file=None,
         DATABASE_URL="postgresql://test",
         OPENAI_API_KEY="test",
         FLAT_RAG_TOOL_ENABLED=True,
@@ -89,13 +90,14 @@ def test_luna_prompt_does_not_require_local_and_web_together():
 
 def test_default_budget_defaults_are_calibrated_without_changing_premium_controls():
     settings = Settings(
+        _env_file=None,
         DATABASE_URL="postgresql://test",
         OPENAI_API_KEY="test",
     )
-    assert settings.default_turn_deadline_ms == 75000
-    assert settings.default_answer_research_target_ms == 45000
-    assert settings.default_terminal_synthesis_target_ms == 20000
-    assert settings.default_final_response_reserve_ms == 5000
+    assert settings.default_turn_deadline_ms == 300000
+    assert settings.default_answer_research_target_ms == 240000
+    assert settings.default_terminal_synthesis_target_ms == 45000
+    assert settings.default_final_response_reserve_ms == 15000
     assert settings.premium_turn_deadline_ms == 90000
     assert settings.premium_answer_research_target_ms == 40000
     assert settings.terminal_synthesis_target_ms == 15000

@@ -203,8 +203,13 @@ def test_navigation_is_structural_only_and_is_capped():
     assert result.result.data["evidence_refs"] == []
     assert "unresolved" in payload and "ambiguous" in payload
 
-    denied = executor.execute_tool(
+    second = executor.execute_tool(
         _call("schedule2_navigation", {"requests": [{"operation": "provision_context", "subclass": None, "provision_ref": "485.211", "max_targets": 20}]}, "call-2"),
+        context,
+    )
+    assert second.result.status == "ok"
+    denied = executor.execute_tool(
+        _call("schedule2_navigation", {"requests": [{"operation": "provision_context", "subclass": None, "provision_ref": "485.211", "max_targets": 20}]}, "call-3"),
         context,
     )
     assert denied.result.status == "partial"
@@ -233,7 +238,9 @@ def test_exact_lookup_batch_registers_genuine_refs_and_caps():
     assert all(context.registry.is_registered(ref) for ref in refs)
     assert len(exact.calls) == 8
 
-    denied = executor.execute_tool(_call("exact_legal_lookup", args, "call-2"), context)
+    second = executor.execute_tool(_call("exact_legal_lookup", args, "call-2"), context)
+    assert second.result.status == "ok"
+    denied = executor.execute_tool(_call("exact_legal_lookup", args, "call-3"), context)
     assert denied.result.status == "partial"
     assert denied.result.error.code == "EXACT_LEGAL_LOOKUP_BUDGET_EXHAUSTED"
 
@@ -296,21 +303,30 @@ def test_all_empty_exact_lookup_is_bounded_and_deterministic():
     assert result.result.status == "partial"
     assert result.result.error.code == "EXACT_NO_USABLE_LOCATOR"
     assert result.result.data["lookups"] == []
-    assert context.exact_legal_lookup_call_count == 1
+    assert context.exact_legal_lookup_call_count == 0
     assert context.exact_legal_lookup_denied_call_count == 0
 
 
-def test_second_exact_call_is_removed_from_next_provider_tool_set():
+def test_exact_tools_remain_visible_until_execution_budget_is_reached():
     from app.services.agent_runtime_service import AgentRuntimeService
 
     tools = [{"name": "exact_legal_lookup"}, {"name": "flat_rag_search"}, {"name": "submit_answer"}]
-    remaining = AgentRuntimeService._provider_tools_for_round(
+    after_one = AgentRuntimeService._provider_tools_for_round(
         tools,
         flat_rag_executed_count=0,
         max_flat_rag_calls=1,
-        exact_legal_lookup_used=True,
+        exact_legal_lookup_call_count=1,
+        max_exact_legal_lookup_calls=2,
     )
-    assert [tool["name"] for tool in remaining] == ["flat_rag_search", "submit_answer"]
+    assert [tool["name"] for tool in after_one] == ["exact_legal_lookup", "flat_rag_search", "submit_answer"]
+    after_two = AgentRuntimeService._provider_tools_for_round(
+        tools,
+        flat_rag_executed_count=0,
+        max_flat_rag_calls=1,
+        exact_legal_lookup_call_count=2,
+        max_exact_legal_lookup_calls=2,
+    )
+    assert [tool["name"] for tool in after_two] == ["flat_rag_search", "submit_answer"]
 
 
 def test_arm_n_terminal_normalization_allows_nested_claim_spans_and_deduplicates_lists():
