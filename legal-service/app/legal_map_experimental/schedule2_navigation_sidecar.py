@@ -25,7 +25,7 @@ import hashlib
 import json
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -55,6 +55,11 @@ ALLOWED_RELATIONS = frozenset(
         "PREVIOUS_CLAUSE",
         "REFERENCES_SCHEDULE",
         "REFERENCES_SCHEDULE_PROVISION",
+        "REFERENCES_SCHEDULE2_PROVISION",
+        "REFERENCES_SUBCLASS",
+        "REFERENCES_VISA_CLASS",
+        "REFERENCES_SPECIAL_RETURN_CRITERION",
+        "REFERENCES_INSTRUMENT_DEPENDENCY",
         "REFERENCES_REGULATION",
         "REFERENCES_ACT",
         "REFERENCES_INSTRUMENT",
@@ -105,6 +110,14 @@ SUBCLASS_RE = re.compile(
     r"\s*[—–-]\s*(?P<title>[^\n]+)\s*$",
     re.IGNORECASE,
 )
+SUBCLASS_HEADING_RE = re.compile(
+    r"^\s*Subclass\s+[0-9]{3,4}"
+    r"(?:(?:\s+[—–-]?\s*|[—–-]\s*)[^\n]*)?\s*$",
+    re.IGNORECASE,
+)
+SUBCLASS_TRAILING_HEADING_RE = re.compile(
+    r"^\s*(?:[A-Z][A-Za-z-]*\s+)+Subclass\s+[0-9]{3,4}\s*$"
+)
 # Only a standalone line is structural.  In particular, no parenthesised
 # suffix is accepted: prose ``103.313(2)`` is an external/internal reference,
 # not a new Schedule-2 provision.
@@ -152,6 +165,22 @@ COMPOUND_SCHEDULE_LOCATOR_RE = re.compile(
     rf"\b(?P<kind>{COMPOUND_LOCATOR_WORDS})\s+"
     rf"(?P<provision>{LEGAL_LOCATOR})\s+of\s+"
     rf"Schedule\s+(?P<schedule>\d{{1,2}}[A-Z]?){LEGAL_LOCATOR_TERMINATOR}",
+    re.IGNORECASE,
+)
+SUBCLASS_REFERENCE_RE = re.compile(
+    r"\bSubclass\s+(?P<provision>[0-9]{3,4})(?![0-9A-Za-z])",
+    re.IGNORECASE,
+)
+VISA_CLASS_RE = re.compile(r"\bClass\s+(?P<provision>[A-Z]{2})(?![A-Z0-9])")
+SPECIAL_RETURN_CRITERION_RE = re.compile(
+    r"\bspecial\s+return\s+(?:criterion|criteria)\s+"
+    r"(?P<provisions>5\d{3}(?:(?:\s*,\s*|\s+(?:and|or)\s+)5\d{3})*)\b",
+    re.IGNORECASE,
+)
+UNNAMED_INSTRUMENT_RE = re.compile(
+    r"\blegislative\s+instrument\b"
+    r"(?:\s+made\s+for\s+(?:this|the)\s+"
+    r"(?:paragraph|subparagraph|clause|subclause|item))?",
     re.IGNORECASE,
 )
 SCHEDULE_CRITERION_RE = re.compile(
@@ -221,6 +250,10 @@ SUBCLAUSE_RE = re.compile(
 
 _REFERENCE_PRIORITY = {
     "schedule_provision": 100,
+    "instrument": 80,
+    "subclass": 80,
+    "visa_class": 80,
+    "special_return_criterion": 80,
     "schedule3_criterion": 80,
     "schedule4_pic": 80,
     "schedule8_condition": 80,
@@ -234,7 +267,7 @@ _REFERENCE_PRIORITY = {
     "item": 60,
     "paragraph": 60,
     "clause": 60,
-    "instrument": 60,
+    "instrument_dependency": 40,
     "act": 60,
     "schedule": 10,
 }
@@ -708,6 +741,47 @@ def _extract_references(text: str) -> list[ReferenceOccurrence]:
                 target_document=f"Schedule {schedule}",
             )
         )
+    for match in SUBCLASS_REFERENCE_RE.finditer(text):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(text)
+        if SUBCLASS_HEADING_RE.fullmatch(text[line_start:line_end].strip()):
+            # Standalone owner/page labels are structural metadata, not
+            # operative references to another subclass.
+            continue
+        if SUBCLASS_TRAILING_HEADING_RE.fullmatch(text[line_start:line_end].strip()):
+            continue
+        found.append(
+            _ref(
+                "subclass",
+                match.group("provision"),
+                match.group(0),
+                match,
+                target_document="Schedule 2",
+            )
+        )
+    for match in VISA_CLASS_RE.finditer(text):
+        found.append(
+            _ref(
+                "visa_class",
+                match.group("provision"),
+                match.group(0),
+                match,
+                target_document="Migration Regulations 1994 — Schedule 1",
+            )
+        )
+    for match in SPECIAL_RETURN_CRITERION_RE.finditer(text):
+        for provision in re.findall(r"5\d{3}", match.group("provisions")):
+            found.append(
+                _ref(
+                    "special_return_criterion",
+                    provision,
+                    match.group(0),
+                    match,
+                    target_document="Schedule 5",
+                )
+            )
     for match in SCHEDULE_CRITERION_RE.finditer(text):
         schedule = match.group("schedule").upper()
         if schedule == "3":
@@ -725,6 +799,16 @@ def _extract_references(text: str) -> list[ReferenceOccurrence]:
         found.append(_ref("regulation", match.group("provision"), match.group(0), match, target_document="Migration Regulations 1994"))
     for match in INSTRUMENT_RE.finditer(text):
         found.append(_ref("instrument", match.group("provision"), match.group(0), match, target_document="Legislative Instrument"))
+    for match in UNNAMED_INSTRUMENT_RE.finditer(text):
+        found.append(
+            _ref(
+                "instrument_dependency",
+                "LEGISLATIVE_INSTRUMENT",
+                match.group(0),
+                match,
+                target_document="Legislative Instrument",
+            )
+        )
     for match in ACT_RE.finditer(text):
         found.append(_ref("act", "MIGRATION_ACT_1958", match.group(0), match, target_document="Migration Act 1958"))
     for match in SECTION_RE.finditer(text):
@@ -787,9 +871,18 @@ def _extract_references(text: str) -> list[ReferenceOccurrence]:
         if not overlaps:
             selected.append(item)
 
-    dedup: dict[tuple[str, str, str | None, bool], ReferenceOccurrence] = {}
+    dedup: dict[tuple[str, str, str | None, bool, int | None], ReferenceOccurrence] = {}
     for item in sorted(selected, key=lambda value: (value.body_offset, value.locator_type, value.provision_ref, value.surface_form)):
-        dedup.setdefault((item.locator_type, item.provision_ref, item.target_document, item.ambiguous), item)
+        dedup.setdefault(
+            (
+                item.locator_type,
+                item.provision_ref,
+                item.target_document,
+                item.ambiguous,
+                item.body_offset if item.locator_type == "instrument_dependency" else None,
+            ),
+            item,
+        )
     return list(dedup.values())
 
 
@@ -855,16 +948,41 @@ def _external_id(
 ) -> str:
     safe_type = re.sub(r"[^A-Z0-9_-]+", "-", locator_type.upper())
     safe_ref = re.sub(r"[^A-Z0-9_.()-]+", "-", provision_ref.upper())
+    if locator_type == "instrument_dependency":
+        return f"s2x:instrument-dependency:{safe_ref}"
     if locator_type == "schedule_provision" and target_document:
         safe_target = re.sub(r"[^A-Z0-9_-]+", "-", target_document.upper())
         return f"s2x:external:{safe_type}:{safe_target}:{safe_ref}"
     return f"s2x:external:{safe_type}:{safe_ref}"
 
 
+def _schedule2_base_ref(provision_ref: str) -> str:
+    return re.sub(r"(?:\([^)]*\))+$", "", provision_ref.upper())
+
+
+def _schedule2_locator_id(provision_ref: str) -> str:
+    safe_ref = re.sub(r"[^A-Z0-9_.()-]+", "-", provision_ref.upper())
+    return f"s2x:schedule2-locator:{safe_ref}"
+
+
+def _instrument_dependency_ref(
+    source_ref: str,
+    occurrence: ProvisionOccurrence,
+    reference: ReferenceOccurrence,
+) -> str:
+    # The source provision plus occurrence order and body offset scope an
+    # unnamed dependency without inventing an instrument identifier.
+    return f"{source_ref}@{occurrence.source_order}:{reference.body_offset}"
+
+
 def _relation(locator_type: str) -> str:
     return {
         "schedule": "REFERENCES_SCHEDULE",
         "schedule_provision": "REFERENCES_SCHEDULE_PROVISION",
+        "subclass": "REFERENCES_SUBCLASS",
+        "visa_class": "REFERENCES_VISA_CLASS",
+        "special_return_criterion": "REFERENCES_SPECIAL_RETURN_CRITERION",
+        "instrument_dependency": "REFERENCES_INSTRUMENT_DEPENDENCY",
         "regulation": "REFERENCES_REGULATION",
         "subregulation": "REFERENCES_REGULATION",
         "section": "REFERENCES_ACT",
@@ -993,11 +1111,77 @@ def build_sidecar(
             edges[next_key] = GraphEdge(id=_edge_id(*next_key), source=next_key[0], relation=next_key[1], target=next_key[2])
             edges[prev_key] = GraphEdge(id=_edge_id(*prev_key), source=prev_key[0], relation=prev_key[1], target=prev_key[2])
 
+    direct_refs: dict[tuple[str, str, str], list[tuple[str, ReferenceOccurrence, ProvisionOccurrence]]] = defaultdict(list)
+    schedule2_locator_refs: dict[str, list[tuple[str, ReferenceOccurrence, ProvisionOccurrence]]] = defaultdict(list)
     external_refs: dict[tuple[str, str, str | None, bool], list[tuple[str, ReferenceOccurrence, ProvisionOccurrence]]] = defaultdict(list)
     for ref, ref_items in report.references.items():
         for occurrence in occurrences_by_ref.get(ref, []):
             for item in _extract_references(occurrence.body):
-                external_refs[(item.locator_type, item.provision_ref, item.target_document, item.ambiguous)].append((ref, item, occurrence))
+                source_id = f"s2x:provision:{ref}"
+                if item.locator_type in {"clause", "subclause"}:
+                    base_ref = _schedule2_base_ref(item.provision_ref)
+                    if base_ref in occurrences_by_ref:
+                        if item.provision_ref == base_ref:
+                            target_id = f"s2x:provision:{base_ref}"
+                        else:
+                            target_id = _schedule2_locator_id(item.provision_ref)
+                            schedule2_locator_refs[target_id].append((ref, item, occurrence))
+                        direct_refs[(source_id, "REFERENCES_SCHEDULE2_PROVISION", target_id)].append(
+                            (ref, item, occurrence)
+                        )
+                        continue
+                if item.locator_type == "subclass" and f"s2x:subclass:{item.provision_ref}" in nodes:
+                    direct_refs[(source_id, "REFERENCES_SUBCLASS", f"s2x:subclass:{item.provision_ref}")].append(
+                        (ref, item, occurrence)
+                    )
+                    continue
+                if item.locator_type == "instrument_dependency":
+                    item = replace(
+                        item,
+                        provision_ref=_instrument_dependency_ref(ref, occurrence, item),
+                    )
+                external_refs[(item.locator_type, item.provision_ref, item.target_document, item.ambiguous)].append(
+                    (ref, item, occurrence)
+                )
+
+    for target_id in sorted(schedule2_locator_refs):
+        items = schedule2_locator_refs[target_id]
+        ordered_items = sorted(
+            items,
+            key=lambda value: (value[0], value[2].source_file, value[2].page_number, value[1].body_offset),
+        )
+        first = ordered_items[0][1]
+        provenance = [_reference_provenance(item[2], item[1]) for item in ordered_items]
+        nodes[target_id] = GraphNode(
+            id=target_id,
+            node_type="schedule2_locator",
+            label=first.surface_form,
+            provision_ref=first.provision_ref,
+            locator_type="schedule2_provision",
+            locator=first.surface_form,
+            target_document="Schedule 2",
+            occurrence_count=len(ordered_items),
+            occurrences=provenance,
+            provenance=provenance,
+        )
+
+    for edge_key in sorted(direct_refs):
+        source_items = direct_refs[edge_key]
+        provenance = [
+            _reference_provenance(item[2], item[1])
+            for item in sorted(
+                source_items,
+                key=lambda value: (value[2].source_file, value[2].page_number, value[1].body_offset),
+            )
+        ]
+        edges[edge_key] = GraphEdge(
+            id=_edge_id(*edge_key),
+            source=edge_key[0],
+            relation=edge_key[1],
+            target=edge_key[2],
+            surface_form=sorted(item[1].surface_form for item in source_items)[0],
+            occurrences=provenance,
+        )
 
     for key in sorted(external_refs, key=lambda value: (value[0], value[1], value[2] or "", value[3])):
         locator_type, provision_ref, target_document, ambiguous = key
@@ -1151,6 +1335,13 @@ def validate_sidecar(sidecar: NavigationSidecar) -> list[str]:
                 errors.append(f"external locator missing resolution metadata: {node.id}")
             if node.occurrence_count != len(node.occurrences):
                 errors.append(f"external occurrence metadata mismatch: {node.id}")
+        if node.node_type == "schedule2_locator":
+            if node.locator_type != "schedule2_provision" or not node.provision_ref:
+                errors.append(f"Schedule-2 locator missing identity: {node.id}")
+            if node.target_document != "Schedule 2":
+                errors.append(f"Schedule-2 locator has invalid target document: {node.id}")
+            if node.occurrence_count != len(node.occurrences):
+                errors.append(f"Schedule-2 locator occurrence metadata mismatch: {node.id}")
     expected_counts = {
         "node_count": len(sidecar.nodes),
         "edge_count": len(sidecar.edges),
