@@ -1,19 +1,19 @@
 {
   "accepted_structural_provision_count": 2461,
   "ambiguous_candidate_count": 0,
-  "ambiguous_external_target_count": 96,
+  "ambiguous_external_target_count": 141,
   "canonical_provision_count": 2461,
   "compilation": "F2026C00667",
   "conflicting_candidate_count": 0,
   "conflicting_ownership_count": 0,
   "document_family": "Migration Regulations 1994",
   "duplicate_occurrence_count": 0,
-  "edge_count": 10365,
+  "edge_count": 12121,
   "explicit_clause_heading_count": 576,
-  "external_locator_count": 287,
+  "external_locator_count": 565,
   "generated_artifact_sha256": {
-    "edges": "7cd373c3b84ae85703aa5710316e04120ead122eb85e385fcba4226247f86b3c",
-    "nodes": "bf3d15c8fd03773dbbf6812ae844b976f1a5ebd80aad6ee3045bbfda5a8fd50b"
+    "edges": "22049ddde6108aac31f39d712994cfc4f20f48f203f0850d904bed73d95d4c67",
+    "nodes": "b57d816a42bb83546ded0e701fa9e7d1fdbc8e3d575cfc516ff741cf463f5082"
   },
   "graph_kind": "experimental_schedule2_legal_navigation_sidecar",
   "locator_index_sha256": "48011996cf260aea63d8d965ba6f750010ae0794472522903f0a4678f3a27beb",
@@ -25,14 +25,15 @@
     "record_count": 549
   },
   "locator_resolution_counts": {
-    "ambiguous": 96,
-    "resolved_local": 171,
-    "unresolved_external": 20
+    "ambiguous": 141,
+    "resolved_local": 198,
+    "unresolved_external": 226
   },
-  "node_count": 2833,
+  "node_count": 3255,
   "node_type_counts": {
-    "external_locator": 287,
+    "external_locator": 565,
     "provision": 2461,
+    "schedule2_locator": 144,
     "subclass": 85
   },
   "positive_only_semantics": true,
@@ -42,17 +43,23 @@
     "CONTAINS": 2461,
     "NEXT_CLAUSE": 2376,
     "PREVIOUS_CLAUSE": 2376,
-    "REFERENCES": 110,
-    "REFERENCES_ACT": 129,
+    "REFERENCES": 144,
+    "REFERENCES_ACT": 171,
     "REFERENCES_CONDITION": 636,
+    "REFERENCES_INSTRUMENT_DEPENDENCY": 62,
     "REFERENCES_PIC": 1973,
-    "REFERENCES_REGULATION": 198,
-    "REFERENCES_SCHEDULE": 65,
-    "REFERENCES_SCHEDULE3_CRITERION": 41
+    "REFERENCES_REGULATION": 254,
+    "REFERENCES_SCHEDULE": 7,
+    "REFERENCES_SCHEDULE2_PROVISION": 414,
+    "REFERENCES_SCHEDULE3_CRITERION": 41,
+    "REFERENCES_SCHEDULE_PROVISION": 46,
+    "REFERENCES_SPECIAL_RETURN_CRITERION": 309,
+    "REFERENCES_SUBCLASS": 628,
+    "REFERENCES_VISA_CLASS": 223
   },
   "schedule2_pages_processed": 576,
   "schema_version": 1,
-  "serving_path_integrated": false,
+  "serving_path_integrated": true,
   "source_documents_processed": 2,
   "source_files": [
     {
@@ -81,5 +88,5 @@
   "source_representation": "tracked_raw_json_page_sections",
   "structural_anomaly_count": 0,
   "subclass_count": 85,
-  "unresolved_external_target_count": 20
+  "unresolved_external_target_count": 226
 }

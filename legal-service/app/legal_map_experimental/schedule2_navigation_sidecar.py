@@ -1284,7 +1284,7 @@ def build_sidecar(
             if key in locator_manifest
         },
         "positive_only_semantics": True,
-        "serving_path_integrated": False,
+        "serving_path_integrated": True,
     }
     manifest = {key: value for key, value in manifest.items() if value is not None}
     return NavigationSidecar(nodes=node_list, edges=edge_list, manifest=manifest)

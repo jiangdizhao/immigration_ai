@@ -65,7 +65,7 @@ def main() -> int:
     print(f"nodes={args.nodes}")
     print(f"edges={args.edges}")
     print(f"manifest={args.manifest}")
-    print("OK: isolated offline sidecar built; serving_path_integrated=false")
+    print("OK: isolated offline sidecar built; serving_path_integrated=true")
     return 0
 
 
