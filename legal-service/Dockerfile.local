@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY legal-service/app ./app
 COPY legal-service/scripts ./scripts
+# Exact legal lookup requires the tracked canonical corpus coverage report at runtime.
+COPY legal-service/artifacts/canonical_corpus_coverage_report.json ./artifacts/canonical_corpus_coverage_report.json
 # Generated from the reviewed ignored YAML at build time; the FastAPI matcher
 # consumes this exact tracked asset and never needs the policy source at runtime.
 COPY chatbot/lib/political-gate/policy.runtime.json ./political-policy/policy.runtime.json
