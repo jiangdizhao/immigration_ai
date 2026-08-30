@@ -844,7 +844,7 @@ class ToolExecutorService:
 
             data = Schedule2NavigationService(context.schedule2_navigation_map).query(request)
             context.schedule2_navigation_target_count += sum(
-                len(item.get("edges", [])) + len(item.get("targets", []))
+                len(item.get("edges", [])) + len(item.get("targets", [])) + len(item.get("matches", []))
                 for item in data.get("results", [])
                 if isinstance(item, dict)
             )

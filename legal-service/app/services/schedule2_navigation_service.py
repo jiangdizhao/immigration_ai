@@ -44,31 +44,72 @@ class Schedule2NavigationService:
                 max_edges=request.max_targets,
             )
             return self._edge_result(request, raw)
-        raw = self._map.follow_references(
-            request.provision_ref or "",
-            max_targets=request.max_targets,
-        )
-        targets = []
-        for item in raw.get("targets", []):
-            if not isinstance(item, dict) or not isinstance(item.get("node"), dict):
-                continue
-            relation = str(item.get("relation", ""))
-            if relation not in ALLOWED_RELATIONS:
-                continue
-            target = item["node"]
-            targets.append({
-                "source": self._source_summary(request.provision_ref or ""),
-                "relation": relation,
-                "target": self._node_summary(target),
-                "surface_form": item.get("surface_form"),
-            })
-        return {
-            "operation": request.operation,
-            "provision_ref": str(raw.get("provision_ref", request.provision_ref or "")),
-            "found": bool(raw.get("found")),
-            "targets": targets,
-            "navigation_only": True,
-        }
+        if request.operation == "follow_references":
+            raw = self._map.follow_references(
+                request.provision_ref or "",
+                max_targets=request.max_targets,
+            )
+            targets = []
+            for item in raw.get("targets", []):
+                if not isinstance(item, dict) or not isinstance(item.get("node"), dict):
+                    continue
+                relation = str(item.get("relation", ""))
+                if relation not in ALLOWED_RELATIONS:
+                    continue
+                target = item["node"]
+                targets.append({
+                    "source": self._source_summary(request.provision_ref or ""),
+                    "relation": relation,
+                    "target": self._node_summary(target),
+                    "surface_form": self._display_text(item.get("surface_form")),
+                })
+            return {
+                "operation": request.operation,
+                "provision_ref": str(raw.get("provision_ref", request.provision_ref or "")),
+                "found": bool(raw.get("found")),
+                "targets": targets,
+                "navigation_only": True,
+            }
+        if request.operation == "find_mentions":
+            raw = self._map.find_mentions(
+                request.locator_type or "",
+                request.locator or "",
+                target_document=request.target_document,
+                max_mentions=request.max_targets,
+            )
+            matches = []
+            for item in raw.get("matches", []):
+                if not isinstance(item, dict) or not isinstance(item.get("node"), dict):
+                    continue
+                mentions = []
+                for mention in item.get("mentions", []):
+                    if not isinstance(mention, dict) or not isinstance(mention.get("source"), dict):
+                        continue
+                    relation = str(mention.get("relation", ""))
+                    if relation not in ALLOWED_RELATIONS:
+                        continue
+                    mentions.append({
+                        "source": self._node_summary(mention["source"]),
+                        "relation": relation,
+                        "surface_form": self._display_text(mention.get("surface_form")),
+                    })
+                if mentions:
+                    matches.append({
+                        "target": self._node_summary(item["node"]),
+                        "mentions": mentions,
+                    })
+            return {
+                "operation": request.operation,
+                "query": {
+                    "locator_type": request.locator_type,
+                    "locator": self._display_text(request.locator),
+                    "target_document": request.target_document,
+                },
+                "found": bool(raw.get("found")),
+                "matches": matches,
+                "navigation_only": True,
+            }
+        raise ValueError(f"unsupported Schedule-2 navigation operation: {request.operation}")
 
     def _edge_result(self, request: Schedule2NavigationRequest, raw: dict[str, Any]) -> dict[str, Any]:
         nodes = {
@@ -89,7 +130,7 @@ class Schedule2NavigationService:
                 "source": self._node_summary(source),
                 "relation": relation,
                 "target": self._node_summary(target),
-                "surface_form": edge.get("surface_form"),
+                "surface_form": self._display_text(edge.get("surface_form")),
             })
         edges.sort(key=lambda item: (
             str(item["source"].get("locator", "")),
@@ -117,14 +158,44 @@ class Schedule2NavigationService:
         }
 
     @staticmethod
-    def _node_summary(node: dict[str, Any]) -> dict[str, Any]:
+    def _display_text(value: object) -> str | None:
+        if value is None:
+            return None
+        return " ".join(str(value).split()).strip()
+
+    @classmethod
+    def _node_summary(cls, node: dict[str, Any]) -> dict[str, Any]:
         # Do not pass through occurrences/provenance: those are graph
         # metadata, not source evidence and are unnecessary for navigation.
         keys = (
             "id", "node_type", "label", "subclass", "provision_ref", "locator_type",
-            "locator", "target_document", "local_available", "resolution_status", "ambiguous",
+            "locator", "target_document", "ambiguous", "title",
         )
-        return {key: node[key] for key in keys if key in node}
+        summary = {}
+        for key in keys:
+            if key not in node:
+                continue
+            value = node[key]
+            if key in {"label", "locator"}:
+                value = cls._display_text(value)
+            summary[key] = value
+        if "local_available" in node:
+            summary["locator_index_available"] = node["local_available"]
+        if "resolution_status" in node:
+            status = str(node["resolution_status"])
+            if node.get("locator_type") == "instrument_dependency" and status in {
+                "unresolved_external", "unresolved", "unresolved_dependency",
+            }:
+                status = "unresolved_dependency"
+            else:
+                status = {
+                    "resolved_local": "resolved_in_locator_index",
+                    "unresolved_external": "unresolved_in_locator_index",
+                    "unresolved": "unresolved_in_locator_index",
+                    "ambiguous": "ambiguous",
+                }.get(status, status)
+            summary["locator_resolution_status"] = status
+        return summary
 
 
 def create_schedule2_navigation_service(

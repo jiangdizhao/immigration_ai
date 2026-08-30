@@ -135,17 +135,25 @@ class ExactLegalLookupBatchRequest(StrictContract):
 class Schedule2NavigationRequest(StrictContract):
     """One read-only structural query against the Schedule-2 sidecar."""
 
-    operation: Literal["subclass_map", "provision_context", "follow_references"]
+    operation: Literal["subclass_map", "provision_context", "follow_references", "find_mentions"]
     subclass: str | None = Field(default=None, max_length=20)
     provision_ref: str | None = Field(default=None, max_length=255)
+    locator_type: str | None = Field(default=None, max_length=100)
+    locator: str | None = Field(default=None, max_length=2000)
+    target_document: str | None = Field(default=None, max_length=500)
     max_targets: int = Field(default=20, ge=1, le=30)
 
     @model_validator(mode="after")
     def validate_target(self):
         if self.operation == "subclass_map" and not self.subclass:
             raise ValueError("subclass_map requires subclass")
-        if self.operation != "subclass_map" and not self.provision_ref:
+        if self.operation in {"provision_context", "follow_references"} and not self.provision_ref:
             raise ValueError(f"{self.operation} requires provision_ref")
+        if self.operation == "find_mentions":
+            if not self.locator_type or not self.locator_type.strip():
+                raise ValueError("find_mentions requires locator_type")
+            if not self.locator or not self.locator.strip():
+                raise ValueError("find_mentions requires locator")
         return self
 
 

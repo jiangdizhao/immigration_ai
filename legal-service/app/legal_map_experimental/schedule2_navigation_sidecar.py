@@ -1508,6 +1508,122 @@ class Schedule2NavigationMap:
             ],
         }
 
+    @staticmethod
+    def _locator_type_matches(node: GraphNode, locator_type: str) -> bool:
+        normalized = locator_type.strip().casefold()
+        node_locator_type = (node.locator_type or "").strip().casefold()
+        if normalized == "schedule5_special_return_criterion":
+            normalized = "special_return_criterion"
+        if normalized == "schedule2_provision":
+            return node.node_type in {"provision", "schedule2_locator"} or node_locator_type == normalized
+        if normalized == "subclass":
+            return node.node_type == "subclass" or node_locator_type == normalized
+        return node_locator_type == normalized
+
+    @staticmethod
+    def _locator_value(locator_type: str, value: object) -> str:
+        normalized = " ".join(str(value or "").split()).strip().casefold()
+        locator_kind = locator_type.strip().casefold()
+        if locator_kind in {"visa_class", "subclass"}:
+            normalized = re.sub(rf"^{locator_kind.replace('_', ' ')}\s+", "", normalized)
+        elif locator_kind == "schedule":
+            normalized = re.sub(r"^schedule\s+", "", normalized)
+        return normalized
+
+    @classmethod
+    def _node_locator_values(cls, node: GraphNode, locator_type: str) -> set[str]:
+        values: set[str] = set()
+        for value in (node.locator, node.provision_ref, node.subclass):
+            if value not in (None, ""):
+                values.add(cls._locator_value(locator_type, value))
+        return values
+
+    @classmethod
+    def _node_target_document(cls, node: GraphNode, locator_type: str) -> str | None:
+        if node.target_document:
+            return cls._locator_value("target_document", node.target_document)
+        if locator_type.strip().casefold() == "schedule2_provision" and node.node_type in {"provision", "schedule2_locator"}:
+            return "schedule 2"
+        return None
+
+    def find_mentions(
+        self,
+        locator_type: str,
+        locator: str,
+        *,
+        target_document: str | None = None,
+        max_mentions: int = 20,
+    ) -> dict[str, object]:
+        """Return bounded incoming explicit references to a known graph target.
+
+        This is an identity lookup over extracted graph metadata and incoming
+        ``REFERENCES*`` edges.  It deliberately does not inspect provision
+        bodies or infer any relationship beyond an existing explicit edge.
+        """
+        query_type = " ".join(str(locator_type).split()).strip().casefold()
+        query_locator = self._locator_value(query_type, locator)
+        query_document = (
+            self._locator_value("target_document", target_document)
+            if target_document is not None
+            else None
+        )
+        candidates = [
+            node
+            for node in self._nodes.values()
+            if self._locator_type_matches(node, query_type)
+            and query_locator in self._node_locator_values(node, query_type)
+            and (
+                query_document is None
+                or self._node_target_document(node, query_type) == query_document
+            )
+        ]
+        candidates.sort(key=lambda node: node.id)
+
+        remaining = max(0, int(max_mentions))
+        matches: list[dict[str, object]] = []
+        for target in candidates:
+            if remaining == 0:
+                break
+            mentions = []
+            for edge in self._incoming[target.id]:
+                source = self._nodes.get(edge.source)
+                if edge.relation.startswith("REFERENCES") and source is not None and source.node_type == "provision":
+                    mentions.append(edge)
+            mentions.sort(
+                key=lambda edge: (
+                    _natural_key(self._nodes[edge.source].provision_ref or ""),
+                    edge.source,
+                    edge.relation,
+                    " ".join((edge.surface_form or "").split()).casefold(),
+                    edge.id,
+                )
+            )
+            bounded_mentions = mentions[:remaining]
+            if not bounded_mentions:
+                continue
+            matches.append(
+                {
+                    "node": target.to_dict(),
+                    "mentions": [
+                        {
+                            "relation": edge.relation,
+                            "source": self._nodes[edge.source].to_dict(),
+                            "surface_form": edge.surface_form,
+                        }
+                        for edge in bounded_mentions
+                    ],
+                }
+            )
+            remaining -= len(bounded_mentions)
+
+        return {
+            "locator_type": locator_type,
+            "locator": locator,
+            "target_document": target_document,
+            "found": bool(candidates),
+            "matches": matches,
+        }
+
 
 def normalized_sidecar(sidecar: NavigationSidecar) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, object]]:
     return (

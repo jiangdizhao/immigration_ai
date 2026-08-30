@@ -224,11 +224,12 @@ SCHEDULE2_NAVIGATION_TOOL = {
     "type": "function",
     "name": "schedule2_navigation",
     "description": (
-        "Read-only structural navigation over the experimental Schedule-2 sidecar. "
-        "Returns explicit clause/reference targets and local resolution metadata "
-        "as navigation hints only. It never returns legal evidence and cannot "
-        "establish eligibility, applicability, or a pathway. Use exact_legal_lookup "
-        "to obtain genuine source evidence for a target."
+        "Read-only forward structural navigation and reverse explicit-reference "
+        "lookup over the experimental Schedule-2 sidecar. Use find_mentions to "
+        "locate Schedule-2 provisions that explicitly reference a known target. "
+        "Navigation only: it never returns legal evidence, establishes eligibility "
+        "or applicability, or infers semantics. Locator-index availability does not "
+        "mean that law or a source is absent; use exact_legal_lookup for evidence."
     ),
     "strict": True,
     "parameters": {
@@ -243,13 +244,19 @@ SCHEDULE2_NAVIGATION_TOOL = {
                     "properties": {
                         "operation": {
                             "type": "string",
-                            "enum": ["subclass_map", "provision_context", "follow_references"],
+                            "enum": ["subclass_map", "provision_context", "follow_references", "find_mentions"],
                         },
                         "subclass": {"anyOf": [{"type": "string", "maxLength": 20}, {"type": "null"}]},
                         "provision_ref": {"anyOf": [{"type": "string", "maxLength": 255}, {"type": "null"}]},
+                        "locator_type": {"anyOf": [{"type": "string", "maxLength": 100}, {"type": "null"}]},
+                        "locator": {"anyOf": [{"type": "string", "maxLength": 2000}, {"type": "null"}]},
+                        "target_document": {"anyOf": [{"type": "string", "maxLength": 500}, {"type": "null"}]},
                         "max_targets": {"type": "integer", "minimum": 1, "maximum": 30},
                     },
-                    "required": ["operation", "subclass", "provision_ref", "max_targets"],
+                    "required": [
+                        "operation", "subclass", "provision_ref", "locator_type", "locator",
+                        "target_document", "max_targets",
+                    ],
                     "additionalProperties": False,
                 },
             },
