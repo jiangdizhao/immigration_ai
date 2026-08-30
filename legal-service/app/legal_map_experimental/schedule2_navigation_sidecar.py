@@ -54,6 +54,7 @@ ALLOWED_RELATIONS = frozenset(
         "NEXT_CLAUSE",
         "PREVIOUS_CLAUSE",
         "REFERENCES_SCHEDULE",
+        "REFERENCES_SCHEDULE_PROVISION",
         "REFERENCES_REGULATION",
         "REFERENCES_ACT",
         "REFERENCES_INSTRUMENT",
@@ -130,6 +131,29 @@ COMPILATION_RE = re.compile(r"\bF\d{4}[A-Z]\d{3,6}\b", re.IGNORECASE)
 
 # Explicit, syntax-only external locators.  Patterns are deliberately scoped
 # to legal locator words; ordinary bare numbers are never treated as targets.
+#
+# A legal locator consists of a digit-led base (including dotted regulation
+# forms and alphanumeric Schedule items) followed by zero or more nested
+# parenthesised components.  Keeping these fragments shared is important: a
+# locator such as ``2.20B(2)`` must have the same boundary behavior regardless
+# of whether it is introduced as a regulation, subsection, or paragraph.
+LEGAL_LOCATOR_BASE = r"[0-9]+[A-Z0-9]*(?:\.[0-9]+[A-Z0-9]*)*"
+LEGAL_LOCATOR_NESTED = r"(?:\([0-9A-Za-z]+\))*"
+LEGAL_LOCATOR = rf"{LEGAL_LOCATOR_BASE}{LEGAL_LOCATOR_NESTED}"
+LEGAL_LOCATOR_TERMINATOR = r"(?=$|[\s,;:!?)]|\[|\]|\{|\}|\.(?![0-9A-Za-z]))"
+LEGAL_LOCATOR_PREFIX = rf"\b(?P<provision>{LEGAL_LOCATOR}){LEGAL_LOCATOR_TERMINATOR}"
+REGULATION_LOCATOR = rf"[0-9]{{1,3}}\.[0-9]+[A-Z0-9]*{LEGAL_LOCATOR_NESTED}"
+REGULATION_LOCATOR_PREFIX = rf"\b(?P<provision>{REGULATION_LOCATOR}){LEGAL_LOCATOR_TERMINATOR}"
+COMPOUND_LOCATOR_WORDS = (
+    r"paragraph|subparagraph|item|subitem|clause|subclause|"
+    r"regulation|subregulation|section|subsection"
+)
+COMPOUND_SCHEDULE_LOCATOR_RE = re.compile(
+    rf"\b(?P<kind>{COMPOUND_LOCATOR_WORDS})\s+"
+    rf"(?P<provision>{LEGAL_LOCATOR})\s+of\s+"
+    rf"Schedule\s+(?P<schedule>\d{{1,2}}[A-Z]?){LEGAL_LOCATOR_TERMINATOR}",
+    re.IGNORECASE,
+)
 SCHEDULE_CRITERION_RE = re.compile(
     r"\bSchedule\s+(?P<schedule>\d{1,2}[A-Z]?)\s+"
     r"(?:criterion|criteria|clause|clauses)\s+"
@@ -150,11 +174,11 @@ CONDITION_RE = re.compile(
     re.IGNORECASE,
 )
 SUBREGULATION_RE = re.compile(
-    r"\bsubreg(?:ulation)?\s+(?P<provision>\d{1,2}\.\d{1,3}[A-Z]{0,3}\([0-9A-Za-z]+\))\b",
+    rf"\bsubreg(?:ulation)?\s+{LEGAL_LOCATOR_PREFIX}",
     re.IGNORECASE,
 )
 REGULATION_RE = re.compile(
-    r"\b(?:regulation|reg\.?|r)\s+(?P<provision>\d{1,2}\.\d{1,3}[A-Z]{0,3})\b",
+    rf"\b(?:regulation|reg\.?|r)\s+{REGULATION_LOCATOR_PREFIX}",
     re.IGNORECASE,
 )
 SCHEDULE_RE = re.compile(
@@ -167,20 +191,53 @@ INSTRUMENT_RE = re.compile(
     re.IGNORECASE,
 )
 SECTION_RE = re.compile(
-    r"\b(?:section|s\.?)\s+(?P<provision>\d{1,4}[A-Z]{0,2}(?:\([0-9A-Za-z]+\))?)\b",
+    rf"\b(?:section|s\.?)\s+{LEGAL_LOCATOR_PREFIX}",
     re.IGNORECASE,
 )
 SUBSECTION_RE = re.compile(
-    r"\bsubsection\s+(?P<provision>\d{1,4}[A-Z]{0,2}\([0-9A-Za-z]+\))\b",
+    rf"\bsubsection\s+{LEGAL_LOCATOR_PREFIX}",
     re.IGNORECASE,
 )
 ITEM_RE = re.compile(
-    r"\bitem\s+(?P<provision>\d{1,5}[A-Z]{0,3})\b", re.IGNORECASE
+    rf"\bitem\s+{LEGAL_LOCATOR_PREFIX}", re.IGNORECASE
 )
 PARAGRAPH_RE = re.compile(
-    r"\bparagraph\s+(?P<provision>\([a-z0-9]+\)|\d{1,3}(?:\.\d{1,3})*)\b",
+    rf"\bparagraph\s+{LEGAL_LOCATOR_PREFIX}",
     re.IGNORECASE,
 )
+SUBITEM_RE = re.compile(
+    rf"\bsubitem\s+{LEGAL_LOCATOR_PREFIX}", re.IGNORECASE
+)
+SUBPARAGRAPH_RE = re.compile(
+    rf"\bsubparagraph\s+{LEGAL_LOCATOR_PREFIX}", re.IGNORECASE
+)
+CLAUSE_RE = re.compile(
+    rf"\bclause\s+{LEGAL_LOCATOR_PREFIX}", re.IGNORECASE
+)
+SUBCLAUSE_RE = re.compile(
+    rf"\bsubclause\s+{LEGAL_LOCATOR_PREFIX}", re.IGNORECASE
+)
+
+
+_REFERENCE_PRIORITY = {
+    "schedule_provision": 100,
+    "schedule3_criterion": 80,
+    "schedule4_pic": 80,
+    "schedule8_condition": 80,
+    "subregulation": 70,
+    "subsection": 70,
+    "subitem": 70,
+    "subparagraph": 70,
+    "subclause": 70,
+    "regulation": 60,
+    "section": 60,
+    "item": 60,
+    "paragraph": 60,
+    "clause": 60,
+    "instrument": 60,
+    "act": 60,
+    "schedule": 10,
+}
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -640,6 +697,17 @@ def _ref(
 
 def _extract_references(text: str) -> list[ReferenceOccurrence]:
     found: list[ReferenceOccurrence] = []
+    for match in COMPOUND_SCHEDULE_LOCATOR_RE.finditer(text):
+        schedule = match.group("schedule").upper()
+        found.append(
+            _ref(
+                "schedule_provision",
+                match.group("provision"),
+                match.group(0),
+                match,
+                target_document=f"Schedule {schedule}",
+            )
+        )
     for match in SCHEDULE_CRITERION_RE.finditer(text):
         schedule = match.group("schedule").upper()
         if schedule == "3":
@@ -667,6 +735,22 @@ def _extract_references(text: str) -> list[ReferenceOccurrence]:
         found.append(_ref("item", match.group("provision"), match.group(0), match, ambiguous=True))
     for match in PARAGRAPH_RE.finditer(text):
         found.append(_ref("paragraph", match.group("provision"), match.group(0), match, ambiguous=True))
+    for match in SUBITEM_RE.finditer(text):
+        found.append(_ref("subitem", match.group("provision"), match.group(0), match, ambiguous=True))
+    for match in SUBPARAGRAPH_RE.finditer(text):
+        found.append(_ref("subparagraph", match.group("provision"), match.group(0), match, ambiguous=True))
+    for match in CLAUSE_RE.finditer(text):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(text)
+        if CLAUSE_HEADING_RE.fullmatch(text[line_start:line_end].strip()):
+            # Page-level ``Clause 802.111`` labels are structural headings,
+            # not an explicit reference in the preceding provision body.
+            continue
+        found.append(_ref("clause", match.group("provision"), match.group(0), match, ambiguous=True))
+    for match in SUBCLAUSE_RE.finditer(text):
+        found.append(_ref("subclause", match.group("provision"), match.group(0), match, ambiguous=True))
 
     # The generic Schedule pattern runs after Schedule-3 criterion extraction;
     # it is retained as a broad structural navigation target as well.
@@ -675,9 +759,37 @@ def _extract_references(text: str) -> list[ReferenceOccurrence]:
         if schedule != "2":
             found.append(_ref("schedule", schedule, match.group(0), match, target_document=f"Schedule {schedule}"))
 
-    dedup: dict[tuple[str, str, bool], ReferenceOccurrence] = {}
-    for item in sorted(found, key=lambda value: (value.body_offset, value.locator_type, value.provision_ref, value.surface_form)):
-        dedup.setdefault((item.locator_type, item.provision_ref, item.ambiguous), item)
+    # Specific references own their syntactic span.  This prevents a compound
+    # address from also producing its overlapping paragraph/item and broad
+    # Schedule matches, while retaining genuinely standalone Schedule text.
+    selected: list[ReferenceOccurrence] = []
+    for item in sorted(
+        found,
+        key=lambda value: (
+            -_REFERENCE_PRIORITY.get(value.locator_type, 0),
+            value.body_offset,
+            -len(value.surface_form),
+            value.locator_type,
+            value.provision_ref,
+            value.surface_form,
+        ),
+    ):
+        item_start = item.body_offset
+        item_end = item_start + len(item.surface_form)
+        overlaps = False
+        for existing in selected:
+            existing_start = existing.body_offset
+            existing_end = existing_start + len(existing.surface_form)
+            if item_start < existing_end and existing_start < item_end:
+                if _REFERENCE_PRIORITY.get(item.locator_type, 0) < _REFERENCE_PRIORITY.get(existing.locator_type, 0):
+                    overlaps = True
+                    break
+        if not overlaps:
+            selected.append(item)
+
+    dedup: dict[tuple[str, str, str | None, bool], ReferenceOccurrence] = {}
+    for item in sorted(selected, key=lambda value: (value.body_offset, value.locator_type, value.provision_ref, value.surface_form)):
+        dedup.setdefault((item.locator_type, item.provision_ref, item.target_document, item.ambiguous), item)
     return list(dedup.values())
 
 
@@ -727,7 +839,7 @@ def _locator_availability(
     lookup_type = locator_type
     if locator_type == "subregulation":
         lookup_type = "regulation"
-        lookup_ref = re.sub(r"\([^)]*\)$", "", lookup_ref)
+        lookup_ref = re.sub(r"(?:\([^)]*\))+$", "", lookup_ref)
     return any(
         record.locator_type.casefold() == lookup_type.casefold()
         and record.provision_ref.upper() == lookup_ref
@@ -735,15 +847,24 @@ def _locator_availability(
     )
 
 
-def _external_id(locator_type: str, provision_ref: str) -> str:
+def _external_id(
+    locator_type: str,
+    provision_ref: str,
+    *,
+    target_document: str | None = None,
+) -> str:
     safe_type = re.sub(r"[^A-Z0-9_-]+", "-", locator_type.upper())
     safe_ref = re.sub(r"[^A-Z0-9_.()-]+", "-", provision_ref.upper())
+    if locator_type == "schedule_provision" and target_document:
+        safe_target = re.sub(r"[^A-Z0-9_-]+", "-", target_document.upper())
+        return f"s2x:external:{safe_type}:{safe_target}:{safe_ref}"
     return f"s2x:external:{safe_type}:{safe_ref}"
 
 
 def _relation(locator_type: str) -> str:
     return {
         "schedule": "REFERENCES_SCHEDULE",
+        "schedule_provision": "REFERENCES_SCHEDULE_PROVISION",
         "regulation": "REFERENCES_REGULATION",
         "subregulation": "REFERENCES_REGULATION",
         "section": "REFERENCES_ACT",
@@ -872,16 +993,16 @@ def build_sidecar(
             edges[next_key] = GraphEdge(id=_edge_id(*next_key), source=next_key[0], relation=next_key[1], target=next_key[2])
             edges[prev_key] = GraphEdge(id=_edge_id(*prev_key), source=prev_key[0], relation=prev_key[1], target=prev_key[2])
 
-    external_refs: dict[tuple[str, str, bool], list[tuple[str, ReferenceOccurrence, ProvisionOccurrence]]] = defaultdict(list)
+    external_refs: dict[tuple[str, str, str | None, bool], list[tuple[str, ReferenceOccurrence, ProvisionOccurrence]]] = defaultdict(list)
     for ref, ref_items in report.references.items():
         for occurrence in occurrences_by_ref.get(ref, []):
             for item in _extract_references(occurrence.body):
-                external_refs[(item.locator_type, item.provision_ref, item.ambiguous)].append((ref, item, occurrence))
+                external_refs[(item.locator_type, item.provision_ref, item.target_document, item.ambiguous)].append((ref, item, occurrence))
 
-    for key in sorted(external_refs):
-        locator_type, provision_ref, ambiguous = key
+    for key in sorted(external_refs, key=lambda value: (value[0], value[1], value[2] or "", value[3])):
+        locator_type, provision_ref, target_document, ambiguous = key
         items = external_refs[key]
-        external_id = _external_id(locator_type, provision_ref)
+        external_id = _external_id(locator_type, provision_ref, target_document=target_document)
         local_available = _locator_availability(locator_type, provision_ref, locator_records)
         status = "ambiguous" if ambiguous else ("resolved_local" if local_available else "unresolved_external")
         first = sorted(items, key=lambda value: (value[0], value[2].source_file, value[2].page_number, value[1].body_offset))[0][1]
@@ -894,7 +1015,7 @@ def build_sidecar(
                 provision_ref=provision_ref,
                 locator_type=locator_type,
                 locator=first.surface_form,
-                target_document=first.target_document,
+                target_document=target_document,
                 ambiguous=ambiguous,
                 local_available=local_available,
                 resolution_status=status,
