@@ -61,6 +61,20 @@ export default function Page() {
         </div>
         <AuthForm action={handleSubmit} defaultEmail={email}>
           <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
+          <div className="flex flex-col gap-2 text-center text-gray-600 text-sm dark:text-zinc-400">
+            <Link
+              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
+              href="/forgot-password"
+            >
+              Forgot password?
+            </Link>
+            <Link
+              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
+              href="/resend-verification"
+            >
+              Resend verification email
+            </Link>
+          </div>
           <p className="mt-4 text-center text-gray-600 text-sm dark:text-zinc-400">
             {"Don't have an account? "}
             <Link

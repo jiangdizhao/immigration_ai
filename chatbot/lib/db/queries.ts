@@ -9,6 +9,7 @@ import {
   gt,
   gte,
   inArray,
+  isNull,
   lt,
   type SQL,
   sql,
@@ -17,6 +18,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
+import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
 import { ChatbotError } from "../errors";
 import { generateUUID } from "../utils";
 import { calculateVipWindow } from "../vip/entitlement";
@@ -25,10 +27,12 @@ import {
   chat,
   type DBMessage,
   document,
+  emailVerificationToken,
   immigrationConversation,
   type LawyerClarificationRequest,
   lawyerClarificationRequest,
   message,
+  passwordResetToken,
   type Suggestion,
   stream,
   suggestion,
@@ -47,6 +51,7 @@ import { generateHashedPassword } from "./utils";
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);
 const db = drizzle(client);
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export async function getUser(email: string): Promise<User[]> {
   try {
@@ -75,6 +80,16 @@ export async function getUserEntitlementById(userId: string) {
     .limit(1);
 
   return entitlement ?? null;
+}
+
+export async function getUserAuthVersion(userId: string) {
+  const [record] = await db
+    .select({ authVersion: user.authVersion })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  return record?.authVersion ?? null;
 }
 
 export async function listLawyerClarificationRequestsForUser({
@@ -358,9 +373,11 @@ export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
   try {
-    return await db
+    const [createdUser] = await db
       .insert(user)
-      .values({ email: email.trim().toLowerCase(), password: hashedPassword });
+      .values({ email: email.trim().toLowerCase(), password: hashedPassword })
+      .returning();
+    return createdUser;
   } catch (_error) {
     throw new ChatbotError("bad_request:database", "Failed to create user");
   }
@@ -384,6 +401,242 @@ export async function createGuestUser() {
       "Failed to create guest user"
     );
   }
+}
+
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+const AUTH_TOKEN_COOLDOWN_MS = 60 * 1000;
+
+async function hasRecentOutstandingToken(
+  tx: DbTransaction,
+  tokenTable: typeof emailVerificationToken | typeof passwordResetToken,
+  userId: string,
+  now: Date
+) {
+  const [recent] = await tx
+    .select({ createdAt: tokenTable.createdAt })
+    .from(tokenTable)
+    .where(
+      and(
+        eq(tokenTable.userId, userId),
+        isNull(tokenTable.consumedAt),
+        gt(tokenTable.expiresAt, now)
+      )
+    )
+    .orderBy(desc(tokenTable.createdAt))
+    .limit(1);
+
+  return Boolean(
+    recent &&
+      now.getTime() - recent.createdAt.getTime() < AUTH_TOKEN_COOLDOWN_MS
+  );
+}
+
+async function lockUserForAuthToken(tx: DbTransaction, userId: string) {
+  await tx.execute(
+    sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`
+  );
+}
+
+export async function createEmailVerificationTokenForUser({
+  userId,
+  now = new Date(),
+  enforceCooldown = true,
+}: {
+  userId: string;
+  now?: Date;
+  enforceCooldown?: boolean;
+}) {
+  return await db.transaction(async (tx) => {
+    await lockUserForAuthToken(tx, userId);
+
+    if (
+      enforceCooldown &&
+      (await hasRecentOutstandingToken(tx, emailVerificationToken, userId, now))
+    ) {
+      return null;
+    }
+
+    await tx
+      .update(emailVerificationToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(emailVerificationToken.userId, userId),
+          isNull(emailVerificationToken.consumedAt)
+        )
+      );
+
+    const { rawToken, tokenHash } = createOpaqueToken();
+    await tx.insert(emailVerificationToken).values({
+      userId,
+      tokenHash,
+      expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_TTL_MS),
+      createdAt: now,
+    });
+
+    const [account] = await tx
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    return account ? { email: account.email, token: rawToken } : null;
+  });
+}
+
+export async function verifyEmailWithToken(
+  rawToken: string,
+  now = new Date()
+): Promise<"verified" | "already_verified" | "invalid"> {
+  const tokenHash = hashOpaqueToken(rawToken);
+
+  return await db.transaction(async (tx) => {
+    const [claimedToken] = await tx
+      .update(emailVerificationToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(emailVerificationToken.tokenHash, tokenHash),
+          isNull(emailVerificationToken.consumedAt),
+          gt(emailVerificationToken.expiresAt, now)
+        )
+      )
+      .returning({ userId: emailVerificationToken.userId });
+
+    if (!claimedToken) {
+      return "invalid";
+    }
+
+    const [updatedUser] = await tx
+      .update(user)
+      .set({ emailVerifiedAt: now })
+      .where(
+        and(eq(user.id, claimedToken.userId), isNull(user.emailVerifiedAt))
+      )
+      .returning({ id: user.id });
+
+    await tx
+      .update(emailVerificationToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(emailVerificationToken.userId, claimedToken.userId),
+          isNull(emailVerificationToken.consumedAt)
+        )
+      );
+
+    return updatedUser ? "verified" : "already_verified";
+  });
+}
+
+export async function createPasswordResetTokenForUser({
+  userId,
+  now = new Date(),
+}: {
+  userId: string;
+  now?: Date;
+}) {
+  return await db.transaction(async (tx) => {
+    await lockUserForAuthToken(tx, userId);
+
+    const [account] = await tx
+      .select({
+        email: user.email,
+        password: user.password,
+        emailVerifiedAt: user.emailVerifiedAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!account?.password || !account.emailVerifiedAt) {
+      return null;
+    }
+
+    if (await hasRecentOutstandingToken(tx, passwordResetToken, userId, now)) {
+      return null;
+    }
+
+    await tx
+      .update(passwordResetToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(passwordResetToken.userId, userId),
+          isNull(passwordResetToken.consumedAt)
+        )
+      );
+
+    const { rawToken, tokenHash } = createOpaqueToken();
+    await tx.insert(passwordResetToken).values({
+      userId,
+      tokenHash,
+      expiresAt: new Date(now.getTime() + PASSWORD_RESET_TTL_MS),
+      createdAt: now,
+    });
+
+    return account ? { email: account.email, token: rawToken } : null;
+  });
+}
+
+export async function resetPasswordWithToken({
+  rawToken,
+  password,
+  now = new Date(),
+}: {
+  rawToken: string;
+  password: string;
+  now?: Date;
+}) {
+  const tokenHash = hashOpaqueToken(rawToken);
+  const hashedPassword = generateHashedPassword(password);
+
+  return await db.transaction(async (tx) => {
+    const [claimedToken] = await tx
+      .update(passwordResetToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(passwordResetToken.tokenHash, tokenHash),
+          isNull(passwordResetToken.consumedAt),
+          gt(passwordResetToken.expiresAt, now)
+        )
+      )
+      .returning({ userId: passwordResetToken.userId });
+
+    if (!claimedToken) {
+      return null;
+    }
+
+    const [updatedUser] = await tx
+      .update(user)
+      .set({
+        password: hashedPassword,
+        authVersion: sql`${user.authVersion} + 1`,
+      })
+      .where(eq(user.id, claimedToken.userId))
+      .returning({
+        email: user.email,
+        authVersion: user.authVersion,
+      });
+
+    if (!updatedUser) {
+      return null;
+    }
+
+    await tx
+      .update(passwordResetToken)
+      .set({ consumedAt: now })
+      .where(
+        and(
+          eq(passwordResetToken.userId, claimedToken.userId),
+          isNull(passwordResetToken.consumedAt)
+        )
+      );
+
+    return updatedUser;
+  });
 }
 
 export async function getOrCreateLocalImmigrationUserId() {

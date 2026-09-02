@@ -20,6 +20,8 @@ export const user = pgTable(
     id: uuid("id").primaryKey().notNull().defaultRandom(),
     email: varchar("email", { length: 64 }).notNull(),
     password: varchar("password", { length: 64 }),
+    emailVerifiedAt: timestamp("emailVerifiedAt"),
+    authVersion: integer("authVersion").notNull().default(1),
     role: varchar("role", { enum: ["user", "admin"] })
       .notNull()
       .default("user"),
@@ -36,6 +38,58 @@ export const user = pgTable(
 );
 
 export type User = InferSelectModel<typeof user>;
+
+export const emailVerificationToken = pgTable(
+  "EmailVerificationToken",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex("EmailVerificationToken_token_hash_unique").on(
+      table.tokenHash
+    ),
+    userCreatedIndex: index("EmailVerificationToken_user_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export type EmailVerificationToken = InferSelectModel<
+  typeof emailVerificationToken
+>;
+
+export const passwordResetToken = pgTable(
+  "PasswordResetToken",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex("PasswordResetToken_token_hash_unique").on(
+      table.tokenHash
+    ),
+    userCreatedIndex: index("PasswordResetToken_user_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export type PasswordResetToken = InferSelectModel<typeof passwordResetToken>;
 
 export const vipPurchase = pgTable(
   "VipPurchase",

@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { useActionState, useEffect, useState } from "react";
 import { AuthForm } from "@/components/auth-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -10,8 +8,6 @@ import { toast } from "@/components/toast";
 import { type RegisterActionState, register } from "../actions";
 
 export default function Page() {
-  const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [isSuccessful, setIsSuccessful] = useState(false);
 
@@ -22,9 +18,6 @@ export default function Page() {
     }
   );
 
-  const { update: updateSession } = useSession();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: router and updateSession are stable refs
   useEffect(() => {
     if (state.status === "user_exists") {
       toast({ type: "error", description: "Account already exists!" });
@@ -36,12 +29,18 @@ export default function Page() {
         description: "Failed validating your submission!",
       });
     } else if (state.status === "success") {
-      toast({ type: "success", description: "Account created successfully!" });
-
+      toast({
+        type: "success",
+        description: "Account created. Check your email to verify it.",
+      });
       setIsSuccessful(true);
-      updateSession();
-      router.replace(state.redirectTo ?? "/ai-workspace");
-      router.refresh();
+    } else if (state.status === "email_delivery_failed") {
+      toast({
+        type: "error",
+        description:
+          "Your account was created, but we could not send the verification email. Please try resend.",
+      });
+      setIsSuccessful(true);
     }
   }, [state.status]);
 
@@ -58,9 +57,24 @@ export default function Page() {
           <p className="text-gray-500 text-sm dark:text-zinc-400">
             Create an account with your email and password
           </p>
+          {(state.status === "success" ||
+            state.status === "email_delivery_failed") && (
+            <p className="text-gray-500 text-sm dark:text-zinc-400">
+              Check your inbox, then sign in after verifying your email. If the
+              message is missing, use resend verification.
+            </p>
+          )}
         </div>
         <AuthForm action={handleSubmit} defaultEmail={email}>
           <SubmitButton isSuccessful={isSuccessful}>Sign Up</SubmitButton>
+          <p className="text-center text-gray-600 text-sm dark:text-zinc-400">
+            <Link
+              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
+              href="/resend-verification"
+            >
+              Resend verification email
+            </Link>
+          </p>
           <p className="mt-4 text-center text-gray-600 text-sm dark:text-zinc-400">
             {"Already have an account? "}
             <Link

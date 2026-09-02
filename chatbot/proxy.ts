@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { guestRegex, isDevelopmentEnvironment } from "./lib/constants";
+import { isDevelopmentEnvironment } from "./lib/constants";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,7 +13,17 @@ export async function proxy(request: NextRequest) {
     return new Response("pong", { status: 200 });
   }
 
-  if (pathname.startsWith("/api/auth")) {
+  if (
+    pathname.startsWith("/api/auth") ||
+    [
+      "/login",
+      "/register",
+      "/verify-email",
+      "/resend-verification",
+      "/forgot-password",
+      "/reset-password",
+    ].includes(pathname)
+  ) {
     return NextResponse.next();
   }
 
@@ -36,18 +46,6 @@ export async function proxy(request: NextRequest) {
 
     return NextResponse.redirect(
       new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, publicBaseUrl)
-    );
-  }
-
-  const isGuest =
-    token?.type === "guest" || guestRegex.test(token?.email ?? "");
-
-  if (token && !isGuest && ["/login", "/register"].includes(pathname)) {
-    return NextResponse.redirect(
-      new URL(
-        token.role === "admin" ? "/admin-portal" : "/ai-workspace",
-        request.url
-      )
     );
   }
 

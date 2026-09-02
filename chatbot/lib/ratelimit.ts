@@ -6,6 +6,12 @@ import { ChatbotError } from "@/lib/errors";
 const MAX_MESSAGES = 10;
 const TTL_SECONDS = 60 * 60;
 
+type RateLimitOptions = {
+  keyPrefix?: string;
+  maxRequests?: number;
+  ttlSeconds?: number;
+};
+
 let client: ReturnType<typeof createClient> | null = null;
 
 function getClient() {
@@ -19,7 +25,10 @@ function getClient() {
   return client;
 }
 
-export async function checkIpRateLimit(ip: string | undefined) {
+export async function checkIpRateLimit(
+  ip: string | undefined,
+  options: RateLimitOptions = {}
+) {
   if (!isProductionEnvironment || !ip) {
     return;
   }
@@ -30,14 +39,16 @@ export async function checkIpRateLimit(ip: string | undefined) {
   }
 
   try {
-    const key = `ip-rate-limit:${ip}`;
+    const key = `${options.keyPrefix ?? "ip-rate-limit"}:${ip}`;
+    const maxRequests = options.maxRequests ?? MAX_MESSAGES;
+    const ttlSeconds = options.ttlSeconds ?? TTL_SECONDS;
     const [count] = await redis
       .multi()
       .incr(key)
-      .expire(key, TTL_SECONDS, "NX")
+      .expire(key, ttlSeconds, "NX")
       .exec();
 
-    if (typeof count === "number" && count > MAX_MESSAGES) {
+    if (typeof count === "number" && count > maxRequests) {
       throw new ChatbotError("rate_limit:chat");
     }
   } catch (error) {
