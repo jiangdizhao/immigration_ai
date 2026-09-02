@@ -122,6 +122,44 @@ export function buildPasswordChangedEmail({ email }: { email: string }) {
   } satisfies EmailMessage;
 }
 
+export function buildLawyerRequestNotificationEmail({
+  email,
+  requestId,
+  recipient,
+  kind,
+}: {
+  email: string;
+  requestId: string;
+  recipient: "customer" | "lawyer" | "staff";
+  kind:
+    | "request_created"
+    | "request_assigned"
+    | "needs_more_information"
+    | "customer_replied"
+    | "review_completed";
+}) {
+  const path =
+    recipient === "customer"
+      ? `/lawyer-requests/${requestId}`
+      : `/lawyer-portal/${requestId}`;
+  const labels = {
+    request_created: "A new lawyer review request is ready for staff triage.",
+    request_assigned: "A lawyer review request has been assigned to you.",
+    needs_more_information:
+      "Your lawyer review request needs more information.",
+    customer_replied: "A customer has replied to a lawyer review request.",
+    review_completed: "A lawyer review request has a new result.",
+  } as const;
+  const link = new URL(path, `${getAppBaseUrl()}/`).toString();
+  const intro = labels[kind];
+  return {
+    to: email,
+    subject: "Lawyer review request updated",
+    text: `${intro}\n\nOpen the request here: ${link}`,
+    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(link)}">Open lawyer review request</a></p>`,
+  } satisfies EmailMessage;
+}
+
 function getFromAddress() {
   const address = process.env.EMAIL_FROM_ADDRESS?.trim();
   if (!address) {

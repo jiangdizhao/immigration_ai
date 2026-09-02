@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { listLawyerClarificationRequestsForAdmin } from "@/lib/db/queries";
 import { requireAdminUser } from "@/lib/lawyer-requests/admin-access";
+import { listAdminLawyerRequests } from "@/lib/lawyer-requests/service";
 import {
   isLawyerClarificationStatus,
   LAWYER_CLARIFICATION_STATUSES,
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   }
   const status =
     value && value !== "all" ? statusSchema.parse(value) : undefined;
-  const results = await listLawyerClarificationRequestsForAdmin({ status });
+  const results = await listAdminLawyerRequests(status);
   return Response.json({
     requests: results.map(({ request: requestRecord, customerEmail }) => ({
       ...requestRecord,

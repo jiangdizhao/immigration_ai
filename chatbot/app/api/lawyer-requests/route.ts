@@ -1,11 +1,9 @@
 import { z } from "zod";
 import {
-  createLawyerClarificationRequest,
   getChatById,
   getImmigrationConversationByChatId,
   getLawyerClarificationRequestByUserAndAssistantMessage,
   getMessagesByChatId,
-  listLawyerClarificationRequestsForUser,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
 import {
@@ -13,10 +11,18 @@ import {
   requestSourceForRole,
 } from "@/lib/lawyer-requests/authorization";
 import {
+  createLawyerRequestWithEvent,
+  listCustomerLawyerRequests,
+} from "@/lib/lawyer-requests/service";
+import {
   buildLawyerRequestSnapshot,
   LAWYER_REQUEST_SNAPSHOT_VERSION,
 } from "@/lib/lawyer-requests/snapshot";
 import { validateLawyerRequestTarget } from "@/lib/lawyer-requests/target-validation";
+import {
+  customerLawyerRequestSummary,
+  customerLawyerRequestView,
+} from "@/lib/lawyer-requests/views";
 import { requireRegisteredUser } from "@/lib/vip/access";
 import { premiumDeniedResponse } from "@/lib/vip/entitlement";
 
@@ -27,16 +33,6 @@ const createRequestSchema = z
     customerNote: z.string().trim().max(4000).optional(),
   })
   .strict();
-
-function requestResponse(
-  request: NonNullable<
-    Awaited<
-      ReturnType<typeof getLawyerClarificationRequestByUserAndAssistantMessage>
-    >
-  >
-) {
-  return Response.json(request);
-}
 
 export async function GET(request: Request) {
   const access = await requireRegisteredUser();
@@ -49,11 +45,13 @@ export async function GET(request: Request) {
     return Response.json({ error: "Invalid chat ID." }, { status: 400 });
   }
 
-  const requests = await listLawyerClarificationRequestsForUser({
-    userId: access.userId,
-    chatId,
+  const requests = await listCustomerLawyerRequests(access.userId);
+  const filteredRequests = chatId
+    ? requests.filter((request) => request.chatId === chatId)
+    : requests;
+  return Response.json({
+    requests: filteredRequests.map(customerLawyerRequestSummary),
   });
-  return Response.json({ requests });
 }
 
 export async function POST(request: Request) {
@@ -91,7 +89,7 @@ export async function POST(request: Request) {
     }
   );
   if (existing && existing.chatId === chatId) {
-    return requestResponse(existing);
+    return Response.json(customerLawyerRequestSummary(existing));
   }
   if (existing) {
     return Response.json(
@@ -132,24 +130,34 @@ export async function POST(request: Request) {
   });
 
   try {
-    const created = await createLawyerClarificationRequest({
-      values: {
-        userId: access.userId,
-        chatId,
-        userMessageId: snapshot.userMessageId,
-        assistantMessageId: snapshot.assistantMessageId,
-        legalMatterId: conversation?.legalMatterId ?? null,
-        requestSource: requestSourceForRole(access.entitlement.role),
-        assistantMode: snapshot.assistantMode,
-        snapshotVersion: LAWYER_REQUEST_SNAPSHOT_VERSION,
-        questionSnapshot: snapshot.questionSnapshot,
-        answerSnapshot: snapshot.answerSnapshot,
-        evidenceSnapshot: snapshot.evidenceSnapshot,
-        contextSnapshot: snapshot.contextSnapshot,
-        customerNote: customerNote || null,
-      },
+    const created = await createLawyerRequestWithEvent({
+      userId: access.userId,
+      chatId,
+      userMessageId: snapshot.userMessageId,
+      assistantMessageId: snapshot.assistantMessageId,
+      legalMatterId: conversation?.legalMatterId ?? null,
+      requestSource: requestSourceForRole(access.entitlement.role),
+      assistantMode: snapshot.assistantMode,
+      snapshotVersion: LAWYER_REQUEST_SNAPSHOT_VERSION,
+      questionSnapshot: snapshot.questionSnapshot,
+      answerSnapshot: snapshot.answerSnapshot,
+      evidenceSnapshot: snapshot.evidenceSnapshot,
+      contextSnapshot: snapshot.contextSnapshot,
+      customerNote: customerNote || null,
     });
-    return Response.json(created, { status: 201 });
+    const staffEmail = process.env.LAWYER_REQUEST_STAFF_EMAIL?.trim();
+    if (staffEmail) {
+      const { notifyLawyerRequest } = await import(
+        "@/lib/lawyer-requests/notifications"
+      );
+      await notifyLawyerRequest({
+        email: staffEmail,
+        requestId: created.id,
+        recipient: "staff",
+        kind: "request_created",
+      });
+    }
+    return Response.json(customerLawyerRequestView(created), { status: 201 });
   } catch (error) {
     if (
       error &&
@@ -163,7 +171,7 @@ export async function POST(request: Request) {
           assistantMessageId,
         });
       if (duplicate) {
-        return requestResponse(duplicate);
+        return Response.json(customerLawyerRequestSummary(duplicate));
       }
     }
     throw new ChatbotError(

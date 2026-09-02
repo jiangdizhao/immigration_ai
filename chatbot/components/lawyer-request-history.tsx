@@ -18,6 +18,8 @@ type LawyerRequest = {
   correctedAnswer: string | null;
   createdAt: string;
   reviewedAt: string | null;
+  assigned: boolean;
+  unread: boolean;
 };
 
 const statusLabels: Record<string, string> = {
@@ -86,6 +88,12 @@ export function LawyerRequestHistory() {
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 Submitted {new Date(request.createdAt).toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {request.assigned
+                  ? "Assigned to a lawyer"
+                  : "Waiting for lawyer assignment"}
+                {request.unread ? " · Update available" : ""}
               </p>
             </div>
             <Link

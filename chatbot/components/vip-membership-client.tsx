@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 type VipStatus = {
-  role: "user" | "admin";
+  role: "user" | "lawyer" | "admin";
   membershipTier: "free" | "vip";
   vipExpiresAt: string | null;
   activeVip: boolean;

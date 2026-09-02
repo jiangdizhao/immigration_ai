@@ -8,7 +8,7 @@ import { createGuestUser, getUser, getUserAuthVersion } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
 
 export type UserType = "guest" | "regular";
-export type UserRole = "user" | "admin";
+export type UserRole = "user" | "lawyer" | "admin";
 export type MembershipTier = "free" | "vip";
 
 declare module "next-auth" {

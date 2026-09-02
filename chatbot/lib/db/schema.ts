@@ -22,7 +22,7 @@ export const user = pgTable(
     password: varchar("password", { length: 64 }),
     emailVerifiedAt: timestamp("emailVerifiedAt"),
     authVersion: integer("authVersion").notNull().default(1),
-    role: varchar("role", { enum: ["user", "admin"] })
+    role: varchar("role", { enum: ["user", "lawyer", "admin"] })
       .notNull()
       .default("user"),
     membershipTier: varchar("membershipTier", { enum: ["free", "vip"] })
@@ -168,6 +168,12 @@ export const lawyerClarificationRequest = pgTable(
     reviewerUserId: uuid("reviewerUserId").references(() => user.id, {
       onDelete: "set null",
     }),
+    assignedLawyerUserId: uuid("assignedLawyerUserId").references(
+      () => user.id,
+      { onDelete: "set null" }
+    ),
+    assignedAt: timestamp("assignedAt"),
+    customerLastViewedAt: timestamp("customerLastViewedAt"),
     lawyerResponse: text("lawyerResponse"),
     correctedAnswer: text("correctedAnswer"),
     reviewedAt: timestamp("reviewedAt"),
@@ -185,11 +191,71 @@ export const lawyerClarificationRequest = pgTable(
     statusCreatedIndex: index(
       "LawyerClarificationRequest_status_created_idx"
     ).on(table.status, table.createdAt),
+    assignedLawyerStatusIndex: index(
+      "LawyerClarificationRequest_assigned_lawyer_status_idx"
+    ).on(table.assignedLawyerUserId, table.status, table.updatedAt),
   })
 );
 
 export type LawyerClarificationRequest = InferSelectModel<
   typeof lawyerClarificationRequest
+>;
+
+export const lawyerClarificationMessage = pgTable(
+  "LawyerClarificationMessage",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    requestId: uuid("requestId")
+      .notNull()
+      .references(() => lawyerClarificationRequest.id, { onDelete: "cascade" }),
+    authorUserId: uuid("authorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    authorRole: varchar("authorRole", {
+      enum: ["customer", "lawyer", "admin"],
+    }).notNull(),
+    body: varchar("body", { length: 8000 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    requestCreatedIndex: index(
+      "LawyerClarificationMessage_request_created_idx"
+    ).on(table.requestId, table.createdAt),
+  })
+);
+
+export type LawyerClarificationMessage = InferSelectModel<
+  typeof lawyerClarificationMessage
+>;
+
+export const lawyerClarificationEvent = pgTable(
+  "LawyerClarificationEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    requestId: uuid("requestId")
+      .notNull()
+      .references(() => lawyerClarificationRequest.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    actorRole: varchar("actorRole", {
+      enum: ["customer", "lawyer", "admin", "system"],
+    }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    fromStatus: varchar("fromStatus", { length: 64 }),
+    toStatus: varchar("toStatus", { length: 64 }),
+    metadata: json("metadata"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    requestCreatedIndex: index(
+      "LawyerClarificationEvent_request_created_idx"
+    ).on(table.requestId, table.createdAt),
+  })
+);
+
+export type LawyerClarificationEvent = InferSelectModel<
+  typeof lawyerClarificationEvent
 >;
 
 export const chat = pgTable("Chat", {

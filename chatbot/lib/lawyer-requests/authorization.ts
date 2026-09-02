@@ -7,6 +7,6 @@ export function canCreateLawyerClarificationRequest(
   return isPremiumAllowed(entitlement, now);
 }
 
-export function requestSourceForRole(role: "user" | "admin") {
+export function requestSourceForRole(role: "user" | "lawyer" | "admin") {
   return role === "admin" ? "admin_test" : "vip_customer";
 }

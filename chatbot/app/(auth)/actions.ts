@@ -46,7 +46,7 @@ async function applyPublicAuthRateLimit() {
 
 export type LoginActionState = {
   status: "idle" | "in_progress" | "success" | "failed" | "invalid_data";
-  redirectTo?: "/ai-workspace" | "/admin-portal";
+  redirectTo?: "/ai-workspace" | "/admin-portal" | "/lawyer-portal";
 };
 
 export const login = async (
@@ -76,7 +76,12 @@ export const login = async (
 
     return {
       status: "success",
-      redirectTo: users[0].role === "admin" ? "/admin-portal" : "/ai-workspace",
+      redirectTo:
+        users[0].role === "admin"
+          ? "/admin-portal"
+          : users[0].role === "lawyer"
+            ? "/lawyer-portal"
+            : "/ai-workspace",
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

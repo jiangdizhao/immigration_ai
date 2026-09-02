@@ -1,5 +1,5 @@
 export type VipMembershipTier = "free" | "vip";
-export type VipUserRole = "user" | "admin";
+export type VipUserRole = "user" | "lawyer" | "admin";
 
 export type EntitlementUser = {
   role: VipUserRole;

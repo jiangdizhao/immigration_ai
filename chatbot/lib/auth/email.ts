@@ -3,6 +3,7 @@ import "server-only";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 import {
+  buildLawyerRequestNotificationEmail,
   buildPasswordChangedEmail,
   buildPasswordResetEmail,
   buildSesEmailRequest,
@@ -42,4 +43,18 @@ export async function sendPasswordResetEmail(args: {
 
 export async function sendPasswordChangedEmail(args: { email: string }) {
   await sendEmail(buildPasswordChangedEmail(args));
+}
+
+export async function sendLawyerRequestNotificationEmail(args: {
+  email: string;
+  requestId: string;
+  recipient: "customer" | "lawyer" | "staff";
+  kind:
+    | "request_created"
+    | "request_assigned"
+    | "needs_more_information"
+    | "customer_replied"
+    | "review_completed";
+}) {
+  await sendEmail(buildLawyerRequestNotificationEmail(args));
 }

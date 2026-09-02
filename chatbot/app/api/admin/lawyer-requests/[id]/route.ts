@@ -1,21 +1,24 @@
 import { z } from "zod";
-import {
-  getLawyerClarificationRequestForAdmin,
-  updateLawyerClarificationRequest,
-} from "@/lib/db/queries";
 import { requireAdminUser } from "@/lib/lawyer-requests/admin-access";
+import { classifyAdminLawyerRequestPatch } from "@/lib/lawyer-requests/admin-update";
+import { notifyLawyerRequest } from "@/lib/lawyer-requests/notifications";
 import {
-  isLawyerClarificationStatus,
-  validateLawyerClarificationUpdate,
-} from "@/lib/lawyer-requests/status";
+  assignLawyer,
+  getLawyerRequestNotificationTargets,
+  getStaffLawyerRequest,
+  LawyerRequestDomainError,
+  updateStaffRequest,
+} from "@/lib/lawyer-requests/service";
+import { isLawyerClarificationStatus } from "@/lib/lawyer-requests/status";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
 const updateSchema = z
   .object({
-    status: z.string(),
+    status: z.string().optional(),
     lawyerResponse: z.string().trim().max(8000).optional(),
     correctedAnswer: z.string().trim().max(12_000).optional(),
+    assignedLawyerUserId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -25,7 +28,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return admin;
   }
   const id = (await context.params).id;
-  const result = await getLawyerClarificationRequestForAdmin(id);
+  const result = await getStaffLawyerRequest(id);
   if (!result) {
     return Response.json(
       { error: "Lawyer request not found." },
@@ -35,6 +38,7 @@ export async function GET(_request: Request, context: RouteContext) {
   return Response.json({
     ...result.request,
     customerEmail: result.customerEmail,
+    messages: result.messages,
   });
 }
 
@@ -44,68 +48,94 @@ export async function PATCH(request: Request, context: RouteContext) {
     return admin;
   }
   const id = (await context.params).id;
-  const current = await getLawyerClarificationRequestForAdmin(id);
+  const current = await getStaffLawyerRequest(id);
   if (!current) {
     return Response.json(
       { error: "Lawyer request not found." },
       { status: 404 }
     );
   }
-  if (current.request.status === "closed") {
-    return Response.json(
-      { error: "Closed lawyer requests cannot be modified." },
-      { status: 409 }
-    );
-  }
-
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !isLawyerClarificationStatus(parsed.data.status)) {
+  if (!parsed.success) {
     return Response.json(
-      { error: "A valid status is required." },
+      { error: "Invalid lawyer request update." },
       { status: 400 }
     );
   }
-
-  const lawyerResponse =
-    parsed.data.lawyerResponse ?? current.request.lawyerResponse;
-  const correctedAnswer =
-    parsed.data.correctedAnswer ?? current.request.correctedAnswer;
-  const update = {
-    status: parsed.data.status,
-    lawyerResponse,
-    correctedAnswer,
-  } as const;
-  const validationError = validateLawyerClarificationUpdate(
-    current.request,
-    update
-  );
-  if (validationError) {
-    return Response.json({ error: validationError }, { status: 400 });
-  }
-
-  const now = new Date();
-  const substantive =
-    parsed.data.status === "confirmed" ||
-    parsed.data.status === "corrected" ||
-    parsed.data.status === "needs_more_information";
-  const updated = await updateLawyerClarificationRequest({
-    id,
-    expectedStatus: current.request.status,
-    values: {
-      status: parsed.data.status,
-      reviewerUserId: admin.id,
-      ...(parsed.data.lawyerResponse !== undefined ? { lawyerResponse } : {}),
-      ...(parsed.data.correctedAnswer !== undefined ? { correctedAnswer } : {}),
-      ...(substantive ? { reviewedAt: now } : {}),
-      ...(parsed.data.status === "closed" ? { closedAt: now } : {}),
-      updatedAt: now,
-    },
-  });
-  if (!updated) {
+  if (classifyAdminLawyerRequestPatch(parsed.data) === "mixed") {
     return Response.json(
-      { error: "Request changed; reload and try again." },
-      { status: 409 }
+      {
+        error: "Assignment and review updates must be submitted separately.",
+      },
+      { status: 400 }
     );
   }
-  return Response.json(updated);
+  if (
+    parsed.data.status !== undefined &&
+    !isLawyerClarificationStatus(parsed.data.status)
+  ) {
+    return Response.json({ error: "Invalid request status." }, { status: 400 });
+  }
+  try {
+    if (parsed.data.assignedLawyerUserId !== undefined) {
+      await assignLawyer({
+        actor: admin,
+        requestId: id,
+        assignedLawyerUserId: parsed.data.assignedLawyerUserId,
+      });
+      const targets = await getLawyerRequestNotificationTargets(id);
+      if (targets?.lawyerEmail) {
+        await notifyLawyerRequest({
+          email: targets.lawyerEmail,
+          requestId: id,
+          recipient: "lawyer",
+          kind: "request_assigned",
+        });
+      }
+    }
+    if (parsed.data.status !== undefined) {
+      await updateStaffRequest({
+        actor: admin,
+        requestId: id,
+        status: parsed.data.status,
+        lawyerResponse: parsed.data.lawyerResponse,
+        correctedAnswer: parsed.data.correctedAnswer,
+      });
+      const targets = await getLawyerRequestNotificationTargets(id);
+      if (
+        targets?.customerEmail &&
+        (parsed.data.status === "confirmed" ||
+          parsed.data.status === "corrected")
+      ) {
+        await notifyLawyerRequest({
+          email: targets.customerEmail,
+          requestId: id,
+          recipient: "customer",
+          kind: "review_completed",
+        });
+      }
+      if (
+        targets?.customerEmail &&
+        parsed.data.status === "needs_more_information"
+      ) {
+        await notifyLawyerRequest({
+          email: targets.customerEmail,
+          requestId: id,
+          recipient: "customer",
+          kind: "needs_more_information",
+        });
+      }
+    }
+    const updated = await getStaffLawyerRequest(id);
+    return Response.json({
+      ...updated?.request,
+      customerEmail: updated?.customerEmail,
+      messages: updated?.messages ?? [],
+    });
+  } catch (error) {
+    if (error instanceof LawyerRequestDomainError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
 }

@@ -41,6 +41,7 @@ function isActivePath(pathname: string, href: string) {
 function AccountMenu({
   email,
   isAdmin,
+  isLawyer,
   membershipTier,
   vipExpiresAt,
   activeVip,
@@ -49,6 +50,7 @@ function AccountMenu({
 }: {
   email: string;
   isAdmin: boolean;
+  isLawyer: boolean;
   membershipTier: "free" | "vip";
   vipExpiresAt: string | null;
   activeVip: boolean;
@@ -102,7 +104,13 @@ function AccountMenu({
             {isAdmin ? "AI Workspace" : "My conversations / AI Workspace"}
           </Link>
         </DropdownMenuItem>
-        {isAdmin ? null : (
+        {isLawyer ? (
+          <DropdownMenuItem asChild>
+            <Link className="cursor-pointer" href="/lawyer-portal">
+              Lawyer portal
+            </Link>
+          </DropdownMenuItem>
+        ) : isAdmin ? null : (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/lawyer-requests">
               My lawyer requests
@@ -148,6 +156,7 @@ export function SiteHeader() {
   const isAuthenticated =
     status === "authenticated" && Boolean(sessionUser) && !isGuest;
   const isAdmin = isAuthenticated && sessionUser?.role === "admin";
+  const isLawyer = isAuthenticated && sessionUser?.role === "lawyer";
   const email = sessionUser?.email ?? "";
   const [serverEntitlement, setServerEntitlement] = useState<{
     membershipTier: "free" | "vip";
@@ -245,6 +254,7 @@ export function SiteHeader() {
               email={email}
               expiredVip={expiredVip}
               isAdmin={isAdmin}
+              isLawyer={isLawyer}
               membershipTier={membershipTier}
               vipExpiresAt={vipExpiresAt}
             />
@@ -319,6 +329,7 @@ export function SiteHeader() {
                 email={email}
                 expiredVip={expiredVip}
                 isAdmin={isAdmin}
+                isLawyer={isLawyer}
                 membershipTier={membershipTier}
                 mobile
                 vipExpiresAt={vipExpiresAt}

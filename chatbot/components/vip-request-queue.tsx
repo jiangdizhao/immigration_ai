@@ -13,7 +13,11 @@ type RequestRecord = {
   lawyerResponse: string | null;
   correctedAnswer: string | null;
   createdAt: string;
+  assignedLawyerUserId: string | null;
+  assignedAt: string | null;
 };
+
+type LawyerOption = { id: string; email: string; role: "user" | "lawyer" };
 
 const statuses = [
   "all",
@@ -41,6 +45,8 @@ export function VipRequestQueue() {
   const [correctedAnswer, setCorrectedAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [lawyers, setLawyers] = useState<LawyerOption[]>([]);
+  const [selectedLawyerId, setSelectedLawyerId] = useState("");
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -70,11 +76,62 @@ export function VipRequestQueue() {
     loadQueue();
   }, [loadQueue]);
 
+  useEffect(() => {
+    fetch("/api/admin/lawyers")
+      .then(async (response) => {
+        const data = (await response.json()) as { users?: LawyerOption[] };
+        if (response.ok) {
+          setLawyers(
+            (data.users ?? []).filter((user) => user.role === "lawyer")
+          );
+        }
+      })
+      .catch(() => {
+        // The request queue remains usable if account management is unavailable.
+      });
+  }, []);
+
   function selectRequest(request: RequestRecord) {
     setSelected(request);
     setLawyerResponse(request.lawyerResponse ?? "");
     setCorrectedAnswer(request.correctedAnswer ?? "");
+    setSelectedLawyerId(request.assignedLawyerUserId ?? "");
     setMessage(null);
+  }
+
+  async function updateAssignment() {
+    if (!selected) {
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+    try {
+      const response = await fetch(
+        `/api/admin/lawyer-requests/${selected.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assignedLawyerUserId: selectedLawyerId || null,
+          }),
+        }
+      );
+      const data = (await response.json()) as RequestRecord & {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to update assignment.");
+      }
+      setSelected(data);
+      setMessage("Assignment updated.");
+      await loadQueue();
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to update assignment."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function updateStatus(status: string) {
@@ -207,6 +264,35 @@ export function VipRequestQueue() {
                   </p>
                 </div>
               ) : null}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Assignment
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <select
+                    className="min-w-56 rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    onChange={(event) =>
+                      setSelectedLawyerId(event.target.value)
+                    }
+                    value={selectedLawyerId}
+                  >
+                    <option value="">Unassigned</option>
+                    {lawyers.map((lawyer) => (
+                      <option key={lawyer.id} value={lawyer.id}>
+                        {lawyer.email}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                    disabled={loading}
+                    onClick={updateAssignment}
+                    type="button"
+                  >
+                    Save assignment
+                  </button>
+                </div>
+              </div>
               <textarea
                 className="min-h-28 w-full rounded-2xl border border-slate-200 p-3 text-sm"
                 maxLength={8000}
