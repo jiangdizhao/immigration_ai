@@ -965,13 +965,13 @@ class QueryService:
         legal_decision: Any | None = None,
         communication_plan: Any | None = None,
         extra_debug: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> str | None:
         """Passive lawyer-review trace hook.
 
         This method must not mutate the response or influence control flow.
         ReviewTraceService opens its own database session and catches failures.
         """
-        self.review_trace_service.safe_record_answer_trace(
+        trace_id = self.review_trace_service.safe_record_answer_trace(
             matter=matter,
             payload=payload,
             response=response,
@@ -984,6 +984,9 @@ class QueryService:
             communication_plan=communication_plan,
             extra_debug=extra_debug,
         )
+        if trace_id:
+            response.trace_id = trace_id
+        return trace_id
 
     # ------------------------------------------------------------------
     # Semantic turn and task helpers

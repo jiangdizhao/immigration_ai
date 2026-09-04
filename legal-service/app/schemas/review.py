@@ -188,6 +188,21 @@ class MaterializeLearningRequest(BaseSchema):
     phase7_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class Phase8LearningBridgeRequest(BaseSchema):
+    phase8_request_id: str = Field(min_length=1, max_length=255)
+    answer_trace_id: str = Field(min_length=1, max_length=255)
+    legal_matter_id: str | None = Field(default=None, max_length=255)
+    chatbot_chat_id: str | None = Field(default=None, max_length=255)
+    chatbot_assistant_message_id: str | None = Field(default=None, max_length=255)
+    acting_staff_role: str = Field(pattern="^(lawyer|admin)$")
+    reviewer_id: str = Field(min_length=1, max_length=255)
+    outcome: str = Field(pattern="^(confirmed|corrected)$")
+    lawyer_comment: str | None = Field(default=None, max_length=8000)
+    corrected_answer: str | None = Field(default=None, max_length=12000)
+    preferred_reasoning_or_research_approach: str | None = Field(default=None, max_length=8000)
+    create_reasoning_lesson_candidate: bool = False
+
+
 class EvaluationBankCaseOut(BaseSchema):
     artifact_id: str
     artifact_status: str

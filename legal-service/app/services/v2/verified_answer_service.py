@@ -628,7 +628,9 @@ class QueryServiceV2:
         matter.metadata_json = meta
 
     def _trace(self, matter: Matter, payload: QueryRequest, response: QueryResponse, timing: dict[str, Any], extra: dict[str, Any]) -> None:
-        self.review_trace_service.safe_record_answer_trace(matter=matter, payload=payload, response=response, state=None, semantic_turn=None, original_question=payload.question, effective_question=payload.question, stage_timing=timing, legal_decision=None, communication_plan=None, extra_debug=extra)
+        trace_id = self.review_trace_service.safe_record_answer_trace(matter=matter, payload=payload, response=response, state=None, semantic_turn=None, original_question=payload.question, effective_question=payload.question, stage_timing=timing, legal_decision=None, communication_plan=None, extra_debug=extra)
+        if trace_id:
+            response.trace_id = trace_id
 
     def _to_response(self, payload: QueryRequest, matter: Matter, rendered: V2RenderedAnswer, citations: list[CitationOut]) -> QueryResponse:
         return QueryResponse(matter_id=matter.id, answer=rendered.answer, response_language="zh" if self._looks_zh(rendered.answer) else (payload.response_language or "en"), confidence=rendered.confidence, user_display_mode=rendered.user_display_mode, issue_type=rendered.issue_type, missing_facts=rendered.missing_facts, follow_up_questions=rendered.follow_up_questions, citations=citations, compact_sources=rendered.compact_sources, escalate=rendered.escalate, next_action=rendered.next_action, retrieval_debug={})

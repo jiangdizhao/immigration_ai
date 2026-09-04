@@ -15,6 +15,7 @@ type RequestRecord = {
   createdAt: string;
   assignedLawyerUserId: string | null;
   assignedAt: string | null;
+  learningBridge?: { status: string } | null;
 };
 
 type LawyerOption = { id: string; email: string; role: "user" | "lawyer" };
@@ -43,6 +44,12 @@ export function VipRequestQueue() {
   const [selected, setSelected] = useState<RequestRecord | null>(null);
   const [lawyerResponse, setLawyerResponse] = useState("");
   const [correctedAnswer, setCorrectedAnswer] = useState("");
+  const [
+    preferredReasoningOrResearchApproach,
+    setPreferredReasoningOrResearchApproach,
+  ] = useState("");
+  const [createReasoningLessonCandidate, setCreateReasoningLessonCandidate] =
+    useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [lawyers, setLawyers] = useState<LawyerOption[]>([]);
@@ -95,6 +102,8 @@ export function VipRequestQueue() {
     setSelected(request);
     setLawyerResponse(request.lawyerResponse ?? "");
     setCorrectedAnswer(request.correctedAnswer ?? "");
+    setPreferredReasoningOrResearchApproach("");
+    setCreateReasoningLessonCandidate(false);
     setSelectedLawyerId(request.assignedLawyerUserId ?? "");
     setMessage(null);
   }
@@ -159,7 +168,13 @@ export function VipRequestQueue() {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status, lawyerResponse, correctedAnswer }),
+          body: JSON.stringify({
+            status,
+            lawyerResponse,
+            correctedAnswer,
+            preferredReasoningOrResearchApproach,
+            createReasoningLessonCandidate,
+          }),
         }
       );
       const data = (await response.json()) as RequestRecord & {
@@ -307,6 +322,58 @@ export function VipRequestQueue() {
                 placeholder="Corrected answer (required for correction)"
                 value={correctedAnswer}
               />
+              <textarea
+                className="min-h-24 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+                maxLength={8000}
+                onChange={(event) =>
+                  setPreferredReasoningOrResearchApproach(event.target.value)
+                }
+                placeholder="Optional procedural reasoning/research approach"
+                value={preferredReasoningOrResearchApproach}
+              />
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  checked={createReasoningLessonCandidate}
+                  onChange={(event) =>
+                    setCreateReasoningLessonCandidate(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                Create reasoning lesson candidate
+              </label>
+              <p className="text-sm text-slate-600">
+                Learning bridge:{" "}
+                {selected.learningBridge?.status ?? "not finalized"} · runtime
+                effect: shadow/none
+              </p>
+              {selected.learningBridge &&
+              [
+                "failed_retryable",
+                "blocked_missing_trace_link",
+                "blocked_missing_experience",
+              ].includes(selected.learningBridge.status) ? (
+                <button
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      await fetch(
+                        `/api/admin/lawyer-requests/${selected.id}/learning`,
+                        {
+                          method: "POST",
+                        }
+                      );
+                      await loadQueue();
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  type="button"
+                >
+                  Retry learning bridge
+                </button>
+              ) : null}
               {message ? (
                 <p className="text-sm text-slate-700">{message}</p>
               ) : null}

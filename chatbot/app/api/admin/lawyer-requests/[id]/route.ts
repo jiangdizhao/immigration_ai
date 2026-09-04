@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { requireAdminUser } from "@/lib/lawyer-requests/admin-access";
 import { classifyAdminLawyerRequestPatch } from "@/lib/lawyer-requests/admin-update";
+import { attemptLearningBridge } from "@/lib/lawyer-requests/learning-bridge";
+import { runLearningBridgeFailNeutral } from "@/lib/lawyer-requests/learning-bridge-policy";
 import { notifyLawyerRequest } from "@/lib/lawyer-requests/notifications";
 import {
   assignLawyer,
   getLawyerRequestNotificationTargets,
+  getLearningBridge,
   getStaffLawyerRequest,
   LawyerRequestDomainError,
   updateStaffRequest,
@@ -19,6 +22,12 @@ const updateSchema = z
     lawyerResponse: z.string().trim().max(8000).optional(),
     correctedAnswer: z.string().trim().max(12_000).optional(),
     assignedLawyerUserId: z.string().uuid().nullable().optional(),
+    preferredReasoningOrResearchApproach: z
+      .string()
+      .trim()
+      .max(8000)
+      .optional(),
+    createReasoningLessonCandidate: z.boolean().optional(),
   })
   .strict();
 
@@ -39,6 +48,7 @@ export async function GET(_request: Request, context: RouteContext) {
     ...result.request,
     customerEmail: result.customerEmail,
     messages: result.messages,
+    learningBridge: await getLearningBridge(id),
   });
 }
 
@@ -100,7 +110,23 @@ export async function PATCH(request: Request, context: RouteContext) {
         status: parsed.data.status,
         lawyerResponse: parsed.data.lawyerResponse,
         correctedAnswer: parsed.data.correctedAnswer,
+        preferredReasoningOrResearchApproach:
+          parsed.data.preferredReasoningOrResearchApproach,
+        createReasoningLessonCandidate:
+          parsed.data.createReasoningLessonCandidate,
       });
+      if (
+        parsed.data.status === "confirmed" ||
+        parsed.data.status === "corrected"
+      ) {
+        await runLearningBridgeFailNeutral(
+          () => attemptLearningBridge(id),
+          () =>
+            console.error(
+              "Phase-8 learning bridge failed after lawyer result finalization"
+            )
+        );
+      }
       const targets = await getLawyerRequestNotificationTargets(id);
       if (
         targets?.customerEmail &&
@@ -131,6 +157,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       ...updated?.request,
       customerEmail: updated?.customerEmail,
       messages: updated?.messages ?? [],
+      learningBridge: await getLearningBridge(id),
     });
   } catch (error) {
     if (error instanceof LawyerRequestDomainError) {

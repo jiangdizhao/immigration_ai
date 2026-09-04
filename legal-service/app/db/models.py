@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any
+from uuid import uuid4
 
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, func, inspect
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import get_settings
@@ -212,7 +214,7 @@ def _reject_review_artifact_content_update(_mapper, _connection, target) -> None
 
 
 class ExperienceRecord(UUIDPrimaryKeyMixin, Base):
-    """Immutable Phase 7.1 snapshot of a completed Default interaction.
+    """Immutable snapshot of an eligible completed live interaction.
 
     This table is intentionally separate from AnswerTrace: AnswerTrace has
     mutable lawyer-review workflow fields, while an experience is an
@@ -239,6 +241,29 @@ class ExperienceRecord(UUIDPrimaryKeyMixin, Base):
         # NULL request IDs are allowed for offline/manual records.  A stable
         # request ID, when available, is the idempotency key for live capture.
         UniqueConstraint("request_id", name="uq_experience_records_request_id"),
+    )
+
+
+class Phase8LearningBridgeReceipt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Idempotency receipt for the server-to-server Phase 8 learning bridge."""
+
+    __tablename__ = "phase8_learning_bridge_receipts"
+
+    # The controlled migration uses a native PostgreSQL UUID. Override the
+    # generic legacy mixin annotation so SQLAlchemy binds this key correctly.
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+
+    external_request_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    answer_trace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    experience_record_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    answer_review_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evaluation_artifact_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lesson_artifact_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("external_request_id", name="uq_phase8_learning_bridge_external_request"),
     )
 
 

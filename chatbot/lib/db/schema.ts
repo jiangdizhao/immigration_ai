@@ -258,6 +258,89 @@ export type LawyerClarificationEvent = InferSelectModel<
   typeof lawyerClarificationEvent
 >;
 
+export const immigrationAnswerTraceLink = pgTable(
+  "ImmigrationAnswerTraceLink",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    chatId: uuid("chatId")
+      .notNull()
+      .references(() => chat.id, { onDelete: "cascade" }),
+    assistantMessageId: uuid("assistantMessageId").notNull(),
+    legalMatterId: varchar("legalMatterId", { length: 255 }),
+    answerTraceId: varchar("answerTraceId", { length: 255 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    assistantUnique: uniqueIndex(
+      "ImmigrationAnswerTraceLink_chat_assistant_unique"
+    ).on(table.chatId, table.assistantMessageId),
+    traceUnique: uniqueIndex("ImmigrationAnswerTraceLink_trace_unique").on(
+      table.answerTraceId
+    ),
+  })
+);
+
+export type ImmigrationAnswerTraceLink = InferSelectModel<
+  typeof immigrationAnswerTraceLink
+>;
+
+export const lawyerClarificationLearningBridge = pgTable(
+  "LawyerClarificationLearningBridge",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    requestId: uuid("requestId")
+      .notNull()
+      .references(() => lawyerClarificationRequest.id, { onDelete: "cascade" }),
+    assistantMessageId: uuid("assistantMessageId"),
+    legalMatterId: varchar("legalMatterId", { length: 255 }),
+    actingStaffRole: varchar("actingStaffRole", { enum: ["lawyer", "admin"] }),
+    answerTraceId: varchar("answerTraceId", { length: 255 }),
+    experienceRecordId: varchar("experienceRecordId", { length: 255 }),
+    status: varchar("status", {
+      enum: [
+        "pending",
+        "completed",
+        "blocked_missing_trace_link",
+        "blocked_missing_experience",
+        "failed_retryable",
+        "failed_permanent",
+      ],
+    })
+      .notNull()
+      .default("pending"),
+    phase7AnswerReviewId: varchar("phase7AnswerReviewId", { length: 255 }),
+    evaluationArtifactId: varchar("evaluationArtifactId", { length: 255 }),
+    reasoningLessonCandidateArtifactId: varchar(
+      "reasoningLessonCandidateArtifactId",
+      { length: 255 }
+    ),
+    preferredReasoningOrResearchApproach: text(
+      "preferredReasoningOrResearchApproach"
+    ),
+    createReasoningLessonCandidate: boolean("createReasoningLessonCandidate")
+      .notNull()
+      .default(false),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    lastAttemptAt: timestamp("lastAttemptAt"),
+    completedAt: timestamp("completedAt"),
+    lastErrorCode: varchar("lastErrorCode", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    requestUnique: uniqueIndex(
+      "LawyerClarificationLearningBridge_request_unique"
+    ).on(table.requestId),
+    statusUpdatedIndex: index(
+      "LawyerClarificationLearningBridge_status_updated_idx"
+    ).on(table.status, table.updatedAt),
+  })
+);
+
+export type LawyerClarificationLearningBridge = InferSelectModel<
+  typeof lawyerClarificationLearningBridge
+>;
+
 export const chat = pgTable("Chat", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   createdAt: timestamp("createdAt").notNull(),

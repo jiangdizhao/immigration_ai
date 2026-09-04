@@ -13,7 +13,10 @@ from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.state import MatterState
 from app.schemas.agent import AgentExecutionMetrics
 from app.services.agent_observability_service import AgentObservabilityService
-from app.services.experience_archive_service import ExperienceArchiveService
+from app.services.experience_archive_service import (
+    ExperienceArchiveService,
+    is_eligible_live_experience_archive_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +146,12 @@ class ReviewTraceService:
             logger.exception("Review trace recording failed; public response is unchanged.")
 
         # This is the canonical rich completion capture.  It is independent of
-        # lawyer-review enablement, Default-only, and request-thread snapshot
+        # lawyer-review enablement and request-thread snapshot
         # construction is guarded by the archive coordinator.
         try:
-            if getattr(payload, "assistant_mode", "") in {"default", "default_legal_pipeline"}:
+            if is_eligible_live_experience_archive_mode(
+                getattr(payload, "assistant_mode", None)
+            ):
                 capture_method = getattr(
                     self.experience_archive_service,
                     "safe_capture_async",

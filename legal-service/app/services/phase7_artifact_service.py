@@ -529,7 +529,19 @@ class Phase7ArtifactService:
 
     def _metadata(self, options: Any, **extra: Any) -> dict[str, Any]:
         supplied = getattr(options, "phase7_metadata", {}) or {}
-        allowed = {"scope_applicability", "notes", "source_integrity", "evaluation_name"}
+        allowed = {
+            "scope_applicability",
+            "notes",
+            "source_integrity",
+            "evaluation_name",
+            "source_system",
+            "phase8_request_id",
+            "chatbot_chat_id",
+            "chatbot_assistant_message_id",
+            "legal_matter_id",
+            "acting_staff_role",
+            "source_assistant_mode",
+        }
         metadata = {
             key: self._safe_json(supplied[key])
             for key in allowed

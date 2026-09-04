@@ -31,6 +31,12 @@ class CapturingSession:
         return SimpleNamespace(id=matter_id) if matter_id in self.existing_matter_ids else None
 
 
+class PremiumTraceSession(CapturingSession):
+    def add(self, value) -> None:
+        value.id = "trace-premium"
+        super().add(value)
+
+
 def response() -> QueryResponse:
     return QueryResponse(
         matter_id="matter-1",
@@ -98,6 +104,81 @@ def test_review_trace_contains_exact_observability_fields(monkeypatch) -> None:
     assert metrics["tool_call_count"] == 1
     assert metrics["terminal_submission_missing"] is True
     assert session.added.matter_id == "matter-1"
+
+
+def test_premium_review_trace_returns_exact_id_and_archives_the_same_answer(monkeypatch):
+    import app.services.review_trace_service as review_module
+
+    session = PremiumTraceSession(existing_matter_ids={"matter-1"})
+    monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
+    captured = []
+
+    class ArchiveSpy:
+        def safe_capture(self, **kwargs):
+            captured.append(kwargs)
+
+        def safe_capture_async(self, **kwargs):
+            captured.append(kwargs)
+
+    service = ReviewTraceService(experience_archive_service=ArchiveSpy())
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+    accepted_answer = "The accepted Premium answer."
+    trace_id = service.safe_record_answer_trace(
+        matter=SimpleNamespace(id="matter-1", session_id="session-1"),
+        payload=QueryRequest(
+            question="Premium question", assistant_mode="premium_direct_gpt55_high"
+        ),
+        response=response().model_copy(update={"answer": accepted_answer}),
+        state=None,
+        extra_debug={"trace_path": "premium_direct"},
+    )
+
+    assert trace_id == "trace-premium"
+    assert session.added.id == trace_id
+    assert session.added.assistant_answer == accepted_answer
+    assert session.added.trace_json["extra_debug"]["trace_path"] == "premium_direct"
+    assert len(captured) == 1
+    assert captured[0]["answer_trace_id"] == trace_id
+    assert captured[0]["payload"].assistant_mode == "premium_direct_gpt55_high"
+
+
+def test_premium_trace_failure_is_fail_neutral_and_archive_still_receives_answer(
+    monkeypatch,
+):
+    import app.services.review_trace_service as review_module
+
+    def fail_session():
+        raise RuntimeError("trace database unavailable")
+
+    monkeypatch.setattr(review_module, "SessionLocal", fail_session)
+    captured = []
+
+    class ArchiveSpy:
+        def safe_capture(self, **kwargs):
+            captured.append(kwargs)
+
+        def safe_capture_async(self, **kwargs):
+            captured.append(kwargs)
+
+    service = ReviewTraceService(experience_archive_service=ArchiveSpy())
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+    public_response = response()
+    before = public_response.model_dump()
+
+    trace_id = service.safe_record_answer_trace(
+        matter=SimpleNamespace(id="matter-1", session_id="session-1"),
+        payload=QueryRequest(
+            question="Premium question", assistant_mode="premium_direct_gpt55_high"
+        ),
+        response=public_response,
+        state=None,
+    )
+
+    assert trace_id is None
+    assert public_response.model_dump() == before
+    assert len(captured) == 1
+    assert captured[0]["answer_trace_id"] is None
+    assert captured[0]["response"].answer == public_response.answer
 
 
 def test_invalid_matter_fk_skips_answer_trace_but_archives_diagnostics(monkeypatch) -> None:

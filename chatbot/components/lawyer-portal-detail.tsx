@@ -18,6 +18,7 @@ type RequestRecord = {
   customerNote: string | null;
   lawyerResponse: string | null;
   correctedAnswer: string | null;
+  preferredReasoningOrResearchApproach?: string | null;
   messages: Message[];
 };
 
@@ -25,6 +26,12 @@ export function LawyerPortalDetail({ id }: { id: string }) {
   const [request, setRequest] = useState<RequestRecord | null>(null);
   const [lawyerResponse, setLawyerResponse] = useState("");
   const [correctedAnswer, setCorrectedAnswer] = useState("");
+  const [
+    preferredReasoningOrResearchApproach,
+    setPreferredReasoningOrResearchApproach,
+  ] = useState("");
+  const [createReasoningLessonCandidate, setCreateReasoningLessonCandidate] =
+    useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -37,6 +44,9 @@ export function LawyerPortalDetail({ id }: { id: string }) {
     setRequest(data);
     setLawyerResponse(data.lawyerResponse ?? "");
     setCorrectedAnswer(data.correctedAnswer ?? "");
+    setPreferredReasoningOrResearchApproach(
+      data.preferredReasoningOrResearchApproach ?? ""
+    );
   }, [id]);
 
   useEffect(() => {
@@ -54,7 +64,13 @@ export function LawyerPortalDetail({ id }: { id: string }) {
       const response = await fetch(`/api/lawyer-portal/requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, lawyerResponse, correctedAnswer }),
+        body: JSON.stringify({
+          status,
+          lawyerResponse,
+          correctedAnswer,
+          preferredReasoningOrResearchApproach,
+          createReasoningLessonCandidate,
+        }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -159,6 +175,25 @@ export function LawyerPortalDetail({ id }: { id: string }) {
             placeholder="Corrected answer (required for correction)"
             value={correctedAnswer}
           />
+          <textarea
+            className="min-h-24 w-full rounded-xl border border-slate-300 p-3 text-sm"
+            maxLength={8000}
+            onChange={(event) =>
+              setPreferredReasoningOrResearchApproach(event.target.value)
+            }
+            placeholder="Optional procedural reasoning/research approach (for a lesson candidate)"
+            value={preferredReasoningOrResearchApproach}
+          />
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              checked={createReasoningLessonCandidate}
+              onChange={(event) =>
+                setCreateReasoningLessonCandidate(event.target.checked)
+              }
+              type="checkbox"
+            />
+            Create a reasoning lesson candidate
+          </label>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button

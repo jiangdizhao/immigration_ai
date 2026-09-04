@@ -443,9 +443,9 @@ class DefaultAgentServingService:
             confidence=response.confidence,
         )
 
-    def _record_trace(self, *, query_service: Any, matter: Any, payload: QueryRequest, response: QueryResponse, state: Any, original_question: str, effective_question: str, result: Any, registry: RequestEvidenceRegistry) -> None:
+    def _record_trace(self, *, query_service: Any, matter: Any, payload: QueryRequest, response: QueryResponse, state: Any, original_question: str, effective_question: str, result: Any, registry: RequestEvidenceRegistry) -> str | None:
         try:
-            query_service.review_trace_service.safe_record_answer_trace(
+            trace_id = query_service.review_trace_service.safe_record_answer_trace(
                 matter=matter,
                 payload=payload,
                 response=response,
@@ -460,8 +460,12 @@ class DefaultAgentServingService:
                 execution_metrics=result.metrics,
                 evidence_registry=registry,
             )
+            if trace_id:
+                response.trace_id = trace_id
+            return trace_id
         except Exception:
             logger.exception("Default AgentRuntime answer trace recording failed")
+            return None
 
     def _debug_payload(self, *, result: Any, metrics: dict[str, Any], registry: RequestEvidenceRegistry) -> dict[str, Any]:
         settings = get_settings()

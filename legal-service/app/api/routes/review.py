@@ -11,6 +11,7 @@ from app.schemas.review import (
     AnswerTraceOut,
     EvaluationBankCaseOut,
     MaterializeLearningRequest,
+    Phase8LearningBridgeRequest,
     MatterReviewOut,
     ReviewConversationItem,
     ReviewQueueItem,
@@ -29,7 +30,9 @@ from app.services.phase7_3a_reasoning_bank import (
     ReasoningBankService,
     RuleFormationError,
 )
+from app.services.phase7_artifact_service import Phase7ArtifactError
 from app.services.review_service import ReviewService
+from app.services.phase8_learning_bridge_service import Phase8LearningBridgeService
 from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
 from app.services.evaluation_bank_service import (
     EvaluationBankService,
@@ -44,6 +47,7 @@ reasoning_bank_service = ReasoningBankService()
 reasoning_bank_manager = ReasoningBankManager()
 rule_compiler_service = Phase73RuleCompilerService()
 reasoning_bank_runtime_service = ReasoningBankRuntimeService()
+phase8_learning_bridge_service = Phase8LearningBridgeService()
 
 
 def _commit_or_rollback(db: DBSession) -> None:
@@ -163,6 +167,27 @@ def materialize_learning_artifacts(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
     return result
+
+
+@router.post("/phase8/learning-bridge")
+def materialize_phase8_learning_bridge(
+    payload: Phase8LearningBridgeRequest,
+    db: DBSession,
+    trusted_lawyer_review: bool = Depends(verify_lawyer_review_assertion),
+) -> dict:
+    try:
+        return phase8_learning_bridge_service.materialize(
+            db,
+            payload=payload,
+            trusted_lawyer_review=trusted_lawyer_review,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (Phase7ArtifactError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.get("/evaluation-bank", response_model=list[EvaluationBankCaseOut])

@@ -39,6 +39,19 @@ _CAPTURED_REQUEST_ID: ContextVar[str | None] = ContextVar(
     "phase7_experience_capture_request_id", default=None
 )
 
+LIVE_EXPERIENCE_ARCHIVE_MODES = frozenset(
+    {
+        "default",
+        "default_legal_pipeline",
+        "premium",
+        "premium_direct_gpt55_high",
+    }
+)
+
+
+def is_eligible_live_experience_archive_mode(mode: object) -> bool:
+    return isinstance(mode, str) and mode in LIVE_EXPERIENCE_ARCHIVE_MODES
+
 
 @dataclass(frozen=True, slots=True)
 class ExperiencePersistencePayload:
@@ -82,11 +95,9 @@ class ExperienceArchiveService:
 
         if not getattr(self.settings, "phase7_experience_archive_enabled", False):
             return None
-        # Phase 7.1 serving capture is Default-only.  Offline callers may use
-        # synthetic/manual origins, but no Premium data enters this archive.
-        if origin == "live_interaction" and getattr(payload, "assistant_mode", "") not in {
-            "default", "default_legal_pipeline",
-        }:
+        if origin == "live_interaction" and not is_eligible_live_experience_archive_mode(
+            getattr(payload, "assistant_mode", None)
+        ):
             return None
 
         stable_request_id = self._request_id(payload, request_id)
@@ -114,6 +125,12 @@ class ExperienceArchiveService:
         """Build the snapshot now, then persist pure data asynchronously."""
 
         if not getattr(self.settings, "phase7_experience_archive_enabled", False):
+            return
+        payload: QueryRequest = kwargs["payload"]
+        origin = kwargs.get("origin", "live_interaction")
+        if origin == "live_interaction" and not is_eligible_live_experience_archive_mode(
+            getattr(payload, "assistant_mode", None)
+        ):
             return
         request_id = self._request_id(kwargs["payload"], kwargs.get("request_id"))
         if request_id and self.capture_scheduled_for(request_id):

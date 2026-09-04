@@ -12,7 +12,10 @@ from app.schemas.learning import (
 )
 from app.schemas.query import QueryRequest, QueryResponse
 from app.db.models import ExperienceRecord
-from app.services.experience_archive_service import ExperienceArchiveService
+from app.services.experience_archive_service import (
+    ExperienceArchiveService,
+    is_eligible_live_experience_archive_mode,
+)
 from app.services.review_trace_service import ReviewTraceService
 
 
@@ -138,14 +141,20 @@ def test_disabled_archive_writes_nothing():
     assert _Session.records == []
 
 
-def test_archive_failure_is_fail_open_and_does_not_mutate_response():
+@pytest.mark.parametrize("mode", ["default_legal_pipeline", "premium_direct_gpt55_high"])
+def test_archive_failure_is_fail_open_and_does_not_mutate_response(mode):
     _Session.records = []
     _Session.fail = True
     try:
         service = ExperienceArchiveService(session_factory=_Session, settings=_settings())
         response = _response()
         before = response.model_dump()
-        assert service.safe_capture(payload=_payload(), response=response, request_id="request-1") is None
+        assert (
+            service.safe_capture(
+                payload=_payload(mode=mode), response=response, request_id="request-1"
+            )
+            is None
+        )
         assert response.model_dump() == before
     finally:
         _Session.fail = False
@@ -406,14 +415,37 @@ def test_synthetic_origin_cannot_masquerade_as_lawyer_reviewed(contract):
         contract(**kwargs)
 
 
-def test_premium_is_not_archived_by_phase7_1_serving_writer():
+@pytest.mark.parametrize(
+    "mode",
+    ["default", "default_legal_pipeline", "premium", "premium_direct_gpt55_high"],
+)
+def test_canonical_live_modes_are_archived_by_phase7_1_serving_writer(mode):
     _Session.records = []
     service = ExperienceArchiveService(session_factory=_Session, settings=_settings())
-    assert service.safe_capture(
-        payload=_payload(mode="premium_direct_gpt55_high"),
+    experience_id = service.safe_capture(
+        payload=_payload(mode=mode),
         response=_response(),
-        request_id="premium-request",
-    ) is None
+        answer_trace_id="trace-1",
+        request_id=f"{mode}-request",
+    )
+    assert experience_id is not None
+    assert len(_Session.records) == 1
+    assert _Session.records[0].answer_trace_id == "trace-1"
+    assert _Session.records[0].origin == "live_interaction"
+    assert _Session.records[0].snapshot_json["request"]["assistant_mode"] == mode
+    assert (
+        service.snapshot_sha256(_Session.records[0].snapshot_json)
+        == _Session.records[0].snapshot_sha256
+    )
+
+
+def test_unknown_live_mode_is_rejected_by_both_archive_entrypoints():
+    _Session.records = []
+    service = ExperienceArchiveService(session_factory=_Session, settings=_settings())
+    payload = SimpleNamespace(assistant_mode="unknown-serving-mode")
+    assert not is_eligible_live_experience_archive_mode(payload.assistant_mode)
+    assert service.safe_capture(payload=payload, response=_response()) is None
+    service.safe_capture_async(payload=payload, response=_response())
     assert _Session.records == []
 
 

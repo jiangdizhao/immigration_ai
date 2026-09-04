@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { requireLawyerStaff } from "@/lib/lawyer-requests/access";
+import { attemptLearningBridge } from "@/lib/lawyer-requests/learning-bridge";
+import { runLearningBridgeFailNeutral } from "@/lib/lawyer-requests/learning-bridge-policy";
 import { notifyLawyerRequest } from "@/lib/lawyer-requests/notifications";
 import {
   getLawyerRequestNotificationTargets,
@@ -16,6 +18,12 @@ const updateSchema = z
     status: z.string(),
     lawyerResponse: z.string().trim().max(8000).optional(),
     correctedAnswer: z.string().trim().max(12_000).optional(),
+    preferredReasoningOrResearchApproach: z
+      .string()
+      .trim()
+      .max(8000)
+      .optional(),
+    createReasoningLessonCandidate: z.boolean().optional(),
   })
   .strict();
 
@@ -74,7 +82,23 @@ export async function PATCH(request: Request, context: RouteContext) {
       status: parsed.data.status,
       lawyerResponse: parsed.data.lawyerResponse,
       correctedAnswer: parsed.data.correctedAnswer,
+      preferredReasoningOrResearchApproach:
+        parsed.data.preferredReasoningOrResearchApproach,
+      createReasoningLessonCandidate:
+        parsed.data.createReasoningLessonCandidate,
     });
+    if (
+      parsed.data.status === "confirmed" ||
+      parsed.data.status === "corrected"
+    ) {
+      await runLearningBridgeFailNeutral(
+        () => attemptLearningBridge(id),
+        () =>
+          console.error(
+            "Phase-8 learning bridge failed after lawyer result finalization"
+          )
+      );
+    }
     const targets = await getLawyerRequestNotificationTargets(id);
     if (
       targets?.customerEmail &&

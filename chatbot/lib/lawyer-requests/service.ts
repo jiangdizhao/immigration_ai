@@ -5,7 +5,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { guestRegex } from "@/lib/constants";
 import {
+  immigrationAnswerTraceLink,
   lawyerClarificationEvent,
+  lawyerClarificationLearningBridge,
   lawyerClarificationMessage,
   lawyerClarificationRequest,
   user,
@@ -78,6 +80,60 @@ export function createLawyerRequestWithEvent(values: RequestInsert) {
     });
     return request;
   });
+}
+
+export async function createImmigrationAnswerTraceLink(values: {
+  chatId: string;
+  assistantMessageId: string;
+  legalMatterId?: string | null;
+  answerTraceId: string;
+}) {
+  const [existing] = await db
+    .select()
+    .from(immigrationAnswerTraceLink)
+    .where(
+      and(
+        eq(immigrationAnswerTraceLink.chatId, values.chatId),
+        eq(
+          immigrationAnswerTraceLink.assistantMessageId,
+          values.assistantMessageId
+        )
+      )
+    )
+    .limit(1);
+  if (existing) {
+    if (existing.answerTraceId !== values.answerTraceId) {
+      throw new Error(
+        "Assistant message is already linked to another answer trace."
+      );
+    }
+    return existing;
+  }
+  const [created] = await db
+    .insert(immigrationAnswerTraceLink)
+    .values(values)
+    .returning();
+  return created;
+}
+
+export async function getImmigrationAnswerTraceLink({
+  chatId,
+  assistantMessageId,
+}: {
+  chatId: string;
+  assistantMessageId: string;
+}) {
+  const [link] = await db
+    .select()
+    .from(immigrationAnswerTraceLink)
+    .where(
+      and(
+        eq(immigrationAnswerTraceLink.chatId, chatId),
+        eq(immigrationAnswerTraceLink.assistantMessageId, assistantMessageId)
+      )
+    )
+    .limit(1);
+  return link ?? null;
 }
 
 export async function getCustomerLawyerRequest({
@@ -315,12 +371,16 @@ export function updateStaffRequest({
   status,
   lawyerResponse,
   correctedAnswer,
+  preferredReasoningOrResearchApproach,
+  createReasoningLessonCandidate = false,
 }: {
   actor: StaffActor;
   requestId: string;
   status: LawyerClarificationStatus;
   lawyerResponse?: string | null;
   correctedAnswer?: string | null;
+  preferredReasoningOrResearchApproach?: string | null;
+  createReasoningLessonCandidate?: boolean;
 }) {
   return db.transaction(async (tx) => {
     const current = await getRequestForUpdate(tx, requestId);
@@ -346,6 +406,15 @@ export function updateStaffRequest({
     const validationError = validateLawyerClarificationUpdate(current, update);
     if (validationError) {
       throw new LawyerRequestDomainError(validationError, 400);
+    }
+    if (
+      createReasoningLessonCandidate &&
+      !preferredReasoningOrResearchApproach?.trim()
+    ) {
+      throw new LawyerRequestDomainError(
+        "An explicit procedural strategy is required for a lesson candidate.",
+        400
+      );
     }
 
     const now = new Date();
@@ -412,8 +481,70 @@ export function updateStaffRequest({
       fromStatus: current.status,
       toStatus: status,
     });
+    if (
+      (status === "confirmed" || status === "corrected") &&
+      current.status !== "confirmed" &&
+      current.status !== "corrected"
+    ) {
+      const [existingBridge] = await tx
+        .select({ id: lawyerClarificationLearningBridge.id })
+        .from(lawyerClarificationLearningBridge)
+        .where(eq(lawyerClarificationLearningBridge.requestId, requestId))
+        .limit(1);
+      if (!existingBridge) {
+        const [link] =
+          current.chatId && current.assistantMessageId
+            ? await tx
+                .select()
+                .from(immigrationAnswerTraceLink)
+                .where(
+                  and(
+                    eq(immigrationAnswerTraceLink.chatId, current.chatId),
+                    eq(
+                      immigrationAnswerTraceLink.assistantMessageId,
+                      current.assistantMessageId
+                    )
+                  )
+                )
+                .limit(1)
+            : [];
+        await tx.insert(lawyerClarificationLearningBridge).values({
+          requestId,
+          assistantMessageId: current.assistantMessageId,
+          legalMatterId: current.legalMatterId,
+          actingStaffRole: actor.role,
+          answerTraceId: link?.answerTraceId ?? null,
+          status: link ? "pending" : "blocked_missing_trace_link",
+          lastErrorCode: link ? null : "missing_exact_answer_trace_link",
+          preferredReasoningOrResearchApproach:
+            preferredReasoningOrResearchApproach?.trim() || null,
+          createReasoningLessonCandidate,
+        });
+      }
+    }
     return updated;
   });
+}
+
+export async function getLearningBridge(requestId: string) {
+  const [bridge] = await db
+    .select()
+    .from(lawyerClarificationLearningBridge)
+    .where(eq(lawyerClarificationLearningBridge.requestId, requestId))
+    .limit(1);
+  return bridge ?? null;
+}
+
+export async function updateLearningBridge(
+  id: string,
+  values: Partial<typeof lawyerClarificationLearningBridge.$inferInsert>
+) {
+  const [updated] = await db
+    .update(lawyerClarificationLearningBridge)
+    .set({ ...values, updatedAt: new Date() })
+    .where(eq(lawyerClarificationLearningBridge.id, id))
+    .returning();
+  return updated ?? null;
 }
 
 export function addCustomerReply({

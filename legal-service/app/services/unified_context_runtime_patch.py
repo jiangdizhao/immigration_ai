@@ -128,7 +128,7 @@ def apply_patch() -> None:
             db.commit()
             db.refresh(matter)
             try:
-                self.review_trace_service.safe_record_answer_trace(
+                trace_id = self.review_trace_service.safe_record_answer_trace(
                     matter=matter,
                     payload=payload,
                     response=response,
@@ -142,9 +142,12 @@ def apply_patch() -> None:
                     extra_debug={
                         "runtime_patch": "unified_context_runtime_patch",
                         "answer_trace_source": "premium_direct_gpt55_high",
+                        "trace_path": "premium_direct",
                         "semantic_turn_router_skipped": True,
                     },
                 )
+                if trace_id:
+                    response.trace_id = trace_id
             except Exception:  # pragma: no cover - ReviewTraceService should already be defensive.
                 logger.exception(
                     "Premium direct answer trace recording failed; public response is unchanged."
@@ -349,7 +352,7 @@ def apply_patch() -> None:
             db.commit()
             db.refresh(matter)
             try:
-                self.review_trace_service.safe_record_answer_trace(
+                trace_id = self.review_trace_service.safe_record_answer_trace(
                     matter=matter,
                     payload=payload,
                     response=response,
@@ -365,6 +368,8 @@ def apply_patch() -> None:
                         "answer_trace_source": "proposal_first_verification_depth",
                     },
                 )
+                if trace_id:
+                    response.trace_id = trace_id
             except Exception:  # pragma: no cover - ReviewTraceService should already be defensive.
                 logger.exception(
                     "Proposal-first answer trace recording failed; public response is unchanged."

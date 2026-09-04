@@ -11,6 +11,8 @@ import {
 } from "@/lib/db/queries";
 import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
+import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service";
+import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -64,6 +66,7 @@ const widgetDirectRequestBodySchema = z.object({
 type ResponseLanguage = "en" | "zh";
 
 type LegalServiceResponse = {
+  trace_id?: string | null;
   answer?: string;
   response_language?: string | null;
   research_status?: "not_required" | "complete" | "incomplete" | null;
@@ -484,6 +487,15 @@ export async function POST(request: Request) {
           ],
         });
         persistedAssistantMessageId = assistantMessageId;
+        const traceLink = buildImmigrationAnswerTraceLinkValues({
+          chatId: frontendChatId,
+          assistantMessageId: persistedAssistantMessageId,
+          legalMatterId: data.matter_id ?? effectiveMatterId,
+          answerTraceId: data.trace_id,
+        });
+        if (traceLink) {
+          await createImmigrationAnswerTraceLink(traceLink);
+        }
       } catch (error) {
         console.warn(
           "Failed to persist premium direct workspace messages",
