@@ -1,0 +1,60 @@
+{
+  "scenario": {
+    "scenario_id": "m1-operative-version-process",
+    "group": "source",
+    "question": "Which process should be followed when the governing version may depend on operative dates?",
+    "facts": {
+      "date_scope_is_unclear": true,
+      "source_version_is_unverified": true
+    },
+    "expected_behaviors": [
+      "Establish the relevant dates before selecting a governing version.",
+      "Verify the selected version before drawing a conclusion."
+    ],
+    "prohibited_behaviors": [
+      "Do not treat an unverified version as established authority."
+    ],
+    "expected_claim_ids": ["process-date-check"],
+    "prohibited_claim_ids": []
+  },
+  "synthetic_source_answer": "Synthetic process answer: establish relevant dates and verify the operative version before concluding. Not legal authority.",
+  "synthetic_review": {
+    "review_outcome": "material_issue",
+    "error_categories": ["premature_version_selection"],
+    "procedural_lesson": "When applicability may depend on operative dates, establish the relevant dates before selecting the governing version of an instrument, and verify that version before drawing the conclusion.",
+    "expected_checker_behavior": {
+      "must_verify_dates": true,
+      "must_not_treat_memory_as_authority": true
+    },
+    "expected_evidence_characteristics": {
+      "version_verification_required": true
+    }
+  },
+  "compiler_rule_draft": {
+    "rule_type": "research_strategy",
+    "title": "Establish operative dates before version selection",
+    "trigger_conditions": [
+      "The governing version may depend on operative dates."
+    ],
+    "applicability_conditions": [
+      "The relevant dates or version are not yet verified."
+    ],
+    "action_steps": [
+      "List the relevant dates before selecting the next research step."
+    ],
+    "verification_steps": [
+      "Verify the selected version and record the basis for the process decision."
+    ],
+    "prohibited_behaviors": [
+      "Do not treat memory or an unverified version as authority."
+    ],
+    "exceptions_or_limits": [
+      "Keep the result conditional when the relevant dates remain unresolved."
+    ],
+    "transfer_targets": ["date-sensitive-processes"],
+    "case_erasure_confirmation": true,
+    "procedural_only_confirmation": true,
+    "source_specific_residue": [],
+    "legal_proposition_residue": []
+  }
+}
