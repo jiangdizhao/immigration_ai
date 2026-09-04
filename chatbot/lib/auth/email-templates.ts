@@ -28,6 +28,9 @@ function getAppBaseUrl() {
   return url.toString().replace(/\/$/, "");
 }
 
+/** Validated application base URL, shared with billing redirect construction. */
+export { getAppBaseUrl as getValidatedAppBaseUrl };
+
 function buildActionUrl(pathname: string, token: string) {
   const url = new URL(pathname, `${getAppBaseUrl()}/`);
   url.searchParams.set("token", token);

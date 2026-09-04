@@ -66,6 +66,22 @@ export function getVipBillingProviderConfig(
   );
 }
 
+/**
+ * Server-only Stripe webhook signing secret. Fails closed when missing; the
+ * value must never be exposed to clients or persisted.
+ */
+export function getStripeWebhookSecret(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const secret = env.STRIPE_WEBHOOK_SECRET;
+  if (typeof secret !== "string" || secret.trim().length === 0) {
+    throw new Error(
+      "STRIPE_WEBHOOK_SECRET is required for Stripe billing webhooks."
+    );
+  }
+  return secret;
+}
+
 export type VipBillingProviderStatus = {
   provider: VipBillingProviderName | "unconfigured";
   ready: boolean;

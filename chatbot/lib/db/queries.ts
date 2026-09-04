@@ -38,9 +38,14 @@ import {
   suggestion,
   type User,
   user,
+  type VipBillingNotification,
   type VipPurchase,
+  type VipSubscription,
+  vipBillingEvent,
+  vipBillingNotification,
   vipPlanPrice,
   vipPurchase,
+  vipSubscription,
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
@@ -421,6 +426,1012 @@ export async function replaceActiveVipPlanPrice({
       .returning();
 
     return price;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 M2: Stripe subscription lifecycle persistence.
+// ---------------------------------------------------------------------------
+
+export async function getVipPlanPriceById(id: string) {
+  const [price] = await db
+    .select()
+    .from(vipPlanPrice)
+    .where(eq(vipPlanPrice.id, id))
+    .limit(1);
+  return price ?? null;
+}
+
+export async function findReusableVipProviderProductId() {
+  const [price] = await db
+    .select({ providerProductId: vipPlanPrice.providerProductId })
+    .from(vipPlanPrice)
+    .where(
+      and(
+        eq(vipPlanPrice.provider, "stripe"),
+        eq(vipPlanPrice.providerSyncStatus, "ready")
+      )
+    )
+    .orderBy(desc(vipPlanPrice.createdAt))
+    .limit(1);
+  return price?.providerProductId ?? null;
+}
+
+export async function markVipPlanPriceProvisioned({
+  id,
+  provider,
+  providerProductId,
+  providerPriceId,
+}: {
+  id: string;
+  provider: string;
+  providerProductId: string;
+  providerPriceId: string;
+}) {
+  await db
+    .update(vipPlanPrice)
+    .set({
+      provider,
+      providerProductId,
+      providerPriceId,
+      providerSyncStatus: "ready",
+    })
+    .where(eq(vipPlanPrice.id, id));
+}
+
+export async function markVipPlanPriceProvisioningFailed(id: string) {
+  await db
+    .update(vipPlanPrice)
+    .set({ providerSyncStatus: "failed" })
+    .where(eq(vipPlanPrice.id, id));
+}
+
+export async function getVipSubscriptionById(id: string) {
+  const [subscription] = await db
+    .select()
+    .from(vipSubscription)
+    .where(eq(vipSubscription.id, id))
+    .limit(1);
+  return subscription ?? null;
+}
+
+export async function getLiveVipSubscriptionForUser(userId: string) {
+  const [subscription] = await db
+    .select()
+    .from(vipSubscription)
+    .where(
+      and(
+        eq(vipSubscription.userId, userId),
+        sql`${vipSubscription.status} <> 'cancelled'`
+      )
+    )
+    .orderBy(desc(vipSubscription.createdAt))
+    .limit(1);
+  return subscription ?? null;
+}
+
+export async function getVipSubscriptionByProviderSubscriptionId({
+  provider,
+  providerSubscriptionId,
+}: {
+  provider: string;
+  providerSubscriptionId: string;
+}) {
+  const [subscription] = await db
+    .select()
+    .from(vipSubscription)
+    .where(
+      and(
+        eq(vipSubscription.provider, provider),
+        eq(vipSubscription.providerSubscriptionId, providerSubscriptionId)
+      )
+    )
+    .limit(1);
+  return subscription ?? null;
+}
+
+export async function createPendingVipSubscription({
+  userId,
+  planPriceId,
+  provider,
+  amountMinor,
+  currency,
+}: {
+  userId: string;
+  planPriceId: string;
+  provider: string;
+  amountMinor: number;
+  currency: string;
+}) {
+  const [subscription] = await db
+    .insert(vipSubscription)
+    .values({
+      userId,
+      planPriceId,
+      provider,
+      amountMinor,
+      currency,
+      status: "pending",
+    })
+    .returning();
+  return subscription;
+}
+
+export async function rebindPendingVipSubscriptionToPrice({
+  subscriptionId,
+  planPriceId,
+  amountMinor,
+}: {
+  subscriptionId: string;
+  planPriceId: string;
+  amountMinor: number;
+}) {
+  // A never-paid pending checkout may safely follow the current active price.
+  const [subscription] = await db
+    .update(vipSubscription)
+    .set({ planPriceId, amountMinor, updatedAt: new Date() })
+    .where(
+      and(
+        eq(vipSubscription.id, subscriptionId),
+        eq(vipSubscription.status, "pending")
+      )
+    )
+    .returning();
+  return subscription ?? null;
+}
+
+export async function markVipSubscriptionCheckoutSession({
+  subscriptionId,
+  providerCheckoutSessionId,
+}: {
+  subscriptionId: string;
+  providerCheckoutSessionId: string;
+}) {
+  await db
+    .update(vipSubscription)
+    .set({ providerCheckoutSessionId, updatedAt: new Date() })
+    .where(eq(vipSubscription.id, subscriptionId));
+}
+
+/**
+ * Non-event local synchronization after a successful server-side
+ * cancel-at-period-end request. The webhook remains authoritative for durable
+ * state and emails; this only refreshes the safe customer-facing state.
+ */
+export async function synchronizeVipSubscriptionAfterCancelRequest({
+  subscriptionId,
+  status,
+  cancelAtPeriodEnd,
+  currentPeriodStart,
+  currentPeriodEnd,
+  canceledAt,
+  now = new Date(),
+}: {
+  subscriptionId: string;
+  status: VipSubscription["status"];
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  canceledAt: Date | null;
+  now?: Date;
+}) {
+  const [subscription] = await db
+    .update(vipSubscription)
+    .set({
+      status,
+      cancelAtPeriodEnd,
+      currentPeriodStart: currentPeriodStart ?? undefined,
+      currentPeriodEnd: currentPeriodEnd ?? undefined,
+      cancelledAt: canceledAt ?? undefined,
+      updatedAt: now,
+    })
+    .where(eq(vipSubscription.id, subscriptionId))
+    .returning();
+  return subscription ?? null;
+}
+
+export async function getUserEmailById(userId: string) {
+  const [record] = await db
+    .select({ email: user.email })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return record?.email ?? null;
+}
+
+const VIP_BILLING_EVENT_LEASE_MS = 5 * 60 * 1000;
+const VIP_BILLING_NOTIFICATION_LEASE_MS = 5 * 60 * 1000;
+
+class VipBillingOwnershipError extends Error {
+  constructor(kind: "event" | "notification") {
+    super(`VIP billing ${kind} ownership lost`);
+    this.name = "VipBillingOwnershipError";
+  }
+}
+
+async function lockOwnedVipBillingEvent(
+  tx: DbTransaction,
+  billingEventId: string,
+  processingToken: string
+) {
+  await tx.execute(
+    sql`SELECT "id" FROM "VipBillingEvent" WHERE "id" = ${billingEventId} FOR UPDATE`
+  );
+  const [event] = await tx
+    .select()
+    .from(vipBillingEvent)
+    .where(eq(vipBillingEvent.id, billingEventId))
+    .limit(1);
+  if (
+    event?.processingStatus !== "processing" ||
+    event?.processingToken !== processingToken
+  ) {
+    throw new VipBillingOwnershipError("event");
+  }
+  return event;
+}
+
+async function markOwnedVipBillingEvent(
+  tx: DbTransaction,
+  input: {
+    id: string;
+    processingToken: string;
+    status: "processed" | "ignored" | "failed";
+    now: Date;
+    lastErrorCode?: string;
+  }
+) {
+  const [updated] = await tx
+    .update(vipBillingEvent)
+    .set({
+      processingStatus: input.status,
+      processedAt: input.status === "failed" ? undefined : input.now,
+      lastErrorCode: input.lastErrorCode,
+      processingToken: null,
+      processingStartedAt: null,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(vipBillingEvent.id, input.id),
+        eq(vipBillingEvent.processingStatus, "processing"),
+        eq(vipBillingEvent.processingToken, input.processingToken)
+      )
+    )
+    .returning({ id: vipBillingEvent.id });
+  if (!updated) {
+    throw new VipBillingOwnershipError("event");
+  }
+}
+
+export async function claimVipBillingEvent({
+  provider,
+  providerEventId,
+  eventType,
+  now = new Date(),
+}: {
+  provider: string;
+  providerEventId: string;
+  eventType: string;
+  now?: Date;
+}) {
+  const inserted = await db
+    .insert(vipBillingEvent)
+    .values({
+      provider,
+      providerEventId,
+      eventType,
+      processingStatus: "processing",
+      processingToken: createOpaqueToken().tokenHash,
+      processingStartedAt: now,
+      attemptCount: 1,
+      receivedAt: now,
+    })
+    .onConflictDoNothing({
+      target: [vipBillingEvent.provider, vipBillingEvent.providerEventId],
+    })
+    .returning();
+
+  if (inserted[0]) {
+    return { event: inserted[0], claim: "new" as const, owned: true };
+  }
+
+  return await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT "id" FROM "VipBillingEvent" WHERE "provider" = ${provider} AND "providerEventId" = ${providerEventId} FOR UPDATE`
+    );
+    const [existing] = await tx
+      .select()
+      .from(vipBillingEvent)
+      .where(
+        and(
+          eq(vipBillingEvent.provider, provider),
+          eq(vipBillingEvent.providerEventId, providerEventId)
+        )
+      )
+      .limit(1);
+    if (!existing) {
+      return null;
+    }
+
+    const reclaimable =
+      existing.processingStatus === "received" ||
+      existing.processingStatus === "failed" ||
+      (existing.processingStatus === "processing" &&
+        (!existing.processingStartedAt ||
+          now.getTime() - existing.processingStartedAt.getTime() >=
+            VIP_BILLING_EVENT_LEASE_MS));
+    if (!reclaimable) {
+      return { event: existing, claim: "existing" as const, owned: false };
+    }
+
+    const processingToken = createOpaqueToken().tokenHash;
+    const [reclaimed] = await tx
+      .update(vipBillingEvent)
+      .set({
+        processingStatus: "processing",
+        processingToken,
+        processingStartedAt: now,
+        attemptCount: sql`${vipBillingEvent.attemptCount} + 1`,
+        lastErrorCode: null,
+        processedAt: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(vipBillingEvent.id, existing.id),
+          eq(vipBillingEvent.processingStatus, existing.processingStatus),
+          existing.processingStatus === "processing"
+            ? sql`(
+                ${vipBillingEvent.processingStartedAt} IS NULL
+                OR ${vipBillingEvent.processingStartedAt} < ${new Date(
+                  now.getTime() - VIP_BILLING_EVENT_LEASE_MS
+                )}
+              )`
+            : sql`true`
+        )
+      )
+      .returning();
+    return reclaimed
+      ? { event: reclaimed, claim: "new" as const, owned: true }
+      : { event: existing, claim: "existing" as const, owned: false };
+  });
+}
+
+export async function markVipBillingEventProcessed(
+  id: string,
+  processingToken: string,
+  now = new Date()
+) {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, id, processingToken);
+    await markOwnedVipBillingEvent(tx, {
+      id,
+      processingToken,
+      status: "processed",
+      now,
+    });
+    return true;
+  });
+}
+
+export async function markVipBillingEventIgnored(
+  id: string,
+  processingToken: string,
+  now = new Date()
+) {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, id, processingToken);
+    await markOwnedVipBillingEvent(tx, {
+      id,
+      processingToken,
+      status: "ignored",
+      now,
+    });
+    return true;
+  });
+}
+
+export async function markVipBillingEventFailed(
+  id: string,
+  lastErrorCode: string,
+  processingToken: string,
+  now = new Date()
+) {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, id, processingToken);
+    await markOwnedVipBillingEvent(tx, {
+      id,
+      processingToken,
+      status: "failed",
+      lastErrorCode,
+      now,
+    });
+    return true;
+  });
+}
+
+export async function incrementVipBillingEventAttempt(id: string) {
+  await db
+    .update(vipBillingEvent)
+    .set({ attemptCount: sql`${vipBillingEvent.attemptCount} + 1` })
+    .where(eq(vipBillingEvent.id, id));
+}
+
+export async function listVipBillingNotificationsForEvent(
+  billingEventId: string
+) {
+  return await db
+    .select()
+    .from(vipBillingNotification)
+    .where(eq(vipBillingNotification.billingEventId, billingEventId))
+    .orderBy(asc(vipBillingNotification.createdAt));
+}
+
+export async function markVipBillingNotificationSent(
+  id: string,
+  deliveryToken: string,
+  now = new Date()
+) {
+  const [updated] = await db
+    .update(vipBillingNotification)
+    .set({
+      deliveryStatus: "sent",
+      sentAt: now,
+      deliveryToken: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(vipBillingNotification.id, id),
+        eq(vipBillingNotification.deliveryStatus, "sending"),
+        eq(vipBillingNotification.deliveryToken, deliveryToken)
+      )
+    )
+    .returning({ id: vipBillingNotification.id });
+  return Boolean(updated);
+}
+
+export async function markVipBillingNotificationFailed(
+  id: string,
+  lastErrorCode: string,
+  deliveryToken: string,
+  now = new Date()
+) {
+  const [updated] = await db
+    .update(vipBillingNotification)
+    .set({
+      deliveryStatus: "failed",
+      lastErrorCode,
+      deliveryToken: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(vipBillingNotification.id, id),
+        eq(vipBillingNotification.deliveryStatus, "sending"),
+        eq(vipBillingNotification.deliveryToken, deliveryToken)
+      )
+    )
+    .returning({ id: vipBillingNotification.id });
+  return Boolean(updated);
+}
+
+export async function claimVipBillingNotification(
+  id: string,
+  now = new Date()
+) {
+  const deliveryToken = createOpaqueToken().tokenHash;
+  const staleBefore = new Date(
+    now.getTime() - VIP_BILLING_NOTIFICATION_LEASE_MS
+  );
+  const [claimed] = await db
+    .update(vipBillingNotification)
+    .set({
+      deliveryStatus: "sending",
+      deliveryToken,
+      attemptCount: sql`${vipBillingNotification.attemptCount} + 1`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(vipBillingNotification.id, id),
+        sql`(
+          ${vipBillingNotification.deliveryStatus} IN ('pending', 'failed')
+          OR (
+            ${vipBillingNotification.deliveryStatus} = 'sending'
+            AND ${vipBillingNotification.updatedAt} <= ${staleBefore}
+          )
+        )`
+      )
+    )
+    .returning();
+  return claimed ?? null;
+}
+
+type VipNotificationType =
+  | "vip_activated"
+  | "vip_renewal_paid"
+  | "vip_payment_failed"
+  | "vip_cancellation_scheduled";
+
+type NotificationInsertResult = {
+  notification: VipBillingNotification | null;
+  created: boolean;
+};
+
+async function insertVipBillingNotificationIfAbsent(
+  tx: DbTransaction,
+  input: {
+    billingEventId: string;
+    userId: string;
+    notificationType: VipNotificationType;
+  }
+): Promise<NotificationInsertResult> {
+  const inserted = await tx
+    .insert(vipBillingNotification)
+    .values({
+      billingEventId: input.billingEventId,
+      userId: input.userId,
+      notificationType: input.notificationType,
+      deliveryStatus: "pending",
+    })
+    .onConflictDoNothing({
+      target: [
+        vipBillingNotification.billingEventId,
+        vipBillingNotification.notificationType,
+      ],
+    })
+    .returning();
+
+  if (inserted[0]) {
+    return { notification: inserted[0], created: true };
+  }
+
+  const [existing] = await tx
+    .select()
+    .from(vipBillingNotification)
+    .where(
+      and(
+        eq(vipBillingNotification.billingEventId, input.billingEventId),
+        eq(vipBillingNotification.notificationType, input.notificationType)
+      )
+    )
+    .limit(1);
+  return { notification: existing ?? null, created: false };
+}
+
+/**
+ * Atomically bind verified Stripe Checkout identity data to the exact local
+ * subscription and mark the billing event processed. Never grants entitlement.
+ */
+export async function applyVipCheckoutBinding({
+  billingEventId,
+  processingToken,
+  subscriptionId,
+  providerCheckoutSessionId,
+  providerCustomerId,
+  providerSubscriptionId,
+  providerPriceId,
+  status,
+  now = new Date(),
+}: {
+  billingEventId: string;
+  processingToken: string;
+  subscriptionId: string;
+  providerCheckoutSessionId: string;
+  providerCustomerId: string | null;
+  providerSubscriptionId: string | null;
+  providerPriceId: string | null;
+  status: VipSubscription["status"];
+  now?: Date;
+}) {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
+    await tx.execute(
+      sql`SELECT "id" FROM "VipSubscription" WHERE "id" = ${subscriptionId} FOR UPDATE`
+    );
+    const [subscription] = await tx
+      .update(vipSubscription)
+      .set({
+        providerCheckoutSessionId,
+        providerCustomerId: providerCustomerId ?? undefined,
+        providerSubscriptionId: providerSubscriptionId ?? undefined,
+        providerPriceId: providerPriceId ?? undefined,
+        status,
+        updatedAt: now,
+      })
+      .where(eq(vipSubscription.id, subscriptionId))
+      .returning();
+
+    if (!subscription) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "failed",
+        lastErrorCode: "unknown_subscription",
+        now,
+      });
+      return null;
+    }
+
+    await markOwnedVipBillingEvent(tx, {
+      id: billingEventId,
+      processingToken,
+      status: "processed",
+      now,
+    });
+
+    return subscription;
+  });
+}
+
+/**
+ * Core entitlement event. Atomically: synchronize the subscription from
+ * trusted provider paid state, project entitlement onto the user, enqueue the
+ * activation/renewal notification, and mark the billing event processed.
+ * A repeated application of the same paid invoice is detected and ignored.
+ */
+export async function applyVipInvoicePaid({
+  billingEventId,
+  processingToken,
+  subscriptionId,
+  providerSubscriptionId,
+  invoiceId,
+  status,
+  currentPeriodStart,
+  currentPeriodEnd,
+  providerCustomerId,
+  providerPriceId,
+  cancelAtPeriodEnd,
+  now = new Date(),
+}: {
+  billingEventId: string;
+  processingToken: string;
+  subscriptionId: string;
+  providerSubscriptionId: string;
+  invoiceId: string;
+  status: VipSubscription["status"];
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  providerCustomerId: string | null;
+  providerPriceId: string | null;
+  cancelAtPeriodEnd: boolean;
+  now?: Date;
+}): Promise<{
+  subscription: VipSubscription | null;
+  notification: VipBillingNotification | null;
+  duplicate: boolean;
+}> {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
+    await tx.execute(
+      sql`SELECT "id" FROM "VipSubscription" WHERE "id" = ${subscriptionId} FOR UPDATE`
+    );
+    const [prior] = await tx
+      .select()
+      .from(vipSubscription)
+      .where(eq(vipSubscription.id, subscriptionId))
+      .limit(1);
+
+    if (!prior) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "failed",
+        lastErrorCode: "unknown_subscription",
+        now,
+      });
+      return { subscription: null, notification: null, duplicate: false };
+    }
+
+    // Duplicate paid-invoice guard: the same invoice must never extend the
+    // entitlement or enqueue a second notification. The event is recorded as
+    // ignored so Stripe retries are cheap no-ops.
+    if (prior.lastPaidInvoiceId === invoiceId) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "ignored",
+        now,
+      });
+      return { subscription: prior, notification: null, duplicate: true };
+    }
+
+    const notificationType: VipNotificationType =
+      prior.lastPaidInvoiceId || prior.lastPaidAt
+        ? "vip_renewal_paid"
+        : "vip_activated";
+
+    const [subscription] = await tx
+      .update(vipSubscription)
+      .set({
+        status,
+        providerSubscriptionId,
+        currentPeriodStart,
+        currentPeriodEnd,
+        providerCustomerId: providerCustomerId ?? prior.providerCustomerId,
+        providerPriceId: providerPriceId ?? prior.providerPriceId,
+        cancelAtPeriodEnd,
+        lastPaidInvoiceId: invoiceId,
+        lastPaidAt: now,
+        updatedAt: now,
+      })
+      .where(eq(vipSubscription.id, subscriptionId))
+      .returning();
+
+    // Entitlement projection: the trusted provider paid period end is the
+    // single source for vipExpiresAt.
+    await tx
+      .update(user)
+      .set({ membershipTier: "vip", vipExpiresAt: currentPeriodEnd })
+      .where(eq(user.id, prior.userId));
+
+    const { notification } = await insertVipBillingNotificationIfAbsent(tx, {
+      billingEventId,
+      userId: prior.userId,
+      notificationType,
+    });
+
+    await markOwnedVipBillingEvent(tx, {
+      id: billingEventId,
+      processingToken,
+      status: "processed",
+      now,
+    });
+
+    return {
+      subscription: subscription ?? null,
+      notification,
+      duplicate: false,
+    };
+  });
+}
+
+/**
+ * Verified payment failure: synchronize provider-derived subscription state
+ * without extending or revoking existing paid entitlement time, enqueue a
+ * failure notification, and mark the event processed.
+ */
+export async function applyVipPaymentFailed({
+  billingEventId,
+  processingToken,
+  subscriptionId,
+  providerSubscriptionId,
+  status,
+  providerCustomerId,
+  currentPeriodStart,
+  currentPeriodEnd,
+  cancelAtPeriodEnd,
+  now = new Date(),
+}: {
+  billingEventId: string;
+  processingToken: string;
+  subscriptionId: string;
+  providerSubscriptionId: string;
+  status: VipSubscription["status"];
+  providerCustomerId: string | null;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  now?: Date;
+}): Promise<{
+  subscription: VipSubscription | null;
+  notification: VipBillingNotification | null;
+}> {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
+    await tx.execute(
+      sql`SELECT "id" FROM "VipSubscription" WHERE "id" = ${subscriptionId} FOR UPDATE`
+    );
+    const [prior] = await tx
+      .select()
+      .from(vipSubscription)
+      .where(eq(vipSubscription.id, subscriptionId))
+      .limit(1);
+
+    if (!prior) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "failed",
+        lastErrorCode: "unknown_subscription",
+        now,
+      });
+      return { subscription: null, notification: null };
+    }
+
+    const [subscription] = await tx
+      .update(vipSubscription)
+      .set({
+        status,
+        providerSubscriptionId,
+        providerCustomerId: providerCustomerId ?? prior.providerCustomerId,
+        currentPeriodStart: currentPeriodStart ?? prior.currentPeriodStart,
+        currentPeriodEnd: currentPeriodEnd ?? prior.currentPeriodEnd,
+        cancelAtPeriodEnd,
+        updatedAt: now,
+      })
+      .where(eq(vipSubscription.id, subscriptionId))
+      .returning();
+
+    const { notification } = await insertVipBillingNotificationIfAbsent(tx, {
+      billingEventId,
+      userId: prior.userId,
+      notificationType: "vip_payment_failed",
+    });
+
+    await markOwnedVipBillingEvent(tx, {
+      id: billingEventId,
+      processingToken,
+      status: "processed",
+      now,
+    });
+
+    return { subscription: subscription ?? null, notification };
+  });
+}
+
+/**
+ * Verified subscription update: synchronize provider status/period/cancel
+ * flag. Must never grant entitlement. Queues exactly one cancellation
+ * notification on a false -> true cancelAtPeriodEnd transition.
+ */
+export async function applyVipSubscriptionStatusUpdate({
+  billingEventId,
+  processingToken,
+  subscriptionId,
+  providerSubscriptionId,
+  providerCustomerId,
+  providerPriceId,
+  status,
+  currentPeriodStart,
+  currentPeriodEnd,
+  cancelAtPeriodEnd,
+  canceledAt,
+  now = new Date(),
+}: {
+  billingEventId: string;
+  processingToken: string;
+  subscriptionId: string;
+  providerSubscriptionId: string;
+  providerCustomerId: string | null;
+  providerPriceId: string | null;
+  status: VipSubscription["status"];
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  canceledAt: Date | null;
+  now?: Date;
+}): Promise<{
+  subscription: VipSubscription | null;
+  cancellationNotification: VipBillingNotification | null;
+}> {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
+    await tx.execute(
+      sql`SELECT "id" FROM "VipSubscription" WHERE "id" = ${subscriptionId} FOR UPDATE`
+    );
+    const [prior] = await tx
+      .select()
+      .from(vipSubscription)
+      .where(eq(vipSubscription.id, subscriptionId))
+      .limit(1);
+
+    if (!prior) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "failed",
+        lastErrorCode: "unknown_subscription",
+        now,
+      });
+      return { subscription: null, cancellationNotification: null };
+    }
+
+    const [subscription] = await tx
+      .update(vipSubscription)
+      .set({
+        status,
+        providerSubscriptionId,
+        providerCustomerId: providerCustomerId ?? prior.providerCustomerId,
+        providerPriceId: providerPriceId ?? prior.providerPriceId,
+        currentPeriodStart: currentPeriodStart ?? prior.currentPeriodStart,
+        currentPeriodEnd: currentPeriodEnd ?? prior.currentPeriodEnd,
+        cancelAtPeriodEnd,
+        cancelledAt: canceledAt ?? prior.cancelledAt,
+        updatedAt: now,
+      })
+      .where(eq(vipSubscription.id, subscriptionId))
+      .returning();
+
+    let cancellationNotification: VipBillingNotification | null = null;
+    if (!prior.cancelAtPeriodEnd && cancelAtPeriodEnd) {
+      const result = await insertVipBillingNotificationIfAbsent(tx, {
+        billingEventId,
+        userId: prior.userId,
+        notificationType: "vip_cancellation_scheduled",
+      });
+      cancellationNotification = result.notification;
+    }
+
+    await markOwnedVipBillingEvent(tx, {
+      id: billingEventId,
+      processingToken,
+      status: "processed",
+      now,
+    });
+
+    return { subscription: subscription ?? null, cancellationNotification };
+  });
+}
+
+/**
+ * Verified provider deletion: terminal local status plus entitlement closure.
+ * For period-end cancellations this arrives at/after the paid boundary, so
+ * closing entitlement here never removes prepaid time early.
+ */
+export async function applyVipSubscriptionDeleted({
+  billingEventId,
+  processingToken,
+  subscriptionId,
+  canceledAt,
+  now = new Date(),
+}: {
+  billingEventId: string;
+  processingToken: string;
+  subscriptionId: string;
+  canceledAt: Date | null;
+  now?: Date;
+}): Promise<VipSubscription | null> {
+  return await db.transaction(async (tx) => {
+    await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
+    await tx.execute(
+      sql`SELECT "id" FROM "VipSubscription" WHERE "id" = ${subscriptionId} FOR UPDATE`
+    );
+    const [prior] = await tx
+      .select()
+      .from(vipSubscription)
+      .where(eq(vipSubscription.id, subscriptionId))
+      .limit(1);
+
+    if (!prior) {
+      await markOwnedVipBillingEvent(tx, {
+        id: billingEventId,
+        processingToken,
+        status: "failed",
+        lastErrorCode: "unknown_subscription",
+        now,
+      });
+      return null;
+    }
+
+    const [subscription] = await tx
+      .update(vipSubscription)
+      .set({
+        status: "cancelled",
+        endedAt: now,
+        cancelAtPeriodEnd: false,
+        cancelledAt: canceledAt ?? prior.cancelledAt ?? now,
+        updatedAt: now,
+      })
+      .where(eq(vipSubscription.id, subscriptionId))
+      .returning();
+
+    // Provider termination closes the entitlement projection.
+    await tx
+      .update(user)
+      .set({ membershipTier: "free", vipExpiresAt: null })
+      .where(eq(user.id, prior.userId));
+
+    await markOwnedVipBillingEvent(tx, {
+      id: billingEventId,
+      processingToken,
+      status: "processed",
+      now,
+    });
+
+    return subscription ?? null;
   });
 }
 

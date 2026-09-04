@@ -72,10 +72,12 @@ export async function handleAdminVipBillingPriceSet({
   requireAdmin,
   service,
   request,
+  onPriceCreated,
 }: {
   requireAdmin: AdminAuthenticator;
   service: Pick<AdminPriceService, "setActiveVipMonthlyPrice">;
   request: Request;
+  onPriceCreated?: (price: VipPlanPriceRecord) => Promise<void>;
 }): Promise<Response> {
   const admin = await requireAdmin();
   if (admin instanceof Response) {
@@ -113,6 +115,21 @@ export async function handleAdminVipBillingPriceSet({
       amountMinor,
       adminUserId: admin.userId,
     });
+
+    // Optional server-side Stripe provisioning hook. A Stripe outage must
+    // never corrupt the local price history; provisioning failures are
+    // recorded on the price row and surfaced only as a safe sync state.
+    if (price && onPriceCreated) {
+      try {
+        await onPriceCreated(price);
+      } catch (provisioningError) {
+        console.error(
+          "VIP price provisioning after save failed:",
+          provisioningError
+        );
+      }
+    }
+
     return Response.json({ price: price ? toPublicPrice(price) : null });
   } catch (error) {
     console.error("Unable to set the VIP monthly price:", error);

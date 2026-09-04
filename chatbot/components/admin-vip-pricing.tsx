@@ -15,7 +15,6 @@ type VipPlanPriceView = {
   providerSyncStatus: string;
   createdAt: string;
 };
-
 export function AdminVipPricing() {
   const [price, setPrice] = useState<VipPlanPriceView | null>(null);
   const [amountInput, setAmountInput] = useState("");
@@ -89,6 +88,16 @@ export function AdminVipPricing() {
             : "not set yet"}
         </span>
       </p>
+      {price ? (
+        <p className="mt-1 text-xs text-slate-500">
+          Payment provider sync:{" "}
+          {price.providerSyncStatus === "ready"
+            ? "ready"
+            : price.providerSyncStatus === "failed"
+              ? "failed — retry by saving the price again"
+              : "pending"}
+        </p>
+      ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <label className="text-sm text-slate-700" htmlFor="vip-monthly-price">
           New monthly price

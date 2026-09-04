@@ -5,6 +5,7 @@ import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import {
   user,
   vipBillingEvent,
+  vipBillingNotification,
   vipPlanPrice,
   vipSubscription,
 } from "../../db/schema";
@@ -71,12 +72,27 @@ test("VipPlanPrice holds immutable, admin-created monthly AUD prices", () => {
   assert.ok(
     uniqueIndexNames(vipPlanPrice).includes("VipPlanPrice_active_unique")
   );
+
   const whereSql = indexWhereSql(vipPlanPrice, "VipPlanPrice_active_unique");
   assert.ok(whereSql !== null, "active price unique index must be partial");
   assert.ok(whereSql.includes("active"), whereSql ?? "");
 
   // Administrator attribution is nullable and detached on user deletion.
   assert.equal(config.foreignKeys.length, 1);
+});
+
+test("VipBillingNotification has a leased sending state and opaque delivery token", () => {
+  const config = getTableConfig(vipBillingNotification);
+  const status = config.columns.find(
+    (column) => column.name === "deliveryStatus"
+  );
+  assert.deepEqual(status?.enumValues, [
+    "pending",
+    "sending",
+    "sent",
+    "failed",
+  ]);
+  assert.ok(columnNames(vipBillingNotification).includes("deliveryToken"));
 });
 
 test("VipSubscription is separate from VipPurchase and retains its price", () => {
@@ -140,10 +156,14 @@ test("VipBillingEvent enforces provider event idempotency", () => {
   );
   assert.deepEqual(status?.enumValues, [
     "received",
+    "processing",
     "processed",
     "failed",
     "ignored",
   ]);
+  const eventColumns = columnNames(vipBillingEvent);
+  assert.ok(eventColumns.includes("processingToken"));
+  assert.ok(eventColumns.includes("processingStartedAt"));
 
   // No raw provider payload storage.
   assert.equal(

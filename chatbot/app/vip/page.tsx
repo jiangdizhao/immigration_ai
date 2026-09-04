@@ -29,9 +29,10 @@ async function VipPageContent() {
             VIP Membership
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            VIP includes access to Premium AI mode through the Premium service
-            for the active membership period. This page uses a clearly marked
-            local payment simulation and does not collect payment-card data.
+            VIP includes access to Premium AI mode for the active membership
+            period. Membership renews monthly until cancelled, and payments are
+            handled securely by Stripe-hosted checkout — card details are never
+            entered or stored on this website.
           </p>
           <VipMembershipClient />
         </div>

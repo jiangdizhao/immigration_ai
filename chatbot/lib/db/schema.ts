@@ -176,6 +176,9 @@ export const vipSubscription = pgTable(
     provider: varchar("provider", { length: 32 }).notNull(),
     providerCustomerId: varchar("providerCustomerId", { length: 255 }),
     providerSubscriptionId: varchar("providerSubscriptionId", { length: 255 }),
+    providerCheckoutSessionId: varchar("providerCheckoutSessionId", {
+      length: 255,
+    }),
     providerPriceId: varchar("providerPriceId", { length: 255 }),
     // Price snapshot retained alongside the historical price reference.
     amountMinor: integer("amountMinor").notNull(),
@@ -198,6 +201,8 @@ export const vipSubscription = pgTable(
     cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
     cancelledAt: timestamp("cancelledAt"),
     endedAt: timestamp("endedAt"),
+    lastPaidInvoiceId: varchar("lastPaidInvoiceId", { length: 255 }),
+    lastPaidAt: timestamp("lastPaidAt"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -205,6 +210,9 @@ export const vipSubscription = pgTable(
     providerSubscriptionUnique: uniqueIndex(
       "VipSubscription_provider_subscription_unique"
     ).on(table.provider, table.providerSubscriptionId),
+    providerCheckoutSessionUnique: uniqueIndex(
+      "VipSubscription_provider_checkout_session_unique"
+    ).on(table.providerCheckoutSessionId),
     userStatusIndex: index("VipSubscription_user_status_idx").on(
       table.userId,
       table.status
@@ -212,6 +220,13 @@ export const vipSubscription = pgTable(
     planPriceIndex: index("VipSubscription_plan_price_idx").on(
       table.planPriceId
     ),
+    // DB-enforced invariant: a user has at most one non-historical (not
+    // cancelled) recurring subscription. Cancelled rows remain as history.
+    liveSubscriptionPerUserUnique: uniqueIndex(
+      "VipSubscription_live_per_user_unique"
+    )
+      .on(table.userId)
+      .where(sql`${table.status} <> 'cancelled'`),
   })
 );
 
@@ -225,10 +240,12 @@ export const vipBillingEvent = pgTable(
     providerEventId: varchar("providerEventId", { length: 255 }).notNull(),
     eventType: varchar("eventType", { length: 128 }).notNull(),
     processingStatus: varchar("processingStatus", {
-      enum: ["received", "processed", "failed", "ignored"],
+      enum: ["received", "processing", "processed", "failed", "ignored"],
     })
       .notNull()
       .default("received"),
+    processingToken: varchar("processingToken", { length: 128 }),
+    processingStartedAt: timestamp("processingStartedAt"),
     attemptCount: integer("attemptCount").notNull().default(0),
     lastErrorCode: varchar("lastErrorCode", { length: 128 }),
     receivedAt: timestamp("receivedAt").notNull().defaultNow(),
@@ -251,6 +268,57 @@ export const vipBillingEvent = pgTable(
 );
 
 export type VipBillingEvent = InferSelectModel<typeof vipBillingEvent>;
+
+// Transactional billing notification outbox. Webhook DB mutations must not
+// depend on SES succeeding synchronously: notifications are enqueued in the
+// same transaction as the billing mutation and delivered afterwards.
+// Raw email bodies and provider payloads are intentionally NOT stored.
+export const vipBillingNotification = pgTable(
+  "VipBillingNotification",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    billingEventId: uuid("billingEventId")
+      .notNull()
+      .references(() => vipBillingEvent.id, { onDelete: "cascade" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    notificationType: varchar("notificationType", {
+      enum: [
+        "vip_activated",
+        "vip_renewal_paid",
+        "vip_payment_failed",
+        "vip_cancellation_scheduled",
+      ],
+    }).notNull(),
+    deliveryStatus: varchar("deliveryStatus", {
+      enum: ["pending", "sending", "sent", "failed"],
+    })
+      .notNull()
+      .default("pending"),
+    deliveryToken: varchar("deliveryToken", { length: 128 }),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    lastErrorCode: varchar("lastErrorCode", { length: 128 }),
+    sentAt: timestamp("sentAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    // One notification per billing event + type: duplicate webhook delivery
+    // must not create duplicate notification rows or duplicate sends.
+    eventNotificationUnique: uniqueIndex(
+      "VipBillingNotification_event_type_unique"
+    ).on(table.billingEventId, table.notificationType),
+    deliveryStatusIndex: index("VipBillingNotification_status_idx").on(
+      table.deliveryStatus,
+      table.updatedAt
+    ),
+  })
+);
+
+export type VipBillingNotification = InferSelectModel<
+  typeof vipBillingNotification
+>;
 
 export const lawyerClarificationRequest = pgTable(
   "LawyerClarificationRequest",

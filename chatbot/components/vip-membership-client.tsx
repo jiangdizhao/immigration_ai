@@ -16,6 +16,20 @@ type VipStatus = {
     currency: string;
     durationDays: number;
   } | null;
+  billingProvider: {
+    provider: "stripe" | "simulation" | "unconfigured";
+    ready: boolean;
+  };
+  activePlan: {
+    amountMinor: number;
+    currency: string;
+    interval: string;
+  } | null;
+  subscription: {
+    status: string;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+  } | null;
 };
 
 type Purchase = {
@@ -47,6 +61,7 @@ export function VipMembershipClient() {
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const response = await fetch("/api/vip/status");
@@ -64,6 +79,17 @@ export function VipMembershipClient() {
           : "Unable to load membership status."
       );
     });
+
+    // Browser redirect state is display-only. It NEVER activates VIP; the
+    // status API reflects activation only after verified provider payment.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      setCheckoutNotice(
+        "Payment submitted. Membership activates after secure payment confirmation."
+      );
+    } else if (params.get("checkout") === "cancelled") {
+      setCheckoutNotice("Checkout was cancelled. You were not charged.");
+    }
   }, [refreshStatus]);
 
   const startCheckout = async () => {
@@ -74,6 +100,11 @@ export function VipMembershipClient() {
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error ?? "Unable to start checkout.");
+      }
+      if (typeof data.url === "string") {
+        // Stripe-hosted Checkout handles all payment-card data.
+        window.location.assign(data.url);
+        return;
       }
       setPurchase(data as Purchase);
     } catch (checkoutError) {
@@ -119,31 +150,46 @@ export function VipMembershipClient() {
     }
   };
 
-  const cancelCheckout = async () => {
-    if (!purchase?.purchaseId && !purchase?.id) {
-      return;
-    }
+  const cancelRenewal = async () => {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/vip/cancel", {
+      const response = await fetch("/api/vip/subscription/cancel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          purchaseId: purchase.purchaseId ?? purchase.id,
-          providerPaymentId: purchase.providerPaymentId,
-        }),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error ?? "Unable to cancel checkout.");
+        throw new Error(data.error ?? "Unable to cancel renewal.");
       }
-      setPurchase(data.purchase as Purchase);
-    } catch (cancellationError) {
+      await refreshStatus();
+    } catch (cancelError) {
       setError(
-        cancellationError instanceof Error
-          ? cancellationError.message
-          : "Unable to cancel checkout."
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Unable to cancel renewal."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const manageBilling = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/vip/portal", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to open billing management.");
+      }
+      if (typeof data.url === "string") {
+        window.location.assign(data.url);
+      }
+    } catch (portalError) {
+      setError(
+        portalError instanceof Error
+          ? portalError.message
+          : "Unable to open billing management."
       );
     } finally {
       setBusy(false);
@@ -152,43 +198,77 @@ export function VipMembershipClient() {
 
   if (!status) {
     return (
-      <p className="mt-8 text-sm text-slate-500">
-        Loading membership status...
-      </p>
+      <p className="mt-8 text-sm text-slate-600">Loading membership status…</p>
     );
   }
 
-  if (status.role === "admin") {
+  if (status.premiumAllowed) {
     return (
-      <div className="mt-8 rounded-3xl border border-cyan-200 bg-cyan-50 p-5 text-sm leading-6 text-cyan-950">
-        <p className="font-semibold">Administrator access</p>
-        <p className="mt-1">
-          Administrators may test Premium AI through a separate admin override.
-          This does not create VIP membership or a payment record.
-        </p>
-      </div>
-    );
-  }
-
-  if (status.activeVip) {
-    return (
-      <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-950">
-        <p className="font-semibold">Active VIP membership</p>
-        <p className="mt-1">
-          VIP access is active until {formatDate(status.vipExpiresAt)}.
-        </p>
+      <div className="mt-8 space-y-4">
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-950">
+          <p className="font-semibold">
+            {status.role === "admin" && !status.activeVip
+              ? "Administrator access"
+              : "Active VIP"}
+          </p>
+          {status.activeVip ? (
+            <>
+              <p className="mt-1">
+                Access through {formatDate(status.vipExpiresAt)}.
+                {status.subscription?.cancelAtPeriodEnd
+                  ? " Renewal is cancelled; membership stays active until the end of the paid period."
+                  : " Renews automatically until cancelled."}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={manageBilling}
+                  type="button"
+                >
+                  Manage billing
+                </button>
+                {status.subscription &&
+                !status.subscription.cancelAtPeriodEnd ? (
+                  <button
+                    className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    disabled={busy}
+                    onClick={cancelRenewal}
+                    type="button"
+                  >
+                    Cancel renewal
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <p className="mt-1">
+              Premium AI is available with your administrator access.
+            </p>
+          )}
+        </div>
         <Link
-          className="mt-4 inline-block font-semibold underline"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-800"
           href="/ai-workspace"
         >
           Open AI Workspace
         </Link>
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
       </div>
     );
   }
 
+  const isStripeReady =
+    status.billingProvider.provider === "stripe" &&
+    status.billingProvider.ready;
+
   return (
     <div className="mt-8 space-y-5">
+      {checkoutNotice ? (
+        <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 text-sm leading-6 text-cyan-950">
+          {checkoutNotice}
+        </div>
+      ) : null}
       <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
         <p className="font-semibold">
           {status.expiredVip ? "VIP expired" : "Free account"}
@@ -198,75 +278,82 @@ export function VipMembershipClient() {
           available.
         </p>
       </div>
-      {purchase?.status === "pending" ? (
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <p className="font-semibold text-slate-950">
-            Local payment simulation
-          </p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            This development checkout has no card fields and no real payment
-            provider.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              className="rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-              disabled={busy}
-              onClick={confirmCheckout}
-              type="button"
-            >
-              Simulate successful payment
-            </button>
-            <button
-              className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
-              disabled={busy}
-              onClick={cancelCheckout}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : purchase ? (
-        <p className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
-          Simulated payment status:{" "}
-          <span className="font-semibold">{purchase.status}</span>
-        </p>
-      ) : (
+      {isStripeReady ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <p className="font-semibold text-slate-950">
-              Premium AI membership
-            </p>
-            {status.product ? (
+            <p className="font-semibold text-slate-950">VIP Membership</p>
+            {status.activePlan ? (
               <p className="font-semibold text-[#001736]">
                 {formatAmount(
-                  status.product.amountMinor,
-                  status.product.currency
-                )}
+                  status.activePlan.amountMinor,
+                  status.activePlan.currency
+                )}{" "}
+                / month
               </p>
             ) : null}
           </div>
-          {status.product ? (
-            <p className="mt-1 text-sm text-slate-600">
-              Duration: {status.product.durationDays} days
-            </p>
-          ) : null}
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
-            Local payment simulation
+          <p className="mt-2 text-sm text-slate-600">
+            Renews automatically until cancelled.
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            Payments are handled securely by Stripe. Card details are never
+            entered or stored on this website.
           </p>
           <button
             className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            disabled={busy || !status.simulationEnabled}
+            disabled={busy}
             onClick={startCheckout}
             type="button"
           >
-            Start simulated checkout
+            Subscribe
           </button>
-          {status.simulationEnabled ? null : (
-            <p className="mt-3 text-sm text-amber-700">
-              Simulation is disabled in this environment.
+        </div>
+      ) : status.simulationEnabled ? (
+        purchase?.status === "pending" ? (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <p className="font-semibold text-slate-950">
+              Local payment simulation
             </p>
-          )}
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              This development checkout has no card fields and no real payment
+              provider.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                className="rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                disabled={busy}
+                onClick={confirmCheckout}
+                type="button"
+              >
+                Simulate successful payment
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="font-semibold text-slate-950">
+              Premium AI membership
+            </p>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+              Local payment simulation
+            </p>
+            <button
+              className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={busy}
+              onClick={startCheckout}
+              type="button"
+            >
+              Start simulated checkout
+            </button>
+          </div>
+        )
+      ) : (
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="font-semibold text-slate-950">VIP Membership</p>
+          <p className="mt-2 text-sm text-slate-600">
+            VIP membership is not available for purchase in this environment
+            yet.
+          </p>
         </div>
       )}
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
