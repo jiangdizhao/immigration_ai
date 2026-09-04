@@ -54,9 +54,17 @@ import { generateHashedPassword } from "./utils";
 // use the Drizzle adapter for Auth.js / NextAuth
 // https://authjs.dev/reference/adapter/drizzle
 
+// The schema's timestamps are intentionally `timestamp` (without time zone).
+// Pin every application session to UTC so Date values round-trip consistently
+// even when the local PostgreSQL role uses a regional timezone.
 // biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
+const client = postgres(process.env.POSTGRES_URL!, {
+  connection: { TimeZone: "UTC" },
+});
 const db = drizzle(client);
+function rawPgTimestamp(date: Date): string {
+  return date.toISOString();
+}
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export async function getUser(email: string): Promise<User[]> {
@@ -784,8 +792,8 @@ export async function claimVipBillingEvent({
           existing.processingStatus === "processing"
             ? sql`(
                 ${vipBillingEvent.processingStartedAt} IS NULL
-                OR ${vipBillingEvent.processingStartedAt} < ${new Date(
-                  now.getTime() - VIP_BILLING_EVENT_LEASE_MS
+                OR ${vipBillingEvent.processingStartedAt} < ${rawPgTimestamp(
+                  new Date(now.getTime() - VIP_BILLING_EVENT_LEASE_MS)
                 )}
               )`
             : sql`true`
@@ -940,7 +948,7 @@ export async function claimVipBillingNotification(
           ${vipBillingNotification.deliveryStatus} IN ('pending', 'failed')
           OR (
             ${vipBillingNotification.deliveryStatus} = 'sending'
-            AND ${vipBillingNotification.updatedAt} <= ${staleBefore}
+            AND ${vipBillingNotification.updatedAt} <= ${rawPgTimestamp(staleBefore)}
           )
         )`
       )
