@@ -1,0 +1,252 @@
+{
+  "schema_version": "phase8.4.m3.campaign_fixture.v1",
+  "source_fixtures": [
+    {
+      "fixture_id": "m3-c1-dates",
+      "fixture": {
+        "scenario": {
+          "scenario_id": "m3-c1-source",
+          "group": "source",
+          "question": "Which process should be followed when an operative version may depend on dates?",
+          "facts": {"dates_unclear": true},
+          "expected_behaviors": ["establish dates before version selection"],
+          "prohibited_behaviors": [],
+          "expected_claim_ids": ["m3-c1-source-claim"],
+          "prohibited_claim_ids": []
+        },
+        "synthetic_source_answer": "Synthetic process observation.",
+        "synthetic_review": {
+          "review_outcome": "material_issue",
+          "error_categories": ["premature_version_selection"],
+          "procedural_lesson": "Establish relevant dates before selecting the governing version, then verify the selected version before concluding."
+        },
+        "compiler_rule_draft": {
+          "rule_type": "research_strategy",
+          "title": "Establish dates before version selection",
+          "trigger_conditions": ["The governing version may depend on operative dates."],
+          "applicability_conditions": ["Relevant dates or version are not verified."],
+          "action_steps": ["Establish the relevant dates before selecting a version."],
+          "verification_steps": ["Verify the selected version before concluding."],
+          "prohibited_behaviors": ["Do not treat an unverified version as established."],
+          "exceptions_or_limits": ["Keep the result conditional while dates remain unresolved."],
+          "transfer_targets": ["date-sensitive-processes"],
+          "case_erasure_confirmation": true,
+          "procedural_only_confirmation": true,
+          "source_specific_residue": [],
+          "legal_proposition_residue": []
+        }
+      }
+    },
+    {
+      "fixture_id": "m3-c2-applicability",
+      "fixture": {
+        "scenario": {
+          "scenario_id": "m3-c2-source",
+          "group": "source",
+          "question": "Which process should be followed when a threshold fact is missing?",
+          "facts": {"threshold_fact_missing": true},
+          "expected_behaviors": ["resolve missing applicability facts"],
+          "prohibited_behaviors": [],
+          "expected_claim_ids": ["m3-c2-source-claim"],
+          "prohibited_claim_ids": []
+        },
+        "synthetic_source_answer": "Synthetic process observation.",
+        "synthetic_review": {
+          "review_outcome": "material_issue",
+          "error_categories": ["missing_applicability_fact"],
+          "procedural_lesson": "Resolve missing threshold and applicability facts before selecting a branch."
+        },
+        "compiler_rule_draft": {
+          "rule_type": "fact_elicitation",
+          "title": "Resolve applicability facts before branch selection",
+          "trigger_conditions": ["A threshold or applicability fact is missing."],
+          "applicability_conditions": ["The missing fact can change the available branch."],
+          "action_steps": ["Identify and resolve the missing applicability fact."],
+          "verification_steps": ["Confirm the fact before selecting a branch."],
+          "prohibited_behaviors": ["Do not select a branch from an unstated fact."],
+          "exceptions_or_limits": ["Keep alternatives open when the fact cannot yet be resolved."],
+          "transfer_targets": ["fact-sensitive-processes"],
+          "case_erasure_confirmation": true,
+          "procedural_only_confirmation": true,
+          "source_specific_residue": [],
+          "legal_proposition_residue": []
+        }
+      }
+    },
+    {
+      "fixture_id": "m3-c3-authority",
+      "fixture": {
+        "scenario": {
+          "scenario_id": "m3-c3-source",
+          "group": "source",
+          "question": "Which process distinguishes discovery material from authoritative evidence?",
+          "facts": {"discovery_material_present": true},
+          "expected_behaviors": ["separate discovery from authority"],
+          "prohibited_behaviors": [],
+          "expected_claim_ids": ["m3-c3-source-claim"],
+          "prohibited_claim_ids": []
+        },
+        "synthetic_source_answer": "Synthetic process observation.",
+        "synthetic_review": {
+          "review_outcome": "material_issue",
+          "error_categories": ["discovery_authority_confusion"],
+          "procedural_lesson": "Separate navigation and discovery material from authoritative evidence before relying on it."
+        },
+        "compiler_rule_draft": {
+          "rule_type": "evidence_strategy",
+          "title": "Separate discovery from authoritative evidence",
+          "trigger_conditions": ["Material was found as navigation or discovery material."],
+          "applicability_conditions": ["The material has not yet been verified as authority."],
+          "action_steps": ["Treat discovery as a lead and locate the authoritative source."],
+          "verification_steps": ["Verify the authoritative source before relying on it."],
+          "prohibited_behaviors": ["Do not treat a discovery lead as authoritative evidence."],
+          "exceptions_or_limits": ["Describe the source as unverified until verification is complete."],
+          "transfer_targets": ["authority-check"],
+          "case_erasure_confirmation": true,
+          "procedural_only_confirmation": true,
+          "source_specific_residue": [],
+          "legal_proposition_residue": []
+        }
+      }
+    },
+    {
+      "fixture_id": "m3-c4-locator",
+      "fixture": {
+        "scenario": {
+          "scenario_id": "m3-c4-source",
+          "group": "source",
+          "question": "Which process should be followed when a concrete legal locator needs verification?",
+          "facts": {"locator_unverified": true},
+          "expected_behaviors": ["verify a concrete locator"],
+          "prohibited_behaviors": [],
+          "expected_claim_ids": ["m3-c4-source-claim"],
+          "prohibited_claim_ids": []
+        },
+        "synthetic_source_answer": "Synthetic process observation.",
+        "synthetic_review": {
+          "review_outcome": "material_issue",
+          "error_categories": ["unverified_locator"],
+          "procedural_lesson": "Verify a concrete legal locator through exact lookup before relying on it."
+        },
+        "compiler_rule_draft": {
+          "rule_type": "research_strategy",
+          "title": "Verify a concrete locator before relying on it",
+          "trigger_conditions": ["A concrete legal locator has not been verified."],
+          "applicability_conditions": ["The locator is material to the process decision."],
+          "action_steps": ["Use exact lookup to verify the concrete locator."],
+          "verification_steps": ["Confirm the returned source and locator before relying on it."],
+          "prohibited_behaviors": ["Do not infer legal absence from an unverified lookup."],
+          "exceptions_or_limits": ["Report the locator as unresolved when exact verification is unavailable."],
+          "transfer_targets": ["locator-verification"],
+          "case_erasure_confirmation": true,
+          "procedural_only_confirmation": true,
+          "source_specific_residue": [],
+          "legal_proposition_residue": []
+        }
+      }
+    },
+    {
+      "fixture_id": "m3-c5-conflict",
+      "fixture": {
+        "scenario": {
+          "scenario_id": "m3-c5-source",
+          "group": "source",
+          "question": "Which process should be followed when relevant evidence conflicts?",
+          "facts": {"evidence_conflict_present": true},
+          "expected_behaviors": ["resolve conflict before a decisive conclusion"],
+          "prohibited_behaviors": [],
+          "expected_claim_ids": ["m3-c5-source-claim"],
+          "prohibited_claim_ids": []
+        },
+        "synthetic_source_answer": "Synthetic process observation.",
+        "synthetic_review": {
+          "review_outcome": "material_issue",
+          "error_categories": ["unresolved_conflict"],
+          "procedural_lesson": "Identify conflicting evidence and resolve the conflict before making a decisive conclusion."
+        },
+        "compiler_rule_draft": {
+          "rule_type": "failure_avoidance",
+          "title": "Resolve evidence conflicts before concluding",
+          "trigger_conditions": ["Relevant evidence points to conflicting results."],
+          "applicability_conditions": ["The conflict can affect the process conclusion."],
+          "action_steps": ["Identify the conflict and resolve it using the most direct verification step."],
+          "verification_steps": ["Confirm that the conflicting evidence has been reconciled."],
+          "prohibited_behaviors": ["Do not make a decisive conclusion while a material conflict remains."],
+          "exceptions_or_limits": ["State the unresolved conflict and keep the result conditional."],
+          "transfer_targets": ["conflict-resolution"],
+          "case_erasure_confirmation": true,
+          "procedural_only_confirmation": true,
+          "source_specific_residue": [],
+          "legal_proposition_residue": []
+        }
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "candidate_campaign_id": "m3-c1-dates",
+      "source_fixture_id": "m3-c1-dates",
+      "scenarios": [
+        {"scenario_id": "m3-c1-source", "group": "source", "question": "Which process should be followed when an operative version may depend on dates?", "facts": {"dates_unclear": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c1-source-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-transfer-a", "group": "transfer", "question": "Which process should be followed when a dated instruction may have changed?", "facts": {"dates_unclear": true, "instruction_changed": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c1-transfer-a-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-transfer-b", "group": "transfer", "question": "Which process should be followed when two operative periods may apply?", "facts": {"periods_overlap": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c1-transfer-b-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-negative-a", "group": "negative_control", "question": "Which process should be followed for an ordinary current procedure?", "facts": {"dates_clear": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-negative-b", "group": "negative_control", "question": "Which process applies when no version ambiguity exists?", "facts": {"version_clear": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-control-a", "group": "control", "question": "What is a clear way to organize an unrelated task?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c1-control-b", "group": "control", "question": "Which process handles an unrelated administrative request?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []}
+      ]
+    },
+    {
+      "candidate_campaign_id": "m3-c2-applicability",
+      "source_fixture_id": "m3-c2-applicability",
+      "scenarios": [
+        {"scenario_id": "m3-c2-source", "group": "source", "question": "Which process should be followed when a threshold fact is missing?", "facts": {"threshold_fact_missing": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c2-source-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-transfer-a", "group": "transfer", "question": "Which process applies when an eligibility fact is not yet confirmed?", "facts": {"fact_unconfirmed": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c2-transfer-a-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-transfer-b", "group": "transfer", "question": "Which process applies when a branch depends on a missing input?", "facts": {"input_missing": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c2-transfer-b-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-negative-a", "group": "negative_control", "question": "Which process applies when all threshold facts are confirmed?", "facts": {"facts_confirmed": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-negative-b", "group": "negative_control", "question": "Which process applies to a fully specified request?", "facts": {"facts_complete": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-control-a", "group": "control", "question": "Which process handles an unrelated clear request?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c2-control-b", "group": "control", "question": "How should an unrelated completed task be recorded?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []}
+      ]
+    },
+    {
+      "candidate_campaign_id": "m3-c3-authority",
+      "source_fixture_id": "m3-c3-authority",
+      "scenarios": [
+        {"scenario_id": "m3-c3-source", "group": "source", "question": "Which process distinguishes discovery material from authoritative evidence?", "facts": {"discovery_material_present": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c3-source-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c3-transfer-a", "group": "transfer", "question": "Which process applies when a search result is only a lead?", "facts": {"lead_unverified": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c3-transfer-a-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c3-transfer-b", "group": "transfer", "question": "Which process applies when a navigation result has not been verified?", "facts": {"navigation_unverified": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c3-transfer-b-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c3-negative-a", "group": "negative_control", "question": "Which process should be followed when authoritative evidence is already verified?", "facts": {"authority_verified": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": ["m3-c3-harmful"]},
+        {"scenario_id": "m3-c3-negative-b", "group": "negative_control", "question": "Which process applies to a confirmed primary source?", "facts": {"primary_confirmed": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": ["m3-c3-harmful"]},
+        {"scenario_id": "m3-c3-control-a", "group": "control", "question": "Which process handles an unrelated request?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": ["m3-c3-harmful"]},
+        {"scenario_id": "m3-c3-control-b", "group": "control", "question": "How should an unrelated task be organized?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": ["m3-c3-harmful"]}
+      ]
+    },
+    {
+      "candidate_campaign_id": "m3-c4-locator",
+      "source_fixture_id": "m3-c4-locator",
+      "scenarios": [
+        {"scenario_id": "m3-c4-source", "group": "source", "question": "Which process should be followed when a concrete legal locator needs verification?", "facts": {"locator_unverified": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c4-source-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-transfer-a", "group": "transfer", "question": "Which process applies when an exact reference is unresolved?", "facts": {"reference_unresolved": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c4-transfer-a-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-transfer-b", "group": "transfer", "question": "Which process applies when a source locator is incomplete?", "facts": {"locator_incomplete": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c4-transfer-b-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-negative-a", "group": "negative_control", "question": "Which process applies when the locator is already verified?", "facts": {"locator_verified": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-negative-b", "group": "negative_control", "question": "Which process applies without a source lookup question?", "facts": {"no_lookup_needed": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-control-a", "group": "control", "question": "Which process handles an unrelated task?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c4-control-b", "group": "control", "question": "How should an unrelated request be organized?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []}
+      ]
+    },
+    {
+      "candidate_campaign_id": "m3-c5-conflict",
+      "source_fixture_id": "m3-c5-conflict",
+      "scenarios": [
+        {"scenario_id": "m3-c5-source", "group": "source", "question": "Which process should be followed when relevant evidence conflicts?", "facts": {"evidence_conflict_present": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c5-source-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-transfer-a", "group": "transfer", "question": "Which process applies when two relevant records disagree?", "facts": {"records_disagree": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c5-transfer-a-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-transfer-b", "group": "transfer", "question": "Which process applies when a material discrepancy remains?", "facts": {"discrepancy_present": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": ["m3-c5-transfer-b-claim"], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-negative-a", "group": "negative_control", "question": "Which process applies when all evidence is consistent?", "facts": {"evidence_consistent": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-negative-b", "group": "negative_control", "question": "Which process applies when no conflict exists?", "facts": {"no_conflict": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-control-a", "group": "control", "question": "Which process handles an unrelated request?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []},
+        {"scenario_id": "m3-c5-control-b", "group": "control", "question": "How should an unrelated completed task be handled?", "facts": {"unrelated": true}, "expected_behaviors": [], "prohibited_behaviors": [], "expected_claim_ids": [], "prohibited_claim_ids": []}
+      ]
+    }
+  ]
+}
