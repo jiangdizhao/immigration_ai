@@ -126,6 +126,132 @@ export const vipPurchase = pgTable(
 
 export type VipPurchase = InferSelectModel<typeof vipPurchase>;
 
+// Phase 9 M1: dedicated recurring VIP billing foundation. These tables are
+// intentionally separate from the historical one-time VipPurchase simulation.
+export const vipPlanPrice = pgTable(
+  "VipPlanPrice",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    amountMinor: integer("amountMinor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("AUD"),
+    billingInterval: varchar("billingInterval", { enum: ["month"] })
+      .notNull()
+      .default("month"),
+    active: boolean("active").notNull().default(true),
+    createdByUserId: uuid("createdByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    provider: varchar("provider", { length: 32 }),
+    providerProductId: varchar("providerProductId", { length: 255 }),
+    providerPriceId: varchar("providerPriceId", { length: 255 }),
+    providerSyncStatus: varchar("providerSyncStatus", {
+      enum: ["unprovisioned", "ready", "failed"],
+    })
+      .notNull()
+      .default("unprovisioned"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    retiredAt: timestamp("retiredAt"),
+  },
+  (table) => ({
+    // DB-enforced invariant: at most one active VIP price at a time. Historical
+    // price rows stay immutable so existing subscriptions keep their price.
+    activePriceUnique: uniqueIndex("VipPlanPrice_active_unique")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
+  })
+);
+
+export type VipPlanPrice = InferSelectModel<typeof vipPlanPrice>;
+
+export const vipSubscription = pgTable(
+  "VipSubscription",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    planPriceId: uuid("planPriceId")
+      .notNull()
+      .references(() => vipPlanPrice.id, { onDelete: "restrict" }),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerCustomerId: varchar("providerCustomerId", { length: 255 }),
+    providerSubscriptionId: varchar("providerSubscriptionId", { length: 255 }),
+    providerPriceId: varchar("providerPriceId", { length: 255 }),
+    // Price snapshot retained alongside the historical price reference.
+    amountMinor: integer("amountMinor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    status: varchar("status", {
+      enum: [
+        "pending",
+        "incomplete",
+        "active",
+        "past_due",
+        "unpaid",
+        "paused",
+        "cancelled",
+      ],
+    })
+      .notNull()
+      .default("pending"),
+    currentPeriodStart: timestamp("currentPeriodStart"),
+    currentPeriodEnd: timestamp("currentPeriodEnd"),
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").notNull().default(false),
+    cancelledAt: timestamp("cancelledAt"),
+    endedAt: timestamp("endedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    providerSubscriptionUnique: uniqueIndex(
+      "VipSubscription_provider_subscription_unique"
+    ).on(table.provider, table.providerSubscriptionId),
+    userStatusIndex: index("VipSubscription_user_status_idx").on(
+      table.userId,
+      table.status
+    ),
+    planPriceIndex: index("VipSubscription_plan_price_idx").on(
+      table.planPriceId
+    ),
+  })
+);
+
+export type VipSubscription = InferSelectModel<typeof vipSubscription>;
+
+export const vipBillingEvent = pgTable(
+  "VipBillingEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerEventId: varchar("providerEventId", { length: 255 }).notNull(),
+    eventType: varchar("eventType", { length: 128 }).notNull(),
+    processingStatus: varchar("processingStatus", {
+      enum: ["received", "processed", "failed", "ignored"],
+    })
+      .notNull()
+      .default("received"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    lastErrorCode: varchar("lastErrorCode", { length: 128 }),
+    receivedAt: timestamp("receivedAt").notNull().defaultNow(),
+    processedAt: timestamp("processedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    // Idempotency ledger: duplicate provider webhook deliveries are detected
+    // by this unique constraint. Raw provider payloads are intentionally NOT
+    // stored here.
+    providerEventUnique: uniqueIndex(
+      "VipBillingEvent_provider_event_unique"
+    ).on(table.provider, table.providerEventId),
+    statusUpdatedIndex: index("VipBillingEvent_status_updated_idx").on(
+      table.processingStatus,
+      table.updatedAt
+    ),
+  })
+);
+
+export type VipBillingEvent = InferSelectModel<typeof vipBillingEvent>;
+
 export const lawyerClarificationRequest = pgTable(
   "LawyerClarificationRequest",
   {

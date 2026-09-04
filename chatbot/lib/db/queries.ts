@@ -39,6 +39,7 @@ import {
   type User,
   user,
   type VipPurchase,
+  vipPlanPrice,
   vipPurchase,
   vote,
 } from "./schema";
@@ -366,6 +367,60 @@ export async function settleVipPurchase({
       .returning();
 
     return settled ?? null;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 M1: recurring VIP billing foundation (admin-controlled pricing).
+// ---------------------------------------------------------------------------
+
+export async function getActiveVipPlanPrice() {
+  const [price] = await db
+    .select()
+    .from(vipPlanPrice)
+    .where(and(eq(vipPlanPrice.active, true), isNull(vipPlanPrice.retiredAt)))
+    .limit(1);
+
+  return price ?? null;
+}
+
+export async function replaceActiveVipPlanPrice({
+  amountMinor,
+  currency,
+  billingInterval,
+  adminUserId,
+  retirePriceId,
+  now = new Date(),
+}: {
+  amountMinor: number;
+  currency: "AUD";
+  billingInterval: "month";
+  adminUserId: string | null;
+  retirePriceId: string | null;
+  now?: Date;
+}) {
+  return await db.transaction(async (tx) => {
+    if (retirePriceId) {
+      await tx
+        .update(vipPlanPrice)
+        .set({ active: false, retiredAt: now })
+        .where(
+          and(eq(vipPlanPrice.id, retirePriceId), eq(vipPlanPrice.active, true))
+        );
+    }
+
+    const [price] = await tx
+      .insert(vipPlanPrice)
+      .values({
+        amountMinor,
+        currency,
+        billingInterval,
+        active: true,
+        createdByUserId: adminUserId,
+      })
+      .returning();
+
+    return price;
   });
 }
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
+import { AdminVipPricing } from "@/components/admin-vip-pricing";
 import { LawyerAccountManagement } from "@/components/lawyer-account-management";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
@@ -72,6 +73,7 @@ async function AdminPortalPageContent() {
             </Link>
           </div>
           <LawyerAccountManagement />
+          <AdminVipPricing />
         </div>
       </main>
     </div>
