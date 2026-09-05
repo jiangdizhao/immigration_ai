@@ -13,6 +13,10 @@ export async function proxy(request: NextRequest) {
     return new Response("pong", { status: 200 });
   }
 
+  if (pathname === "/api/vip/billing/webhook") {
+    return NextResponse.next();
+  }
+
   if (
     pathname.startsWith("/api/auth") ||
     [
