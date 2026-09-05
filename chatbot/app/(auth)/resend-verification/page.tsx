@@ -43,7 +43,7 @@ export default function ResendVerificationPage() {
               type="email"
             />
           </div>
-          <SubmitButton isSuccessful={state.status === "success"}>
+          <SubmitButton isSuccessful={false}>
             Send verification email
           </SubmitButton>
           {state.status === "success" && (

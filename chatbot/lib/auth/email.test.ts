@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { getSafeEmailErrorMetadata } from "./email-errors";
 import {
   buildPasswordChangedEmail,
   buildPasswordResetEmail,
@@ -42,5 +43,27 @@ test("SES request construction is local and does not send", () => {
   assert.equal(
     request.Content?.Simple?.Subject?.Data,
     "Your Au Lawyers password was changed"
+  );
+});
+
+test("email delivery diagnostics expose only safe provider metadata", () => {
+  const error = Object.assign(
+    new Error("secret token and full email payload must not be logged"),
+    {
+      type: "SesException",
+      code: "MessageRejected",
+      $metadata: { httpStatusCode: 400 },
+    }
+  );
+
+  assert.deepEqual(getSafeEmailErrorMetadata(error), {
+    errorName: "Error",
+    errorType: "SesException",
+    awsErrorCode: "MessageRejected",
+    httpStatus: 400,
+  });
+  assert.doesNotMatch(
+    JSON.stringify(getSafeEmailErrorMetadata(error)),
+    /secret|token|payload|email/i
   );
 });
