@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.query_correlation import QueryCorrelationMiddleware
 from app.db.base import Base
 from app.db import models  # noqa: F401
 from app.db.phase7_schema import ensure_phase7_1_append_only_trigger
@@ -48,6 +49,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+app.add_middleware(QueryCorrelationMiddleware, path=f"{settings.api_v1_prefix}/query")
 
 
 @app.get("/")

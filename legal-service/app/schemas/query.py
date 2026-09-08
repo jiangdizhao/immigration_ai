@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.core.config import get_settings
 from app.schemas.common import BaseSchema
@@ -10,7 +10,8 @@ from app.schemas.state import CaseHypothesis, FactSlotState, InteractionPlan, Co
 settings = get_settings()
 
 class QueryRequest(BaseSchema):
-    question: str = Field(min_length=3, max_length=4000)
+    question: str = Field(min_length=1, max_length=4000)
+
     response_language: Literal["en", "zh"] | None = None
     matter_id: str | None = None
     session_id: str | None = None
@@ -39,6 +40,13 @@ class QueryRequest(BaseSchema):
     client_turn_id: str | None = Field(default=None, max_length=255)
     # Optional full frontend-visible message history.
     frontend_messages: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("question")
+    @classmethod
+    def question_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("question must not be blank")
+        return value
 
 
 class QueryResponse(BaseSchema):

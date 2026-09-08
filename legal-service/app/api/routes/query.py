@@ -4,7 +4,7 @@ import time
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, Request
 
 from app.api.deps import verify_api_key
 from app.db.session import get_db, SessionLocal
@@ -133,6 +133,7 @@ def run_query(
     payload: QueryRequest,
     background_tasks: BackgroundTasks = None,
     db=Depends(get_db),
+    request: Request = None,
 ) -> QueryResponse:
     # This is the backend timing origin: before engine selection, service
     # construction, matter/state loading, or agent setup.
@@ -143,6 +144,7 @@ def run_query(
         and payload.assistant_mode in {"default", "default_legal_pipeline"}
     )
     token = observability_service.begin_turn(
+        request_id=getattr(request.state, "query_request_id", None) if request else None,
         mode=payload.assistant_mode,
         started_at=accepted_at,
         architecture_version=(

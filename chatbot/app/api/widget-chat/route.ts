@@ -13,16 +13,16 @@ import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
 import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service";
 import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
+import { requestLegalService } from "@/lib/legal-service-transport";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { checkIpRateLimit } from "@/lib/ratelimit";
+import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
 
 export const maxDuration = 390;
-
-const LEGAL_SERVICE_TIMEOUT_MS = 370_000;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 
@@ -685,106 +685,50 @@ function legalServiceFallbackText(responseLanguage: ResponseLanguage): string {
     : "Sorry, the legal service is temporarily unavailable. Please try again shortly, or contact the lawyer for manual confirmation.";
 }
 
-function previewResponseBody(value: string): string {
-  return value.replace(/\s+/g, " ").trim().slice(0, 500);
-}
-
 async function fetchLegalServiceJson(params: {
   url: string;
   apiKey?: string;
   payload: Record<string, unknown>;
   responseLanguage: ResponseLanguage;
   matterId: string | null;
+  requestId: string;
 }): Promise<LegalServiceJsonResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    LEGAL_SERVICE_TIMEOUT_MS
+  const result = await requestLegalService({
+    ...params,
+    timeoutMs: LEGAL_SERVICE_TIMEOUT_MS,
+  });
+  if (result.ok) {
+    return { ok: true, data: result.data as LegalServiceResponse };
+  }
+  const response = emptyWidgetResponse(
+    legalServiceFallbackText(params.responseLanguage),
+    params.matterId,
+    params.responseLanguage
   );
-
-  let response: Response;
-  try {
-    response = await fetch(params.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(params.apiKey ? { "X-API-Key": params.apiKey } : {}),
-      },
-      body: JSON.stringify(params.payload),
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    console.error("legal-service fetch failed:", error);
-    return {
-      ok: false,
-      response: emptyWidgetResponse(
-        legalServiceFallbackText(params.responseLanguage),
-        params.matterId,
-        params.responseLanguage
-      ),
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  const bodyText = await response.text();
-
-  if (!response.ok) {
-    console.error(
-      "legal-service error:",
-      response.status,
-      response.statusText,
-      previewResponseBody(bodyText)
-    );
-    return {
-      ok: false,
-      response: emptyWidgetResponse(
-        legalServiceFallbackText(params.responseLanguage),
-        params.matterId,
-        params.responseLanguage
-      ),
-    };
-  }
-
-  if (!contentType.toLowerCase().includes("application/json")) {
-    console.error(
-      "legal-service returned non-JSON response:",
-      contentType,
-      previewResponseBody(bodyText)
-    );
-    return {
-      ok: false,
-      response: emptyWidgetResponse(
-        legalServiceFallbackText(params.responseLanguage),
-        params.matterId,
-        params.responseLanguage
-      ),
-    };
-  }
-
-  try {
-    return { ok: true, data: JSON.parse(bodyText) as LegalServiceResponse };
-  } catch (error) {
-    console.error(
-      "legal-service JSON parse failed:",
-      error,
-      previewResponseBody(bodyText)
-    );
-    return {
-      ok: false,
-      response: emptyWidgetResponse(
-        legalServiceFallbackText(params.responseLanguage),
-        params.matterId,
-        params.responseLanguage
-      ),
-    };
-  }
+  response.headers.set("X-Request-ID", params.requestId);
+  return { ok: false, response };
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+  const started = performance.now();
+  console.info(
+    JSON.stringify({ event: "widget_request_received", request_id: requestId })
+  );
+  const response = await handleWidgetRequest(request, requestId);
+  response.headers.set("X-Request-ID", requestId);
+  console.info(
+    JSON.stringify({
+      event: "widget_request_finished",
+      request_id: requestId,
+      http_status: response.status,
+      elapsed_ms: Math.round(performance.now() - started),
+    })
+  );
+  return response;
+}
+
+async function handleWidgetRequest(request: Request, requestId: string) {
   try {
     const json = await request.json();
     const {
@@ -830,6 +774,19 @@ export async function POST(request: Request) {
     await checkIpRateLimit(ipAddress(request));
 
     const session = await auth();
+    console.info(
+      JSON.stringify({
+        event: "widget_auth_result",
+        request_id: requestId,
+        authenticated: Boolean(session?.user),
+        user_type:
+          session?.user?.type === "guest"
+            ? "guest"
+            : session?.user?.type === "regular"
+              ? "regular"
+              : null,
+      })
+    );
     if (!session?.user) {
       return new ChatbotError("unauthorized:chat").toResponse();
     }
@@ -877,11 +834,13 @@ export async function POST(request: Request) {
       .filter(Boolean);
 
     const legalServiceResult = await fetchLegalServiceJson({
+      requestId,
       url: `${legalServiceUrl}/api/v1/query`,
       apiKey,
       responseLanguage,
       matterId: effectiveMatterId,
       payload: {
+        client_turn_id: requestId,
         question,
         response_language: responseLanguage,
         matter_id: effectiveMatterId,
@@ -1006,6 +965,7 @@ export async function POST(request: Request) {
     });
 
     return Response.json({
+      requestId,
       text: finalText,
       assistantMessageId: persistedAssistantMessageId,
       responseLanguage: finalResponseLanguage,
@@ -1029,7 +989,9 @@ export async function POST(request: Request) {
         : null,
     });
   } catch (error) {
-    console.error("widget-chat error:", error);
+    console.error(
+      JSON.stringify({ event: "widget_request_error", request_id: requestId })
+    );
     if (error instanceof ChatbotError) {
       return error.toResponse();
     }
