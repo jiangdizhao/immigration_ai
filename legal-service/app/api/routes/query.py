@@ -139,6 +139,7 @@ def run_query(
     # construction, matter/state loading, or agent setup.
     accepted_at = time.perf_counter()
     settings = get_settings()
+    fast_selected = payload.assistant_mode == "fast"
     default_agent_selected = (
         getattr(settings, "default_agent_serving_enabled", False)
         and payload.assistant_mode in {"default", "default_legal_pipeline"}
@@ -147,8 +148,13 @@ def run_query(
         request_id=getattr(request.state, "query_request_id", None) if request else None,
         mode=payload.assistant_mode,
         started_at=accepted_at,
+        turn_deadline_ms=(settings.fast_turn_deadline_ms if fast_selected else None),
         architecture_version=(
-            "phase2.default_agent_runtime" if default_agent_selected else "legacy.v1"
+            "fast.direct_luna"
+            if fast_selected
+            else "phase2.default_agent_runtime"
+            if default_agent_selected
+            else "legacy.v1"
         ),
     )
     try:
@@ -195,6 +201,24 @@ def run_query(
             # carried history is removed here before any engine can consume it.
             payload = political_failsafe_service.sanitize_payload_history(payload)
 
+        # Fast is a separate service contract. Dispatch before shadow work,
+        # QueryService construction, matter/state loading, and every Default
+        # retrieval/research/checking service. Native web_search remains an
+        # internal OpenAI Responses capability, not an application tool loop.
+        if fast_selected:
+            from app.services.fast_direct_luna_service import FastDirectLunaService
+
+            observability_service.mark_agent_started("fast_direct_luna")
+            observability_service.record_logical_stage("fast_direct_luna")
+            response = FastDirectLunaService().answer(
+                payload=payload,
+                deadline=observability_service.current_deadline(),
+                observability=observability_service,
+            )
+            observability_service.mark_answer_completed()
+            observability_service.mark_metrics_complete()
+            return response
+
         # Launch the non-serving shadow after the political gate and before
         # legacy work.  The shadow receives only immutable request data and
         # owns its DB/provider resources, so legacy state mutation cannot race
@@ -203,6 +227,7 @@ def run_query(
             settings.agent_shadow_enabled
             and not politically_blocked
             and not default_agent_selected
+            and not fast_selected
         ):
             is_premium = payload.assistant_mode in (
                 "premium", "premium_direct_gpt55_high",

@@ -282,6 +282,43 @@ const WORKSPACE_PROGRESS_STAGES_EN = [
   },
 ] as const;
 
+const FAST_PROGRESS_STAGES_EN = [
+  {
+    afterMs: 0,
+    title: "Preparing a quick answer",
+    detail: "Keeping the response concise and focused on your question.",
+  },
+  {
+    afterMs: 5000,
+    title: "Checking whether fresh information is needed",
+    detail: "Fast may use native web search when current information matters.",
+  },
+  {
+    afterMs: 15_000,
+    title: "Finishing the quick answer",
+    detail:
+      "For deeper source-aware verification, use Legal Check when available.",
+  },
+] as const;
+
+const FAST_PROGRESS_STAGES_ZH = [
+  {
+    afterMs: 0,
+    title: "正在准备快速答复",
+    detail: "保持答复简洁，并聚焦于你的问题。",
+  },
+  {
+    afterMs: 5000,
+    title: "正在判断是否需要最新信息",
+    detail: "如果问题涉及当前信息，Fast 可能使用原生网页搜索。",
+  },
+  {
+    afterMs: 15_000,
+    title: "正在完成快速答复",
+    detail: "如需更深入的来源核对，请在可用时使用 Legal Check。",
+  },
+] as const;
+
 function looksChineseText(text: string) {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text);
 }
@@ -290,10 +327,19 @@ function isZhLanguage(responseLanguage?: string | null) {
   return (responseLanguage ?? "").toLowerCase().startsWith("zh");
 }
 
-function workspaceProgressStage(elapsedMs: number, isZh: boolean) {
-  const stages = isZh
-    ? WORKSPACE_PROGRESS_STAGES_ZH
-    : WORKSPACE_PROGRESS_STAGES_EN;
+function workspaceProgressStage(
+  elapsedMs: number,
+  isZh: boolean,
+  assistantMode: AssistantMode
+) {
+  const stages =
+    assistantMode === "fast"
+      ? isZh
+        ? FAST_PROGRESS_STAGES_ZH
+        : FAST_PROGRESS_STAGES_EN
+      : isZh
+        ? WORKSPACE_PROGRESS_STAGES_ZH
+        : WORKSPACE_PROGRESS_STAGES_EN;
   return stages.reduce((current, stage) => {
     if (elapsedMs >= stage.afterMs) {
       return stage;
@@ -407,11 +453,13 @@ function blockedWidgetResponse(
 function WorkspaceProcessingCard({
   elapsedMs,
   isZh,
+  assistantMode,
 }: {
   elapsedMs: number;
   isZh: boolean;
+  assistantMode: AssistantMode;
 }) {
-  const stage = workspaceProgressStage(elapsedMs, isZh);
+  const stage = workspaceProgressStage(elapsedMs, isZh, assistantMode);
   const seconds = Math.max(1, Math.floor(elapsedMs / 1000));
   return (
     <div className="flex gap-3">
@@ -1338,6 +1386,7 @@ export function ImmigrationAIWorkspace({
           {status === "submitted" ? (
             <div className="px-0 pb-4">
               <WorkspaceProcessingCard
+                assistantMode={assistantMode}
                 elapsedMs={pendingElapsedMs}
                 isZh={pendingIsZh}
               />

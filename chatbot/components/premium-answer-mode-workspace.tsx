@@ -5,37 +5,72 @@ import { useEffect, useState } from "react";
 import {
   ASSISTANT_MODE_STORAGE_KEY,
   type AssistantMode,
+  type AssistantModeAccessPolicy,
   normalizeAssistantMode,
+  resolveAllowedAssistantMode,
 } from "@/lib/assistant-mode";
 import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
 
 export function PremiumAnswerModeWorkspace() {
-  const [assistantMode, setAssistantMode] = useState<AssistantMode>("default");
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>("fast");
   const [modeHydrated, setModeHydrated] = useState(false);
-  const [premiumAllowed, setPremiumAllowed] = useState(false);
+  const [accessPolicy, setAccessPolicy] =
+    useState<AssistantModeAccessPolicy | null>(null);
 
   useEffect(() => {
-    setAssistantMode(
-      normalizeAssistantMode(
-        window.localStorage.getItem(ASSISTANT_MODE_STORAGE_KEY)
-      )
-    );
-    setModeHydrated(true);
+    let active = true;
+    const storedMode = window.localStorage.getItem(ASSISTANT_MODE_STORAGE_KEY);
+
+    fetch("/api/assistant-mode-access")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("assistant mode access unavailable");
+        }
+        return (await response.json()) as AssistantModeAccessPolicy;
+      })
+      .then((policy) => {
+        if (!active) {
+          return;
+        }
+        setAccessPolicy(policy);
+        setAssistantMode(resolveAllowedAssistantMode(storedMode, policy));
+        setModeHydrated(true);
+      })
+      .catch(() => {
+        if (active) {
+          setModeHydrated(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (!modeHydrated) {
+    if (!modeHydrated || !accessPolicy) {
       return;
     }
     window.localStorage.setItem(ASSISTANT_MODE_STORAGE_KEY, assistantMode);
-  }, [assistantMode, modeHydrated]);
+  }, [assistantMode, modeHydrated, accessPolicy]);
 
-  useEffect(() => {
-    fetch("/api/vip/status")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => setPremiumAllowed(Boolean(data?.premiumAllowed)))
-      .catch(() => setPremiumAllowed(false));
-  }, []);
+  if (!accessPolicy || !modeHydrated) {
+    return (
+      <section className="mx-auto mt-8 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          Preparing the assistant…
+        </div>
+      </section>
+    );
+  }
+
+  const hydratedAccessPolicy = accessPolicy;
+  const modeAllowed = (mode: AssistantMode) =>
+    mode === "fast"
+      ? hydratedAccessPolicy.fastAllowed
+      : mode === "default"
+        ? hydratedAccessPolicy.slowAllowed
+        : hydratedAccessPolicy.premiumAllowed;
 
   return (
     <>
@@ -49,10 +84,9 @@ export function PremiumAnswerModeWorkspace() {
               Choose speed or verification before sending the next question
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Default legal check uses the current Schedule/RAG verification
-              pipeline. Direct LLM quick answer keeps lightweight recent chat
-              history and the politics-sensitive filter, then skips the slower
-              legal-source helper chain for a model-only answer.
+              Fast gives a concise first answer with optional native web search.
+              Slow / Legal Check uses the current source-aware verification
+              pipeline. Premium preserves its existing VIP-only direct path.
             </p>
           </div>
 
@@ -67,31 +101,54 @@ export function PremiumAnswerModeWorkspace() {
               className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
               id="assistant-mode-select"
               onChange={(event) =>
-                setAssistantMode(normalizeAssistantMode(event.target.value))
+                setAssistantMode((current) => {
+                  const next = normalizeAssistantMode(event.target.value);
+                  return modeAllowed(next) ? next : current;
+                })
               }
               value={assistantMode}
             >
-              <option value="default">Default legal check</option>
-              <option value="premium">Premium direct answer</option>
+              <option value="fast">Fast — Quick Answer</option>
+              <option
+                disabled={!hydratedAccessPolicy.slowAllowed}
+                value="default"
+              >
+                Slow — Legal Check
+              </option>
+              <option
+                disabled={!hydratedAccessPolicy.premiumAllowed}
+                value="premium"
+              >
+                Premium — Premium Answer
+              </option>
             </select>
-            {assistantMode === "premium" ? (
+            {hydratedAccessPolicy.userType === "guest" ? (
+              <div className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                <p>Fast is available without signing in.</p>
+                <p>
+                  Slow is disabled —{" "}
+                  <Link className="font-semibold underline" href="/login">
+                    sign in to use Legal Check
+                  </Link>
+                  .
+                </p>
+                <p>Premium is disabled — VIP membership required.</p>
+              </div>
+            ) : assistantMode === "premium" ? (
               <div className="mt-2 space-y-1 text-xs leading-5 text-amber-700">
                 <p>
-                  Fast mode is not source-verified. Use it for customer-friendly
-                  first views, not final case advice.
+                  Premium is the existing direct answer lane for VIP members.
                 </p>
-                {premiumAllowed ? null : (
-                  <p className="font-semibold">
-                    Premium requires an active VIP membership.{" "}
-                    <Link className="underline" href="/vip">
-                      Upgrade to VIP
-                    </Link>
-                  </p>
-                )}
               </div>
+            ) : assistantMode === "fast" ? (
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Speed-first answer; native web search is used only when Luna
+                decides freshness matters. Use Legal Check for deeper
+                source-aware verification.
+              </p>
             ) : (
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                Safer default mode keeps the source-aware legal workflow.
+                Slow mode keeps the source-aware legal workflow.
               </p>
             )}
           </div>

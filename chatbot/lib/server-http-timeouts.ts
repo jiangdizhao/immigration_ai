@@ -7,6 +7,9 @@ import { Agent, type Dispatcher, fetch as undiciFetch } from "undici";
  */
 export const LEGAL_SERVICE_TIMEOUT_MS = 370_000;
 
+/** Short transport budget for the speed-first Fast Luna lane. */
+export const FAST_LEGAL_SERVICE_TIMEOUT_MS = 50_000;
+
 /**
  * Undici dispatcher timeouts dedicated to Next.js -> legal-service traffic.
  *

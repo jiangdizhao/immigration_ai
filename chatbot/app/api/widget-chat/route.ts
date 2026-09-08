@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
+import { isGuestAssistantUser } from "@/lib/assistant-mode-access";
 import {
   getImmigrationConversationByChatId,
   saveMessages,
@@ -789,6 +790,16 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     );
     if (!session?.user) {
       return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    if (isGuestAssistantUser(session.user)) {
+      return Response.json(
+        {
+          error:
+            "Legal Check requires a registered account. Use Fast — Quick Answer, or sign in.",
+          loginPath: "/login",
+        },
+        { status: 403 }
+      );
     }
     const frontendUserId = session.user.id;
     const activeFrontendChatId = frontendChatId ?? id;

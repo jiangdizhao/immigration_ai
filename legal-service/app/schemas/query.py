@@ -30,6 +30,7 @@ class QueryRequest(BaseSchema):
     # The premium lane is still pre-screened for politics-sensitive content, then answers
     # directly with a high-reasoning model without Schedule/RAG/source verification.
     assistant_mode: Literal[
+        "fast",
         "default",
         "premium",
         "default_legal_pipeline",

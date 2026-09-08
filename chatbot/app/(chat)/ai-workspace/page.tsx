@@ -1,8 +1,14 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
-export default function AIWorkspacePage() {
+export default async function AIWorkspacePage() {
+  if (!(await auth())?.user) {
+    redirect("/api/auth/guest?redirectUrl=/ai-workspace");
+  }
+
   return (
     <div className="min-h-dvh bg-[#f8f9fa] text-slate-900">
       <SiteHeader />
@@ -29,12 +35,9 @@ export default function AIWorkspacePage() {
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-8 text-slate-200">
               This page is the product core. It reuses the existing backend
-              bridge at{" "}
-              <code className="rounded bg-white/10 px-1.5 py-0.5">
-                /api/widget-chat
-              </code>
-              , but gives the assistant enough space to behave like a serious
-              legal-service interface.
+              bridges for Fast, Legal Check, and Premium, while giving the
+              assistant enough space to behave like a serious legal-service
+              interface.
             </p>
           </div>
         </section>

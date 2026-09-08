@@ -107,6 +107,28 @@ class Settings(BaseSettings):
     premium_turn_deadline_ms: int = Field(
         default=90000, ge=1, alias="PREMIUM_TURN_DEADLINE_MS"
     )
+    fast_luna_model: str = Field(default="gpt-5.6-luna", alias="FAST_LUNA_MODEL")
+    fast_luna_reasoning_effort: Literal["low"] = Field(
+        default="low", alias="FAST_LUNA_REASONING_EFFORT"
+    )
+    fast_luna_provider_timeout_ms: int = Field(
+        default=38000, ge=1, alias="FAST_LUNA_PROVIDER_TIMEOUT_MS"
+    )
+    fast_luna_max_output_tokens: int = Field(
+        default=1200, ge=1, le=8000, alias="FAST_LUNA_MAX_OUTPUT_TOKENS"
+    )
+    fast_luna_max_tool_calls: int = Field(
+        default=2, ge=1, le=5, alias="FAST_LUNA_MAX_TOOL_CALLS"
+    )
+    fast_luna_web_search_context_size: Literal["low", "medium", "high"] = Field(
+        default="low", alias="FAST_LUNA_WEB_SEARCH_CONTEXT_SIZE"
+    )
+    fast_luna_service_tier: str | None = Field(
+        default=None, alias="FAST_LUNA_SERVICE_TIER"
+    )
+    fast_turn_deadline_ms: int = Field(
+        default=45000, ge=1, alias="FAST_TURN_DEADLINE_MS"
+    )
     default_answer_research_target_ms: int = Field(
         default=240000, ge=1, alias="DEFAULT_ANSWER_RESEARCH_TARGET_MS"
     )
@@ -192,6 +214,8 @@ class Settings(BaseSettings):
             > self.premium_turn_deadline_ms
         ):
             raise ValueError("premium answer/checker targets must fit inside the turn deadline")
+        if self.fast_luna_provider_timeout_ms > self.fast_turn_deadline_ms:
+            raise ValueError("Fast Luna provider timeout must fit inside the Fast turn deadline")
         for mode, deadline_ms, research_target_ms, terminal_target_ms, reserve_ms in (
             (
                 "default",
