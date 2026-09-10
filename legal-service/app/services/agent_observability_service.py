@@ -201,6 +201,11 @@ class AgentObservabilityService:
         status: str = "ok",
         is_retry: bool = False,
         call_kind: str = "initial",
+        stream_end_reason: str | None = None,
+        provider_incomplete_reason: str | None = None,
+        response_completed_observed: bool = False,
+        response_incomplete_observed: bool = False,
+        response_failed_observed: bool = False,
     ) -> None:
         observation = self._require_turn()
         remaining = (
@@ -226,6 +231,11 @@ class AgentObservabilityService:
                 status=status,
                 call_kind=call_kind,
                 is_retry=is_retry,
+                stream_end_reason=stream_end_reason,
+                provider_incomplete_reason=provider_incomplete_reason,
+                response_completed_observed=response_completed_observed,
+                response_incomplete_observed=response_incomplete_observed,
+                response_failed_observed=response_failed_observed,
             )
         )
         observation.metrics.provider_api_call_count = len(observation.metrics.provider_calls)

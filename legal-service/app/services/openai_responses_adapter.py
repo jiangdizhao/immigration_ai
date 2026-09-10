@@ -40,6 +40,16 @@ from app.services.web_evidence_normalizer import WebEvidenceNormalizer
 logger = logging.getLogger(__name__)
 _UNSET_NATIVE_WEB_MAX_TOOL_CALLS = object()
 
+STREAM_END_REASONS = (
+    "response_completed",
+    "response_incomplete",
+    "response_failed",
+    "stream_eof_before_completed",
+    "local_deadline",
+    "transport_timeout",
+    "transport_error",
+)
+
 
 # Fresh terminal recovery must carry enough completed local evidence to remain
 # useful, but must not replay the old Responses protocol envelope.  Keep this
@@ -86,6 +96,11 @@ class ResponsesStreamAccumulator:
     partial: bool = False
     status: str = "ok"
     stream_error: str | None = None
+    stream_end_reason: str | None = None
+    provider_incomplete_reason: str | None = None
+    response_completed_observed: bool = False
+    response_incomplete_observed: bool = False
+    response_failed_observed: bool = False
     native_sources: list[dict[str, Any]] = field(default_factory=list)
     citation_annotations: list[dict[str, Any]] = field(default_factory=list)
     search_call_ids: list[str] = field(default_factory=list)
@@ -194,6 +209,8 @@ class ResponsesStreamAccumulator:
             self.completed = True
             self.partial = False
             self.status = "ok"
+            self.stream_end_reason = "response_completed"
+            self.response_completed_observed = True
             self.final_response = response
         elif event_type == "response.incomplete":
             response = self._get(event, "response")
@@ -206,6 +223,9 @@ class ResponsesStreamAccumulator:
             )
             self.partial = self._has_salvageable_artifacts()
             self.status = "timeout"
+            self.stream_end_reason = "response_incomplete"
+            self.provider_incomplete_reason = self._response_incomplete_reason(response)
+            self.response_incomplete_observed = True
             self.final_response = response
         elif event_type == "response.failed":
             response = self._get(event, "response")
@@ -218,11 +238,14 @@ class ResponsesStreamAccumulator:
             )
             self.partial = self._has_salvageable_artifacts()
             self.status = "error"
+            self.stream_end_reason = "response_failed"
+            self.response_failed_observed = True
             self.stream_error = self._response_error_text(response) or "Responses API response failed"
             self.final_response = response
         elif event_type == "error":
             self.partial = self._has_salvageable_artifacts()
             self.status = "error"
+            self.stream_end_reason = "transport_error"
             self.stream_error = str(self._get(event, "message", "Responses API stream error"))
 
     def consume_response(self, response: Any) -> None:
@@ -239,13 +262,23 @@ class ResponsesStreamAccumulator:
         )
         self.completed = True
         self.status = "ok"
+        self.stream_end_reason = "response_completed"
+        self.response_completed_observed = True
         self.final_response = response
 
-    def mark_interrupted(self, *, timeout: bool, error: BaseException | None = None) -> None:
+    def mark_interrupted(
+        self,
+        *,
+        timeout: bool,
+        error: BaseException | None = None,
+        end_reason: str | None = None,
+    ) -> None:
         if self.completed:
             return
         self.partial = self._has_salvageable_artifacts()
         self.status = "timeout" if timeout else "error"
+        if self.stream_end_reason is None and end_reason in STREAM_END_REASONS:
+            self.stream_end_reason = end_reason
         if error is not None:
             self.stream_error = str(error)[:1000]
 
@@ -541,6 +574,15 @@ class ResponsesStreamAccumulator:
         message = cls._get(error, "message") if error is not None else None
         return str(message) if message else None
 
+    @classmethod
+    def _response_incomplete_reason(cls, response: Any) -> str | None:
+        details = cls._get(response, "incomplete_details") if response is not None else None
+        reason = cls._get(details, "reason") if details is not None else None
+        if isinstance(reason, str):
+            return reason[:100] or None
+        value = getattr(reason, "value", None)
+        return value[:100] or None if isinstance(value, str) else None
+
 
 def _is_timeout_exception(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or "timeout" in exc.__class__.__name__.lower()
@@ -579,6 +621,11 @@ def consume_responses_stream(
             accumulator.mark_interrupted(
                 timeout=_is_timeout_exception(exc),
                 error=exc,
+                end_reason=(
+                    "transport_timeout"
+                    if _is_timeout_exception(exc)
+                    else "transport_error"
+                ),
             )
             return accumulator
         while not accumulator.completed:
@@ -586,6 +633,7 @@ def consume_responses_stream(
                 accumulator.mark_interrupted(
                     timeout=True,
                     error=TimeoutError("Responses stream absolute deadline exhausted"),
+                    end_reason="local_deadline",
                 )
                 break
             try:
@@ -597,6 +645,7 @@ def consume_responses_stream(
                         error=TimeoutError(
                             "Responses stream ended before response.completed"
                         ),
+                        end_reason="stream_eof_before_completed",
                     )
                 break
             except Exception as exc:
@@ -604,6 +653,11 @@ def consume_responses_stream(
                     accumulator.mark_interrupted(
                         timeout=_is_timeout_exception(exc),
                         error=exc,
+                        end_reason=(
+                            "transport_timeout"
+                            if _is_timeout_exception(exc)
+                            else "transport_error"
+                        ),
                     )
                 break
 
@@ -614,6 +668,7 @@ def consume_responses_stream(
                 accumulator.mark_interrupted(
                     timeout=True,
                     error=TimeoutError("Responses stream absolute deadline exhausted"),
+                    end_reason="local_deadline",
                 )
                 break
 
@@ -804,6 +859,11 @@ class OpenAIResponsesAdapter(ProviderInterface):
                                    if accumulator.partial else []),
                 completed_output_item_count=accumulator.completed_output_item_count,
                 stream_error=accumulator.stream_error,
+                stream_end_reason=accumulator.stream_end_reason,
+                provider_incomplete_reason=accumulator.provider_incomplete_reason,
+                response_completed_observed=accumulator.response_completed_observed,
+                response_incomplete_observed=accumulator.response_incomplete_observed,
+                response_failed_observed=accumulator.response_failed_observed,
             )
         except Exception as exc:
             duration_ms = (time.perf_counter() - start) * 1000.0
@@ -820,6 +880,11 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 native_web_source_count=len(ctx.native_sources),
                 native_web_citation_count=len(ctx.citation_annotations),
                 stream_error=str(exc)[:1000],
+                stream_end_reason=(
+                    "transport_timeout"
+                    if self._is_timeout_exception(exc)
+                    else "transport_error"
+                ),
             )
 
     @staticmethod

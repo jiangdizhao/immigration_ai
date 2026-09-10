@@ -236,6 +236,11 @@ class ProviderResponse:
     partial_citations: list[dict[str, Any]] = field(default_factory=list)
     completed_output_item_count: int = 0
     stream_error: str | None = None
+    stream_end_reason: str | None = None
+    provider_incomplete_reason: str | None = None
+    response_completed_observed: bool = False
+    response_incomplete_observed: bool = False
+    response_failed_observed: bool = False
 
 
 class ProviderInterface:
@@ -902,6 +907,7 @@ class AgentRuntimeService:
                         tool_definitions_count=len(provider_tools),
                         status="timeout",
                         is_retry=(_provider_call_kind() == "retry"),
+                        stream_end_reason="local_deadline",
                     ))
                     errors.append("Deadline exceeded during provider call")
                     if terminal_phase:
@@ -934,6 +940,11 @@ class AgentRuntimeService:
                         tool_definitions_count=len(provider_tools),
                         status=failure_kind,
                         is_retry=(_provider_call_kind() == "retry"),
+                        stream_end_reason=(
+                            "transport_timeout"
+                            if failure_kind == "timeout"
+                            else "transport_error"
+                        ),
                     ))
                     if terminal_phase:
                         errors.append(f"Terminal synthesis provider call failed: {exc}")
@@ -1010,6 +1021,11 @@ class AgentRuntimeService:
                     ),
                     stream_completed_function_call_count=len(response.tool_calls),
                     stream_completed_output_item_count=response.completed_output_item_count,
+                    stream_end_reason=response.stream_end_reason,
+                    provider_incomplete_reason=response.provider_incomplete_reason,
+                    response_completed_observed=response.response_completed_observed,
+                    response_incomplete_observed=response.response_incomplete_observed,
+                    response_failed_observed=response.response_failed_observed,
                     # Phase 5.1A.1: content-free search-privacy violation category counts.
                     search_privacy_violation_count=response.pii_violation_count,
                     search_privacy_violation_categories=dict(response.search_privacy_violation_categories),

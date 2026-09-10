@@ -204,6 +204,19 @@ class ProviderCallObservation(StrictContract):
     stream_timeout_after_partial: bool = False
     stream_completed_function_call_count: int = Field(default=0, ge=0)
     stream_completed_output_item_count: int = Field(default=0, ge=0)
+    stream_end_reason: Literal[
+        "response_completed",
+        "response_incomplete",
+        "response_failed",
+        "stream_eof_before_completed",
+        "local_deadline",
+        "transport_timeout",
+        "transport_error",
+    ] | None = None
+    provider_incomplete_reason: str | None = Field(default=None, max_length=100)
+    response_completed_observed: bool = False
+    response_incomplete_observed: bool = False
+    response_failed_observed: bool = False
     # Phase 5.1A.1: content-free per-call search-privacy violation category
     # counts (category -> count). Never stores raw query text, hashes, names,
     # or identifier values.

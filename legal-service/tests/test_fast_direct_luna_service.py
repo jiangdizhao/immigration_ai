@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.core.config import Settings
 from app.schemas.query import QueryRequest
 from app.schemas.query import QueryResponse
 from app.api.routes import query as query_route
@@ -15,7 +16,7 @@ def _settings() -> SimpleNamespace:
         fast_luna_model="gpt-5.6-luna",
         fast_luna_reasoning_effort="low",
         fast_luna_provider_timeout_ms=38000,
-        fast_luna_max_output_tokens=1200,
+        fast_luna_max_output_tokens=None,
         fast_luna_max_tool_calls=2,
         fast_luna_web_search_context_size="low",
         fast_luna_service_tier=None,
@@ -67,6 +68,28 @@ def _payload() -> QueryRequest:
     )
 
 
+def test_fast_max_output_tokens_defaults_to_unset_without_env_override(monkeypatch):
+    monkeypatch.delenv("FAST_LUNA_MAX_OUTPUT_TOKENS", raising=False)
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+    )
+
+    assert settings.fast_luna_max_output_tokens is None
+
+
+def test_fast_explicit_max_output_tokens_override_is_accepted(monkeypatch):
+    monkeypatch.setenv("FAST_LUNA_MAX_OUTPUT_TOKENS", "4000")
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://test",
+        OPENAI_API_KEY="test",
+    )
+
+    assert settings.fast_luna_max_output_tokens == 4000
+
+
 def test_fast_uses_one_luna_request_with_only_optional_native_web_search(monkeypatch):
     monkeypatch.setattr(fast_module, "get_settings", _settings)
     calls: list[dict] = []
@@ -94,6 +117,7 @@ def test_fast_uses_one_luna_request_with_only_optional_native_web_search(monkeyp
     assert len(calls) == 1
     assert calls[0]["model"] == "gpt-5.6-luna"
     assert calls[0]["reasoning"] == {"effort": "low"}
+    assert "max_output_tokens" not in calls[0]
     assert calls[0]["tools"] == [{"type": "web_search", "search_context_size": "low"}]
     assert calls[0]["tool_choice"] == "auto"
     assert calls[0]["max_tool_calls"] == 2
@@ -123,7 +147,86 @@ def test_fast_provider_failure_is_neutral_and_does_not_retry_or_enter_slow(monke
     assert call_count == 1
     assert response.architecture_version == "fast.direct_luna"
     assert response.retrieval_debug["fast_direct_luna"]["completion_status"] == "timeout"
+    assert response.retrieval_debug["fast_direct_luna"]["stream_end_reason"] == "transport_timeout"
     assert "Legal Check" in response.answer
+
+
+def test_fast_incomplete_fallback_preserves_content_free_stream_diagnostics(monkeypatch):
+    monkeypatch.setattr(fast_module, "get_settings", _settings)
+
+    class _Stream:
+        def __iter__(self):
+            yield SimpleNamespace(
+                type="response.created",
+                response=SimpleNamespace(id="fast-incomplete-response"),
+            )
+            yield SimpleNamespace(
+                type="response.output_text.delta",
+                delta="partial provider text that must not be served",
+            )
+            yield SimpleNamespace(
+                type="response.incomplete",
+                response=SimpleNamespace(
+                    id="fast-incomplete-response",
+                    incomplete_details=SimpleNamespace(reason="max_tokens"),
+                    output=[],
+                ),
+            )
+
+    class _Responses:
+        def create(self, **kwargs):
+            return _Stream()
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.responses = _Responses()
+
+    monkeypatch.setattr(fast_module, "OpenAI", _Client)
+    response = FastDirectLunaService().answer(
+        payload=_payload(),
+        deadline=AbsoluteTurnDeadline(started_at=0, turn_deadline_ms=45000, clock=lambda: 1),
+    )
+
+    debug = response.retrieval_debug["fast_direct_luna"]
+    assert "Quick Answer is temporarily unavailable" in response.answer
+    assert "partial provider text" not in response.answer
+    assert debug["stream_end_reason"] == "response_incomplete"
+    assert debug["provider_incomplete_reason"] == "max_tokens"
+    assert debug["response_id"] == "fast-incomplete-response"
+    assert debug["provider_elapsed_ms"] is not None
+    assert debug["allocated_provider_timeout_ms"] == 38000
+    assert debug["outer_deadline_ms"] == 45000
+    assert debug["response_completed_observed"] is False
+    assert debug["response_incomplete_observed"] is True
+    assert debug["response_failed_observed"] is False
+    assert debug["native_web_max_tool_calls"] == 2
+    assert debug["max_output_tokens"] is None
+
+
+def test_fast_explicit_max_output_tokens_override_is_sent(monkeypatch):
+    settings = _settings()
+    settings.fast_luna_max_output_tokens = 4000
+    monkeypatch.setattr(fast_module, "get_settings", lambda: settings)
+    calls: list[dict] = []
+
+    class _Responses:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return _Response()
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.responses = _Responses()
+
+    monkeypatch.setattr(fast_module, "OpenAI", _Client)
+    response = FastDirectLunaService().answer(
+        payload=_payload(),
+        deadline=AbsoluteTurnDeadline(started_at=0, turn_deadline_ms=45000, clock=lambda: 1),
+    )
+
+    assert response.answer == "A concise answer."
+    assert calls[0]["max_output_tokens"] == 4000
+    assert response.retrieval_debug["fast_direct_luna"]["max_output_tokens"] == 4000
 
 
 def test_fast_does_not_force_native_search(monkeypatch):

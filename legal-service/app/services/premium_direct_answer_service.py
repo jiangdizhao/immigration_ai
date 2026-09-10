@@ -570,6 +570,7 @@ class PremiumDirectAnswerService:
                 str(exc)[:500],
             )
             primary_error_debug = {
+                **(primary_call_debug if "primary_call_debug" in locals() else {}),
                 "primary_failed": True,
                 "primary_error_type": exc.__class__.__name__,
                 "primary_error": str(exc)[:1000],
@@ -952,6 +953,11 @@ class PremiumDirectAnswerService:
                     accumulator.completed_function_calls
                 ),
                 "stream_completed_output_item_count": accumulator.completed_output_item_count,
+                "stream_end_reason": accumulator.stream_end_reason,
+                "provider_incomplete_reason": accumulator.provider_incomplete_reason,
+                "response_completed_observed": accumulator.response_completed_observed,
+                "response_incomplete_observed": accumulator.response_incomplete_observed,
+                "response_failed_observed": accumulator.response_failed_observed,
                 "stream_timeout_after_partial": (
                     accumulator.status == "timeout" and accumulator.partial
                 ),

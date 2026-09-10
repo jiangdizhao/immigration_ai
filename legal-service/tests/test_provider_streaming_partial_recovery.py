@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import date
 from types import SimpleNamespace
 
 import anyio
+import pytest
 
 from app.schemas.agent import AgentRuntimeRequest, ExecutionBudget
 from app.schemas.query import QueryRequest
@@ -121,6 +123,10 @@ def test_completed_stream_accumulates_text_and_sources() -> None:
     assert result.status == "ok"
     assert result.text == "The fee is supported by the source."
     assert result.partial is False
+    assert result.stream_end_reason == "response_completed"
+    assert result.response_completed_observed is True
+    assert result.response_incomplete_observed is False
+    assert result.response_failed_observed is False
     assert result.native_web_source_count == 1
     assert len(registry.get_all_refs()) == 1
     assert responses.calls[0]["stream"] is True
@@ -168,6 +174,10 @@ def test_timeout_preserves_completed_sources_but_marks_text_partial() -> None:
     assert result.native_web_source_count == 1
     assert result.native_web_citation_count == 1
     assert result.stream_error == "stream timeout"
+    assert result.stream_end_reason == "transport_timeout"
+    assert result.response_completed_observed is False
+    assert result.response_incomplete_observed is False
+    assert result.response_failed_observed is False
     assert len(registry.get_all_refs()) == 1
 
 
@@ -255,6 +265,7 @@ def test_incomplete_snapshot_with_valid_json_is_not_executable() -> None:
             type="response.incomplete",
             response=SimpleNamespace(
                 id="incomplete-response",
+                incomplete_details=SimpleNamespace(reason="max_tokens"),
                 output=[SimpleNamespace(
                     type="function_call",
                     id="fc-item-2",
@@ -273,6 +284,63 @@ def test_incomplete_snapshot_with_valid_json_is_not_executable() -> None:
     assert result.status == "timeout"
     assert result.tool_calls == []
     assert result.partial is False
+    assert result.stream_end_reason == "response_incomplete"
+    assert result.provider_incomplete_reason == "max_tokens"
+    assert result.response_incomplete_observed is True
+
+
+def test_incomplete_snapshot_without_reason_is_safe() -> None:
+    stream = FakeStream([
+        SimpleNamespace(
+            type="response.incomplete",
+            response=SimpleNamespace(id="incomplete-without-reason", output=[]),
+        ),
+    ])
+
+    result = consume_responses_stream(stream, allocated_timeout_seconds=1)
+
+    assert result.status == "timeout"
+    assert result.stream_end_reason == "response_incomplete"
+    assert result.provider_incomplete_reason is None
+    assert result.response_incomplete_observed is True
+
+
+def test_failed_snapshot_is_distinct_from_timeout() -> None:
+    stream = FakeStream([
+        SimpleNamespace(
+            type="response.failed",
+            response=SimpleNamespace(
+                id="failed-response",
+                error=SimpleNamespace(message="provider failed"),
+                output=[],
+            ),
+        ),
+    ])
+
+    result = consume_responses_stream(stream, allocated_timeout_seconds=1)
+
+    assert result.status == "error"
+    assert result.stream_end_reason == "response_failed"
+    assert result.response_failed_observed is True
+    assert result.response_incomplete_observed is False
+
+
+def test_stream_error_event_is_transport_error() -> None:
+    result = consume_responses_stream(
+        FakeStream([SimpleNamespace(type="error", message="stream failed")]),
+        allocated_timeout_seconds=1,
+    )
+
+    assert result.status == "error"
+    assert result.stream_end_reason == "transport_error"
+
+
+def test_eof_before_completed_is_distinct_from_transport_timeout() -> None:
+    result = consume_responses_stream(FakeStream([]), allocated_timeout_seconds=1)
+
+    assert result.status == "timeout"
+    assert result.stream_end_reason == "stream_eof_before_completed"
+    assert result.stream_error == "Responses stream ended before response.completed"
 
 
 def test_completed_response_is_not_downgraded_by_later_transport_error() -> None:
@@ -327,12 +395,31 @@ def test_absolute_stream_deadline_preserves_safe_artifacts_and_rejects_late_even
     )
 
     assert accumulator.status == "timeout"
+    assert accumulator.stream_end_reason == "local_deadline"
     assert accumulator.partial is True
     assert "partial text" in "".join(accumulator.text_parts)
     assert "late text" not in "".join(accumulator.text_parts)
     assert [source["url"] for source in accumulator.materialized_sources()] == [source_url]
     assert accumulator.completed_function_calls == []
     assert stream.closed is True
+
+
+def test_transport_error_is_distinct_from_timeout() -> None:
+    result = consume_responses_stream(
+        FakeStream([], error=RuntimeError("connection failed")),
+        allocated_timeout_seconds=1,
+    )
+
+    assert result.status == "error"
+    assert result.stream_end_reason == "transport_error"
+
+
+def test_cancelled_error_propagates_without_classification() -> None:
+    with pytest.raises(asyncio.CancelledError):
+        consume_responses_stream(
+            FakeStream([], error=asyncio.CancelledError()),
+            allocated_timeout_seconds=1,
+        )
 
 
 def test_completed_stream_stays_ok_when_cleanup_fails_after_deadline() -> None:
@@ -642,6 +729,8 @@ def test_premium_call_uses_stream_accumulator_for_partial_timeout(monkeypatch) -
     assert debug["provider_status"] == "timeout"
     assert debug["stream_partial_available"] is True
     assert debug["stream_timeout_after_partial"] is True
+    assert debug["stream_end_reason"] == "transport_timeout"
+    assert debug["response_completed_observed"] is False
     assert responses.calls[0]["stream"] is True
 
 

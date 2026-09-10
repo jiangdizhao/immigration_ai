@@ -114,8 +114,8 @@ class Settings(BaseSettings):
     fast_luna_provider_timeout_ms: int = Field(
         default=38000, ge=1, alias="FAST_LUNA_PROVIDER_TIMEOUT_MS"
     )
-    fast_luna_max_output_tokens: int = Field(
-        default=1200, ge=1, le=8000, alias="FAST_LUNA_MAX_OUTPUT_TOKENS"
+    fast_luna_max_output_tokens: int | None = Field(
+        default=None, ge=1, le=8000, alias="FAST_LUNA_MAX_OUTPUT_TOKENS"
     )
     fast_luna_max_tool_calls: int = Field(
         default=2, ge=1, le=5, alias="FAST_LUNA_MAX_TOOL_CALLS"
