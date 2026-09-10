@@ -63,6 +63,10 @@ TERMINAL_RECOVERY_INSTRUCTION = (
     "Submit the answer through submit_answer. research_status must be incomplete because research was incomplete."
 )
 
+TERMINAL_RECOVERY_EVIDENCE_CONTEXT_MAX_CHARS = 12000
+TERMINAL_RECOVERY_EVIDENCE_TEXT_MAX_CHARS = 3000
+TERMINAL_RECOVERY_CONTEXT_MESSAGE_MAX_CHARS = 4000
+
 
 def _submission_evidence_refs(arguments: Any) -> set[str]:
     """Count submitted canonical evidence refs without retaining their values."""
@@ -533,6 +537,27 @@ class AgentRuntimeService:
         def _research_stage_remaining_ms() -> float:
             return max(0.0, (research_stage_deadline_at - deadline.clock()) * 1000.0)
 
+        def _terminal_recovery_timeout_ms() -> float:
+            """Return a useful recovery allocation without extending the turn."""
+            usable = max(
+                0.0,
+                deadline.remaining_ms() - float(budget.final_response_reserve_ms),
+            )
+            minimum = min(
+                float(budget.terminal_recovery_min_start_budget_ms),
+                float(budget.terminal_synthesis_min_start_budget_ms),
+            )
+            if usable < minimum:
+                return 0.0
+            return min(float(budget.terminal_recovery_target_ms), usable)
+
+        def _compact_terminal_recovery_pending() -> bool:
+            return (
+                terminal_recovery_pending
+                and terminal_continuation_reason == "terminal_timeout"
+                and request.mode == "default"
+            )
+
         def _provider_call_kind() -> str:
             # A terminal recovery follows a failed research call, but it is a
             # bounded continuation rather than a provider retry.  Keep that
@@ -559,6 +584,7 @@ class AgentRuntimeService:
                 # a fresh terminal request from a normal completed-response
                 # continuation.  It is metadata only and is not sent as text.
                 "terminal_fresh_request": terminal_fresh_request,
+                "terminal_timeout_recovery": terminal_continuation_reason == "terminal_timeout",
             })
             terminal_instruction_added = True
 
@@ -610,6 +636,83 @@ class AgentRuntimeService:
             })
             recovered_artifact_context_added = True
 
+        def _build_fresh_terminal_history() -> list[dict[str, Any]]:
+            """Keep only current context and registered evidence for recovery."""
+            current_user_message = next(
+                (
+                    message
+                    for message in messages
+                    if message.get("role") == "user"
+                    and not message.get("terminal_instruction")
+                    and not message.get("partial_provider_text")
+                    and not message.get("recovered_artifact_context")
+                ),
+                None,
+            )
+            compact_history: list[dict[str, Any]] = []
+            if current_user_message is not None:
+                compact_history.append(current_user_message)
+
+            for message in messages:
+                if message.get("partial_provider_text") or message.get(
+                    "recovered_artifact_context"
+                ):
+                    compact_history.append({
+                        "role": "user",
+                        "content": str(message.get("content") or "")[
+                            :TERMINAL_RECOVERY_CONTEXT_MESSAGE_MAX_CHARS
+                        ],
+                        "partial_provider_text": message.get("partial_provider_text") is True,
+                        "recovered_artifact_context": message.get(
+                            "recovered_artifact_context"
+                        ) is True,
+                    })
+
+            evidence_rows: list[dict[str, Any]] = []
+            evidence_context_chars = 0
+            for evidence_ref in registry.get_all_refs()[:60]:
+                try:
+                    entry = registry.resolve(evidence_ref)
+                except Exception:
+                    continue
+                record = entry.evidence_record
+                row: dict[str, Any] = {
+                    "evidence_ref": evidence_ref,
+                    "evidence_origin": entry.evidence_origin,
+                    "source_type": getattr(record, "source_type", None),
+                    "authority_kind": getattr(record, "authority_kind", None),
+                    "binding_status": getattr(record, "binding_status", None),
+                    "document_id": getattr(record, "document_id", None),
+                    "provision_or_span": entry.provision_or_span
+                    or getattr(record, "provision_or_span", None),
+                    "url": entry.url or getattr(record, "url", None),
+                    "title": getattr(record, "title", None),
+                }
+                evidence_text = getattr(record, "text", None)
+                if isinstance(evidence_text, str) and evidence_text:
+                    row["text"] = evidence_text[:TERMINAL_RECOVERY_EVIDENCE_TEXT_MAX_CHARS]
+                candidate = json.dumps(row, ensure_ascii=False, default=str)
+                if evidence_context_chars + len(candidate) > TERMINAL_RECOVERY_EVIDENCE_CONTEXT_MAX_CHARS:
+                    break
+                evidence_rows.append(row)
+                evidence_context_chars += len(candidate)
+
+            if evidence_rows:
+                compact_history.append({
+                    "role": "user",
+                    "content": (
+                        "Already registered request-scoped evidence. Use only these evidence refs; "
+                        "do not perform research or invent refs:\n"
+                        + json.dumps(evidence_rows, ensure_ascii=False, default=str)
+                    ),
+                    "recovered_evidence_context": True,
+                })
+
+            for message in messages:
+                if message.get("terminal_instruction") is True:
+                    compact_history.append(message)
+            return compact_history
+
         def _begin_terminal_recovery(reason: str) -> bool:
             nonlocal terminal_phase
             nonlocal terminal_recovery_attempted
@@ -626,11 +729,17 @@ class AgentRuntimeService:
             # Recovery is available after a research-stage failure/cutoff even
             # when no tool or response history exists. The original system and
             # user messages are sufficient context for degraded synthesis.
+            terminal_timeout_recovery = reason == "terminal_timeout"
+            if terminal_timeout_recovery and request.mode != "default":
+                return False
             if (
-                terminal_phase
+                (terminal_phase and not terminal_timeout_recovery)
                 or terminal_recovery_attempted
                 or submission_received
-                or provider_call_count >= budget.max_provider_calls
+                or (
+                    provider_call_count >= budget.max_provider_calls
+                    and not terminal_timeout_recovery
+                )
             ):
                 return False
             terminal_phase = True
@@ -640,7 +749,11 @@ class AgentRuntimeService:
             terminal_submission_continuation_count = 1
             terminal_continuation_reason = reason
             research_incomplete = True
-            if reason in {"research_provider_timeout", "research_provider_error"}:
+            if reason in {
+                "research_provider_timeout",
+                "research_provider_error",
+                "terminal_timeout",
+            }:
                 # An interrupted Responses stream has no safe continuation
                 # boundary. Force terminal synthesis to be a fresh request;
                 # completed Responses may still use continuation semantics.
@@ -656,7 +769,13 @@ class AgentRuntimeService:
             return True
 
         try:
-            while provider_call_count < budget.max_provider_calls:
+            # A terminal recovery is the one bounded exception to the normal
+            # provider-call cap. It is armed only after the normal terminal
+            # attempt fails and can never open another research call.
+            while (
+                provider_call_count < budget.max_provider_calls
+                or _compact_terminal_recovery_pending()
+            ):
                 remaining = deadline.remaining_ms()
                 if remaining <= 0:
                     errors.append("Deadline exceeded before provider call")
@@ -695,23 +814,45 @@ class AgentRuntimeService:
                         0.0,
                         remaining - float(budget.final_response_reserve_ms),
                     )
-                    if usable_terminal_budget < float(
-                        budget.terminal_synthesis_min_start_budget_ms
-                    ):
+                    terminal_minimum_start_budget = (
+                        min(
+                            budget.terminal_recovery_min_start_budget_ms,
+                            budget.terminal_synthesis_min_start_budget_ms,
+                        )
+                        if _compact_terminal_recovery_pending()
+                        else budget.terminal_synthesis_min_start_budget_ms
+                    )
+                    terminal_target_ms = (
+                        budget.terminal_recovery_target_ms
+                        if _compact_terminal_recovery_pending()
+                        else budget.terminal_synthesis_target_ms
+                    )
+                    if usable_terminal_budget < float(terminal_minimum_start_budget):
                         errors.append("Insufficient budget to start terminal synthesis")
                         terminal_remaining_budget_after_ms = deadline.remaining_ms()
                         break
                     call_timeout_ms = min(
-                        float(budget.terminal_synthesis_target_ms),
+                        float(terminal_target_ms),
                         usable_terminal_budget,
                     )
                     terminal_timeout_allocated_ms = call_timeout_ms
                 else:
                     call_timeout_ms = min(remaining, research_remaining)
 
+                call_reasoning_effort = (
+                    get_settings().default_terminal_recovery_reasoning_effort
+                    if _compact_terminal_recovery_pending()
+                    else policy.reasoning_effort
+                )
+
                 # Count only an actual provider API call. A protected terminal
                 # attempt that is skipped below the minimum-start threshold is
                 # not an API call and must not inflate provider telemetry.
+                provider_messages = (
+                    _build_fresh_terminal_history()
+                    if _compact_terminal_recovery_pending()
+                    else messages
+                )
                 provider_call_count += 1
                 provider_call_started = time.perf_counter()
                 try:
@@ -730,8 +871,8 @@ class AgentRuntimeService:
                             if terminal_phase
                             else policy.tool_choice
                         ),
-                        reasoning_effort=policy.reasoning_effort,
-                        messages_history=messages,
+                        reasoning_effort=call_reasoning_effort,
+                        messages_history=provider_messages,
                         timeout_ms=call_timeout_ms,
                         registry=registry,
                         previous_response_id=previous_response_id,
@@ -744,16 +885,20 @@ class AgentRuntimeService:
                         response_id=None,
                         previous_response_id=previous_response_id,
                         model=policy.model,
-                        effort=getattr(policy, "reasoning_effort", None),
+                        effort=call_reasoning_effort,
                         duration_ms=max(0.0, (time.perf_counter() - provider_call_started) * 1000.0),
                         timeout_allocated_ms=call_timeout_ms,
                         remaining_deadline_before_call_ms=remaining,
                         research_stage_remaining_before_ms=0 if terminal_phase else research_remaining,
                         absolute_remaining_after_ms=deadline.remaining_ms(),
                         research_stage_remaining_after_ms=0 if terminal_phase else _research_stage_remaining_ms(),
-                        input_items_count=len(messages),
-                        input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
-                        function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                        input_items_count=len(provider_messages),
+                        input_char_count=sum(
+                            len(str(m.get("content") or "")) for m in provider_messages
+                        ),
+                        function_output_count=sum(
+                            1 for m in provider_messages if m.get("role") == "tool"
+                        ),
                         tool_definitions_count=len(provider_tools),
                         status="timeout",
                         is_retry=(_provider_call_kind() == "retry"),
@@ -772,16 +917,20 @@ class AgentRuntimeService:
                         response_id=None,
                         previous_response_id=previous_response_id,
                         model=policy.model,
-                        effort=getattr(policy, "reasoning_effort", None),
+                        effort=call_reasoning_effort,
                         duration_ms=max(0.0, (time.perf_counter() - provider_call_started) * 1000.0),
                         timeout_allocated_ms=call_timeout_ms,
                         remaining_deadline_before_call_ms=remaining,
                         research_stage_remaining_before_ms=0 if terminal_phase else research_remaining,
                         absolute_remaining_after_ms=deadline.remaining_ms(),
                         research_stage_remaining_after_ms=0 if terminal_phase else _research_stage_remaining_ms(),
-                        input_items_count=len(messages),
-                        input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
-                        function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                        input_items_count=len(provider_messages),
+                        input_char_count=sum(
+                            len(str(m.get("content") or "")) for m in provider_messages
+                        ),
+                        function_output_count=sum(
+                            1 for m in provider_messages if m.get("role") == "tool"
+                        ),
                         tool_definitions_count=len(provider_tools),
                         status=failure_kind,
                         is_retry=(_provider_call_kind() == "retry"),
@@ -823,7 +972,7 @@ class AgentRuntimeService:
                     response_id=response.response_id or None,
                     previous_response_id=previous_response_id,
                     model=policy.model,
-                    effort=response.effort or getattr(policy, "reasoning_effort", None),
+                    effort=response.effort or call_reasoning_effort,
                     input_tokens=response.input_tokens,
                     cached_input_tokens=response.cached_input_tokens,
                     reasoning_tokens=response.reasoning_tokens,
@@ -864,9 +1013,13 @@ class AgentRuntimeService:
                     # Phase 5.1A.1: content-free search-privacy violation category counts.
                     search_privacy_violation_count=response.pii_violation_count,
                     search_privacy_violation_categories=dict(response.search_privacy_violation_categories),
-                    input_items_count=len(messages),
-                    input_char_count=sum(len(str(m.get("content") or "")) for m in messages),
-                    function_output_count=sum(1 for m in messages if m.get("role") == "tool"),
+                    input_items_count=len(provider_messages),
+                    input_char_count=sum(
+                        len(str(m.get("content") or "")) for m in provider_messages
+                    ),
+                    function_output_count=sum(
+                        1 for m in provider_messages if m.get("role") == "tool"
+                    ),
                     tool_definitions_count=len(provider_tools),
                     status=response.status,
                     is_retry=(call_kind == "retry"),
@@ -892,6 +1045,14 @@ class AgentRuntimeService:
                 if response.status == "timeout" and not response.tool_calls:
                     errors.append("Provider call timed out")
                     if terminal_phase:
+                        if (
+                            request.mode == "default"
+                            and _terminal_recovery_timeout_ms() > 0
+                            and _begin_terminal_recovery(
+                                "terminal_timeout"
+                            )
+                        ):
+                            continue
                         terminal_remaining_budget_after_ms = deadline.remaining_ms()
                         break
                     if _begin_terminal_recovery("research_provider_timeout"):

@@ -78,6 +78,8 @@ class DefaultAgentServingService:
                 terminal_synthesis_target_ms=settings.default_terminal_synthesis_target_ms,
                 final_response_reserve_ms=settings.default_final_response_reserve_ms,
                 terminal_synthesis_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
+                terminal_recovery_target_ms=settings.default_terminal_recovery_target_ms,
+                terminal_recovery_min_start_budget_ms=settings.terminal_synthesis_min_start_budget_ms,
             )
 
             runtime_state = self._compact_state(

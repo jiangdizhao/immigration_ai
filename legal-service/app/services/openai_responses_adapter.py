@@ -46,6 +46,7 @@ _UNSET_NATIVE_WEB_MAX_TOOL_CALLS = object()
 # bounded so a large tool result cannot consume the terminal request budget.
 FRESH_RECOVERY_TOOL_CONTEXT_MAX_CHARS = 12000
 FRESH_RECOVERY_TOOL_RESULT_MAX_CHARS = 5000
+FRESH_RECOVERY_CONTEXT_MESSAGE_MAX_CHARS = 4000
 
 
 @dataclass(slots=True)
@@ -916,11 +917,29 @@ class OpenAIResponsesAdapter(ProviderInterface):
             message.get("terminal_fresh_request") is True
             for message in messages_history
         )
+        compact_terminal_recovery = any(
+            message.get("terminal_timeout_recovery") is True
+            for message in messages_history
+        )
         fresh_tool_context = (
             self._build_fresh_recovery_tool_context(messages_history)
             if fresh_terminal_recovery
             else None
         )
+        fresh_user_message: dict[str, Any] | None = None
+        if fresh_terminal_recovery:
+            fresh_user_message = next(
+                (
+                    message
+                    for message in messages_history
+                    if message.get("role") == "user"
+                    and not message.get("terminal_instruction")
+                    and not message.get("partial_provider_text")
+                    and not message.get("recovered_artifact_context")
+                    and not message.get("recovered_evidence_context")
+                ),
+                None,
+            )
         terminal_instructions: list[str] = []
         for msg in messages_history:
             role = msg.get("role", "user")
@@ -929,6 +948,29 @@ class OpenAIResponsesAdapter(ProviderInterface):
                 continue
             if msg.get("terminal_instruction") is True:
                 terminal_instructions.append(str(content))
+                continue
+            if compact_terminal_recovery:
+                # A fresh terminal request must not replay accumulated
+                # assistant prose or protocol history. The current question,
+                # bounded partial context, and bounded tool-evidence context
+                # below are the only retained inputs.
+                if msg is fresh_user_message:
+                    items.append({
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": str(content)}],
+                    })
+                elif (
+                    msg.get("partial_provider_text")
+                    or msg.get("recovered_artifact_context")
+                    or msg.get("recovered_evidence_context")
+                ):
+                    items.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "input_text",
+                            "text": str(content)[:FRESH_RECOVERY_CONTEXT_MESSAGE_MAX_CHARS],
+                        }],
+                    })
                 continue
             if role == "assistant" and "tool_calls" in msg:
                 continue

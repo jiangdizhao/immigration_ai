@@ -133,6 +133,8 @@ class ExecutionBudget(StrictContract):
     terminal_synthesis_target_ms: int = Field(default=15000, ge=1)
     final_response_reserve_ms: int = Field(default=3000, ge=0)
     terminal_synthesis_min_start_budget_ms: int = Field(default=5000, ge=1)
+    terminal_recovery_target_ms: int = Field(default=20000, ge=1)
+    terminal_recovery_min_start_budget_ms: int = Field(default=5000, ge=1)
 
     @model_validator(mode="after")
     def validate_budget(self):
@@ -142,6 +144,8 @@ class ExecutionBudget(StrictContract):
             raise ValueError("retry viability threshold must fit inside turn_deadline_ms")
         if self.terminal_synthesis_min_start_budget_ms > self.terminal_synthesis_target_ms:
             raise ValueError("terminal minimum-start budget must not exceed terminal target")
+        if self.terminal_recovery_min_start_budget_ms > self.terminal_recovery_target_ms:
+            raise ValueError("terminal recovery minimum-start budget must not exceed recovery target")
         return self
 
 

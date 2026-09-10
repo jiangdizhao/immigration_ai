@@ -69,6 +69,12 @@ def _schedule_shadow_run(
             budget_kwargs.update(
                 max_tool_rounds=settings.agent_max_tool_rounds,
                 max_provider_calls=settings.agent_max_provider_calls,
+                terminal_recovery_target_ms=getattr(
+                    settings, "default_terminal_recovery_target_ms", 20000
+                ),
+                terminal_recovery_min_start_budget_ms=getattr(
+                    settings, "terminal_synthesis_min_start_budget_ms", 5000
+                ),
                 max_schedule2_navigation_calls=getattr(
                     settings, "agent_max_schedule2_navigation_calls", 2
                 ),

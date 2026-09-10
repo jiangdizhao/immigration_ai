@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     default_final_response_reserve_ms: int = Field(
         default=15000, ge=0, alias="DEFAULT_FINAL_RESPONSE_RESERVE_MS"
     )
+    default_terminal_recovery_target_ms: int = Field(
+        default=20000, ge=1, alias="DEFAULT_TERMINAL_RECOVERY_TARGET_MS"
+    )
+    default_terminal_recovery_reasoning_effort: Literal["medium"] = Field(
+        default="medium", alias="DEFAULT_TERMINAL_RECOVERY_REASONING_EFFORT"
+    )
     premium_answer_research_target_ms: int = Field(
         default=40000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
     )

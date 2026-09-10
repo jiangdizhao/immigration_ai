@@ -59,6 +59,7 @@ from app.schemas.agent import (
     AgentSubmissionV2,
     ExecutionBudget,
 )
+from app.schemas.evidence import NativeWebEvidenceRef
 from app.schemas.query import QueryRequest
 from app.services.agent_observability_service import (
     AbsoluteTurnDeadline,
@@ -1335,6 +1336,257 @@ class TestPhase5ResourceGovernance:
         assert provider.call_count <= 11
         assert clock() < 40.0
         assert result.metrics.provider_api_call_count < 12
+
+
+class TestPhase10_1TerminalRecovery:
+    """Regression coverage for one fresh recovery after terminal timeout."""
+
+    @staticmethod
+    def _research_responses(text_chars: int = 8000) -> list[ProviderResponse]:
+        responses: list[ProviderResponse] = []
+        for index in range(1, 5):
+            responses.append(ProviderResponse(
+                response_id=f"research-{index}",
+                model="gpt-5.6-luna",
+                status="ok",
+                text="R" * text_chars,
+                tool_calls=[ToolCallRequest(
+                    call_id=f"utility-{index}",
+                    name="deterministic_utility",
+                    arguments={
+                        "operation": "arithmetic",
+                        "operands": [index, 1],
+                        "expression": f"{index} + 1",
+                        "calendar": "calendar_days",
+                        "timezone": "Australia/Sydney",
+                        "rounding": "none",
+                        "precision": 0,
+                    },
+                )],
+                duration_ms=100,
+            ))
+        return responses
+
+    @staticmethod
+    def _budget(**overrides: Any) -> ExecutionBudget:
+        values = {
+            "max_tool_rounds": 4,
+            "max_provider_calls": 5,
+            "max_retries": 0,
+            "turn_deadline_ms": 60000,
+            "answer_research_target_ms": 40000,
+            "checker_target_ms": 8000,
+            "terminal_synthesis_target_ms": 10000,
+            "final_response_reserve_ms": 5000,
+            "terminal_synthesis_min_start_budget_ms": 1000,
+            "terminal_recovery_target_ms": 10000,
+            "terminal_recovery_min_start_budget_ms": 1000,
+        }
+        values.update(overrides)
+        return ExecutionBudget(**values)
+
+    @staticmethod
+    def _registered_web_ref(registry: RequestEvidenceRegistry) -> str:
+        return registry.register_native_web_evidence(
+            evidence=NativeWebEvidenceRef(
+                evidence_ref="web:provider",
+                evidence_origin="openai_web_native",
+                source_type="web_page",
+                source_authenticity="official_copy",
+                authority_kind="operational_guidance",
+                jurisdiction="Cth",
+                binding_status="not_applicable",
+                court_or_tribunal_level=None,
+                retrieved_at=datetime.now(timezone.utc),
+                provenance_complete=True,
+                search_call_id="search-1",
+                url="https://example.gov.au/visa",
+                title="Official visa information",
+                native_web_citation=None,
+            ),
+            tool_call_id="search-1",
+        )
+
+    async def _run(self, provider: MockProvider, *, budget: ExecutionBudget, registry=None):
+        registry = registry or create_registry("phase10-1")
+        result = await AgentRuntimeService(provider=provider).run_shadow(
+            make_runtime_request(
+                user_text="What visa pathway applies?",
+                execution_budget=budget,
+            ),
+            deadline=AbsoluteTurnDeadline(
+                started_at=time.perf_counter(),
+                turn_deadline_ms=budget.turn_deadline_ms,
+            ),
+            registry=registry,
+        )
+        return result, registry
+
+    async def test_terminal_timeout_gets_exactly_one_recovery_call(self):
+        provider = MockProvider([
+            *self._research_responses(),
+            ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            make_greeting_response(),
+        ])
+
+        result, _ = await self._run(provider, budget=self._budget())
+
+        assert provider.call_count == 6
+        assert result.submission is not None
+        assert result.status == "completed"
+        assert result.metrics.terminal_recovery_triggered is True
+        assert result.metrics.terminal_recovery_reason == "terminal_timeout"
+        assert result.metrics.terminal_fresh_request is True
+
+    async def test_recovery_is_fresh_compact_and_submit_only(self):
+        registry = create_registry("phase10-1-compact")
+        evidence_ref = self._registered_web_ref(registry)
+        recovery = make_greeting_response()
+        recovery.tool_calls[0].arguments["citations"] = [{
+            "evidence_ref": evidence_ref,
+            "display_label": "Official visa information",
+        }]
+        provider = MockProvider([
+            *self._research_responses(),
+            ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            recovery,
+        ])
+
+        result, _ = await self._run(
+            provider,
+            budget=self._budget(),
+            registry=registry,
+        )
+
+        recovery_call = provider.call_args[5]
+        assert recovery_call["previous_response_id"] is None
+        assert [tool.get("name") for tool in recovery_call["tools"]] == ["submit_answer"]
+        assert recovery_call["reasoning_effort"] == "medium"
+        history = recovery_call["messages_history"]
+        assert any("What visa pathway applies?" in str(item.get("content")) for item in history)
+        assert any(evidence_ref in str(item.get("content")) for item in history)
+        assert not any(item.get("role") in {"assistant", "tool"} for item in history)
+        assert not any("R" * 1000 in str(item.get("content")) for item in history)
+        assert result.submission is not None
+        assert result.metrics.provider_calls[-1].effort == "medium"
+        assert result.metrics.provider_calls[-1].input_char_count < 20000
+
+    async def test_hundred_kilobyte_research_history_recovers_compactly(self):
+        provider = MockProvider([
+            *self._research_responses(text_chars=25000),
+            ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            make_greeting_response(),
+        ])
+
+        result, _ = await self._run(provider, budget=self._budget())
+
+        research_history_chars = sum(
+            len(str(message.get("content") or ""))
+            for message in provider.call_args[4]["messages_history"]
+        )
+        recovery_history_chars = sum(
+            len(str(message.get("content") or ""))
+            for message in provider.call_args[5]["messages_history"]
+        )
+        assert research_history_chars >= 100000
+        assert recovery_history_chars < 20000
+        assert provider.call_count == 6
+        assert result.status == "completed"
+        assert result.submission is not None
+
+    async def test_recovery_failure_is_final_and_does_not_loop(self):
+        provider = MockProvider([
+            *self._research_responses(),
+            ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            ProviderResponse(response_id="recovery-error", model="gpt-5.6-luna", status="error"),
+        ])
+
+        result, _ = await self._run(provider, budget=self._budget())
+
+        assert provider.call_count == 6
+        assert result.submission is None
+        assert result.completion_status == "safe_failure"
+        assert result.metrics.terminal_recovery_triggered is True
+        assert len(result.metrics.provider_calls) == 6
+
+    async def test_insufficient_budget_skips_recovery(self):
+        # A deadline that is already below the useful recovery threshold when
+        # terminal timeout handling runs must not start another provider call.
+        clock = TestPhase5ResourceGovernance._FakeClock(value=0.0)
+        provider = TestPhase5ResourceGovernance._AdvancingProvider(
+            clock=clock,
+            responses=[
+                *self._research_responses(),
+                ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            ],
+            advance_ms_per_call=[11000.0, 11000.0, 11000.0, 11000.0, 15000.0],
+        )
+        budget = self._budget(
+            turn_deadline_ms=60000,
+            answer_research_target_ms=50000,
+            checker_target_ms=5000,
+            terminal_synthesis_target_ms=5000,
+            final_response_reserve_ms=5000,
+            terminal_synthesis_min_start_budget_ms=1000,
+            terminal_recovery_target_ms=10000,
+            terminal_recovery_min_start_budget_ms=5000,
+        )
+        result = await AgentRuntimeService(provider=provider).run_shadow(
+            make_runtime_request(user_text="What visa pathway applies?", execution_budget=budget),
+            deadline=AbsoluteTurnDeadline(
+                started_at=0.0,
+                turn_deadline_ms=budget.turn_deadline_ms,
+                clock=clock,
+            ),
+            registry=create_registry("phase10-1-budget"),
+        )
+
+        assert provider.call_count == 5
+        assert result.submission is None
+        assert result.metrics.terminal_recovery_triggered is False
+
+    async def test_normal_terminal_success_has_no_recovery(self):
+        provider = MockProvider([
+            *self._research_responses(),
+            make_greeting_response(),
+        ])
+
+        result, _ = await self._run(provider, budget=self._budget())
+
+        assert provider.call_count == 5
+        assert result.submission is not None
+        assert result.metrics.submission_attempt_count == 1
+        assert result.metrics.submission_accepted_count == 1
+        assert result.metrics.terminal_recovery_triggered is False
+        expected_effort = AgentPolicyService().build_policy(
+            mode="default",
+            experiment_arm=None,
+        ).reasoning_effort
+        assert provider.call_args[-1]["reasoning_effort"] == expected_effort
+        assert provider.call_args[-1]["reasoning_effort"] != "medium"
+
+    async def test_recovery_submission_keeps_existing_evidence_validation(self):
+        invalid_recovery = make_greeting_response()
+        invalid_recovery.tool_calls[0].arguments["citations"] = [{
+            "evidence_ref": "exact:not-registered",
+            "display_label": "Unregistered evidence",
+        }]
+        provider = MockProvider([
+            *self._research_responses(),
+            ProviderResponse(response_id="terminal-timeout", model="gpt-5.6-luna", status="timeout"),
+            invalid_recovery,
+        ])
+
+        result, _ = await self._run(provider, budget=self._budget())
+
+        assert provider.call_count == 6
+        assert result.submission is None
+        assert result.metrics.submission_attempt_count == 1
+        assert result.metrics.submission_accepted_count == 0
+        assert any(
+            "EVIDENCE" in code
+            for code in result.metrics.submission_rejection_categories_by_attempt[0]
+        )
 
 
 # ---------------------------------------------------------------------------
