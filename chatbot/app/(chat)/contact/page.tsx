@@ -8,12 +8,17 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  PublicActionLink,
+  PublicEditorialHero,
+  PublicEyebrow,
+  PublicPageFrame,
+  PublicSectionHeading,
+} from "@/components/public-page-primitives";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { useSiteLocale } from "@/components/site-locale-provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { getPublicPageContent, PUBLIC_ROUTES } from "@/lib/public-content";
 
 export default function ContactPage() {
@@ -21,127 +26,133 @@ export default function ContactPage() {
   const content = getPublicPageContent(locale);
 
   return (
-    <div className="min-h-dvh bg-[#f8f9fa] text-slate-900">
+    <PublicPageFrame>
       <SiteHeader />
       <main>
-        <section className="relative overflow-hidden bg-[#001736] px-5 py-16 text-white lg:px-8">
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 opacity-34"
-            style={{
-              backgroundImage:
-                "url('/images/sovereign-nexus/opera-house-hero.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,23,54,0.97),rgba(0,43,91,0.86),rgba(0,23,54,0.42))]" />
-          <div className="relative mx-auto max-w-7xl">
-            <Badge
-              className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/10"
-              variant="outline"
-            >
-              <MessageSquareMore className="mr-2 size-3.5 text-cyan-200" />
-              {content.contact.eyebrow}
-            </Badge>
-            <h1 className="mt-5 max-w-4xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
-              {content.contact.title}
-            </h1>
-            <p className="mt-5 max-w-3xl text-base leading-8 text-slate-200">
-              {content.contact.description}
-            </p>
-          </div>
-        </section>
-
-        <section className="mx-auto grid max-w-7xl gap-6 px-5 py-16 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
-          <div className="space-y-5">
-            <Card className="rounded-[32px] border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-6">
-                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-[#001736] text-white">
-                  <MessageSquareMore className="size-6" />
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-                  {content.contact.aiCardTitle}
-                </h2>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {content.contact.aiCardDescription}
-                </p>
-                <Button
-                  asChild
-                  className="mt-5 rounded-full bg-[#001736] text-white hover:bg-[#002b5b]"
-                >
-                  <Link href={PUBLIC_ROUTES.aiWorkspace}>
-                    {content.contact.aiCta}
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[32px] border-amber-200 bg-amber-50/70 shadow-sm">
-              <CardContent className="p-6">
-                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
-                  <Scale className="size-6" />
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+        <PublicEditorialHero
+          actions={
+            <PublicActionLink href={PUBLIC_ROUTES.aiWorkspace} variant="navy">
+              {content.contact.aiCta}
+            </PublicActionLink>
+          }
+          aside={
+            <div className="rounded-[2rem] bg-[#fffaf0] p-6 shadow-[0_30px_85px_-45px_rgba(146,91,0,0.7)] ring-1 ring-amber-200/70 sm:p-8">
+              <div className="flex items-center justify-between gap-4">
+                <PublicEyebrow icon={Scale} tone="amber">
                   {content.contact.lawyerCardTitle}
-                </h2>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {content.contact.lawyerCardDescription}
-                </p>
-                <Button
-                  asChild
-                  className="mt-5 rounded-full bg-[#8a5a00] text-white hover:bg-[#704900]"
-                >
-                  <Link href={PUBLIC_ROUTES.aiWorkspace}>
-                    {content.contact.lawyerCta}
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="overflow-hidden rounded-[36px] border-0 bg-gradient-to-br from-[#001736] via-[#002b5b] to-[#1d0052] text-white shadow-[0_30px_110px_-42px_rgba(15,23,42,0.75)]">
-            <CardContent className="p-8 lg:p-10">
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">
-                {content.contact.readinessEyebrow}
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                {content.contact.readinessTitle}
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-slate-200">
-                {content.contact.readinessDescription}
-              </p>
-
-              <div className="mt-7 grid gap-3">
-                {content.contact.readiness.map((item) => (
-                  <div
-                    className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/10 p-4"
-                    key={item}
-                  >
-                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-cyan-200" />
-                    <p className="text-sm leading-6 text-slate-100">{item}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8 rounded-2xl border border-white/10 bg-white/10 p-5">
-                <div className="mb-2 flex items-center gap-2 text-cyan-200">
-                  <ShieldCheck className="size-4" />
-                  <span className="text-sm font-medium text-white">
-                    {content.contact.boundaryTitle}
-                  </span>
+                </PublicEyebrow>
+                <div className="rounded-2xl bg-amber-100 p-3 text-amber-800 ring-1 ring-amber-200">
+                  <Scale className="size-5" />
                 </div>
-                <p className="text-sm leading-6 text-slate-300">
-                  {content.contact.boundaryDescription}
-                </p>
               </div>
-            </CardContent>
-          </Card>
+              <h2 className="mt-7 text-2xl font-semibold leading-tight tracking-[-0.03em] text-slate-950 sm:text-3xl">
+                {content.contact.lawyerCardTitle}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                {content.contact.lawyerCardDescription}
+              </p>
+              <div className="mt-6 rounded-2xl bg-white p-4 text-sm leading-6 text-slate-700 ring-1 ring-amber-200/60">
+                {content.contact.lawyerCta}
+              </div>
+            </div>
+          }
+          description={content.contact.description}
+          eyebrow={content.contact.eyebrow}
+          icon={MessageSquareMore}
+          title={content.contact.title}
+          tone="amber"
+        />
+
+        <section className="bg-[#f4f6f9] px-5 py-20 sm:py-24 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-6 lg:grid-cols-[0.76fr_1.24fr] lg:items-start lg:gap-8">
+              <div className="grid gap-5">
+                <article className="rounded-[1.75rem] bg-[#f3efff] p-6 shadow-[0_18px_50px_-38px_rgba(91,55,180,0.75)] ring-1 ring-violet-200/80 sm:p-7">
+                  <div className="flex size-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-800 ring-1 ring-violet-200">
+                    <MessageSquareMore className="size-5" />
+                  </div>
+                  <PublicEyebrow className="mt-6" tone="purple">
+                    {content.contact.aiCardTitle}
+                  </PublicEyebrow>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                    {content.contact.aiCardTitle}
+                  </h2>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {content.contact.aiCardDescription}
+                  </p>
+                  <PublicActionLink
+                    href={PUBLIC_ROUTES.aiWorkspace}
+                    variant="purple"
+                  >
+                    {content.contact.aiCta}
+                  </PublicActionLink>
+                </article>
+
+                <article className="rounded-[1.75rem] bg-[#fffaf0] p-6 shadow-[0_18px_50px_-38px_rgba(146,91,0,0.7)] ring-1 ring-amber-200/80 sm:p-7">
+                  <div className="flex size-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-200">
+                    <Scale className="size-5" />
+                  </div>
+                  <PublicEyebrow className="mt-6" tone="amber">
+                    {content.contact.lawyerCardTitle}
+                  </PublicEyebrow>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                    {content.contact.lawyerCardTitle}
+                  </h2>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {content.contact.lawyerCardDescription}
+                  </p>
+                  <Button
+                    asChild
+                    className="mt-6 h-11 rounded-full bg-[#9a6500] px-5 text-white shadow-lg shadow-amber-900/15 hover:bg-[#7a4f00]"
+                  >
+                    <Link href={PUBLIC_ROUTES.aiWorkspace}>
+                      {content.contact.lawyerCta}
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </Button>
+                </article>
+              </div>
+
+              <article className="rounded-[2rem] bg-[#092c52] p-7 text-white shadow-[0_30px_90px_-48px_rgba(9,44,82,0.85)] sm:p-9 lg:p-11">
+                <PublicSectionHeading
+                  dark
+                  eyebrow={content.contact.readinessEyebrow}
+                  title={content.contact.readinessTitle}
+                  tone="navy"
+                />
+                <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+                  {content.contact.readinessDescription}
+                </p>
+
+                <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                  {content.contact.readiness.map((item) => (
+                    <div
+                      className="flex items-start gap-3 rounded-2xl bg-white/[0.08] p-4 ring-1 ring-white/10"
+                      key={item}
+                    >
+                      <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-cyan-200" />
+                      <p className="text-sm leading-6 text-slate-100">{item}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-8 rounded-3xl bg-white/[0.08] p-5 ring-1 ring-white/10">
+                  <div className="flex items-center gap-2 text-cyan-100">
+                    <ShieldCheck className="size-4" />
+                    <span className="text-sm font-medium text-white">
+                      {content.contact.boundaryTitle}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {content.contact.boundaryDescription}
+                  </p>
+                </div>
+              </article>
+            </div>
+          </div>
         </section>
       </main>
       <SiteFooter />
-    </div>
+    </PublicPageFrame>
   );
 }
