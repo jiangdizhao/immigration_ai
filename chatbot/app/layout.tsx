@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
+import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { SiteLocaleProvider } from "@/components/site-locale-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import {
+  DEFAULT_SITE_LOCALE,
+  getSiteLocaleFromCookie,
+  SITE_LOCALE_COOKIE,
+  type SiteLocale,
+} from "@/lib/site-locale";
 
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
@@ -49,6 +58,41 @@ const THEME_COLOR_SCRIPT = `\
   updateThemeColor();
 })();`;
 
+function AppProviders({
+  children,
+  initialLocale,
+}: {
+  children: React.ReactNode;
+  initialLocale: SiteLocale;
+}) {
+  return (
+    <SiteLocaleProvider initialLocale={initialLocale}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        disableTransitionOnChange
+        enableSystem
+      >
+        <Toaster position="top-center" />
+        <SessionProvider>{children}</SessionProvider>
+      </ThemeProvider>
+    </SiteLocaleProvider>
+  );
+}
+
+async function CookieLocaleProviders({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const cookieStore = await cookies();
+  const initialLocale = getSiteLocaleFromCookie(
+    `${SITE_LOCALE_COOKIE}=${cookieStore.get(SITE_LOCALE_COOKIE)?.value ?? ""}`
+  );
+
+  return <AppProviders initialLocale={initialLocale}>{children}</AppProviders>;
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -61,7 +105,7 @@ export default function RootLayout({
       // visual flicker before hydration. Hence the `suppressHydrationWarning`
       // prop is necessary to avoid the React hydration mismatch warning.
       // https://github.com/pacocoursey/next-themes?tab=readme-ov-file#with-app
-      lang="en"
+      lang={DEFAULT_SITE_LOCALE}
       suppressHydrationWarning
     >
       <head>
@@ -73,15 +117,15 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          disableTransitionOnChange
-          enableSystem
+        <Suspense
+          fallback={
+            <AppProviders initialLocale={DEFAULT_SITE_LOCALE}>
+              {children}
+            </AppProviders>
+          }
         >
-          <Toaster position="top-center" />
-          <SessionProvider>{children}</SessionProvider>
-        </ThemeProvider>
+          <CookieLocaleProviders>{children}</CookieLocaleProviders>
+        </Suspense>
       </body>
     </html>
   );

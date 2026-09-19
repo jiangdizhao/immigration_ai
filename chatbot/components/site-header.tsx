@@ -14,7 +14,14 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { guestRegex } from "@/lib/constants";
+import type {
+  SiteLocale,
+  SiteNavKey,
+  SiteTranslation,
+} from "@/lib/site-locale";
 import { cn } from "@/lib/utils";
+import { SiteLanguageSwitcher } from "./site-language-switcher";
+import { useSiteLocale } from "./site-locale-provider";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -24,11 +31,11 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 
-const navItems = [
-  { label: "AI Workspace", href: "/ai-workspace" },
-  { label: "Services", href: "/services" },
-  { label: "Process", href: "/process" },
-  { label: "Contact", href: "/contact" },
+const navItems: { key: SiteNavKey; href: string }[] = [
+  { key: "workspace", href: "/ai-workspace" },
+  { key: "services", href: "/services" },
+  { key: "process", href: "/process" },
+  { key: "contact", href: "/contact" },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -46,6 +53,8 @@ function AccountMenu({
   vipExpiresAt,
   activeVip,
   expiredVip,
+  copy,
+  locale,
   mobile = false,
 }: {
   email: string;
@@ -55,21 +64,23 @@ function AccountMenu({
   vipExpiresAt: string | null;
   activeVip: boolean;
   expiredVip: boolean;
+  copy: SiteTranslation;
+  locale: SiteLocale;
   mobile?: boolean;
 }) {
   const accountLabel = isAdmin
-    ? "Administrator"
+    ? copy.account.administrator
     : membershipTier === "vip" && activeVip
-      ? `VIP until ${new Date(vipExpiresAt as string).toLocaleDateString()}`
+      ? `${copy.account.vipUntil} ${new Date(vipExpiresAt as string).toLocaleDateString(locale)}`
       : expiredVip
-        ? "VIP expired"
-        : "Free account";
+        ? copy.account.vipExpired
+        : copy.account.freeAccount;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={`Account menu for ${email}`}
+          aria-label={`${copy.account.menuFor} ${email}`}
           className={cn(
             "flex min-w-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-left text-sm text-white transition hover:bg-white/15",
             mobile && "w-full justify-between rounded-2xl px-4 py-3"
@@ -88,7 +99,9 @@ function AccountMenu({
         data-testid="site-account-menu"
       >
         <div className="px-3 py-2">
-          <p className="text-xs font-medium text-slate-500">Signed in as</p>
+          <p className="text-xs font-medium text-slate-500">
+            {copy.account.signedInAs}
+          </p>
           <p className="mt-1 truncate text-sm font-semibold text-slate-950">
             {email}
           </p>
@@ -101,33 +114,35 @@ function AccountMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link className="cursor-pointer" href="/ai-workspace">
-            {isAdmin ? "AI Workspace" : "My conversations / AI Workspace"}
+            {isAdmin
+              ? copy.account.aiWorkspace
+              : copy.account.conversationsAndWorkspace}
           </Link>
         </DropdownMenuItem>
         {isLawyer ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/lawyer-portal">
-              Lawyer portal
+              {copy.account.lawyerPortal}
             </Link>
           </DropdownMenuItem>
         ) : isAdmin ? null : (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/lawyer-requests">
-              My lawyer requests
+              {copy.account.lawyerRequests}
             </Link>
           </DropdownMenuItem>
         )}
         {!isAdmin && !activeVip ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/vip">
-              {expiredVip ? "Renew VIP" : "Upgrade to VIP"}
+              {expiredVip ? copy.account.renewVip : copy.account.upgradeVip}
             </Link>
           </DropdownMenuItem>
         ) : null}
         {isAdmin ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/admin-portal">
-              Admin Portal
+              {copy.account.adminPortal}
             </Link>
           </DropdownMenuItem>
         ) : null}
@@ -139,7 +154,7 @@ function AccountMenu({
           }}
         >
           <LogOut className="size-4" />
-          Log out
+          {copy.account.logOut}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -147,6 +162,7 @@ function AccountMenu({
 }
 
 export function SiteHeader() {
+  const { copy, locale } = useSiteLocale();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: session, status } = useSession();
@@ -219,10 +235,10 @@ export function SiteHeader() {
           </div>
           <div>
             <p className="font-semibold leading-tight tracking-tight">
-              Sovereign Nexus Legal
+              {copy.brand.name}
             </p>
             <p className="text-xs leading-tight text-slate-300">
-              AI-assisted migration intake
+              {copy.brand.tagline}
             </p>
           </div>
         </Link>
@@ -241,20 +257,23 @@ export function SiteHeader() {
                 href={item.href}
                 key={item.href}
               >
-                {item.label}
+                {copy.nav[item.key]}
               </Link>
             );
           })}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
+          <SiteLanguageSwitcher />
           {isAuthenticated ? (
             <AccountMenu
               activeVip={activeVip}
+              copy={copy}
               email={email}
               expiredVip={expiredVip}
               isAdmin={isAdmin}
               isLawyer={isLawyer}
+              locale={locale}
               membershipTier={membershipTier}
               vipExpiresAt={vipExpiresAt}
             />
@@ -265,14 +284,14 @@ export function SiteHeader() {
                 className="rounded-full text-slate-200 hover:bg-white/10 hover:text-white"
                 variant="ghost"
               >
-                <Link href="/login">Login</Link>
+                <Link href="/login">{copy.header.login}</Link>
               </Button>
               <Button
                 asChild
                 className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/15"
                 variant="outline"
               >
-                <Link href="/register">Register</Link>
+                <Link href="/register">{copy.header.register}</Link>
               </Button>
             </>
           )}
@@ -280,12 +299,16 @@ export function SiteHeader() {
             asChild
             className="rounded-full bg-white px-5 text-[#001736] hover:bg-slate-100"
           >
-            <Link href="/ai-workspace">Talk to AI</Link>
+            <Link href="/ai-workspace">{copy.header.talkToAi}</Link>
           </Button>
         </div>
 
         <button
-          aria-label="Open navigation"
+          aria-label={
+            mobileOpen
+              ? copy.header.closeNavigation
+              : copy.header.openNavigation
+          }
           className="rounded-full border border-white/15 bg-white/10 p-2 text-white md:hidden"
           onClick={() => setMobileOpen((value) => !value)}
           type="button"
@@ -311,7 +334,7 @@ export function SiteHeader() {
                   key={item.href}
                   onClick={() => setMobileOpen(false)}
                 >
-                  {item.label}
+                  {copy.nav[item.key]}
                 </Link>
               );
             })}
@@ -320,16 +343,19 @@ export function SiteHeader() {
               className="mt-2 rounded-full bg-white text-[#001736] hover:bg-slate-100"
             >
               <Link href="/ai-workspace" onClick={() => setMobileOpen(false)}>
-                Talk to AI
+                {copy.header.talkToAi}
               </Link>
             </Button>
+            <SiteLanguageSwitcher mobile />
             {isAuthenticated ? (
               <AccountMenu
                 activeVip={activeVip}
+                copy={copy}
                 email={email}
                 expiredVip={expiredVip}
                 isAdmin={isAdmin}
                 isLawyer={isLawyer}
+                locale={locale}
                 membershipTier={membershipTier}
                 mobile
                 vipExpiresAt={vipExpiresAt}
@@ -342,7 +368,7 @@ export function SiteHeader() {
                   variant="outline"
                 >
                   <Link href="/login" onClick={() => setMobileOpen(false)}>
-                    Login
+                    {copy.header.login}
                   </Link>
                 </Button>
                 <Button
@@ -350,7 +376,7 @@ export function SiteHeader() {
                   className="rounded-2xl bg-white text-[#001736] hover:bg-slate-100"
                 >
                   <Link href="/register" onClick={() => setMobileOpen(false)}>
-                    Register
+                    {copy.header.register}
                   </Link>
                 </Button>
               </div>
