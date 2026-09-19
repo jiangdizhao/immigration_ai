@@ -32,6 +32,9 @@ export function SiteFooter() {
             <Link className="hover:text-[#002b5b]" href="/services">
               {copy.nav.services}
             </Link>
+            <Link className="hover:text-[#002b5b]" href="/intelligence">
+              {copy.nav.intelligence}
+            </Link>
             <Link className="hover:text-[#002b5b]" href="/process">
               {copy.nav.process}
             </Link>

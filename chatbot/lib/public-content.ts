@@ -3,6 +3,7 @@ import type { SiteLocale } from "./site-locale";
 export const PUBLIC_ROUTES = {
   aiWorkspace: "/ai-workspace",
   services: "/services",
+  intelligence: "/intelligence",
   process: "/process",
   contact: "/contact",
 } as const;
@@ -269,6 +270,17 @@ type PublicPageCopy = {
       description: string;
       cardCta: string;
     };
+    intelligence: {
+      eyebrow: string;
+      title: string;
+      description: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      viewAll: string;
+      sourceLabel: string;
+      analysisLabel: string;
+      lawyerLabel: string;
+    };
     journey: {
       eyebrow: string;
       title: string;
@@ -294,6 +306,32 @@ type PublicPageCopy = {
     nextStepDescription: string;
     aiCta: string;
     consultationCta: string;
+  };
+  intelligence: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    searchPlaceholder: string;
+    allCategories: string;
+    noResults: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    viewDetails: string;
+    sourceStatus: string;
+    editorialStatus: string;
+    authority: string;
+    sourceDate: string;
+    effectiveDate: string;
+    jurisdiction: string;
+    category: string;
+    officialSource: string;
+    analysisTitle: string;
+    analysisEmpty: string;
+    lawyerTitle: string;
+    lawyerEmpty: string;
+    impactTitle: string;
+    impactEmpty: string;
+    backToList: string;
   };
   process: {
     eyebrow: string;
@@ -354,6 +392,18 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         description:
           "六个暂定服务类别用于帮助您找到入口。具体情况、适用范围和后续建议需要结合您的资料进一步确认。",
         cardCta: "查看服务方向",
+      },
+      intelligence: {
+        eyebrow: "最新政策解读",
+        title: "先看官方来源，再理解政策信息",
+        description:
+          "政策条目会在来源和编辑状态均完成核验后显示。这里不会用未经确认的内容填补空白。",
+        emptyTitle: "已发布的政策解读将在核验后显示",
+        emptyDescription: "目前还没有完成来源核验和发布流程的政策条目。",
+        viewAll: "查看最新政策解读",
+        sourceLabel: "官方来源",
+        analysisLabel: "AI 辅助分析",
+        lawyerLabel: "律师点评",
       },
       journey: {
         eyebrow: "服务流程",
@@ -416,6 +466,34 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         "先浏览服务方向，再使用 AI 工作台整理您的情况；如有需要，可在现有流程中继续申请律师查看。",
       aiCta: "开始 AI 初步咨询",
       consultationCta: "提交咨询需求",
+    },
+    intelligence: {
+      eyebrow: "最新政策解读",
+      title: "把政策来源、状态与实际影响分开看",
+      description:
+        "这里仅展示已完成编辑发布流程的条目。官方来源、AI 辅助分析和律师点评会明确区分。",
+      searchPlaceholder: "搜索标题、来源或类别",
+      allCategories: "全部类别",
+      noResults: "没有符合当前搜索条件的已发布条目",
+      emptyTitle: "当前没有已发布的政策解读",
+      emptyDescription:
+        "政策内容将在官方来源和编辑状态完成核验后发布。当前页面保持为空，不展示未经确认的政策事实。",
+      viewDetails: "查看解读",
+      sourceStatus: "来源状态",
+      editorialStatus: "编辑状态",
+      authority: "发布机构 / 权威来源",
+      sourceDate: "来源日期",
+      effectiveDate: "生效日期",
+      jurisdiction: "适用辖区",
+      category: "类别",
+      officialSource: "查看官方来源",
+      analysisTitle: "AI 辅助分析",
+      analysisEmpty: "当前条目没有单独发布 AI 辅助分析。",
+      lawyerTitle: "律师点评",
+      lawyerEmpty: "当前条目没有已确认的律师点评。",
+      impactTitle: "实际影响",
+      impactEmpty: "当前条目没有提供经编辑确认的实际影响说明。",
+      backToList: "返回政策解读",
     },
     process: {
       eyebrow: "服务流程",
@@ -529,6 +607,20 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
           "Six provisional service categories help you find an entry point. Specific scope, suitability, and next steps require your information to be reviewed further.",
         cardCta: "View service direction",
       },
+      intelligence: {
+        eyebrow: "Policy intelligence",
+        title:
+          "Start with the official source, then understand the information",
+        description:
+          "Policy entries appear only after their source and editorial status have been reviewed. This space is not filled with unconfirmed material.",
+        emptyTitle: "Published policy intelligence will appear after review",
+        emptyDescription:
+          "There are no policy entries that have completed source review and publication yet.",
+        viewAll: "View policy intelligence",
+        sourceLabel: "Official source",
+        analysisLabel: "AI-assisted analysis",
+        lawyerLabel: "Lawyer commentary",
+      },
       journey: {
         eyebrow: "Service journey",
         title: "AI organises the initial picture; lawyers join when needed",
@@ -595,6 +687,36 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         "Browse the service directions, then use the AI workspace to organise your situation. Where appropriate, the existing workflow can continue to a lawyer review request.",
       aiCta: "Start AI initial consultation",
       consultationCta: "Submit a consultation request",
+    },
+    intelligence: {
+      eyebrow: "Policy intelligence",
+      title: "Separate policy sources, status, and practical relevance",
+      description:
+        "Only entries that have completed the editorial publication process are shown. Official sources, AI-assisted analysis, and lawyer commentary are labelled separately.",
+      searchPlaceholder: "Search title, source, or category",
+      allCategories: "All categories",
+      noResults: "No published entries match the current search",
+      emptyTitle: "There are no published policy updates yet",
+      emptyDescription:
+        "Policy content will be published after its official source and editorial status have been reviewed. This page remains empty rather than presenting unconfirmed policy facts.",
+      viewDetails: "View interpretation",
+      sourceStatus: "Source status",
+      editorialStatus: "Editorial status",
+      authority: "Issuing body / authority",
+      sourceDate: "Source date",
+      effectiveDate: "Effective date",
+      jurisdiction: "Jurisdiction",
+      category: "Category",
+      officialSource: "View official source",
+      analysisTitle: "AI-assisted analysis",
+      analysisEmpty:
+        "No separate AI-assisted analysis is published for this entry.",
+      lawyerTitle: "Lawyer commentary",
+      lawyerEmpty:
+        "No confirmed lawyer commentary is published for this entry.",
+      impactTitle: "Practical relevance",
+      impactEmpty: "No curated practical relevance is provided for this entry.",
+      backToList: "Back to policy intelligence",
     },
     process: {
       eyebrow: "Service journey",

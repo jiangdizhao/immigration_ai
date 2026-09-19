@@ -34,6 +34,7 @@ import {
 const navItems: { key: SiteNavKey; href: string }[] = [
   { key: "workspace", href: "/ai-workspace" },
   { key: "services", href: "/services" },
+  { key: "intelligence", href: "/intelligence" },
   { key: "process", href: "/process" },
   { key: "contact", href: "/contact" },
 ];

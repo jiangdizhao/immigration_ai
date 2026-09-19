@@ -6,7 +6,12 @@ export const SUPPORTED_SITE_LOCALES = ["zh-CN", "en"] as const;
 
 export type SiteLocale = (typeof SUPPORTED_SITE_LOCALES)[number];
 
-export type SiteNavKey = "workspace" | "services" | "process" | "contact";
+export type SiteNavKey =
+  | "workspace"
+  | "services"
+  | "intelligence"
+  | "process"
+  | "contact";
 
 export type SiteTranslation = {
   brand: {
@@ -64,6 +69,7 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
     nav: {
       workspace: "AI 工作台",
       services: "服务",
+      intelligence: "最新政策解读",
       process: "办理流程",
       contact: "联系我们",
     },
@@ -116,6 +122,7 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
     nav: {
       workspace: "AI Workspace",
       services: "Services",
+      intelligence: "Policy Intelligence",
       process: "Process",
       contact: "Contact",
     },

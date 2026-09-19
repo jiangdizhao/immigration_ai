@@ -2,6 +2,7 @@
 
 import {
   ArrowUpRight,
+  BookOpenText,
   CheckCircle2,
   FileText,
   MessageSquareMore,
@@ -9,6 +10,11 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  formatPolicyDate,
+  getPolicySourceStatusLabel,
+  getPublishedPolicies,
+} from "@/lib/policy-intelligence";
 import {
   getPublicPageContent,
   getPublicServiceCatalog,
@@ -32,6 +38,7 @@ export function ImmigrationServiceHome() {
   const content = getPublicPageContent(locale);
   const services = getPublicServiceCatalog(locale);
   const team = getPublicTeamPlaceholders(locale);
+  const policies = getPublishedPolicies();
 
   return (
     <PublicPageFrame>
@@ -172,6 +179,81 @@ export function ImmigrationServiceHome() {
                 />
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="bg-white px-5 py-20 sm:py-24 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end lg:gap-16">
+              <PublicSectionHeading
+                eyebrow={content.home.intelligence.eyebrow}
+                title={content.home.intelligence.title}
+                tone="navy"
+              />
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+                {content.home.intelligence.description}
+              </p>
+            </div>
+
+            {policies.length > 0 ? (
+              <div className="mt-12 grid gap-5 lg:grid-cols-3">
+                {policies.slice(0, 3).map((policy) => {
+                  const copy = policy.copy[locale];
+                  return (
+                    <article
+                      className="flex min-w-0 flex-col rounded-[1.75rem] bg-[#f4f6f9] p-6 ring-1 ring-slate-200/70 transition hover:-translate-y-1 hover:bg-white hover:shadow-[0_22px_60px_-38px_rgba(15,23,42,0.75)] sm:p-7"
+                      key={policy.id}
+                    >
+                      <div className="flex items-center justify-between gap-3 text-xs font-semibold text-[#123f70]">
+                        <span className="inline-flex items-center gap-2">
+                          <BookOpenText className="size-4" />
+                          {getPolicySourceStatusLabel(
+                            policy.sourceStatus,
+                            locale
+                          )}
+                        </span>
+                        <span className="text-slate-500">
+                          {formatPolicyDate(policy.source.sourceDate, locale)}
+                        </span>
+                      </div>
+                      <h3 className="mt-5 break-words text-xl font-semibold leading-tight tracking-tight text-slate-950">
+                        {copy.title}
+                      </h3>
+                      <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-600">
+                        {copy.summary}
+                      </p>
+                      <Link
+                        className="mt-auto inline-flex items-center gap-2 pt-6 text-sm font-semibold text-[#123f70] hover:text-violet-700"
+                        href={`${PUBLIC_ROUTES.intelligence}/${policy.slug}`}
+                      >
+                        {content.home.intelligence.viewAll}
+                        <ArrowUpRight className="size-4" />
+                      </Link>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-12 grid gap-8 rounded-[2rem] bg-[#f4f6f9] p-7 ring-1 ring-slate-200/70 sm:p-10 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-[#123f70] shadow-sm ring-1 ring-slate-200/70">
+                  <BookOpenText className="size-6" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="break-words text-xl font-semibold tracking-tight text-slate-950">
+                    {content.home.intelligence.emptyTitle}
+                  </h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                    {content.home.intelligence.emptyDescription}
+                  </p>
+                </div>
+                <PublicActionLink
+                  href={PUBLIC_ROUTES.intelligence}
+                  variant="navy"
+                >
+                  {content.home.intelligence.viewAll}
+                </PublicActionLink>
+              </div>
+            )}
           </div>
         </section>
 

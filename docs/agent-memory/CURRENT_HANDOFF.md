@@ -15,6 +15,7 @@
 - P11-001: **VERIFIED**
 - P11-002A: **VERIFIED**
 - P11-002B: **VERIFIED**
+- P11-003A: **IMPLEMENTED IN WORKING TREE — OWNER REVIEW PENDING**
 
 P11-002B was accepted after Git diff review and owner visual review of the refined Home, Services, Process and Contact desktop pages.
 
@@ -64,11 +65,106 @@ Therefore:
 
 The model must distinguish source/legal status from editorial publication status.
 
+## P11-003A implementation handoff
+
+P11-003A is implemented on top of the accepted P11-002B baseline and remains
+uncommitted/unpushed for owner review.
+
+Changed files:
+
+- `chatbot/lib/policy-intelligence.ts` — typed manual-first policy model,
+  source/legal status and editorial status unions, published-only selectors,
+  duplicate/metadata validation, bilingual status labels, and empty production
+  registry;
+- `chatbot/lib/policy-intelligence.test.ts` — synthetic-only selector and
+  validation fixtures covering hidden statuses, independent statuses,
+  deterministic ordering, duplicate IDs/slugs, bilingual copy, and unpublished
+  route lookup;
+- `chatbot/lib/public-content.ts` — `/intelligence` route identity plus
+  bilingual Home and Policy Intelligence copy, including truthful empty states;
+- `chatbot/lib/site-locale.ts` — bilingual `intelligence` navigation key;
+- `chatbot/components/site-header.tsx` and `chatbot/components/site-footer.tsx`
+  — responsive navigation/footer links;
+- `chatbot/components/immigration-service-home.tsx` — Home latest-policy
+  preview using the same `getPublishedPolicies()` selector as the list;
+- `chatbot/components/policy-intelligence-page.tsx` — responsive list/detail
+  presentation with search/filter support, source/legal badges, official
+  source layer, AI-analysis layer, and optional lawyer-commentary layer;
+- `chatbot/app/(chat)/intelligence/page.tsx` and
+  `chatbot/app/(chat)/intelligence/[id]/page.tsx` — public list/detail routes;
+- `chatbot/package.json` — includes the policy-intelligence unit test in
+  `test:unit`.
+
+Visual/refactor decisions:
+
+- Adapted the accepted P11-002B editorial primitives rather than creating a
+  second design-system framework.
+- Used navy/green for official source information, purple for AI-assisted
+  analysis, and amber for lawyer commentary.
+- Kept cards tonal and spacious, used controlled asymmetry in the editorial
+  hero, and protected long bilingual headings with wrapping/overflow-safe
+  layout rules.
+- Production policy data remains `MANUAL_POLICY_ENTRIES = []`; no V4 mock
+  policy records, factual sources, dates, legal text, lawyer commentary, sync
+  status, or publication counts were added.
+- The detail selector resolves published slugs only. The browser showed the
+  not-found content for an unpublished slug; in the Next dev/PPR check the
+  navigation response status was observed as 200, so strict HTTP 404 behavior
+  should be confirmed by the owner/reviewer if required by deployment policy.
+
+Validation completed:
+
+- `cd chatbot && pnpm test:unit`: **165 passed, 0 failed, 0 skipped**;
+  localhost-dependent timeout tests required outside-sandbox execution.
+- `cd chatbot && pnpm build`: **passed**; route output includes `/intelligence`
+  and `/intelligence/[id]`.
+- `cd chatbot && pnpm lint`: **failed on 22 pre-existing diagnostics** in
+  unrelated files; no changed file was among the reported diagnostics.
+- Changed-file Biome checks: **passed, 11 files checked**.
+- `git diff --check`: **passed**.
+- Full TypeScript check has no diagnostics in changed policy/public files; the
+  repository still has the known pre-existing AI-model and billing fixture
+  diagnostics.
+
+Manual responsive checks actually performed:
+
+- Home Chinese at 390px and 1280px; Home English at 768px and 1536px;
+- Policy Intelligence Chinese at 1280px; English at 1280px and 390px;
+- focused Home English locale/overflow check at 768px;
+- mobile navigation opened at 390px and `Policy Intelligence` link was visible
+  with `/intelligence` href;
+- locale switch persisted across navigation; CTA and language controls remained
+  usable;
+- measured `document.documentElement.scrollWidth` matched the viewport at all
+  checked sizes; no horizontal overflow was observed;
+- screenshots were captured and visually inspected for Home Chinese desktop
+  and Policy Intelligence English mobile;
+- no fake sync/update status text was present in checked pages.
+
+Known limitations and unresolved questions:
+
+- There are intentionally no production published policy cards or detail
+  pages until real source records are manually supplied and reviewed.
+- The Home preview cannot be visually checked with a real policy card until a
+  verified entry exists; synthetic entries remain test-only.
+- Confirm whether the deployment’s Next.js/PPR handling must expose a literal
+  HTTP 404 status for unpublished policy slugs, in addition to the current
+  not-found UI and published-only selector behavior.
+
+Architecture/content preservation confirmation:
+
+- The six service-family identities, locale architecture, routes outside the
+  new public policy routes, auth/account/VIP behavior, AI Workspace, Fast / AI
+  Legal Check / Premium, legal-service, database, billing, email, AWS, and
+  backend/AI content architecture were preserved.
+- No crawler, scheduler, automated publication path, admin policy editor,
+  database schema, migration, or P11-003B work was added.
+
 ## Next executable task
 
 - `docs/agent-memory/tasks/P11-003A.md`
 - **P11-003A — Policy Intelligence UI + provenance-safe manual content model**
-- state: **PLANNED**
+- state: **implemented in working tree; owner/reviewer verification pending**
 
 Expected route surface:
 
