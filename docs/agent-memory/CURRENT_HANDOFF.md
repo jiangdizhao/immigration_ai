@@ -3,7 +3,7 @@
 **Updated:** 2026-09-19  
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Base commit:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
-**Current HEAD:** to be stamped after bootstrap commit  
+**Bootstrap content commit:** `5adeeddbe5581646935094f40aa784628b883285`\n**Current HEAD:** verify with `git rev-parse HEAD` after sync; the follow-up handoff-only commit intentionally contains no runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
 ## What was done
@@ -33,7 +33,7 @@ Created/updated project authority and memory:
 
 ## Current task state
 
-P11-00: IMPLEMENTED / REVIEW REQUIRED.
+P11-00: IMPLEMENTED / REVIEW REQUIRED. Bootstrap content commit: `5adeeddbe5581646935094f40aa784628b883285`.
 
 Next planned implementation task:
 
