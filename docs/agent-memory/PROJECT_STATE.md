@@ -99,11 +99,11 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 
 - **P11-001 — VERIFIED:** Chinese-first locale + shared shell foundation.
 - **P11-002A — VERIFIED:** bilingual public-content model + Home/Services/Process/Contact structural rebase.
-- P11-002A verified implementation checkpoint: `d0964924be003fd61902fca760bd71aca53abe4f`.
-- P11-002A local validation reported 158 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint and standalone TypeScript checks retain documented pre-existing unrelated diagnostics.
-- Reviewer inspected the Git diff and browser screenshots for Chinese Home, Services, Process, Contact and English Home. The structural/product direction was accepted.
-- Next executable work is **P11-002B — Public-page visual fidelity and responsive refinement**.
-- P11-002B is presentation-only refinement and must preserve the accepted P11-002A content model and functional boundaries.
+- **P11-002B — VERIFIED:** V4-informed public-page visual fidelity + responsive refinement.
+- P11-002B verified implementation checkpoint: `9454a5e4b5a5c5515967ad977faa2355ba053fc5`.
+- Reviewer inspected the Git diff and owner screenshots for Home, Services, Process and Contact after the visual refinement pass.
+- Next executable work is **P11-003A — Policy Intelligence UI + provenance-safe manual content model**.
+- Policy Intelligence is manual-first now, but the typed model must preserve a clean future path to automated official-source discovery plus human review in P11-003B.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -128,7 +128,7 @@ Conversations are working memory only.
 - auth/account navigation that must survive translation/restructure;
 - VIP and server-side entitlement boundaries;
 - lawyer-request ownership and snapshots;
-- preserving provenance semantics while adding Policy Intelligence;
+- preserving provenance semantics while adding Policy Intelligence, especially separating source/legal status from editorial publication status;
 - accidental reuse of mock credentials/claims from the temporary UI;
 - route redesign that could break auth redirects or existing links;
 - database/schema changes made prematurely for presentation goals.

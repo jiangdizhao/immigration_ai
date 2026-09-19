@@ -202,3 +202,36 @@ P11-002B may refine visual hierarchy, spacing, typography, responsive behavior, 
 
 P11-002B must not reopen the accepted service catalogue, locale architecture, route structure, content-governance rules, auth/entitlement behavior, legal backend behavior, or introduce unverified business/lawyer facts merely for visual fidelity.
 
+## D-019 — Policy Intelligence starts manual-first and is automation-ready
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+Policy Intelligence will follow option **C**:
+
+1. **Initial implementation:** manually curated policy entries only.
+2. **Future architecture:** data contracts must be ready for automated discovery from authoritative sources plus human review/publication.
+3. **No automatic publication:** future automated discovery or AI summarisation must not become public legal/policy content without an explicit review/publication gate.
+
+P11-003A therefore builds the public Policy Intelligence experience and a provenance-safe typed content model without adding live crawlers, background jobs, database migrations or automated publication.
+
+P11-003B is reserved for the future official-source discovery / curation / review workflow.
+
+## D-020 — Policy source status and editorial publication status are separate
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+Policy Intelligence must not collapse the legal/source status of an item into the platform's editorial workflow.
+
+The model must distinguish, conceptually:
+
+- **source/legal status** — for example in force, announced, proposed, consultation, superseded;
+- **publication/review status** — for example draft, review required, published, archived.
+
+A proposal/consultation must never be styled or worded as current law merely because the platform has published an explanation of it.
+
+Only explicitly publishable entries may appear in public Policy Intelligence routes.
+
+Official source facts, AI-assisted analysis and lawyer commentary remain visually and semantically distinct.
+
