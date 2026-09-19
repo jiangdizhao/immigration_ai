@@ -3,7 +3,8 @@
 **Updated:** 2026-09-19  
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Base commit:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
-**Bootstrap content commit:** `5adeeddbe5581646935094f40aa784628b883285`\n**Current HEAD:** verify with `git rev-parse HEAD` after sync; the follow-up handoff-only commit intentionally contains no runtime changes  
+**Bootstrap content commit:** `5adeeddbe5581646935094f40aa784628b883285`
+**Git-state rule:** verify the live branch tip with `git rev-parse HEAD` after sync; handoff-maintenance commits may advance the branch without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
 ## What was done
