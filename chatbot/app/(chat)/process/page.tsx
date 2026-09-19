@@ -1,73 +1,19 @@
-import {
-  ArrowRight,
-  Bot,
-  CalendarCheck2,
-  CheckCircle2,
-  FileText,
-  MessageSquareText,
-  SearchCheck,
-  ShieldCheck,
-} from "lucide-react";
+"use client";
+
+import { ArrowRight, Bot, CheckCircle2, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { useSiteLocale } from "@/components/site-locale-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
-const processSteps = [
-  {
-    step: "01",
-    icon: MessageSquareText,
-    title: "Ask a question",
-    description:
-      "The visitor starts with a migration issue, such as a refusal, 485 eligibility concern, bridging travel question, or consultation request.",
-  },
-  {
-    step: "02",
-    icon: Bot,
-    title: "AI classifies the matter",
-    description:
-      "The backend identifies the operation type, visa context, current facts, and whether the case is safe for general guidance or needs escalation.",
-  },
-  {
-    step: "03",
-    icon: FileText,
-    title: "One decisive fact at a time",
-    description:
-      "Instead of a long form, the interface asks the next most useful question. Users can answer, skip, or say they are not sure.",
-  },
-  {
-    step: "04",
-    icon: SearchCheck,
-    title: "Sources and policy checks",
-    description:
-      "The assistant uses local RAG and controlled official-source retrieval when current policy or freshness-sensitive material is needed.",
-  },
-  {
-    step: "05",
-    icon: ShieldCheck,
-    title: "Safe answer or escalation",
-    description:
-      "The system keeps confidence limited, avoids overclaiming, and recommends lawyer review when documents, dates, or risk factors matter.",
-  },
-  {
-    step: "06",
-    icon: CalendarCheck2,
-    title: "Consultation handoff",
-    description:
-      "The website can route qualified users to booking, payment, CRM, or a lawyer review workflow when those integrations are added.",
-  },
-];
-
-const principles = [
-  "Backend controls legal reasoning; frontend controls presentation and conversion.",
-  "State-machine and operation profiles decide when the AI can answer.",
-  "Customer mode hides debug internals but preserves compact source transparency.",
-  "High-risk or document-specific matters are routed toward the lawyer.",
-];
+import { getPublicPageContent, PUBLIC_ROUTES } from "@/lib/public-content";
 
 export default function ProcessPage() {
+  const { locale } = useSiteLocale();
+  const content = getPublicPageContent(locale);
+
   return (
     <div className="min-h-dvh bg-[#f8f9fa] text-slate-900">
       <SiteHeader />
@@ -90,48 +36,42 @@ export default function ProcessPage() {
               variant="outline"
             >
               <Bot className="mr-2 size-3.5 text-cyan-200" />
-              Guided intake process
+              {content.process.eyebrow}
             </Badge>
             <h1 className="mt-5 max-w-4xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
-              A commercial user journey from first question to lawyer
-              consultation.
+              {content.process.title}
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-8 text-slate-200">
-              The site should explain the process clearly. Visitors should
-              understand what the AI does, what it does not do, and when a human
-              lawyer takes over.
+              {content.process.description}
             </p>
           </div>
         </section>
 
         <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {processSteps.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Card
-                  className="rounded-[32px] border-slate-200 bg-white shadow-sm"
-                  key={item.step}
-                >
-                  <CardContent className="p-6">
-                    <div className="mb-5 flex items-center justify-between gap-4">
-                      <div className="flex size-14 items-center justify-center rounded-2xl bg-[#001736] text-white">
-                        <Icon className="size-6" />
-                      </div>
-                      <span className="text-3xl font-semibold text-slate-200">
-                        {item.step}
-                      </span>
+            {content.process.steps.map((step) => (
+              <Card
+                className="rounded-[32px] border-slate-200 bg-white shadow-sm"
+                key={step.id}
+              >
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div className="flex size-14 items-center justify-center rounded-2xl bg-[#001736] text-white">
+                      <MessageSquareText className="size-6" />
                     </div>
-                    <h2 className="text-xl font-semibold text-slate-950">
-                      {item.title}
-                    </h2>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {item.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                    <span className="text-3xl font-semibold text-slate-200">
+                      {step.number}
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-semibold text-slate-950">
+                    {step.title}
+                  </h2>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {step.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </section>
 
@@ -139,19 +79,17 @@ export default function ProcessPage() {
           <div className="grid overflow-hidden rounded-[44px] bg-white shadow-[0_24px_100px_-44px_rgba(15,23,42,0.45)] lg:grid-cols-[0.9fr_1.1fr]">
             <div className="bg-[#001736] p-8 text-white lg:p-10">
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-200">
-                Operating principle
+                {content.process.boundaryEyebrow}
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                The AI is a structured intake and guidance layer, not a
-                replacement lawyer.
+                {content.process.boundaryTitle}
               </h2>
               <p className="mt-4 text-sm leading-7 text-slate-300">
-                This framing makes the product safer and more believable to a
-                commercial immigration practice.
+                {content.process.boundaryDescription}
               </p>
             </div>
             <div className="grid gap-4 p-6 sm:grid-cols-2 lg:p-8">
-              {principles.map((item) => (
+              {content.process.boundaryPoints.map((item) => (
                 <div
                   className="rounded-[28px] border border-slate-200 bg-slate-50 p-5"
                   key={item}
@@ -162,24 +100,25 @@ export default function ProcessPage() {
               ))}
               <div className="rounded-[28px] border border-slate-200 bg-white p-5 sm:col-span-2">
                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                  <div>
-                    <p className="font-semibold text-slate-950">
-                      Try the real workspace flow.
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      The next page uses the existing legal backend and
-                      guided-intake contract.
-                    </p>
+                  <p className="font-semibold text-slate-950">
+                    {content.process.aiCta}
+                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      asChild
+                      className="rounded-full bg-[#001736] text-white hover:bg-[#002b5b]"
+                    >
+                      <Link href={PUBLIC_ROUTES.aiWorkspace}>
+                        {content.process.aiCta}
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild className="rounded-full" variant="outline">
+                      <Link href={PUBLIC_ROUTES.contact}>
+                        {content.process.consultationCta}
+                      </Link>
+                    </Button>
                   </div>
-                  <Button
-                    asChild
-                    className="rounded-full bg-[#001736] text-white hover:bg-[#002b5b]"
-                  >
-                    <Link href="/ai-workspace">
-                      Open AI workspace
-                      <ArrowRight className="ml-2 size-4" />
-                    </Link>
-                  </Button>
                 </div>
               </div>
             </div>

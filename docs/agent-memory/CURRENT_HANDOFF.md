@@ -58,24 +58,47 @@ Public-content governance is now defined in:
 
 - `docs/product/CONTENT_POLICY.md`
 
+## P11-002A implementation handoff
+
+P11-002A is **IMPLEMENTED / REVIEW REQUIRED** on the live branch
+`phase11-chinese-service-platform-ui-rebase` at `45f498952f382da6c2e735d7f651affd5b9758e2`.
+The issued Phase 11 checkpoint remains `45f498952f382da6c2e735d7f651affd5b9758e2`; no commit was created during this implementation turn.
+
+Changed files:
+
+- `chatbot/lib/public-content.ts`
+- `chatbot/lib/public-content.test.ts`
+- `chatbot/components/immigration-service-home.tsx`
+- `chatbot/app/(chat)/services/page.tsx`
+- `chatbot/app/(chat)/process/page.tsx`
+- `chatbot/app/(chat)/contact/page.tsx`
+- `chatbot/package.json`
+- this handoff file
+
+The reusable model is in `chatbot/lib/public-content.ts`. It provides the six stable service IDs and shared bilingual `PUBLIC_SERVICE_CATALOG`, localized page copy through `PUBLIC_PAGE_CONTENT`, explicit generic `PUBLIC_TEAM_PLACEHOLDERS`, existing route constants, and locale getters. Home and Services consume the same catalogue. Home, Services, Process, and Contact consume the existing `SiteLocaleProvider`/`useSiteLocale` foundation, so the existing header language switch changes their page bodies without adding locale-prefixed routes or backend language coupling.
+
+The public positioning is service-platform first, with AI framed as intake/organization and human escalation routed through the existing `/ai-workspace` workflow. Contact contains no invented phone, email, address, WeChat, fees, credentials, statistics, or testimonials. Team cards are visibly generic placeholders with pending-profile copy. P11-002B visual fidelity work remains out of scope.
+
+## P11-002A validation record
+
+- `cd chatbot && pnpm test:unit`: PASS — 158 passed, 0 failed, 0 skipped.
+- `cd chatbot && pnpm build`: PASS — production build completed and generated the expected public routes, including `/`, `/services`, `/process`, and `/contact`.
+- Changed-file Biome check: PASS — 7 files checked, no fixes required on the final check.
+- `git diff --check`: PASS.
+- `cd chatbot && pnpm lint`: FAIL — 22 pre-existing unrelated diagnostics; none reported a P11-002A file.
+- `cd chatbot && pnpm exec tsc --noEmit`: FAIL — pre-existing unrelated errors in `lib/ai/models.test.ts` and `lib/vip/billing/customer-billing-api.test.ts`; no changed-file errors.
+
+No live browser/E2E run was performed by Codex in this turn. Structural checks confirmed that all four public pages use the locale hook, route identities are unchanged, CTAs target existing routes/workflows, and no prohibited legal-service, migration, database, auth, AI-workspace, model, prompt, billing, or deployment files changed. Manual browser review remains part of the required P11-002A review gate.
+
+No unresolved product or architecture decision was identified. The next recommended action is reviewer inspection of the actual Git diff and a browser smoke pass, followed by P11-002B visual refinement if accepted.
+
 ## Next executable task
 
-- `docs/agent-memory/tasks/P11-002A.md`
-- **P11-002A — Public content model + bilingual public-page structural rebase**
-- state: **PLANNED**
+- No P11-002B task packet is present yet; issue/read the applicable packet before implementation.
+- **P11-002B — Public-page visual fidelity and responsive refinement**
+- state: **BLOCKED ON P11-002A REVIEW**
 
-P11-002A should:
-
-- connect Home / Services / Process / Contact page bodies to the existing site-locale foundation;
-- create one small typed/reusable public-content source instead of scattering bilingual strings;
-- reframe the public website as an Australian immigration + study service platform;
-- implement the six agreed provisional service families;
-- add explicit placeholder lawyer/team-card structure where appropriate;
-- use CTA-only contact handling until real coordinates are supplied;
-- preserve all existing routes/auth/backend behavior;
-- defer broad V4 visual fidelity/animation polish to P11-002B.
-
-## Required preflight for P11-002A
+## Required preflight for the next task
 
 Before editing:
 
@@ -84,7 +107,7 @@ Before editing:
 3. read `docs/product/CONTENT_POLICY.md`;
 4. read `docs/agent-memory/DECISIONS.md`;
 5. read this handoff;
-6. read `docs/agent-memory/tasks/P11-002A.md`;
+6. read the applicable next-task packet under `docs/agent-memory/tasks/`;
 7. verify `git status --short`, `git branch --show-current`, and `git rev-parse HEAD`;
 8. stop if unexplained tracked changes exist or repository reality conflicts with the Task Packet.
 
