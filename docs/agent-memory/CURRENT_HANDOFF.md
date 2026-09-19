@@ -70,16 +70,22 @@ The model must distinguish source/legal status from editorial publication status
 P11-003A is implemented on top of the accepted P11-002B baseline and remains
 uncommitted/unpushed for owner review.
 
+R1 correction applied: official excerpts are now source/provenance data on
+`PolicySourceIdentity`, shaped as `{ text, language }`. They are no longer
+part of `LocalizedPolicyCopy`, and the detail page renders the Official Source
+excerpt only from that verbatim source field. No unofficial translation field
+or translation UI was added.
+
 Changed files:
 
 - `chatbot/lib/policy-intelligence.ts` — typed manual-first policy model,
   source/legal status and editorial status unions, published-only selectors,
-  duplicate/metadata validation, bilingual status labels, and empty production
-  registry;
+  duplicate/metadata validation, bilingual status labels, empty production
+  registry, and source-owned verbatim excerpt data;
 - `chatbot/lib/policy-intelligence.test.ts` — synthetic-only selector and
   validation fixtures covering hidden statuses, independent statuses,
-  deterministic ordering, duplicate IDs/slugs, bilingual copy, and unpublished
-  route lookup;
+  deterministic ordering, duplicate IDs/slugs, bilingual copy, unpublished
+  route lookup, and locale-independent official excerpts;
 - `chatbot/lib/public-content.ts` — `/intelligence` route identity plus
   bilingual Home and Policy Intelligence copy, including truthful empty states;
 - `chatbot/lib/site-locale.ts` — bilingual `intelligence` navigation key;
@@ -88,8 +94,9 @@ Changed files:
 - `chatbot/components/immigration-service-home.tsx` — Home latest-policy
   preview using the same `getPublishedPolicies()` selector as the list;
 - `chatbot/components/policy-intelligence-page.tsx` — responsive list/detail
-  presentation with search/filter support, source/legal badges, official
-  source layer, AI-analysis layer, and optional lawyer-commentary layer;
+  presentation with search/filter support, source/legal badges, source-owned
+  official excerpt layer, AI-analysis layer, and optional lawyer-commentary
+  layer;
 - `chatbot/app/(chat)/intelligence/page.tsx` and
   `chatbot/app/(chat)/intelligence/[id]/page.tsx` — public list/detail routes;
 - `chatbot/package.json` — includes the policy-intelligence unit test in
@@ -114,7 +121,7 @@ Visual/refactor decisions:
 
 Validation completed:
 
-- `cd chatbot && pnpm test:unit`: **165 passed, 0 failed, 0 skipped**;
+- `cd chatbot && pnpm test:unit`: **166 passed, 0 failed, 0 skipped**;
   localhost-dependent timeout tests required outside-sandbox execution.
 - `cd chatbot && pnpm build`: **passed**; route output includes `/intelligence`
   and `/intelligence/[id]`.

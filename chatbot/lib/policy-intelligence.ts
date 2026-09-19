@@ -27,7 +27,6 @@ export type LocalizedPolicyCopy = {
   affectedGroup?: string;
   practicalRelevance?: string;
   aiAnalysis?: string;
-  officialExcerpt?: string;
 };
 
 export type PolicySourceIdentity = {
@@ -38,6 +37,14 @@ export type PolicySourceIdentity = {
   effectiveDate?: string | null;
   jurisdiction: string;
   category: string;
+  /**
+   * Verbatim source text. Any future translated rendering must use a separate
+   * explicitly labelled field and must never be stored in localized copy.
+   */
+  officialExcerpt?: {
+    text: string;
+    language: string;
+  };
 };
 
 export type PolicyEntry = {

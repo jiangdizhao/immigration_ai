@@ -23,6 +23,10 @@ function fixture(overrides: Partial<PolicyEntry> = {}): PolicyEntry {
       effectiveDate: null,
       jurisdiction: "Fixture jurisdiction",
       category: "Fixture category",
+      officialExcerpt: {
+        text: "Verbatim source language that must not change with locale.",
+        language: "en",
+      },
     },
     copy: {
       "zh-CN": {
@@ -125,6 +129,33 @@ test("published entries require bilingual titles and summaries", () => {
         },
       }),
     ])
+  );
+});
+
+test("official excerpts are source data and do not vary by locale", () => {
+  const entry = fixture({
+    copy: {
+      "zh-CN": {
+        title: "本地化中文标题",
+        summary: "本地化中文摘要。",
+      },
+      en: {
+        title: "Localised English title",
+        summary: "Localised English summary.",
+      },
+    },
+  });
+
+  assert.equal(Object.hasOwn(entry.copy["zh-CN"], "officialExcerpt"), false);
+  assert.equal(Object.hasOwn(entry.copy.en, "officialExcerpt"), false);
+  assert.equal(
+    getPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt?.text,
+    "Verbatim source language that must not change with locale."
+  );
+  assert.equal(
+    getPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt
+      ?.language,
+    "en"
   );
 });
 

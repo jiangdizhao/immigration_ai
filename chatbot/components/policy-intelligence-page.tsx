@@ -413,14 +413,14 @@ export function PolicyIntelligenceDetail({ entry }: { entry: PolicyEntry }) {
               </div>
             </div>
 
-            {copy.officialExcerpt ? (
+            {entry.source.officialExcerpt ? (
               <div className="mt-5 rounded-[1.75rem] bg-emerald-50 p-6 text-sm leading-7 text-emerald-950 ring-1 ring-emerald-200/70 sm:p-8">
                 <div className="flex items-center gap-2 font-semibold">
                   <ShieldCheck className="size-4" />
                   {content.officialSource}
                 </div>
                 <p className="mt-4 whitespace-pre-wrap">
-                  {copy.officialExcerpt}
+                  {entry.source.officialExcerpt.text}
                 </p>
               </div>
             ) : null}
