@@ -101,11 +101,12 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **P11-002A — VERIFIED:** bilingual public-content model + Home/Services/Process/Contact structural rebase.
 - **P11-002B — VERIFIED:** V4-informed public-page visual fidelity + responsive refinement.
 - **P11-003A — VERIFIED:** Policy Intelligence public UI + provenance-safe manual content model.
-- P11-003A implementation checkpoint: `f7fa6363e4f2ee326306b20203692dd73e45cebd`.
-- P11-003A provenance-hardening checkpoint: `4f232fe40161a7adad104bcbf6c382b846425936`.
+- **P11-003B — VERIFIED:** repository-backed manual curation + server-only publication boundary.
+- P11-003B verified checkpoint: `081ef46dd040b6131d475750d0968c9f2e461bb2`.
 - Production policy registry remains intentionally empty until real records are manually verified and published.
-- Next executable work is **P11-003B — repository-backed manual curation + server-only publication boundary**.
-- Automated official-source discovery is deferred to **P11-003C** after the manual review/publication boundary is proven.
+- Public Home/list/detail paths receive only server-produced public-safe projections; unpublished editorial content remains server-only.
+- Next executable work is **P11-003C — allowlisted official-source discovery into non-public candidates**.
+- P11-003C is operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 

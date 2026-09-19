@@ -300,3 +300,42 @@ The earlier P11-003B scope is split:
 
 P11-003C must not begin automatically after P11-003B. Automated discovery requires separate review of source scope, scheduling, deduplication, freshness, and lawyer/admin review semantics.
 
+## D-025 — P11-003B server-only publication boundary accepted
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+P11-003B at `081ef46dd040b6131d475750d0968c9f2e461bb2` is accepted.
+
+The repository-backed Policy Intelligence editorial source is now server-only. Public Home/list/detail surfaces receive only explicit published public-safe projections from server loaders. Draft, review-required, archived, discovery and origin metadata are not delivered to public client presentation.
+
+The production registry remains intentionally empty until real policy records are verified and approved.
+
+## D-026 — Automated discovery creates non-public candidates only
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+P11-003C may automate discovery from allowlisted official sources, but discovery output is **candidate evidence**, not a publishable Policy Intelligence entry.
+
+Automated discovery must not:
+
+- infer or assert legal effect/status when the official source does not explicitly establish it;
+- create public AI analysis;
+- create lawyer commentary;
+- change an editorial record to `published`;
+- write into the public editorial registry automatically.
+
+Candidate promotion remains a deliberate human-reviewed step.
+
+## D-027 — First discovery implementation is operator-run and offline-safe
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+P11-003C will be an operator-run discovery tool/CLI, not a web-request runtime feature and not a scheduler.
+
+It may use controlled live HTTP fetches only when explicitly invoked by the operator and only against an allowlisted official-source configuration grounded in repository authority. Deterministic tests must use local fixtures and must not depend on network availability.
+
+P11-003C must not modify `legal-service/`; it may inspect the existing official-source registry as design authority but must keep the Policy Intelligence discovery implementation isolated from answer-time legal retrieval.
+
