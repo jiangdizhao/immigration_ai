@@ -57,7 +57,7 @@ The AI workspace is functional and materially stateful. `chatbot/components/immi
 
 Therefore Phase 11 must treat AI Workspace as a high-blast-radius component and rebase it incrementally.
 
-The current shell is still substantially English-first and does not yet provide a site-wide locale foundation or the target V4-style information architecture.
+P11-001 has now established a typed site-wide `zh-CN` / `en` locale foundation for the shared shell. Chinese is the default, the desktop/mobile header exposes a language switch, and the selection persists through the site-locale cookie. Public page bodies remain largely English until P11-002 and later tasks connect them to the locale/content model.
 
 ## Current answer-lane state
 
@@ -94,6 +94,17 @@ content -> AI intake -> matter context -> lawyer escalation -> continuing servic
 ```
 
 See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
+
+## Current Phase 11 execution state
+
+- **P11-001 — VERIFIED:** Chinese-first locale + shared shell foundation.
+- Verified implementation checkpoint: `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`.
+- Local validation reported 154 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint still reports 22 pre-existing unrelated diagnostics.
+- User browser smoke confirmed the expected P11-001 boundary: shared header/footer localize correctly while page-body translation remains intentionally deferred.
+- Next executable work is **P11-002A — Public content model + bilingual public-page structural rebase**.
+- P11-002B will handle higher-fidelity visual refinement after P11-002A structure/content behavior is stable.
+
+Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
 ## Shared project memory
 

@@ -104,3 +104,90 @@ Creating the Phase 11 branch and project-memory documents does not deploy AWS, r
 
 Deployment remains a separately authorized operation.
 
+## D-011 — Placeholder brand remains Sovereign Nexus Legal
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+Until the real firm/platform branding is confirmed, the public UI may continue to use **Sovereign Nexus Legal** as an explicit placeholder brand.
+
+Do not infer that this is the final production brand. Future replacement must be centralized and low-risk.
+
+## D-012 — Public positioning is service-platform first
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+The public website should primarily present an **Australian immigration and study one-stop service platform**.
+
+AI is an important first-contact and intake capability; it must not dominate the public positioning as if the product were only an AI legal chatbot.
+
+Preferred product story:
+
+```text
+service discovery -> AI-assisted intake -> structured matter context
+-> human lawyer escalation when needed -> continuing service
+```
+
+## D-013 — Initial public service catalogue uses six service families
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+P11-002 may organize the first public service catalogue around six provisional families:
+
+1. 留学与学生签证 / Study & Student Visa
+2. 技术移民与雇主担保 / Skilled Migration & Employer Sponsorship
+3. 配偶与家庭类 / Partner & Family
+4. 签证拒签与 ART 复审 / Visa Refusal & ART Review
+5. 永居与公民相关服务 / Permanent Residence & Citizenship-related Services
+6. 复杂案件与个案策略咨询 / Complex Matters & Case Strategy
+
+These are product-navigation categories, not legal conclusions or service guarantees. A lawyer may later refine, merge, rename or remove categories.
+
+## D-014 — Lawyer-team UI may use explicit mock profiles only
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+P11-002 may include lawyer/team card structure so the production layout can be reviewed before real lawyer information is available.
+
+Any temporary lawyer profile must be visibly and structurally identified as **mock / placeholder / awaiting confirmation**.
+
+Do not present invented names, qualifications, practising-certificate details, years of experience, achievements, case counts, success rates or specialisations as production truth.
+
+Use replaceable placeholder avatars rather than implying a real person's identity.
+
+## D-015 — No invented public contact coordinates
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+Until real contact details are confirmed, public pages must not invent a phone number, street address, WeChat account, email address or office location.
+
+Use action-oriented contact/consultation CTAs that lead into the existing website workflow. Real coordinates can be added later after confirmation.
+
+## D-016 — V4 is a strong visual reference, not a pixel-copy mandate
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+The temporary V4 UI should strongly influence visual hierarchy, section composition, semantic color roles and overall premium/legal-service tone.
+
+The production Next.js implementation may adapt layout and components to preserve existing auth, routing, responsive behavior and maintainability. Pixel-perfect copying is not required.
+
+## D-017 — Unknown subjective content must be escalated, not silently decided
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+When a Phase 11 task encounters an unresolved product/content decision that is not determined by repository authority, the coding agent must not silently convert a plausible guess into production truth.
+
+Examples include lawyer identity, qualifications, contact details, pricing, service commitments, testimonials, branding claims, legal/commercial promises and materially subjective user-facing wording.
+
+If the information is not needed for the active task, leave it untouched.
+
+If a visible placeholder is necessary for structural development, use an explicit replaceable placeholder consistent with `docs/product/CONTENT_POLICY.md`.
+
+If the choice affects architecture, legal/commercial meaning, product positioning or long-term information architecture, stop and ask the project owner.
+

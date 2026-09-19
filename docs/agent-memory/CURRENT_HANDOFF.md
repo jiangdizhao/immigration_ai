@@ -2,116 +2,92 @@
 
 **Updated:** 2026-09-19  
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
-**Base commit:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
-**Bootstrap content commit:** `5adeeddbe5581646935094f40aa784628b883285`
-**Git-state rule:** verify the live branch tip with `git rev-parse HEAD` after sync; handoff-maintenance commits may advance the branch without runtime changes  
+**Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
+**P11-001 verified implementation checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
+**Git-state rule:** always verify the live branch tip with `git rev-parse HEAD`; documentation-only memory commits may advance HEAD without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
-## What was done
+## Current verified state
 
-P11-00 repository-memory/bootstrap documentation was added, and P11-001 was
-implemented on the live Phase 11 branch pending review.
+P11-00: **VERIFIED**.
 
-No database schema, environment, AWS resource, Stripe/SES configuration,
-legal-service code, or legal-serving behavior was changed.
+P11-001: **VERIFIED** for its intended scope.
 
-Created/updated project authority and memory:
+P11-001 introduced:
 
-- `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`
-- `docs/agent-memory/PROJECT_STATE.md`
-- `docs/agent-memory/CURRENT_MILESTONE.md`
-- `docs/agent-memory/CURRENT_HANDOFF.md`
-- `docs/agent-memory/DECISIONS.md`
-- `docs/agent-memory/tasks/P11-001.md`
-- `.cline/rules/project-workflow.md`
-- `AGENTS.md` pointer section for Phase 11 shared project state
+- typed `zh-CN` / `en` site locale;
+- default Chinese shared shell;
+- cookie-persisted language selection;
+- shared translation dictionary;
+- desktop/mobile language switcher;
+- localized Header, Footer and account-menu copy;
+- locale unit tests.
 
-## Verified baseline facts
+The implementation preserved existing auth/session, VIP entitlement, lawyer/admin conditional links, route identities and backend answer-language behavior.
 
-- Phase 11 branch originates from Phase 10.2 commit `3b365320...`.
-- Phase 10.2 removed the mandatory default Fast `max_output_tokens=1200` cap and added stream termination diagnostics.
-- The main frontend already has a service homepage, services/process/contact routes, AI Workspace, auth/account, VIP, lawyer requests, lawyer portal/review, and persistent conversations.
-- The V4 temporary UI reference remains `codex/fidelity-completion-v4@8abbba2...`.
-- No Phase 11 runtime implementation has started.
+The project owner performed browser smoke testing and confirmed the expected P11-001 boundary: the shared shell can display Chinese correctly, while the Home/Services/Process/Contact page bodies remain largely English because page-body localization belongs to P11-002.
 
-## Current task state
+## P11-001 validation record
 
-P11-00: IMPLEMENTED / REVIEW REQUIRED. Bootstrap content commit:
-`5adeeddbe5581646935094f40aa784628b883285`.
-
-P11-001: IMPLEMENTED / REVIEW REQUIRED.
-
-Implementation files:
-
-- `chatbot/app/layout.tsx`
-- `chatbot/components/site-header.tsx`
-- `chatbot/components/site-footer.tsx`
-- `chatbot/components/site-locale-provider.tsx`
-- `chatbot/components/site-language-switcher.tsx`
-- `chatbot/lib/site-locale.ts`
-- `chatbot/lib/site-locale.test.ts`
-- `chatbot/package.json`
-
-The implementation provides typed `zh-CN`/`en` locale normalization, a
-shared-shell translation dictionary, a cookie-persisted client provider, a
-desktop/mobile language switcher, and Chinese-first header/footer/account
-copy. The cookie read is isolated behind a Suspense boundary so Next.js
-cache-component prerendering remains valid. Existing session, role, VIP
-entitlement, logout, and route logic remains in place.
-
-Live Git state at handoff: branch
-`phase11-chinese-service-platform-ui-rebase`, HEAD `3ee531d`.
-
-Validation:
+Reported local validation:
 
 - `cd chatbot && pnpm test:unit`: PASS — 154 passed, 0 failed, 0 skipped.
-- `cd chatbot && pnpm build`: PASS — production build and prerender completed.
-- Changed-file `pnpm exec biome check ...`: PASS — all 8 changed files clean.
+- `cd chatbot && pnpm build`: PASS.
+- changed-file Biome check: PASS.
 - `git diff --check`: PASS.
-- `cd chatbot && pnpm lint`: FAIL — 22 pre-existing diagnostics in unrelated
-  files, including `app/globals.css`,
-  `components/assistant-rich-markdown.tsx`, migration snapshots,
-  `lib/default-agent-runtime-debug*`, and other existing files. No diagnostic
-  was reported for the P11-001 files.
+- repository-wide `pnpm lint`: 22 pre-existing unrelated diagnostics; no diagnostic was reported for the P11-001 files.
 
-Manual browser/E2E verification was not run in this UI-only task. Structural
-review confirms both desktop and mobile header controls use the same provider,
-locale changes do not alter routes or backend language state, and the cookie
-is read on subsequent navigation/reload.
+No GitHub Actions run was present for the P11-001 checkpoint, so the above are local validation results, not CI results.
 
-Next planned implementation task:
+No `legal-service/`, migration, database, AWS, Stripe/SES or legal-serving behavior change was part of P11-001.
 
-- `docs/agent-memory/tasks/P11-001.md`
-- **Chinese-first locale + shared public shell foundation**
-- state: PLANNED
+## Product decisions confirmed for P11-002
 
-## Immediate next action
+The project owner confirmed:
 
-Before implementing P11-001, the executor must:
+1. Continue using **Sovereign Nexus Legal** as a placeholder brand.
+2. Public positioning should be **service-platform first**: Australian immigration + study services, with AI as intake and human lawyer escalation.
+3. Use six provisional service families for the first service catalogue.
+4. Include lawyer/team card structure with explicit mock/placeholder profiles.
+5. Do not invent public phone/address/WeChat/email; use consultation CTAs only.
+6. Treat V4 as a strong visual reference while adapting to the production Next.js architecture.
+
+These decisions are recorded in `docs/agent-memory/DECISIONS.md`.
+
+Public-content governance is now defined in:
+
+- `docs/product/CONTENT_POLICY.md`
+
+## Next executable task
+
+- `docs/agent-memory/tasks/P11-002A.md`
+- **P11-002A — Public content model + bilingual public-page structural rebase**
+- state: **PLANNED**
+
+P11-002A should:
+
+- connect Home / Services / Process / Contact page bodies to the existing site-locale foundation;
+- create one small typed/reusable public-content source instead of scattering bilingual strings;
+- reframe the public website as an Australian immigration + study service platform;
+- implement the six agreed provisional service families;
+- add explicit placeholder lawyer/team-card structure where appropriate;
+- use CTA-only contact handling until real coordinates are supplied;
+- preserve all existing routes/auth/backend behavior;
+- defer broad V4 visual fidelity/animation polish to P11-002B.
+
+## Required preflight for P11-002A
+
+Before editing:
 
 1. read `AGENTS.md`;
 2. read `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`;
-3. read `docs/agent-memory/CURRENT_HANDOFF.md`;
-4. read `docs/agent-memory/tasks/P11-001.md`;
-5. run/inspect `git status --short`, `git branch --show-current`, `git rev-parse HEAD`;
-6. confirm the working tree is clean except for already-known protected local files;
-7. implement P11-001 only;
-8. run the Task Packet validation;
-9. update this handoff with changed files, exact tests, risks, non-goals, and next action before stopping.
-
-## Explicit non-goals for the next task
-
-P11-001 must not:
-
-- redesign Home/Services/AI Workspace wholesale;
-- change backend answer behavior;
-- add a database migration;
-- change auth or VIP entitlement semantics;
-- alter legal-service APIs;
-- deploy AWS;
-- copy unverified prototype claims;
-- introduce locale-prefixed URLs.
+3. read `docs/product/CONTENT_POLICY.md`;
+4. read `docs/agent-memory/DECISIONS.md`;
+5. read this handoff;
+6. read `docs/agent-memory/tasks/P11-002A.md`;
+7. verify `git status --short`, `git branch --show-current`, and `git rev-parse HEAD`;
+8. stop if unexplained tracked changes exist or repository reality conflicts with the Task Packet.
 
 ## Review rule
 
-The coding-agent completion message is advisory. Review must inspect actual Git diff, source, and test output.
+The coding-agent completion message is advisory. Review must inspect actual Git diff, source and reproducible validation before P11-002A is marked VERIFIED.
