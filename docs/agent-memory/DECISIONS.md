@@ -235,3 +235,68 @@ Only explicitly publishable entries may appear in public Policy Intelligence rou
 
 Official source facts, AI-assisted analysis and lawyer commentary remain visually and semantically distinct.
 
+## D-021 — P11-003A accepted after provenance hardening
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+P11-003A is accepted after:
+
+- implementation commit `f7fa6363e4f2ee326306b20203692dd73e45cebd`;
+- provenance-hardening correction `4f232fe40161a7adad104bcbf6c382b846425936`.
+
+The accepted model keeps:
+
+- source/legal status separate from editorial publication status;
+- public selectors restricted to published entries;
+- production policy registry empty until real records are manually verified;
+- official verbatim excerpt data owned by source/provenance identity rather than localized copy;
+- AI analysis and lawyer commentary separate from official source material.
+
+## D-022 — Policy curation remains repository-backed before database/admin-write work
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+The next Policy Intelligence step will use a repository-backed manual curation workflow rather than introducing a database migration or runtime admin editor.
+
+Reasons:
+
+- Phase 11 does not currently authorize a Policy Intelligence database migration;
+- real lawyer/policy editorial workflow is still being validated;
+- the public UI already has a typed manual-first model;
+- repository-backed review provides traceability through Git while content volume is low.
+
+This is an interim operational model, not a permanent CMS decision.
+
+A future task may move Policy Intelligence persistence into a database/admin workflow after explicit approval.
+
+## D-023 — Unpublished policy content must remain server-only
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+Draft, review-required, archived, or otherwise unpublished Policy Intelligence records must not be shipped into public browser bundles merely because client-side selectors hide them.
+
+The curation boundary must therefore separate:
+
+- shared public-safe policy types/projections;
+- server-only editorial registry/content;
+- public published projection passed to client-rendered presentation where necessary.
+
+The server-only boundary should use existing Next.js conventions such as `server-only` and server components/loaders.
+
+Public pages may receive published policy data, but must not receive unpublished editorial records.
+
+## D-024 — Automated discovery is deferred until the manual publication boundary is hardened
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+The earlier P11-003B scope is split:
+
+- **P11-003B:** repository-backed manual curation + server-only publication boundary;
+- **P11-003C:** automated official-source discovery into non-public candidates, with no automatic publication.
+
+P11-003C must not begin automatically after P11-003B. Automated discovery requires separate review of source scope, scheduling, deduplication, freshness, and lawyer/admin review semantics.
+
