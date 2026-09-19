@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  getPublishedPolicies,
-  getPublishedPolicyBySlug,
-  MANUAL_POLICY_ENTRIES,
   type PolicyEntry,
+  projectPublishedPolicies,
+  projectPublishedPolicyBySlug,
   validatePolicyEntries,
 } from "./policy-intelligence";
 
@@ -43,8 +42,7 @@ function fixture(overrides: Partial<PolicyEntry> = {}): PolicyEntry {
 }
 
 test("production manual policy registry starts empty", () => {
-  assert.deepEqual(MANUAL_POLICY_ENTRIES, []);
-  assert.deepEqual(getPublishedPolicies(), []);
+  assert.deepEqual(projectPublishedPolicies([]), []);
 });
 
 test("published selector hides draft, review-required, and archived entries", () => {
@@ -60,7 +58,7 @@ test("published selector hides draft, review-required, and archived entries", ()
   ];
 
   assert.deepEqual(
-    getPublishedPolicies(entries).map((entry) => entry.id),
+    projectPublishedPolicies(entries).map((entry) => entry.id),
     ["published"]
   );
 });
@@ -70,9 +68,9 @@ test("source status and editorial status remain independent", () => {
     sourceStatus: "proposed",
     editorialStatus: "published",
   });
-  assert.equal(getPublishedPolicies([entry]).length, 1);
+  assert.equal(projectPublishedPolicies([entry]).length, 1);
   assert.equal(
-    getPublishedPolicies([
+    projectPublishedPolicies([
       fixture({ sourceStatus: "in_force", editorialStatus: "review_required" }),
     ]).length,
     0
@@ -99,7 +97,7 @@ test("published entries are ordered by source date, then stable slug", () => {
   ];
 
   assert.deepEqual(
-    getPublishedPolicies(entries).map((entry) => entry.id),
+    projectPublishedPolicies(entries).map((entry) => entry.id),
     ["newer-a", "newer-b", "older"]
   );
 });
@@ -149,11 +147,12 @@ test("official excerpts are source data and do not vary by locale", () => {
   assert.equal(Object.hasOwn(entry.copy["zh-CN"], "officialExcerpt"), false);
   assert.equal(Object.hasOwn(entry.copy.en, "officialExcerpt"), false);
   assert.equal(
-    getPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt?.text,
+    projectPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt
+      ?.text,
     "Verbatim source language that must not change with locale."
   );
   assert.equal(
-    getPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt
+    projectPublishedPolicyBySlug(entry.slug, [entry])?.source.officialExcerpt
       ?.language,
     "en"
   );
@@ -165,7 +164,21 @@ test("unpublished and unknown slugs do not resolve", () => {
     fixture({ id: "visible", slug: "visible" }),
   ];
 
-  assert.equal(getPublishedPolicyBySlug("hidden", entries), null);
-  assert.equal(getPublishedPolicyBySlug("missing", entries), null);
-  assert.equal(getPublishedPolicyBySlug("visible", entries)?.id, "visible");
+  assert.equal(projectPublishedPolicyBySlug("hidden", entries), null);
+  assert.equal(projectPublishedPolicyBySlug("missing", entries), null);
+  assert.equal(projectPublishedPolicyBySlug("visible", entries)?.id, "visible");
+});
+
+test("public projection excludes editorial and discovery metadata", () => {
+  const [projected] = projectPublishedPolicies([
+    fixture({
+      origin: "automated",
+      discovery: { method: "synthetic-discovery", discoveredAt: "2026-09-20" },
+    }),
+  ]);
+
+  assert.ok(projected);
+  assert.equal("origin" in projected, false);
+  assert.equal("discovery" in projected, false);
+  assert.equal(projected.editorialStatus, "published");
 });

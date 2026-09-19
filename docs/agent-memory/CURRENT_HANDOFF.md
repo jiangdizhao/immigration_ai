@@ -8,6 +8,7 @@
 **P11-002B verified checkpoint:** `9454a5e4b5a5c5515967ad977faa2355ba053fc5`  
 **P11-003A implementation checkpoint:** `f7fa6363e4f2ee326306b20203692dd73e45cebd`  
 **P11-003A provenance-hardening checkpoint:** `4f232fe40161a7adad104bcbf6c382b846425936`  
+**P11-003B starting checkpoint:** `32454ec2dd7b13ab0d438df7337d7c4f7c1c69b1`
 **Git-state rule:** verify the live branch tip with `git rev-parse HEAD`; documentation-only memory commits may advance HEAD without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
@@ -18,6 +19,7 @@
 - P11-002A: **VERIFIED**
 - P11-002B: **VERIFIED**
 - P11-003A: **VERIFIED**
+- P11-003B: **IMPLEMENTED IN WORKING TREE — OWNER REVIEW PENDING**
 
 P11-003A was accepted after Git review of the public Policy Intelligence implementation and the focused R1 provenance correction.
 
@@ -44,39 +46,36 @@ P11-003A validation after R1:
 
 The strict HTTP status behavior of streamed/PPR not-found responses remains a staging acceptance concern rather than a blocker for the current source architecture.
 
-## Important next-step architecture issue
+## P11-003B implementation
 
-The current P11-003A implementation is safe while the production registry is empty.
+P11-003B is implemented in the working tree and remains uncommitted/unpushed. The manual-first, repository-backed curation boundary now separates shared public projection logic from server-only editorial data.
 
-However, public presentation components currently import selectors from the same module that owns the editorial registry. If future draft or review-required entries are placed there, client bundling could expose unpublished editorial data even when the UI filters it out.
+Changed areas:
 
-The next task must harden this boundary **before real unpublished records are added**.
+- `chatbot/content/policy-intelligence/registry.ts`: server-only editorial registry; it remains intentionally empty until verified real records are approved.
+- `chatbot/lib/policy-intelligence-server.ts`: server-only loaders for Home previews, list projections, and detail projections.
+- `chatbot/lib/policy-intelligence.ts`: shared types, validation, and pure published public-projection helpers; internal `origin` and `discovery` metadata are not projected.
+- `chatbot/content/policy-intelligence/README.md`: manual curation, review, publication, provenance, and no-automation workflow.
+- Home, list, and detail routes now load data on the server and pass only explicit public-safe props to client presentation components.
+- Focused projection/boundary tests and the unit-test command were updated.
 
-## P11-003B architecture
+The production flow is: server-only registry → server loader → published public projection → client presentation. Draft/review-required/archived entries are filtered before reaching the client. Home receives an even smaller preview projection. No real policy content, database migration, admin editor, crawler, scheduler, web fetch, LLM summarizer, or automatic publication was added.
 
-The owner previously selected manual-first / automation-ready Policy Intelligence.
+Validation for the working-tree implementation:
 
-P11-003B therefore implements a repository-backed manual curation workflow with a server-only editorial boundary.
+- `pnpm test:unit`: **169 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**; Next compilation, TypeScript, and static generation completed.
+- Changed-file Biome: **passed**.
+- `git diff --check`: **passed**.
+- `pnpm lint`: **fails on the existing repository-wide 22 diagnostics; no changed-file diagnostic was reported by the focused checks**.
 
-Key direction:
+Manual smoke checks performed: Home route and `/intelligence` empty-state rendering, English/Chinese locale switching, public navigation, responsive widths at 390/768/1280/1536px, and unknown intelligence detail rendering. No unpublished fixture was exposed to the browser; the production registry remains empty and the static server-boundary tests/build passed.
 
-- shared policy types/validation may remain importable where safe;
-- editable editorial registry/content must be server-only;
-- public pages receive only published public-safe projections;
-- Git remains the review/audit mechanism for this interim phase;
-- no DB migration;
-- no runtime file writing;
-- no admin write UI;
-- no automated discovery;
-- no real policy records are required for this infrastructure task.
+Known limitation: the existing streamed/PPR development behavior may return HTTP 200 for a rendered not-found response; the route still renders the not-found UI and this remains a staging acceptance concern.
 
-This interim repository workflow should support a later P11-003C where automated official-source discovery creates **non-public candidates only**.
+Unresolved subjective questions: none for this infrastructure-only correction. Real policy records still require source verification, review, and explicit publication through the documented Git workflow.
 
-## Next executable task
-
-- `docs/agent-memory/tasks/P11-003B.md`
-- **P11-003B — Repository-backed policy curation + server-only publication boundary**
-- state: **PLANNED**
+Content/backend architecture confirmation: the public content architecture, locale architecture, routes, auth, roles, AI Workspace, service flows, legal-service, database, billing, email, and AWS behavior were preserved. Only the Policy Intelligence data-loading boundary and its tests/documentation changed.
 
 ## Review rule
 

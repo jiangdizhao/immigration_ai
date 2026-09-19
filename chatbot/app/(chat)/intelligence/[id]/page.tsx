@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PolicyIntelligenceDetail } from "@/components/policy-intelligence-page";
-import { getPublishedPolicyBySlug } from "@/lib/policy-intelligence";
+import { getPublishedPolicyProjectionBySlug } from "@/lib/policy-intelligence-server";
 
 export default async function Page({
   params,
@@ -8,7 +8,7 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const entry = getPublishedPolicyBySlug(id);
+  const entry = getPublishedPolicyProjectionBySlug(id);
 
   if (!entry) {
     notFound();

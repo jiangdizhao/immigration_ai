@@ -13,7 +13,7 @@ import Link from "next/link";
 import {
   formatPolicyDate,
   getPolicySourceStatusLabel,
-  getPublishedPolicies,
+  type PublicPolicyPreview,
 } from "@/lib/policy-intelligence";
 import {
   getPublicPageContent,
@@ -33,12 +33,16 @@ import { SiteHeader } from "./site-header";
 import { useSiteLocale } from "./site-locale-provider";
 import { Button } from "./ui/button";
 
-export function ImmigrationServiceHome() {
+export function ImmigrationServiceHome({
+  publishedPolicyPreviews,
+}: {
+  publishedPolicyPreviews: PublicPolicyPreview[];
+}) {
   const { locale } = useSiteLocale();
   const content = getPublicPageContent(locale);
   const services = getPublicServiceCatalog(locale);
   const team = getPublicTeamPlaceholders(locale);
-  const policies = getPublishedPolicies();
+  const policies = publishedPolicyPreviews;
 
   return (
     <PublicPageFrame>

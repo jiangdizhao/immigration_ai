@@ -19,9 +19,8 @@ import {
   formatPolicyDate,
   getPolicyEditorialStatusLabel,
   getPolicySourceStatusLabel,
-  getPublishedPolicies,
-  type PolicyEntry,
   type PolicySourceStatus,
+  type PublicPolicyProjection,
 } from "@/lib/policy-intelligence";
 import { getPublicPageContent, PUBLIC_ROUTES } from "@/lib/public-content";
 import {
@@ -48,7 +47,7 @@ function StatusPill({
   entry,
   locale,
 }: {
-  entry: PolicyEntry;
+  entry: PublicPolicyProjection;
   locale: "zh-CN" | "en";
 }) {
   return (
@@ -129,7 +128,7 @@ function PolicyCard({
   locale,
   content,
 }: {
-  entry: PolicyEntry;
+  entry: PublicPolicyProjection;
   locale: "zh-CN" | "en";
   content: ReturnType<typeof getPublicPageContent>["intelligence"];
 }) {
@@ -190,10 +189,13 @@ function PolicyCard({
   );
 }
 
-export function PolicyIntelligencePage() {
+export function PolicyIntelligencePage({
+  policies,
+}: {
+  policies: PublicPolicyProjection[];
+}) {
   const { locale } = useSiteLocale();
   const content = getPublicPageContent(locale).intelligence;
-  const policies = getPublishedPolicies();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const categories = useMemo(
@@ -308,7 +310,11 @@ export function PolicyIntelligencePage() {
   );
 }
 
-export function PolicyIntelligenceDetail({ entry }: { entry: PolicyEntry }) {
+export function PolicyIntelligenceDetail({
+  entry,
+}: {
+  entry: PublicPolicyProjection;
+}) {
   const { locale } = useSiteLocale();
   const content = getPublicPageContent(locale).intelligence;
   const copy = entry.copy[locale];

@@ -62,11 +62,37 @@ export type PolicyEntry = {
   } | null;
 };
 
-/**
- * Production is intentionally empty until a real source has been manually
- * reviewed and published. Test fixtures belong in policy-intelligence.test.ts.
- */
-export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [];
+export type PublicPolicySourceIdentity = {
+  authority: string;
+  officialTitle: string;
+  officialUrl: string;
+  sourceDate: string;
+  effectiveDate?: string | null;
+  jurisdiction: string;
+  category: string;
+  officialExcerpt?: {
+    text: string;
+    language: string;
+  };
+};
+
+export type PublicPolicyProjection = {
+  id: string;
+  slug: string;
+  sourceStatus: PolicySourceStatus;
+  editorialStatus: "published";
+  source: PublicPolicySourceIdentity;
+  copy: Record<SiteLocale, LocalizedPolicyCopy>;
+  lawyerCommentary?: Record<SiteLocale, string> | null;
+};
+
+export type PublicPolicyPreview = {
+  id: string;
+  slug: string;
+  sourceStatus: PolicySourceStatus;
+  source: Pick<PublicPolicySourceIdentity, "sourceDate" | "category">;
+  copy: Record<SiteLocale, Pick<LocalizedPolicyCopy, "title" | "summary">>;
+};
 
 const sourceStatusLabels: Record<
   SiteLocale,
@@ -184,11 +210,38 @@ export function validatePolicyEntries(entries: readonly PolicyEntry[]): void {
   }
 }
 
-validatePolicyEntries(MANUAL_POLICY_ENTRIES);
+function projectPolicyEntry(entry: PolicyEntry): PublicPolicyProjection {
+  const { source } = entry;
+  return {
+    id: entry.id,
+    slug: entry.slug,
+    sourceStatus: entry.sourceStatus,
+    editorialStatus: "published",
+    source: {
+      authority: source.authority,
+      officialTitle: source.officialTitle,
+      officialUrl: source.officialUrl,
+      sourceDate: source.sourceDate,
+      effectiveDate: source.effectiveDate,
+      jurisdiction: source.jurisdiction,
+      category: source.category,
+      officialExcerpt: source.officialExcerpt
+        ? { ...source.officialExcerpt }
+        : undefined,
+    },
+    copy: {
+      "zh-CN": { ...entry.copy["zh-CN"] },
+      en: { ...entry.copy.en },
+    },
+    lawyerCommentary: entry.lawyerCommentary
+      ? { ...entry.lawyerCommentary }
+      : entry.lawyerCommentary,
+  };
+}
 
-export function getPublishedPolicies(
-  entries: readonly PolicyEntry[] = MANUAL_POLICY_ENTRIES
-): PolicyEntry[] {
+export function projectPublishedPolicies(
+  entries: readonly PolicyEntry[]
+): PublicPolicyProjection[] {
   validatePolicyEntries(entries);
 
   return entries
@@ -199,14 +252,16 @@ export function getPublishedPolicies(
         left.source.sourceDate
       );
       return dateOrder || left.slug.localeCompare(right.slug, "en");
-    });
+    })
+    .map(projectPolicyEntry);
 }
 
-export function getPublishedPolicyBySlug(
+export function projectPublishedPolicyBySlug(
   slug: string,
-  entries: readonly PolicyEntry[] = MANUAL_POLICY_ENTRIES
-): PolicyEntry | null {
+  entries: readonly PolicyEntry[]
+): PublicPolicyProjection | null {
   return (
-    getPublishedPolicies(entries).find((entry) => entry.slug === slug) ?? null
+    projectPublishedPolicies(entries).find((entry) => entry.slug === slug) ??
+    null
   );
 }
