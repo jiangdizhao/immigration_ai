@@ -191,3 +191,14 @@ If a visible placeholder is necessary for structural development, use an explici
 
 If the choice affects architecture, legal/commercial meaning, product positioning or long-term information architecture, stop and ask the project owner.
 
+## D-018 — P11-002A accepted; P11-002B is presentation-only refinement
+
+**Date:** 2026-09-19  
+**Status:** ACCEPTED
+
+P11-002A at `d0964924be003fd61902fca760bd71aca53abe4f` is accepted as the structural baseline for the public platform pages after Git review and browser review of Home, Services, Process, Contact, plus English locale switching.
+
+P11-002B may refine visual hierarchy, spacing, typography, responsive behavior, reusable presentation primitives, and restrained interaction polish for those public pages.
+
+P11-002B must not reopen the accepted service catalogue, locale architecture, route structure, content-governance rules, auth/entitlement behavior, legal backend behavior, or introduce unverified business/lawyer facts merely for visual fidelity.
+

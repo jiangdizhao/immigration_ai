@@ -57,7 +57,7 @@ The AI workspace is functional and materially stateful. `chatbot/components/immi
 
 Therefore Phase 11 must treat AI Workspace as a high-blast-radius component and rebase it incrementally.
 
-P11-001 has now established a typed site-wide `zh-CN` / `en` locale foundation for the shared shell. Chinese is the default, the desktop/mobile header exposes a language switch, and the selection persists through the site-locale cookie. Public page bodies remain largely English until P11-002 and later tasks connect them to the locale/content model.
+P11-001 established the typed site-wide `zh-CN` / `en` locale foundation. P11-002A then connected Home, Services, Process and Contact page bodies to that same locale state and introduced the shared typed public-content model in `chatbot/lib/public-content.ts`. Chinese is the default, English switching affects both shell and public page bodies, and route identities remain unchanged.
 
 ## Current answer-lane state
 
@@ -98,11 +98,12 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 ## Current Phase 11 execution state
 
 - **P11-001 — VERIFIED:** Chinese-first locale + shared shell foundation.
-- Verified implementation checkpoint: `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`.
-- Local validation reported 154 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint still reports 22 pre-existing unrelated diagnostics.
-- User browser smoke confirmed the expected P11-001 boundary: shared header/footer localize correctly while page-body translation remains intentionally deferred.
-- Next executable work is **P11-002A — Public content model + bilingual public-page structural rebase**.
-- P11-002B will handle higher-fidelity visual refinement after P11-002A structure/content behavior is stable.
+- **P11-002A — VERIFIED:** bilingual public-content model + Home/Services/Process/Contact structural rebase.
+- P11-002A verified implementation checkpoint: `d0964924be003fd61902fca760bd71aca53abe4f`.
+- P11-002A local validation reported 158 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint and standalone TypeScript checks retain documented pre-existing unrelated diagnostics.
+- Reviewer inspected the Git diff and browser screenshots for Chinese Home, Services, Process, Contact and English Home. The structural/product direction was accepted.
+- Next executable work is **P11-002B — Public-page visual fidelity and responsive refinement**.
+- P11-002B is presentation-only refinement and must preserve the accepted P11-002A content model and functional boundaries.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
