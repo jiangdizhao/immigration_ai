@@ -10,7 +10,8 @@ The operator-only discovery implementation is in
 `chatbot/scripts/policy-intelligence-discovery.ts`. Its initial configured
 source IDs are:
 
-- `home-affairs-guidance` — `immi.homeaffairs.gov.au`;
+- `home-affairs-guidance` — `immi.homeaffairs.gov.au` and its structured
+  `siteData.alertItems` seed strategy;
 - `federal-register-legislation` — `legislation.gov.au` and
   `www.legislation.gov.au`;
 - `art-immigration-review` — `art.gov.au` and `www.art.gov.au`.
@@ -29,8 +30,15 @@ For deterministic local testing, use a structural fixture instead of the live
 network:
 
 ```bash
-pnpm policy:discover -- --source home-affairs-guidance --fixture synthetic-listing --dry-run
+pnpm policy:discover -- --source home-affairs-guidance --fixture synthetic-home-affairs --dry-run
 ```
+
+Home Affairs discovery fetches only its configured seed page. It extracts the
+`<script id="siteData" type="application/json">` payload, reads a bounded
+number of `alertItems`, and stops. It does not use ordinary page-link fan-out
+or fetch alert URLs. Alert URLs are retained only after the same HTTPS,
+allowlist, canonicalisation, and network-safety checks as the seed; an alert
+without a usable URL is explicitly tied to the configured seed instead.
 
 The command emits machine-readable candidate JSON to stdout and a concise
 summary to stderr. `--write` is an explicit local-only alternative; it writes
@@ -47,9 +55,21 @@ state.
 
 The fetch boundary is HTTPS-only, exact-host allowlisted, manually redirect
 revalidated, DNS-checked against local/private/link-local addresses, timeout
-bounded, content-type constrained, and response-size bounded. There is no
-arbitrary URL mode, credential/cookie forwarding, generic crawler, scheduler,
-runtime website write, or LLM call.
+bounded across DNS, headers, and the complete decoded body, content-type
+constrained, and response-size bounded. The general response limit remains
+128 KiB; the one-page Home Affairs structured-alert strategy has a separate
+hard decoded-body and total-run ceiling of 2 MiB because the configured seed
+is approximately 1.43 MiB decoded. This is not a general 2 MiB-per-page
+crawler.
+
+Home Affairs `alertItems.updateDate` is retained only as raw
+`sourceMetadata.alertUpdateDate`. It is never converted automatically into a
+legal effective date, commencement date, source/legal status, or editorial
+publication status. Candidates remain non-public discovery evidence and are
+not `PolicyEntry` records.
+
+There is no arbitrary URL mode, credential/cookie forwarding, generic Home
+Affairs crawler, scheduler, runtime website write, or LLM call.
 
 ## Manual promotion workflow
 

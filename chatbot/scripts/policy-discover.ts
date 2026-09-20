@@ -10,6 +10,7 @@ import {
 
 const FIXTURE_IDS = [
   "synthetic-detail",
+  "synthetic-home-affairs",
   "synthetic-listing",
   "synthetic-sitemap",
 ] as const;
@@ -29,7 +30,7 @@ function usage(): string {
     "Usage: pnpm policy:discover -- --source <source-id> (--dry-run | --write) [options]",
     "",
     "Options:",
-    "  --fixture <synthetic-detail|synthetic-listing|synthetic-sitemap>",
+    "  --fixture <synthetic-detail|synthetic-home-affairs|synthetic-listing|synthetic-sitemap>",
     "  --max-candidates <1-10>",
     "",
     "Configured sources:",
@@ -142,7 +143,9 @@ function createFixtureFetch(fixture: FixtureId): DiscoveryFetchOptions {
       const useIndex =
         fixture === "synthetic-sitemap"
           ? requestCount === 1 && url.pathname.endsWith("/sitemap.xml")
-          : fixture === "synthetic-listing" && requestCount === 1;
+          : (fixture === "synthetic-listing" ||
+              fixture === "synthetic-home-affairs") &&
+            requestCount === 1;
       const selectedFixture = useIndex ? fixture : "synthetic-detail";
       const { body, contentType } = fixtureBody(selectedFixture);
       return Promise.resolve(

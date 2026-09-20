@@ -9,12 +9,22 @@ export const DISCOVERY_LIMITS = {
   maxPages: 4,
   maxLinksPerPage: 8,
   maxCandidates: 10,
+  maxAlertItems: 100,
   maxTotalBytes: 256_000,
   maxResponseBytes: 128_000,
   maxPreviewCharacters: 500,
   maxRedirects: 3,
   requestTimeoutMs: 5000,
   maxRuntimeMs: 15_000,
+} as const;
+
+export const HOME_AFFAIRS_ALERT_LIMITS = {
+  maxPages: 1,
+  maxLinksPerPage: 1,
+  maxCandidates: DISCOVERY_LIMITS.maxCandidates,
+  maxAlertItems: DISCOVERY_LIMITS.maxAlertItems,
+  maxTotalBytes: 2 * 1024 * 1024,
+  maxResponseBytes: 2 * 1024 * 1024,
 } as const;
 
 export type DiscoveryLimits = Partial<
@@ -33,7 +43,8 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 export type DiscoveryStrategy =
   | "direct_page"
   | "listing_links"
-  | "sitemap_links";
+  | "sitemap_links"
+  | "home_affairs_site_alerts";
 
 export type PolicyDiscoverySource = {
   id: string;
@@ -64,6 +75,11 @@ export type DiscoveryCandidate = {
     redirectChain: readonly string[];
     titleSource?: "title" | "og:title" | "h1";
     dateSource?: "time" | "meta";
+    alertCategory?: string;
+    alertType?: string;
+    alertUpdateDate?: string;
+    alertUrl?: string;
+    provenanceUrl: "alert" | "seed";
   };
 };
 
@@ -104,7 +120,7 @@ export const POLICY_DISCOVERY_SOURCES: readonly PolicyDiscoverySource[] = [
     seedUrls: [
       "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/student-500",
     ],
-    strategy: "listing_links",
+    strategy: "home_affairs_site_alerts",
     topicHint: "visa_guidance",
   },
   {
@@ -196,12 +212,29 @@ function isUnsafeIpv4Address(address: string): boolean {
 }
 
 function isUnsafeNetworkAddress(address: string): boolean {
-  const normalized = address.toLowerCase().split("%")[0];
+  let normalized = address.toLowerCase().split("%")[0];
   if (isIP(normalized) === 4) {
     return isUnsafeIpv4Address(normalized);
   }
   if (isIP(normalized) !== 6) {
     return true;
+  }
+
+  const lastColon = normalized.lastIndexOf(":");
+  const ipv4Tail = normalized.slice(lastColon + 1);
+  if (ipv4Tail.includes(".")) {
+    const octets = ipv4Tail.split(".").map(Number);
+    if (
+      octets.length !== 4 ||
+      octets.some(
+        (octet) => !Number.isInteger(octet) || octet < 0 || octet > 255
+      )
+    ) {
+      return true;
+    }
+    const high = ((octets[0] << 8) | octets[1]).toString(16);
+    const low = ((octets[2] << 8) | octets[3]).toString(16);
+    normalized = `${normalized.slice(0, lastColon + 1)}${high}:${low}`;
   }
 
   const halves = normalized.split("::");
@@ -290,6 +323,12 @@ export type DiscoveryFetchOptions = {
   timeoutMs?: number;
 };
 
+function responseByteLimitForSource(source: PolicyDiscoverySource): number {
+  return source.strategy === "home_affairs_site_alerts"
+    ? HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes
+    : DISCOVERY_LIMITS.maxResponseBytes;
+}
+
 export type FetchedOfficialPage = {
   requestedUrl: string;
   finalUrl: string;
@@ -306,9 +345,40 @@ function contentTypeWithoutParameters(value: string | null): string {
   return (value ?? "").split(";", 1)[0].trim().toLowerCase();
 }
 
+class DiscoveryTimeoutError extends Error {}
+
+function withAbortDeadline<T>(
+  operation: Promise<T>,
+  signal: AbortSignal
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new DiscoveryTimeoutError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(new DiscoveryTimeoutError());
+    };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+    operation.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
 async function readBoundedBody(
   response: Response,
-  maxResponseBytes: number
+  maxResponseBytes: number,
+  signal: AbortSignal
 ): Promise<Uint8Array> {
   const contentLength = response.headers.get("content-length");
   if (contentLength && Number(contentLength) > maxResponseBytes) {
@@ -332,6 +402,10 @@ async function readBoundedBody(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
+  const cancelOnAbort = () => {
+    reader.cancel().catch(() => undefined);
+  };
+  signal.addEventListener("abort", cancelOnAbort, { once: true });
   try {
     while (true) {
       const result = await reader.read();
@@ -348,6 +422,7 @@ async function readBoundedBody(
       chunks.push(result.value);
     }
   } finally {
+    signal.removeEventListener("abort", cancelOnAbort);
     reader.releaseLock();
   }
 
@@ -367,9 +442,10 @@ export async function fetchOfficialPage(
 ): Promise<FetchedOfficialPage> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const lookupHost = options.lookupHost ?? defaultLookupHost;
+  const responseByteLimit = responseByteLimitForSource(source);
   const maxResponseBytes = Math.min(
-    DISCOVERY_LIMITS.maxResponseBytes,
-    Math.max(1, options.maxResponseBytes ?? DISCOVERY_LIMITS.maxResponseBytes)
+    responseByteLimit,
+    Math.max(1, options.maxResponseBytes ?? responseByteLimit)
   );
   const maxRedirects = Math.min(
     DISCOVERY_LIMITS.maxRedirects,
@@ -381,112 +457,123 @@ export async function fetchOfficialPage(
   );
   let currentUrl = assertOfficialUrlAllowed(rawUrl, source);
   const redirectChain: string[] = [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  for (
-    let redirectCount = 0;
-    redirectCount <= maxRedirects;
-    redirectCount += 1
-  ) {
-    const parsed = new URL(currentUrl);
-    const resolvedAddresses = await lookupHost(parsed.hostname);
-    if (resolvedAddresses.some(isUnsafeNetworkAddress)) {
-      throw new DiscoveryError(
-        "unsafe_network",
-        `Destination resolves to a local or private address: ${parsed.hostname}`
+  try {
+    for (
+      let redirectCount = 0;
+      redirectCount <= maxRedirects;
+      redirectCount += 1
+    ) {
+      const parsed = new URL(currentUrl);
+      const resolvedAddresses = await withAbortDeadline(
+        Promise.resolve().then(() => lookupHost(parsed.hostname)),
+        controller.signal
       );
-    }
+      if (resolvedAddresses.some(isUnsafeNetworkAddress)) {
+        throw new DiscoveryError(
+          "unsafe_network",
+          `Destination resolves to a local or private address: ${parsed.hostname}`
+        );
+      }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
-    try {
-      response = await fetchImpl(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        credentials: "omit",
-        headers: {
-          Accept: "text/html, application/xhtml+xml, application/xml, text/xml",
-          "User-Agent": "ImmigrationAI-PolicyDiscovery/1.0",
-        },
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new DiscoveryError(
-          "timeout",
-          `Request timed out after ${timeoutMs}ms: ${currentUrl}`
-        );
-      }
-      throw error;
-    } finally {
-      clearTimeout(timer);
-    }
+      const response = await withAbortDeadline(
+        Promise.resolve().then(() =>
+          fetchImpl(currentUrl, {
+            method: "GET",
+            redirect: "manual",
+            credentials: "omit",
+            headers: {
+              Accept:
+                "text/html, application/xhtml+xml, application/xml, text/xml",
+              "User-Agent": "ImmigrationAI-PolicyDiscovery/1.0",
+            },
+            signal: controller.signal,
+          })
+        ),
+        controller.signal
+      );
 
-    if (REDIRECT_STATUSES.has(response.status)) {
-      if (redirectCount === maxRedirects) {
-        throw new DiscoveryError(
-          "redirect_limit",
-          `Redirect limit exceeded for ${rawUrl}`
-        );
-      }
-      const location = response.headers.get("location");
-      if (!location) {
-        throw new DiscoveryError(
-          "unsafe_redirect",
-          `Redirect has no Location header: ${currentUrl}`
-        );
-      }
-      const nextUrl = new URL(location, currentUrl).toString();
-      try {
-        currentUrl = assertOfficialUrlAllowed(nextUrl, source);
-      } catch (error) {
-        if (error instanceof DiscoveryError) {
+      if (REDIRECT_STATUSES.has(response.status)) {
+        if (redirectCount === maxRedirects) {
           throw new DiscoveryError(
-            "unsafe_redirect",
-            `Redirect escaped the source allowlist: ${nextUrl}`
+            "redirect_limit",
+            `Redirect limit exceeded for ${rawUrl}`
           );
         }
-        throw error;
+        const location = response.headers.get("location");
+        if (!location) {
+          throw new DiscoveryError(
+            "unsafe_redirect",
+            `Redirect has no Location header: ${currentUrl}`
+          );
+        }
+        const nextUrl = new URL(location, currentUrl).toString();
+        try {
+          currentUrl = assertOfficialUrlAllowed(nextUrl, source);
+        } catch (error) {
+          if (error instanceof DiscoveryError) {
+            throw new DiscoveryError(
+              "unsafe_redirect",
+              `Redirect escaped the source allowlist: ${nextUrl}`
+            );
+          }
+          throw error;
+        }
+        redirectChain.push(currentUrl);
+        continue;
       }
-      redirectChain.push(currentUrl);
-      continue;
-    }
 
-    if (!response.ok) {
-      throw new DiscoveryError(
-        "http_error",
-        `Official source returned HTTP ${response.status}: ${currentUrl}`
+      if (!response.ok) {
+        throw new DiscoveryError(
+          "http_error",
+          `Official source returned HTTP ${response.status}: ${currentUrl}`
+        );
+      }
+
+      const contentType = contentTypeWithoutParameters(
+        response.headers.get("content-type")
       );
+      if (!ACCEPTED_CONTENT_TYPES.has(contentType)) {
+        throw new DiscoveryError(
+          "unsupported_content_type",
+          `Unsupported content type ${contentType || "(missing)"}: ${currentUrl}`
+        );
+      }
+
+      const bytes = await withAbortDeadline(
+        readBoundedBody(response, maxResponseBytes, controller.signal),
+        controller.signal
+      );
+      return {
+        requestedUrl: assertOfficialUrlAllowed(rawUrl, source),
+        finalUrl: currentUrl,
+        status: response.status,
+        contentType,
+        body: new TextDecoder().decode(bytes),
+        bytes: bytes.byteLength,
+        etag: response.headers.get("etag") ?? undefined,
+        lastModified: response.headers.get("last-modified") ?? undefined,
+        redirectChain,
+      };
     }
 
-    const contentType = contentTypeWithoutParameters(
-      response.headers.get("content-type")
+    throw new DiscoveryError(
+      "redirect_limit",
+      `Redirect limit exceeded: ${rawUrl}`
     );
-    if (!ACCEPTED_CONTENT_TYPES.has(contentType)) {
+  } catch (error) {
+    if (error instanceof DiscoveryTimeoutError || controller.signal.aborted) {
       throw new DiscoveryError(
-        "unsupported_content_type",
-        `Unsupported content type ${contentType || "(missing)"}: ${currentUrl}`
+        "timeout",
+        `Request timed out after ${timeoutMs}ms: ${currentUrl}`
       );
     }
-
-    const bytes = await readBoundedBody(response, maxResponseBytes);
-    return {
-      requestedUrl: assertOfficialUrlAllowed(rawUrl, source),
-      finalUrl: currentUrl,
-      status: response.status,
-      contentType,
-      body: new TextDecoder().decode(bytes),
-      bytes: bytes.byteLength,
-      etag: response.headers.get("etag") ?? undefined,
-      lastModified: response.headers.get("last-modified") ?? undefined,
-      redirectChain,
-    };
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-
-  throw new DiscoveryError(
-    "redirect_limit",
-    `Redirect limit exceeded: ${rawUrl}`
-  );
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -581,6 +668,143 @@ export function parseListingLinks(
   return links;
 }
 
+function parseTagAttributes(attributes: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const match of attributes.matchAll(
+    /([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g
+  )) {
+    parsed[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
+  }
+  return parsed;
+}
+
+export function extractHomeAffairsSiteDataJson(
+  html: string
+): string | undefined {
+  for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
+    const attributes = parseTagAttributes(match[1]);
+    if (
+      attributes.id?.toLowerCase() !== "sitedata" ||
+      attributes.type?.split(";", 1)[0].trim().toLowerCase() !==
+        "application/json"
+    ) {
+      continue;
+    }
+    const contentStart = (match.index ?? 0) + match[0].length;
+    const closingTag = /<\/script\s*>/i.exec(html.slice(contentStart));
+    if (!closingTag) {
+      return undefined;
+    }
+    return html.slice(contentStart, contentStart + closingTag.index).trim();
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function parseHomeAffairsAlertItems(
+  html: string,
+  maxItems: number = DISCOVERY_LIMITS.maxAlertItems
+): readonly Record<string, unknown>[] {
+  const siteDataJson = extractHomeAffairsSiteDataJson(html);
+  if (!siteDataJson) {
+    return [];
+  }
+  try {
+    const parsed: unknown = JSON.parse(siteDataJson);
+    if (!isRecord(parsed) || !Array.isArray(parsed.alertItems)) {
+      return [];
+    }
+    return parsed.alertItems.slice(0, Math.max(0, maxItems)).filter(isRecord);
+  } catch {
+    return [];
+  }
+}
+
+function boundedRawMetadata(
+  value: unknown,
+  maxCharacters = 200
+): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, maxCharacters) : undefined;
+}
+
+function alertUrlValues(item: Record<string, unknown>): string[] {
+  const values = item.urls ?? item.url;
+  const candidates = Array.isArray(values) ? values : [values];
+  return candidates.flatMap((value) => {
+    if (typeof value === "string") {
+      return [value];
+    }
+    if (isRecord(value) && typeof value.url === "string") {
+      return [value.url];
+    }
+    return [];
+  });
+}
+
+function candidateFromHomeAffairsAlert(
+  item: Record<string, unknown>,
+  page: FetchedOfficialPage,
+  source: PolicyDiscoverySource,
+  retrievedAt: string,
+  maxPreviewCharacters: number
+): DiscoveryCandidate {
+  const title = boundedRawMetadata(item.title, 500);
+  const content = boundedRawMetadata(item.content, 4096);
+  const normalizedContent = [title, content].filter(Boolean).join("\n");
+  const contentForFingerprint =
+    normalizedContent || JSON.stringify(item, Object.keys(item).sort());
+  let canonicalUrl = assertOfficialUrlAllowed(source.seedUrls[0], source);
+  let provenanceUrl: "alert" | "seed" = "seed";
+  let alertUrl: string | undefined;
+  for (const rawUrl of alertUrlValues(item)) {
+    try {
+      alertUrl = assertOfficialUrlAllowed(rawUrl, source);
+      canonicalUrl = alertUrl;
+      provenanceUrl = "alert";
+      break;
+    } catch {
+      // Out-of-scope alert URLs are not candidate provenance and are never
+      // fetched. A valid alert URL is selected deterministically in source
+      // order; otherwise the configured seed remains the explicit source.
+    }
+  }
+  const contentHash = fingerprintContent(
+    `${canonicalUrl}\n${contentForFingerprint}`
+  );
+
+  return {
+    schemaVersion: DISCOVERY_CANDIDATE_SCHEMA,
+    candidateId: stableCandidateId(source.id, canonicalUrl, contentHash),
+    sourceConfigId: source.id,
+    authority: source.authority,
+    canonicalUrl,
+    discoveredTitle: title,
+    retrievedAt,
+    contentType: page.contentType,
+    preview: boundedPreview(content, maxPreviewCharacters),
+    contentHash,
+    etag: page.etag,
+    lastModified: page.lastModified,
+    discoveryStrategy: source.strategy,
+    sourceMetadata: {
+      httpStatus: page.status,
+      redirectChain: page.redirectChain,
+      alertCategory: boundedRawMetadata(item.category),
+      alertType: boundedRawMetadata(item.type),
+      alertUpdateDate: boundedRawMetadata(item.updateDate),
+      alertUrl,
+      provenanceUrl,
+    },
+  };
+}
+
 type ParsedPageMetadata = {
   title?: string;
   titleSource?: "title" | "og:title" | "h1";
@@ -620,13 +844,16 @@ function parsePageMetadata(body: string): ParsedPageMetadata {
   };
 }
 
-function boundedPreview(value: string | undefined): string | undefined {
+function boundedPreview(
+  value: string | undefined,
+  maxCharacters: number = DISCOVERY_LIMITS.maxPreviewCharacters
+): string | undefined {
   if (!value) {
     return undefined;
   }
   const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length > DISCOVERY_LIMITS.maxPreviewCharacters
-    ? `${normalized.slice(0, DISCOVERY_LIMITS.maxPreviewCharacters - 1)}…`
+  return normalized.length > maxCharacters
+    ? `${normalized.slice(0, Math.max(0, maxCharacters - 1))}…`
     : normalized;
 }
 
@@ -678,6 +905,7 @@ export function candidateFromPage(
       redirectChain: page.redirectChain,
       titleSource: metadata.titleSource,
       dateSource: metadata.dateSource,
+      provenanceUrl: "seed",
     },
   };
 }
@@ -701,30 +929,40 @@ export type DiscoveryRunOptions = {
   limits?: DiscoveryLimits;
 };
 
-function boundedLimits(overrides: DiscoveryLimits = {}) {
+function boundedLimits(
+  source: PolicyDiscoverySource,
+  overrides: DiscoveryLimits = {}
+) {
+  const defaults = {
+    ...DISCOVERY_LIMITS,
+    ...(source.strategy === "home_affairs_site_alerts"
+      ? HOME_AFFAIRS_ALERT_LIMITS
+      : {}),
+  };
   return {
     maxPages: Math.min(
-      DISCOVERY_LIMITS.maxPages,
-      Math.max(1, overrides.maxPages ?? DISCOVERY_LIMITS.maxPages)
+      defaults.maxPages,
+      Math.max(1, overrides.maxPages ?? defaults.maxPages)
     ),
     maxLinksPerPage: Math.min(
-      DISCOVERY_LIMITS.maxLinksPerPage,
-      Math.max(1, overrides.maxLinksPerPage ?? DISCOVERY_LIMITS.maxLinksPerPage)
+      defaults.maxLinksPerPage,
+      Math.max(1, overrides.maxLinksPerPage ?? defaults.maxLinksPerPage)
     ),
     maxCandidates: Math.min(
-      DISCOVERY_LIMITS.maxCandidates,
-      Math.max(1, overrides.maxCandidates ?? DISCOVERY_LIMITS.maxCandidates)
+      defaults.maxCandidates,
+      Math.max(1, overrides.maxCandidates ?? defaults.maxCandidates)
+    ),
+    maxAlertItems: Math.min(
+      defaults.maxAlertItems,
+      Math.max(1, overrides.maxAlertItems ?? defaults.maxAlertItems)
     ),
     maxTotalBytes: Math.min(
-      DISCOVERY_LIMITS.maxTotalBytes,
-      Math.max(1, overrides.maxTotalBytes ?? DISCOVERY_LIMITS.maxTotalBytes)
+      defaults.maxTotalBytes,
+      Math.max(1, overrides.maxTotalBytes ?? defaults.maxTotalBytes)
     ),
     maxResponseBytes: Math.min(
-      DISCOVERY_LIMITS.maxResponseBytes,
-      Math.max(
-        1,
-        overrides.maxResponseBytes ?? DISCOVERY_LIMITS.maxResponseBytes
-      )
+      defaults.maxResponseBytes,
+      Math.max(1, overrides.maxResponseBytes ?? defaults.maxResponseBytes)
     ),
     maxPreviewCharacters: Math.min(
       DISCOVERY_LIMITS.maxPreviewCharacters,
@@ -755,7 +993,7 @@ export async function discoverPolicyCandidates(
   options: DiscoveryRunOptions
 ): Promise<DiscoveryRunResult> {
   const source = getPolicyDiscoverySource(options.sourceId);
-  const limits = boundedLimits(options.limits);
+  const limits = boundedLimits(source, options.limits);
   const startedAt = Date.now();
   const now = options.now ?? (() => new Date().toISOString());
   const queue = [...source.seedUrls];
@@ -815,6 +1053,27 @@ export async function discoverPolicyCandidates(
         `Discovery run exceeds ${limits.maxTotalBytes} total bytes`
       );
     }
+    if (source.strategy === "home_affairs_site_alerts") {
+      for (const item of parseHomeAffairsAlertItems(
+        page.body,
+        limits.maxAlertItems
+      )) {
+        if (candidates.length >= limits.maxCandidates) {
+          break;
+        }
+        candidates.push(
+          candidateFromHomeAffairsAlert(
+            item,
+            page,
+            source,
+            now(),
+            limits.maxPreviewCharacters
+          )
+        );
+      }
+      break;
+    }
+
     candidates.push(candidateFromPage(page, source, now(), source.strategy));
 
     if (source.strategy === "listing_links") {

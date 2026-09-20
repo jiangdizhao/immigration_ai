@@ -11,10 +11,13 @@ import {
   type DiscoveryFetchOptions,
   deduplicateCandidates,
   discoverPolicyCandidates,
+  extractHomeAffairsSiteDataJson,
   type FetchedOfficialPage,
   fetchOfficialPage,
   fingerprintContent,
   getPolicyDiscoverySource,
+  HOME_AFFAIRS_ALERT_LIMITS,
+  parseHomeAffairsAlertItems,
   parseListingLinks,
   parseSitemapLinks,
   stableCandidateId,
@@ -96,7 +99,19 @@ test("HTTPS and exact allowlisted hostnames are required", () => {
 
 test("private and link-local DNS destinations are rejected", async () => {
   const source = getPolicyDiscoverySource("home-affairs-guidance");
-  for (const address of ["10.0.0.4", "169.254.1.1", "::1", "fe80::1"]) {
+  for (const address of [
+    "10.0.0.4",
+    "169.254.1.1",
+    "192.168.1.1",
+    "::1",
+    "fe80::1",
+    "fc00::1",
+    "fd00::1",
+    "::ffff:127.0.0.1",
+    "::ffff:10.0.0.1",
+    "::ffff:169.254.1.1",
+    "::ffff:192.168.1.1",
+  ]) {
     const fetchOptions = fetchSequence(response("<html></html>"));
     fetchOptions.lookupHost = async () => [address];
     await assert.rejects(
@@ -104,6 +119,59 @@ test("private and link-local DNS destinations are rejected", async () => {
       /local or private/
     );
   }
+});
+
+test("the request timeout interrupts a body that never finishes", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const hangingBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("<html>"));
+    },
+    pull() {
+      return new Promise<void>(() => {
+        // Intentionally never resolves: the request deadline must cancel it.
+      });
+    },
+  });
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    fetchOfficialPage(source.seedUrls[0], source, {
+      lookupHost: publicLookup,
+      fetchImpl: () =>
+        Promise.resolve(
+          new Response(hangingBody, {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          })
+        ),
+      timeoutMs: 20,
+    }),
+    (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "timeout"
+  );
+  assert.ok(Date.now() - startedAt < 500);
+});
+
+test("a delayed DNS safety lookup cannot bypass the request timeout", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    fetchOfficialPage(source.seedUrls[0], source, {
+      lookupHost: () =>
+        new Promise<string[]>(() => {
+          // Intentionally never resolves: the request deadline must win.
+        }),
+      fetchImpl: () => {
+        throw new Error("HTTP fetch must not start after DNS timeout");
+      },
+      timeoutMs: 20,
+    }),
+    (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "timeout"
+  );
+  assert.ok(Date.now() - startedAt < 500);
 });
 
 test("redirects are revalidated against the source allowlist", async () => {
@@ -152,6 +220,116 @@ test("response content type and byte limits are enforced", async () => {
       maxResponseBytes: 8,
     }),
     /exceeds 8 bytes/
+  );
+});
+
+test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  assert.equal(source.strategy, "home_affairs_site_alerts");
+  const fixture = readFileSync(
+    resolve(fixtureDirectory, "home-affairs.html"),
+    "utf8"
+  );
+  const largeFixture = fixture.replace(
+    "</body>",
+    `${"x".repeat(1_400_000)}</body>`
+  );
+  let requestCount = 0;
+  const fetchOptions: DiscoveryFetchOptions = {
+    lookupHost: publicLookup,
+    fetchImpl: () => {
+      requestCount += 1;
+      return Promise.resolve(response(largeFixture));
+    },
+  };
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-09-20T00:00:00.000Z",
+    fetchOptions,
+    limits: { maxCandidates: 5 },
+  });
+
+  assert.equal(requestCount, 1);
+  assert.equal(result.candidates.length, 3);
+  assert.ok(largeFixture.length > 1_400_000);
+  assert.ok(
+    result.candidates.every(
+      (item) => item.discoveryStrategy === "home_affairs_site_alerts"
+    )
+  );
+  assert.ok(
+    result.candidates.every(
+      (item) => !item.canonicalUrl.includes("untrusted.example")
+    )
+  );
+  assert.equal(
+    result.candidates[0].sourceMetadata.alertUpdateDate,
+    "2026-09-01"
+  );
+  assert.equal(result.candidates[0].explicitSourceDate, undefined);
+  assert.equal(result.candidates[0].sourceMetadata.provenanceUrl, "alert");
+  assert.equal(result.candidates[1].sourceMetadata.provenanceUrl, "seed");
+  assert.equal(result.candidates[1].sourceMetadata.alertUrl, undefined);
+  assert.equal(result.candidates[0].sourceMetadata.alertCategory, "fixture");
+  assert.equal(result.candidates[0].sourceMetadata.alertType, "synthetic");
+  assert.equal(
+    new Set(result.candidates.map((candidate) => candidate.candidateId)).size,
+    result.candidates.length
+  );
+
+  const repeated = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-09-20T00:00:00.000Z",
+    fetchOptions: {
+      ...fetchOptions,
+      fetchImpl: () => Promise.resolve(response(fixture)),
+    },
+    limits: { maxCandidates: 5 },
+  });
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.candidateId),
+    repeated.candidates.map((candidate) => candidate.candidateId)
+  );
+  assert.equal(
+    parseHomeAffairsAlertItems(fixture, 1).length,
+    1,
+    "alert examination is bounded"
+  );
+});
+
+test("Home Affairs decoded response cap is source-specific and hard-bounded", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const belowCap = "x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes - 1);
+  const page = await fetchOfficialPage(source.seedUrls[0], source, {
+    lookupHost: publicLookup,
+    fetchImpl: () => Promise.resolve(response(belowCap)),
+  });
+  assert.equal(page.bytes, HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes - 1);
+  await assert.rejects(
+    fetchOfficialPage(source.seedUrls[0], source, {
+      lookupHost: publicLookup,
+      fetchImpl: () =>
+        Promise.resolve(
+          response("x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes + 1))
+        ),
+    }),
+    /exceeds 2097152 bytes/
+  );
+});
+
+test("Home Affairs siteData extraction fails safely for missing, malformed, and non-array data", () => {
+  assert.equal(extractHomeAffairsSiteDataJson("<html></html>"), undefined);
+  assert.deepEqual(
+    parseHomeAffairsAlertItems(
+      '<script id="siteData" type="application/json">not-json</script>'
+    ),
+    []
+  );
+  assert.deepEqual(
+    parseHomeAffairsAlertItems(
+      '<script type="application/json" id="siteData">{"alertItems":{}}</script>'
+    ),
+    []
   );
 });
 
@@ -213,10 +391,14 @@ test("local sitemap, listing, and detail fixtures parse without network access",
 });
 
 test("discovery is bounded, deduplicated, and produces non-public provenance candidates", async () => {
-  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const source = getPolicyDiscoverySource("art-immigration-review");
   const listing = readFileSync(
     resolve(fixtureDirectory, "listing.html"),
     "utf8"
+  );
+  const artListing = listing.replaceAll(
+    "immi.homeaffairs.gov.au",
+    "www.art.gov.au"
   );
   const detail = readFileSync(resolve(fixtureDirectory, "detail.html"), "utf8");
   let requestCount = 0;
@@ -227,7 +409,9 @@ test("discovery is bounded, deduplicated, and produces non-public provenance can
       lookupHost: publicLookup,
       fetchImpl: () => {
         requestCount += 1;
-        return Promise.resolve(response(requestCount === 1 ? listing : detail));
+        return Promise.resolve(
+          response(requestCount === 1 ? artListing : detail)
+        );
       },
     },
     limits: { maxPages: 3, maxCandidates: 3 },

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Synthetic Home Affairs structured alert fixture</title>
+  </head>
+  <body>
+    <a href="/navigation-only">Navigation-only link</a>
+    <script id="siteData" type="application/json">
+    {
+      "alertItems": [
+        {
+          "title": "Synthetic alert with an allowed URL",
+          "content": "Fixture-only alert content; not a current policy claim.",
+          "type": "synthetic",
+          "category": "fixture",
+          "urls": [
+            "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
+          ],
+          "updateDate": "2026-09-01"
+        },
+        {
+          "title": "Synthetic alert with an out-of-scope URL",
+          "content": "Fixture-only out-of-scope URL handling.",
+          "type": "synthetic",
+          "category": "fixture",
+          "urls": ["https://untrusted.example.invalid/not-allowed"],
+          "updateDate": "2026-09-02"
+        },
+        {
+          "title": "Synthetic alert without a URL",
+          "content": "Fixture-only seed provenance fallback.",
+          "type": "synthetic",
+          "category": "fixture",
+          "updateDate": "2026-09-03"
+        },
+        {
+          "title": "Synthetic alert with an allowed URL",
+          "content": "Fixture-only alert content; not a current policy claim.",
+          "type": "synthetic",
+          "category": "fixture",
+          "urls": [
+            "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
+          ],
+          "updateDate": "2026-09-01"
+        }
+      ]
+    }
+    </script>
+  </body>
+</html>
