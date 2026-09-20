@@ -105,13 +105,14 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - P11-003B verified checkpoint: `081ef46dd040b6131d475750d0968c9f2e461bb2`.
 - Production policy registry remains intentionally empty until real records are manually verified and published.
 - Public Home/list/detail paths receive only server-produced public-safe projections; unpublished editorial content remains server-only.
-- **P11-003C implementation checkpoint:** `07fa129677d94c9f2c24cac65e1e89859ee2b6d3`; verification remains pending.
-- **P11-003C R1+R2 checkpoint:** `009e7f964f86bd6b755d4fe5ded82c922ea48f09`; security hardening and Home Affairs structured-alert discovery are pushed, but verification remains pending.
-- R1 deterministic tests cover full-operation timeout and IPv4-mapped IPv6/private-network rejection.
-- R2 successfully uses the Home Affairs `siteData.alertItems` structured surface with a one-page 2 MiB decoded-body ceiling and no alert-link crawling.
-- Post-push review found one provenance defect: real Home Affairs `alertItems.urls` are commonly root-relative paths, while the current candidate builder accepts only already-absolute URLs. Live candidates therefore fall back to the seed URL even when a usable alert URL exists.
-- Next executable correction is **P11-003C-R3 — relative alert URL resolution + provenance-kind correction**.
+- **P11-003C — VERIFIED:** allowlisted official-source discovery into non-public candidates.
+- P11-003C accepted checkpoint: `fa02295675dc4343430ae0a109722141e669bbf9`.
+- R1 hardened full-operation timeout and IPv4-mapped IPv6/private-network rejection.
+- R2 replaced Home Affairs generic link discovery with bounded one-page `siteData.alertItems` structured discovery and a source-specific 2 MiB decoded-body ceiling.
+- R3 safely resolves relative/absolute/protocol-relative Home Affairs alert URLs, preserves them as non-fetched provenance pointers, and distinguishes `urlProvenance` as `alert`, `seed`, or `fetched_page`.
+- Production policy registry remains intentionally empty; discovery cannot publish or write `MANUAL_POLICY_ENTRIES`.
 - P11-003C remains operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
+- Known non-blocking observation: the live Home Affairs alert feed contains operational/navigation items alongside policy-like candidates, so human review remains necessary.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 

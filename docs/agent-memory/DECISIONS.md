@@ -410,3 +410,27 @@ For Home Affairs structured discovery:
 
 Generic fetched-page provenance must not be mislabeled as seed provenance.
 
+## D-032 — P11-003C official-source discovery accepted after R1-R3 hardening
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+P11-003C is accepted at checkpoint `fa02295675dc4343430ae0a109722141e669bbf9` after the base implementation plus R1, R2, and R3 corrections.
+
+The accepted discovery boundary is:
+
+- operator-run only; no scheduler or public request-time execution;
+- configured allowlisted official sources only; no arbitrary URL mode;
+- HTTPS/exact-host enforcement with redirect revalidation;
+- DNS/private/local/link-local rejection and full-operation request deadlines;
+- bounded decoded response sizes, page counts, candidate counts, and runtime;
+- Home Affairs uses one bounded structured `siteData.alertItems` seed parse rather than generic link crawling;
+- Home Affairs alert URLs are provenance pointers only, safely resolved/canonicalised and never fetched in this phase;
+- `alertItems.updateDate` remains raw source metadata and is not converted into legal/effective/publication status;
+- discovery candidates remain non-public and separate from `PolicyEntry`;
+- no LLM interpretation, lawyer commentary, automatic promotion, automatic publication, database migration, or `legal-service` change.
+
+R3 also makes URL provenance explicit as `alert`, `seed`, or `fetched_page`.
+
+The remaining observation that the live Home Affairs alert feed includes operational/navigation items as well as policy-like items is not a discovery-safety blocker because candidates remain non-public and require human review. Any automated relevance/legal-importance filtering requires a separate future decision.
+

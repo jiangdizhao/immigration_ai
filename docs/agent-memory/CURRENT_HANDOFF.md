@@ -9,7 +9,8 @@
 **P11-003A implementation checkpoint:** `f7fa6363e4f2ee326306b20203692dd73e45cebd`  
 **P11-003A provenance-hardening checkpoint:** `4f232fe40161a7adad104bcbf6c382b846425936`  
 **P11-003B verified checkpoint:** `081ef46dd040b6131d475750d0968c9f2e461bb2`  
-**P11-003C starting checkpoint:** `f54b525c225c33877954fab306d615c88213e89b`
+**P11-003C starting checkpoint:** `f54b525c225c33877954fab306d615c88213e89b`  
+**P11-003C verified checkpoint:** `fa02295675dc4343430ae0a109722141e669bbf9`
 **Git-state rule:** verify the live branch tip with `git rev-parse HEAD`; documentation-only memory commits may advance HEAD without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
@@ -21,9 +22,10 @@
 - P11-002B: **VERIFIED**
 - P11-003A: **VERIFIED**
 - P11-003B: **VERIFIED**
-- P11-003C-R1/R2: **IMPLEMENTED AND PUSHED**
-- P11-003C-R3: **IMPLEMENTED IN WORKING TREE — OWNER REVIEW PENDING**
-- P11-003C overall: **NOT YET VERIFIED**
+- P11-003C-R1: **VERIFIED**
+- P11-003C-R2: **VERIFIED**
+- P11-003C-R3: **VERIFIED**
+- P11-003C overall: **VERIFIED**
 
 ## P11-003B accepted architecture
 
@@ -109,14 +111,16 @@ Unresolved uncertainty: the live Home Affairs alert feed includes navigation/ope
 
 Recommended next action: owner/reviewer inspect the uncommitted diff, then manually author any verified `PolicyEntry` only through the existing draft/review/publication workflow; do not promote candidate artifacts automatically.
 
-## Review rule
+## Review result
 
-The coding model must leave P11-003C changes uncommitted/unpushed. The owner will provide `git status --short` and `git diff --stat`; reviewer will then provide exact commit/push commands and inspect the GitHub diff after push.
+GitHub review of the pushed R3 checkpoint found no remaining blocking defect. No GitHub Actions checks were attached to the commit; acceptance is based on the inspected source/diff plus the recorded local validation and bounded live smoke.
+
+P11-003C is closed. Do not start P11-004 until the project owner explicitly requests it.
 
 
 ## P11-003C-R3 correction
 
-R3 corrected the reviewed Home Affairs provenance defect without adding a discovery surface. P11-003C is not yet VERIFIED.
+R3 corrected the reviewed Home Affairs provenance defect without adding a discovery surface. P11-003C is VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9`.
 
 Home Affairs alert URLs are now resolved against `page.finalUrl` before the existing HTTPS, exact-host, canonicalisation, and network-safety boundary runs. Root-relative, same-host absolute, and HTTPS protocol-relative URLs are accepted when safe; malformed, HTTP, and out-of-scope URLs are ignored. Alert URLs remain provenance pointers and are never fetched.
 
@@ -152,4 +156,4 @@ R3 live Home Affairs dry-run: exit 0, runtime **787 ms**, 5 candidates. All five
 
 No alert URL was fetched: the Home Affairs strategy still performs exactly one configured seed fetch, while deterministic tests record that the fetch target list contains only the seed URL. No publication, LLM, database, or `legal-service/` behavior changed.
 
-Unresolved question: the live feed still includes operational/navigation alerts alongside policy-like alerts; R3 intentionally preserves them as raw non-public candidates and performs no legal-importance or publication inference.
+Known non-blocking observation: the live feed still includes operational/navigation alerts alongside policy-like alerts; R3 intentionally preserves them as raw non-public candidates and performs no legal-importance or publication inference. Any future relevance filtering requires a separately approved task.

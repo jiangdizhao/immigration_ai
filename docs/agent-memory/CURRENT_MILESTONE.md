@@ -19,7 +19,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 - P11-003A implementation checkpoint: `f7fa6363e4f2ee326306b20203692dd73e45cebd`
 - P11-003A provenance-hardening checkpoint: `4f232fe40161a7adad104bcbf6c382b846425936`
 - P11-003B verified checkpoint: `081ef46dd040b6131d475750d0968c9f2e461bb2`
-- P11-003C implementation checkpoint: `07fa129677d94c9f2c24cac65e1e89859ee2b6d3`
+- P11-003C accepted checkpoint: `fa02295675dc4343430ae0a109722141e669bbf9`
 - Phase 11 authority: `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`
 - public-content authority: `docs/product/CONTENT_POLICY.md`
 
@@ -33,10 +33,10 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-002B | V4-informed public-page visual refinement + responsive polish | VERIFIED |
 | P11-003A | Policy Intelligence UI + provenance-safe manual content model | VERIFIED |
 | P11-003B | Repository-backed manual curation + server-only publication boundary | VERIFIED |
-| P11-003C | Allowlisted official-source discovery into non-public candidates | IMPLEMENTED — VERIFICATION PENDING |
-| P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | IMPLEMENTED |
-| P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | IMPLEMENTED |
-| P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | PLANNED |
+| P11-003C | Allowlisted official-source discovery into non-public candidates | VERIFIED |
+| P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | VERIFIED |
+| P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
+| P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | PLANNED |
 | P11-005 | Matter-centered Client Portal | PLANNED |
 | P11-006 | Lawyer Workspace continuity | PLANNED |
@@ -45,11 +45,11 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 
 ## Current active task
 
-Next executable correction:
+No implementation task is active.
 
-- `docs/agent-memory/tasks/P11-003C-R3.md`
-- title: Relative Home Affairs alert URL resolution + provenance-kind correction
-- state: PLANNED
+P11-003C is closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9`.
+
+P11-004 remains **PLANNED** and has not been started.
 
 ## Evidence that triggered R2
 
@@ -104,12 +104,18 @@ R2 must not:
 - redesign the public Policy Intelligence UI.
 
 
-## Post-R2 review finding
+## P11-003C closure
 
-The R1+R2 checkpoint `009e7f964f86bd6b755d4fe5ded82c922ea48f09` passed its deterministic and live smoke validations, but GitHub/source review of the real Home Affairs payload exposed a provenance-resolution defect.
+The R1+R2 provenance defect identified after `009e7f964f86bd6b755d4fe5ded82c922ea48f09` was corrected by R3 at `fa02295675dc4343430ae0a109722141e669bbf9`.
 
-Real `siteData.alertItems.urls` commonly contains root-relative paths. The current R2 implementation sends those raw strings directly to absolute-URL validation, so they are rejected and candidates fall back to the configured seed URL.
+Accepted behavior now includes:
 
-R3 must resolve a relative alert URL against the already allowlisted fetched page URL, then re-run the normal HTTPS/host/canonicalisation checks. No alert URL may be fetched in R3.
+- root-relative, same-host absolute, and HTTPS protocol-relative Home Affairs alert URL resolution against the fetched page;
+- reapplication of HTTPS/exact-host/canonicalisation checks after resolution;
+- no alert URL fetching;
+- explicit URL provenance kinds: `alert`, `seed`, `fetched_page`;
+- continued non-public candidate-only output and manual publication gate.
 
-R3 should also correct the generic candidate provenance-kind field so a fetched child/detail page is not mislabeled as seed provenance.
+Local validation recorded at R3: 184 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint retains the known 22 baseline diagnostics. The bounded live Home Affairs dry-run completed successfully with five structured candidates.
+
+Known non-blocking observation: the feed includes operational/navigation records as well as policy-like records. No legal-importance inference is performed.
