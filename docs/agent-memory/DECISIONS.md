@@ -339,3 +339,57 @@ It may use controlled live HTTP fetches only when explicitly invoked by the oper
 
 P11-003C must not modify `legal-service/`; it may inspect the existing official-source registry as design authority but must keep the Policy Intelligence discovery implementation isolated from answer-time legal retrieval.
 
+## D-028 — Home Affairs discovery uses structured site data, not generic page-link crawling
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+A live smoke against the configured Home Affairs Student 500 seed established that the page is a valid Home Affairs response but is a poor generic `listing_links` discovery surface.
+
+Observed evidence from the downloaded page:
+
+- decoded HTML size is approximately 1.43 MB;
+- ordinary same-host anchors are mostly the current page, homepage, SharePoint `FIXUPREDIRECT.ASPX` links, and conditions-of-use/navigation material;
+- the page embeds a large `<script id="siteData" type="application/json">` payload;
+- that payload contains structured `alertItems` records with fields such as title, content, category/type, URLs and update date.
+
+Therefore the Home Affairs discovery strategy should parse bounded structured `siteData.alertItems` evidence rather than treat normal `<a href>` links as policy candidates.
+
+This is a source-specific acquisition strategy. It does not change the human publication gate.
+
+## D-029 — Discovery response limits apply to decoded bodies and may be source-strategy specific
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+The discovery fetch boundary limits the decoded response body, not merely compressed network bytes. This is intentional because the safety boundary must also constrain decompression expansion.
+
+The prior 128 KB per-response limit is too small for the observed Home Affairs seed page, whose decoded HTML is approximately 1.43 MB.
+
+P11-003C-R2 may introduce a tightly bounded source/strategy-specific limit sufficient for the known Home Affairs structured seed, with an absolute ceiling around 2 MiB for that strategy, while retaining stricter limits for smaller sources where practical.
+
+Increasing the limit must not remove or weaken:
+
+- full-operation timeout;
+- total-run byte cap;
+- page-count/fan-out limits;
+- redirect revalidation;
+- DNS/private-network checks;
+- exact host allowlisting.
+
+## D-030 — Home Affairs alert dates remain raw candidate evidence
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+Fields such as Home Affairs `siteData.alertItems.updateDate` are discovery evidence only.
+
+They must not be automatically converted into:
+
+- legal effective dates;
+- commencement dates;
+- `PolicySourceStatus` values;
+- public publication status.
+
+Any later mapping into a production `PolicyEntry` remains a human review decision.
+

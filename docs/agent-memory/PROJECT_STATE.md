@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-09-19  
+**Updated:** 2026-09-20  
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -105,8 +105,13 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - P11-003B verified checkpoint: `081ef46dd040b6131d475750d0968c9f2e461bb2`.
 - Production policy registry remains intentionally empty until real records are manually verified and published.
 - Public Home/list/detail paths receive only server-produced public-safe projections; unpublished editorial content remains server-only.
-- Next executable work is **P11-003C — allowlisted official-source discovery into non-public candidates**.
-- P11-003C is operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
+- **P11-003C implementation checkpoint:** `07fa129677d94c9f2c24cac65e1e89859ee2b6d3`; verification remains pending.
+- P11-003C-R1 security hardening is currently present only in the local working tree and is not yet committed/pushed.
+- Deterministic R1 tests passed locally, including full-operation timeout and IPv4-mapped IPv6/private-network rejection.
+- A live Home Affairs smoke then exposed a source-strategy mismatch: the Student 500 page decodes to about 1.43 MB, exceeding the original 128 KB cap, and its ordinary same-host links are mostly navigation/SharePoint infrastructure rather than useful policy-update targets.
+- The same page contains structured `siteData.alertItems`, which is now the accepted Home Affairs discovery surface.
+- Next executable correction is **P11-003C-R2 — Home Affairs structured alert discovery + source-specific bounded fetch calibration**.
+- P11-003C remains operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 

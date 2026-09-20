@@ -19,6 +19,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 - P11-003A implementation checkpoint: `f7fa6363e4f2ee326306b20203692dd73e45cebd`
 - P11-003A provenance-hardening checkpoint: `4f232fe40161a7adad104bcbf6c382b846425936`
 - P11-003B verified checkpoint: `081ef46dd040b6131d475750d0968c9f2e461bb2`
+- P11-003C implementation checkpoint: `07fa129677d94c9f2c24cac65e1e89859ee2b6d3`
 - Phase 11 authority: `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`
 - public-content authority: `docs/product/CONTENT_POLICY.md`
 
@@ -32,7 +33,9 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-002B | V4-informed public-page visual refinement + responsive polish | VERIFIED |
 | P11-003A | Policy Intelligence UI + provenance-safe manual content model | VERIFIED |
 | P11-003B | Repository-backed manual curation + server-only publication boundary | VERIFIED |
-| P11-003C | Allowlisted official-source discovery into non-public candidates | PLANNED |
+| P11-003C | Allowlisted official-source discovery into non-public candidates | IMPLEMENTED — VERIFICATION PENDING |
+| P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | LOCAL WORKING TREE — REVIEW PENDING |
+| P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | PLANNED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | PLANNED |
 | P11-005 | Matter-centered Client Portal | PLANNED |
 | P11-006 | Lawyer Workspace continuity | PLANNED |
@@ -41,69 +44,60 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 
 ## Current active task
 
-Next executable Task Packet:
+Next executable correction:
 
-- `docs/agent-memory/tasks/P11-003C.md`
-- title: Allowlisted official-source discovery into non-public candidates
+- `docs/agent-memory/tasks/P11-003C-R2.md`
+- title: Home Affairs structured alert discovery + source-specific bounded fetch calibration
 - state: PLANNED
 
-## P11-003C objective
+## Evidence that triggered R2
 
-Build the first automation layer for Policy Intelligence without weakening the human publication gate.
+A live operator smoke against:
 
-The desired flow is:
+`https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/student-500`
+
+showed:
+
+- HTTP 200 and normal Home Affairs content;
+- compressed transfer around 239 KB;
+- decoded HTML around 1.43 MB;
+- original 128 KB decoded-body cap correctly rejected the response;
+- normal same-host anchors provide poor discovery precision;
+- the page embeds `siteData` JSON containing structured `alertItems`.
+
+Therefore R2 must not simply enlarge the cap and continue generic link crawling.
+
+## R2 direction
+
+For the configured Home Affairs source:
 
 ```text
-allowlisted official source
-        ->
-operator-run discovery
-        ->
-non-public candidate artifact
-        ->
-human verification / editorial curation
-        ->
-existing server-only registry
-        ->
-published public projection
+known allowlisted Home Affairs seed
+    ->
+bounded decoded-body fetch
+    ->
+extract <script id="siteData" type="application/json">
+    ->
+parse bounded siteData.alertItems
+    ->
+non-public discovery candidates
+    ->
+human review only
 ```
 
-P11-003C should establish:
+The Home Affairs strategy should use no generic link fan-out for policy discovery.
 
-- an internal discovery-source configuration grounded in official sources already recognized by repository authority;
-- a strict hostname/URL allowlist;
-- bounded fetch behavior with timeout/size/type limits;
-- deterministic parsing/normalization from local fixtures;
-- a non-public discovery-candidate schema;
-- canonical URL/content fingerprint/deduplication helpers;
-- an operator-run CLI/dry-run path;
-- no public route changes.
+The structured alert record is still raw discovery evidence. In particular, `updateDate` is not automatically a legal effective/commencement date.
 
-Discovery candidates are evidence for review, not legal conclusions and not public content.
+## Non-goals
 
-## Explicit non-goals
-
-P11-003C must not:
+R2 must not:
 
 - publish anything;
-- edit `MANUAL_POLICY_ENTRIES` automatically;
-- call an LLM;
-- generate Chinese/English policy analysis;
-- create lawyer commentary;
-- infer `in_force` / `proposed` unless explicit source metadata is being faithfully captured;
-- schedule background jobs;
-- create database tables;
+- write `MANUAL_POLICY_ENTRIES`;
+- add an LLM;
+- infer legal status/effect;
 - modify legal-service;
-- deploy AWS.
-
-## Stop conditions
-
-Stop and mark **DECISION REQUIRED** if P11-003C appears to require:
-
-- broad arbitrary web crawling/search;
-- a new source domain not already grounded in repository authority;
-- legal interpretation to classify a discovered page;
-- automatic promotion/publication;
-- database/schema migration;
-- scheduler/queue infrastructure;
-- runtime production writes;
-- legal-service/model/tool changes.
+- add DB/scheduler infrastructure;
+- broaden to arbitrary websites;
+- redesign the public Policy Intelligence UI.
