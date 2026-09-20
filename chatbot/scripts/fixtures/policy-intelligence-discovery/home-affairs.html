@@ -9,14 +9,30 @@
     {
       "alertItems": [
         {
-          "title": "Synthetic alert with an allowed URL",
-          "content": "Fixture-only alert content; not a current policy claim.",
+          "title": "Synthetic alert with a relative URL",
+          "content": "Fixture-only relative alert content; not a current policy claim.",
+          "type": "synthetic",
+          "category": "fixture",
+          "urls": ["/discovery-fixture/alert-one"],
+          "updateDate": "2026-09-01"
+        },
+        {
+          "title": "Synthetic alert with an absolute URL",
+          "content": "Fixture-only absolute alert URL handling.",
           "type": "synthetic",
           "category": "fixture",
           "urls": [
-            "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
+            "https://immi.homeaffairs.gov.au/discovery-fixture/alert-two"
           ],
-          "updateDate": "2026-09-01"
+          "updateDate": "2026-09-02"
+        },
+        {
+          "title": "Synthetic alert with a protocol-relative URL",
+          "content": "Fixture-only protocol-relative URL handling.",
+          "type": "synthetic",
+          "category": "fixture",
+          "urls": ["//immi.homeaffairs.gov.au/discovery-fixture/alert-three"],
+          "updateDate": "2026-09-03"
         },
         {
           "title": "Synthetic alert with an out-of-scope URL",
@@ -24,23 +40,21 @@
           "type": "synthetic",
           "category": "fixture",
           "urls": ["https://untrusted.example.invalid/not-allowed"],
-          "updateDate": "2026-09-02"
+          "updateDate": "2026-09-04"
         },
         {
           "title": "Synthetic alert without a URL",
           "content": "Fixture-only seed provenance fallback.",
           "type": "synthetic",
           "category": "fixture",
-          "updateDate": "2026-09-03"
+          "updateDate": "2026-09-05"
         },
         {
-          "title": "Synthetic alert with an allowed URL",
-          "content": "Fixture-only alert content; not a current policy claim.",
+          "title": "Synthetic alert with a relative URL",
+          "content": "Fixture-only relative alert content; not a current policy claim.",
           "type": "synthetic",
           "category": "fixture",
-          "urls": [
-            "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
-          ],
+          "urls": ["/discovery-fixture/alert-one"],
           "updateDate": "2026-09-01"
         }
       ]

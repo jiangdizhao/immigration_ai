@@ -79,7 +79,7 @@ export type DiscoveryCandidate = {
     alertType?: string;
     alertUpdateDate?: string;
     alertUrl?: string;
-    provenanceUrl: "alert" | "seed";
+    urlProvenance: "alert" | "seed" | "fetched_page";
   };
 };
 
@@ -668,6 +668,26 @@ export function parseListingLinks(
   return links;
 }
 
+export function resolveHomeAffairsAlertUrl(
+  rawUrl: string,
+  baseUrl: string,
+  source: PolicyDiscoverySource
+): string | undefined {
+  const trimmedUrl = rawUrl.trim();
+  if (!trimmedUrl) {
+    return undefined;
+  }
+  try {
+    const resolvedUrl = new URL(
+      decodeHtmlEntities(trimmedUrl),
+      baseUrl
+    ).toString();
+    return assertOfficialUrlAllowed(resolvedUrl, source);
+  } catch {
+    return undefined;
+  }
+}
+
 function parseTagAttributes(attributes: string): Record<string, string> {
   const parsed: Record<string, string> = {};
   for (const match of attributes.matchAll(
@@ -761,19 +781,23 @@ function candidateFromHomeAffairsAlert(
   const contentForFingerprint =
     normalizedContent || JSON.stringify(item, Object.keys(item).sort());
   let canonicalUrl = assertOfficialUrlAllowed(source.seedUrls[0], source);
-  let provenanceUrl: "alert" | "seed" = "seed";
+  let urlProvenance: "alert" | "seed" = "seed";
   let alertUrl: string | undefined;
   for (const rawUrl of alertUrlValues(item)) {
-    try {
-      alertUrl = assertOfficialUrlAllowed(rawUrl, source);
-      canonicalUrl = alertUrl;
-      provenanceUrl = "alert";
+    const resolvedUrl = resolveHomeAffairsAlertUrl(
+      rawUrl,
+      page.finalUrl,
+      source
+    );
+    if (resolvedUrl) {
+      alertUrl = resolvedUrl;
+      canonicalUrl = resolvedUrl;
+      urlProvenance = "alert";
       break;
-    } catch {
-      // Out-of-scope alert URLs are not candidate provenance and are never
-      // fetched. A valid alert URL is selected deterministically in source
-      // order; otherwise the configured seed remains the explicit source.
     }
+    // Out-of-scope or malformed alert URLs are not candidate provenance and
+    // are never fetched. A valid alert URL is selected deterministically in
+    // source order; otherwise the configured seed remains the explicit source.
   }
   const contentHash = fingerprintContent(
     `${canonicalUrl}\n${contentForFingerprint}`
@@ -800,7 +824,7 @@ function candidateFromHomeAffairsAlert(
       alertType: boundedRawMetadata(item.type),
       alertUpdateDate: boundedRawMetadata(item.updateDate),
       alertUrl,
-      provenanceUrl,
+      urlProvenance,
     },
   };
 }
@@ -885,6 +909,14 @@ export function candidateFromPage(
   const metadata = parsePageMetadata(page.body);
   const canonicalUrl = canonicalizeOfficialUrl(page.finalUrl);
   const contentHash = fingerprintContent(page.body);
+  const seedUrls = source.seedUrls.map((seedUrl) =>
+    assertOfficialUrlAllowed(seedUrl, source)
+  );
+  const urlProvenance: "seed" | "fetched_page" = seedUrls.includes(
+    canonicalizeOfficialUrl(page.requestedUrl)
+  )
+    ? "seed"
+    : "fetched_page";
   return {
     schemaVersion: DISCOVERY_CANDIDATE_SCHEMA,
     candidateId: stableCandidateId(source.id, canonicalUrl, contentHash),
@@ -905,7 +937,7 @@ export function candidateFromPage(
       redirectChain: page.redirectChain,
       titleSource: metadata.titleSource,
       dateSource: metadata.dateSource,
-      provenanceUrl: "seed",
+      urlProvenance,
     },
   };
 }

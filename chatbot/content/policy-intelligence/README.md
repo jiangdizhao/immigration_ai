@@ -36,9 +36,17 @@ pnpm policy:discover -- --source home-affairs-guidance --fixture synthetic-home-
 Home Affairs discovery fetches only its configured seed page. It extracts the
 `<script id="siteData" type="application/json">` payload, reads a bounded
 number of `alertItems`, and stops. It does not use ordinary page-link fan-out
-or fetch alert URLs. Alert URLs are retained only after the same HTTPS,
-allowlist, canonicalisation, and network-safety checks as the seed; an alert
+or fetch alert URLs. Alert URLs are first resolved against the fetched page's
+final URL, so root-relative and protocol-relative values can be handled
+without inventing a host. The resolved URL then passes the same HTTPS,
+allowlist, canonicalisation, and network-safety checks as the seed. An alert
 without a usable URL is explicitly tied to the configured seed instead.
+
+Candidate `sourceMetadata.urlProvenance` is a provenance kind, not a legal
+status: `alert` identifies a validated alert pointer, `seed` identifies an
+explicit seed fallback, and `fetched_page` identifies a generic listing,
+sitemap, or detail page that was actually fetched. Alert pointers are never
+followed during discovery.
 
 The command emits machine-readable candidate JSON to stdout and a concise
 summary to stderr. `--write` is an explicit local-only alternative; it writes

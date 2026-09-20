@@ -21,7 +21,8 @@
 - P11-002B: **VERIFIED**
 - P11-003A: **VERIFIED**
 - P11-003B: **VERIFIED**
-- P11-003C-R1/R2: **IMPLEMENTED AND PUSHED — R3 CORRECTION REQUIRED**
+- P11-003C-R1/R2: **IMPLEMENTED AND PUSHED**
+- P11-003C-R3: **IMPLEMENTED IN WORKING TREE — OWNER REVIEW PENDING**
 - P11-003C overall: **NOT YET VERIFIED**
 
 ## P11-003B accepted architecture
@@ -113,24 +114,42 @@ Recommended next action: owner/reviewer inspect the uncommitted diff, then manua
 The coding model must leave P11-003C changes uncommitted/unpushed. The owner will provide `git status --short` and `git diff --stat`; reviewer will then provide exact commit/push commands and inspect the GitHub diff after push.
 
 
-## Post-push R3 review finding
+## P11-003C-R3 correction
 
-GitHub review confirmed the main R1/R2 security and structured-discovery architecture, but P11-003C is not yet VERIFIED.
+R3 corrected the reviewed Home Affairs provenance defect without adding a discovery surface. P11-003C is not yet VERIFIED.
 
-The real uploaded Home Affairs `siteData.alertItems` payload shows that `urls` commonly contains root-relative paths such as:
+Home Affairs alert URLs are now resolved against `page.finalUrl` before the existing HTTPS, exact-host, canonicalisation, and network-safety boundary runs. Root-relative, same-host absolute, and HTTPS protocol-relative URLs are accepted when safe; malformed, HTTP, and out-of-scope URLs are ignored. Alert URLs remain provenance pointers and are never fetched.
 
-`/Visa-subsite/Pages/work/186-employer-nomination-scheme.aspx`
+The synthetic Home Affairs fixture now includes relative, same-host absolute, protocol-relative, out-of-scope, missing, and duplicate alert URLs. The candidate metadata field is now `sourceMetadata.urlProvenance` with explicit kinds:
 
-The current R2 helper passes each raw alert URL directly to `assertOfficialUrlAllowed()`, which requires an absolute URL. As a result, valid relative Home Affairs alert URLs are rejected and live candidates use seed fallback provenance even when a specific alert target exists.
+- `alert` — validated alert pointer;
+- `seed` — explicit fallback when no safe alert URL exists;
+- `fetched_page` — generic listing/sitemap/detail page that was actually fetched.
 
-Required correction:
+Changed files for R3:
 
-- resolve relative alert URLs against `page.finalUrl`;
-- then run the resolved absolute URL through the existing HTTPS/exact-host/canonicalisation boundary;
-- never fetch the alert URL in this phase;
-- retain seed fallback only when no usable URL exists;
-- add deterministic tests using root-relative, same-host absolute and out-of-scope absolute URLs.
+- `chatbot/scripts/policy-intelligence-discovery.ts`
+- `chatbot/lib/policy-intelligence-discovery.test.ts`
+- `chatbot/scripts/fixtures/policy-intelligence-discovery/home-affairs.html`
+- `chatbot/content/policy-intelligence/README.md`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
 
-A secondary provenance semantics issue should be corrected in the same narrow task: generic fetched detail/page candidates currently set `sourceMetadata.provenanceUrl` to `"seed"`, even when the candidate URL is a fetched child page. The provenance kind should truthfully distinguish a fetched page from an actual seed fallback.
+Validation:
 
-Next task: `docs/agent-memory/tasks/P11-003C-R3.md`.
+- `pnpm test:unit`: **184 passed, 0 failed, 0 skipped** outside the sandbox; all R1/R2 tests remain passing and the focused discovery file contains 15 passing tests.
+- `pnpm build`: **passed**.
+- Changed-file Biome: **passed**.
+- `git diff --check`: **passed**.
+- `pnpm lint`: repository-wide known baseline of **22 diagnostics**, with no new discovery-file diagnostics.
+
+R3 live Home Affairs dry-run: exit 0, runtime **787 ms**, 5 candidates. All five exposed specific resolved canonical URLs and `urlProvenance: "alert"` rather than the Student 500 seed:
+
+- `Subclass 186` -> `https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/186-employer-nomination-scheme.aspx`
+- `Skills in Demand 482 processing priorities` -> `https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/skills-in-demand-482-landing.aspx`
+- `Employer Sponsored Regional 494 processing priorities` -> `https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/494-skilled-employer-regional-landing.aspx`
+- `Discussion Paper: Reforming Australia's Settlement Grants Programs September 2026` -> `https://immi.homeaffairs.gov.au/settlement-services-subsite/Pages/SETS/overview.aspx`
+- `Form Banners - SharePoint Migration Project` -> `https://immi.homeaffairs.gov.au/form-listing/Pages/niv-eoi.aspx`
+
+No alert URL was fetched: the Home Affairs strategy still performs exactly one configured seed fetch, while deterministic tests record that the fetch target list contains only the seed URL. No publication, LLM, database, or `legal-service/` behavior changed.
+
+Unresolved question: the live feed still includes operational/navigation alerts alongside policy-like alerts; R3 intentionally preserves them as raw non-public candidates and performs no legal-importance or publication inference.

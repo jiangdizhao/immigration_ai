@@ -20,6 +20,7 @@ import {
   parseHomeAffairsAlertItems,
   parseListingLinks,
   parseSitemapLinks,
+  resolveHomeAffairsAlertUrl,
   stableCandidateId,
 } from "../scripts/policy-intelligence-discovery";
 import { validatePolicyEntries } from "./policy-intelligence";
@@ -235,10 +236,12 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     `${"x".repeat(1_400_000)}</body>`
   );
   let requestCount = 0;
+  const requestedUrls: string[] = [];
   const fetchOptions: DiscoveryFetchOptions = {
     lookupHost: publicLookup,
-    fetchImpl: () => {
+    fetchImpl: (input) => {
       requestCount += 1;
+      requestedUrls.push(String(input));
       return Promise.resolve(response(largeFixture));
     },
   };
@@ -246,11 +249,12 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     sourceId: source.id,
     now: () => "2026-09-20T00:00:00.000Z",
     fetchOptions,
-    limits: { maxCandidates: 5 },
+    limits: { maxCandidates: 10 },
   });
 
   assert.equal(requestCount, 1);
-  assert.equal(result.candidates.length, 3);
+  assert.deepEqual(requestedUrls, [source.seedUrls[0]]);
+  assert.equal(result.candidates.length, 5);
   assert.ok(largeFixture.length > 1_400_000);
   assert.ok(
     result.candidates.every(
@@ -263,13 +267,28 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     )
   );
   assert.equal(
+    result.candidates[0].canonicalUrl,
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
+  );
+  assert.equal(
     result.candidates[0].sourceMetadata.alertUpdateDate,
     "2026-09-01"
   );
   assert.equal(result.candidates[0].explicitSourceDate, undefined);
-  assert.equal(result.candidates[0].sourceMetadata.provenanceUrl, "alert");
-  assert.equal(result.candidates[1].sourceMetadata.provenanceUrl, "seed");
-  assert.equal(result.candidates[1].sourceMetadata.alertUrl, undefined);
+  assert.equal(result.candidates[0].sourceMetadata.urlProvenance, "alert");
+  assert.equal(
+    result.candidates[1].canonicalUrl,
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-two"
+  );
+  assert.equal(result.candidates[1].sourceMetadata.urlProvenance, "alert");
+  assert.equal(
+    result.candidates[2].canonicalUrl,
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-three"
+  );
+  assert.equal(result.candidates[2].sourceMetadata.urlProvenance, "alert");
+  assert.equal(result.candidates[3].sourceMetadata.urlProvenance, "seed");
+  assert.equal(result.candidates[3].sourceMetadata.alertUrl, undefined);
+  assert.equal(result.candidates[4].sourceMetadata.urlProvenance, "seed");
   assert.equal(result.candidates[0].sourceMetadata.alertCategory, "fixture");
   assert.equal(result.candidates[0].sourceMetadata.alertType, "synthetic");
   assert.equal(
@@ -284,7 +303,7 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
       ...fetchOptions,
       fetchImpl: () => Promise.resolve(response(fixture)),
     },
-    limits: { maxCandidates: 5 },
+    limits: { maxCandidates: 10 },
   });
   assert.deepEqual(
     result.candidates.map((candidate) => candidate.candidateId),
@@ -295,6 +314,56 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     1,
     "alert examination is bounded"
   );
+});
+
+test("Home Affairs alert URLs resolve safely without becoming fetch targets", () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const baseUrl = source.seedUrls[0];
+  assert.equal(
+    resolveHomeAffairsAlertUrl(
+      "/Visa-subsite/Pages/work/186-employer-nomination-scheme.aspx",
+      baseUrl,
+      source
+    ),
+    "https://immi.homeaffairs.gov.au/Visa-subsite/Pages/work/186-employer-nomination-scheme.aspx"
+  );
+  assert.equal(
+    resolveHomeAffairsAlertUrl(
+      "https://immi.homeaffairs.gov.au/absolute-alert",
+      baseUrl,
+      source
+    ),
+    "https://immi.homeaffairs.gov.au/absolute-alert"
+  );
+  assert.equal(
+    resolveHomeAffairsAlertUrl(
+      "//immi.homeaffairs.gov.au/protocol-relative-alert",
+      baseUrl,
+      source
+    ),
+    "https://immi.homeaffairs.gov.au/protocol-relative-alert"
+  );
+  assert.equal(
+    resolveHomeAffairsAlertUrl(
+      "//immi.homeaffairs.gov.au/http-base-is-not-accepted",
+      "http://immi.homeaffairs.gov.au/seed",
+      source
+    ),
+    undefined
+  );
+  assert.equal(
+    resolveHomeAffairsAlertUrl(
+      "https://untrusted.example.invalid/out-of-scope",
+      baseUrl,
+      source
+    ),
+    undefined
+  );
+  assert.equal(
+    resolveHomeAffairsAlertUrl("http://[invalid", baseUrl, source),
+    undefined
+  );
+  assert.equal(resolveHomeAffairsAlertUrl("", baseUrl, source), undefined);
 });
 
 test("Home Affairs decoded response cap is source-specific and hard-bounded", async () => {
@@ -388,6 +457,7 @@ test("local sitemap, listing, and detail fixtures parse without network access",
   assert.equal(parsed.discoveredTitle, "Synthetic official detail");
   assert.equal(parsed.explicitSourceDate, "2026-09-01");
   assert.match(parsed.preview ?? "", /Synthetic structural fixture/);
+  assert.equal(parsed.sourceMetadata.urlProvenance, "seed");
 });
 
 test("discovery is bounded, deduplicated, and produces non-public provenance candidates", async () => {
@@ -419,6 +489,10 @@ test("discovery is bounded, deduplicated, and produces non-public provenance can
 
   assert.equal(requestCount, 3);
   assert.equal(result.candidates.length, 3);
+  assert.deepEqual(
+    result.candidates.map((item) => item.sourceMetadata.urlProvenance),
+    ["seed", "fetched_page", "fetched_page"]
+  );
   for (const item of result.candidates) {
     assert.equal(item.schemaVersion, DISCOVERY_CANDIDATE_SCHEMA);
     assert.equal("sourceStatus" in item, false);
