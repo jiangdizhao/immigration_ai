@@ -4,6 +4,7 @@ out/
 .vercel/
 playwright-report/
 test-results/
+.local/policy-intelligence-candidates/
 
 .env
 .env.local

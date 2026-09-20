@@ -1,20 +1,69 @@
-# Manual Policy Intelligence Curation
+# Policy Intelligence Curation and Discovery
 
-This directory is the interim repository-backed editorial source for Policy
-Intelligence. It is intentionally empty until a real policy source has been
-verified and approved. The registry is server-only; do not import it from a
-client component.
+`registry.ts` is the server-only manual editorial registry. It remains empty
+until a real official source has been verified and a human has approved a
+typed `PolicyEntry`. Do not import it from a client component.
 
-Manual workflow:
+## Allowlisted discovery
 
-1. Verify the official source.
-2. Add or update a typed repository editorial entry.
-3. Start the entry as `draft` or `review_required`.
-4. Run the local validation and test commands.
-5. Have the lawyer/project owner review the source and analysis.
-6. Change `editorialStatus` to `published` only after approval.
-7. Inspect the Git diff.
-8. Commit and release through the normal project workflow.
+The operator-only discovery implementation is in
+`chatbot/scripts/policy-intelligence-discovery.ts`. Its initial configured
+source IDs are:
+
+- `home-affairs-guidance` — `immi.homeaffairs.gov.au`;
+- `federal-register-legislation` — `legislation.gov.au` and
+  `www.legislation.gov.au`;
+- `art-immigration-review` — `art.gov.au` and `www.art.gov.au`.
+
+These hosts and seed families are grounded in the existing read-only official
+source registry at `legal-service/app/services/official_source_registry.py`.
+The TypeScript discovery tool does not import or depend on that Python module.
+
+Run a bounded operator discovery dry-run with a configured source ID:
+
+```bash
+pnpm policy:discover -- --source home-affairs-guidance --dry-run
+```
+
+For deterministic local testing, use a structural fixture instead of the live
+network:
+
+```bash
+pnpm policy:discover -- --source home-affairs-guidance --fixture synthetic-listing --dry-run
+```
+
+The command emits machine-readable candidate JSON to stdout and a concise
+summary to stderr. `--write` is an explicit local-only alternative; it writes
+non-public artifacts under `.local/policy-intelligence-candidates/`, which is
+ignored by Git and never imported by the public application.
+
+Discovery is acquisition/provenance only. Candidates use the versioned
+`policy-intelligence.discovery-candidate.v1` contract and may contain the
+allowlisted source identity, canonical URL, discovered title/date, retrieval
+time, content type, bounded preview, fingerprint, HTTP metadata, and discovery
+strategy. A candidate is not a `PolicyEntry` and does not contain source legal
+status, AI analysis, bilingual policy copy, lawyer commentary, or publication
+state.
+
+The fetch boundary is HTTPS-only, exact-host allowlisted, manually redirect
+revalidated, DNS-checked against local/private/link-local addresses, timeout
+bounded, content-type constrained, and response-size bounded. There is no
+arbitrary URL mode, credential/cookie forwarding, generic crawler, scheduler,
+runtime website write, or LLM call.
+
+## Manual promotion workflow
+
+Discovery never writes `registry.ts` and has no candidate publication function.
+The only allowed handoff is:
+
+```text
+candidate
+  -> human verifies the official source
+  -> human manually authors/reviews a PolicyEntry
+  -> draft or review_required
+  -> human approval
+  -> published public projection
+```
 
 Source/legal status and editorial publication status are separate. A proposed
 policy remains legally `proposed` even if an approved editorial explanation is
