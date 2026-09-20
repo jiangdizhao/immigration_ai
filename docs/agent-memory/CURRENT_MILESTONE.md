@@ -34,8 +34,9 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003A | Policy Intelligence UI + provenance-safe manual content model | VERIFIED |
 | P11-003B | Repository-backed manual curation + server-only publication boundary | VERIFIED |
 | P11-003C | Allowlisted official-source discovery into non-public candidates | IMPLEMENTED — VERIFICATION PENDING |
-| P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | LOCAL WORKING TREE — REVIEW PENDING |
-| P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | PLANNED |
+| P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | IMPLEMENTED |
+| P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | IMPLEMENTED |
+| P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | PLANNED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | PLANNED |
 | P11-005 | Matter-centered Client Portal | PLANNED |
 | P11-006 | Lawyer Workspace continuity | PLANNED |
@@ -46,8 +47,8 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 
 Next executable correction:
 
-- `docs/agent-memory/tasks/P11-003C-R2.md`
-- title: Home Affairs structured alert discovery + source-specific bounded fetch calibration
+- `docs/agent-memory/tasks/P11-003C-R3.md`
+- title: Relative Home Affairs alert URL resolution + provenance-kind correction
 - state: PLANNED
 
 ## Evidence that triggered R2
@@ -101,3 +102,14 @@ R2 must not:
 - add DB/scheduler infrastructure;
 - broaden to arbitrary websites;
 - redesign the public Policy Intelligence UI.
+
+
+## Post-R2 review finding
+
+The R1+R2 checkpoint `009e7f964f86bd6b755d4fe5ded82c922ea48f09` passed its deterministic and live smoke validations, but GitHub/source review of the real Home Affairs payload exposed a provenance-resolution defect.
+
+Real `siteData.alertItems.urls` commonly contains root-relative paths. The current R2 implementation sends those raw strings directly to absolute-URL validation, so they are rejected and candidates fall back to the configured seed URL.
+
+R3 must resolve a relative alert URL against the already allowlisted fetched page URL, then re-run the normal HTTPS/host/canonicalisation checks. No alert URL may be fetched in R3.
+
+R3 should also correct the generic candidate provenance-kind field so a fetched child/detail page is not mislabeled as seed provenance.

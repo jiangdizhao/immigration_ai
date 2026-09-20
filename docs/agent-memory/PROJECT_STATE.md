@@ -106,11 +106,11 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Production policy registry remains intentionally empty until real records are manually verified and published.
 - Public Home/list/detail paths receive only server-produced public-safe projections; unpublished editorial content remains server-only.
 - **P11-003C implementation checkpoint:** `07fa129677d94c9f2c24cac65e1e89859ee2b6d3`; verification remains pending.
-- P11-003C-R1 security hardening is currently present only in the local working tree and is not yet committed/pushed.
-- Deterministic R1 tests passed locally, including full-operation timeout and IPv4-mapped IPv6/private-network rejection.
-- A live Home Affairs smoke then exposed a source-strategy mismatch: the Student 500 page decodes to about 1.43 MB, exceeding the original 128 KB cap, and its ordinary same-host links are mostly navigation/SharePoint infrastructure rather than useful policy-update targets.
-- The same page contains structured `siteData.alertItems`, which is now the accepted Home Affairs discovery surface.
-- Next executable correction is **P11-003C-R2 — Home Affairs structured alert discovery + source-specific bounded fetch calibration**.
+- **P11-003C R1+R2 checkpoint:** `009e7f964f86bd6b755d4fe5ded82c922ea48f09`; security hardening and Home Affairs structured-alert discovery are pushed, but verification remains pending.
+- R1 deterministic tests cover full-operation timeout and IPv4-mapped IPv6/private-network rejection.
+- R2 successfully uses the Home Affairs `siteData.alertItems` structured surface with a one-page 2 MiB decoded-body ceiling and no alert-link crawling.
+- Post-push review found one provenance defect: real Home Affairs `alertItems.urls` are commonly root-relative paths, while the current candidate builder accepts only already-absolute URLs. Live candidates therefore fall back to the seed URL even when a usable alert URL exists.
+- Next executable correction is **P11-003C-R3 — relative alert URL resolution + provenance-kind correction**.
 - P11-003C remains operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.

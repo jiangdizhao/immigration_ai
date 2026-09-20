@@ -393,3 +393,20 @@ They must not be automatically converted into:
 
 Any later mapping into a production `PolicyEntry` remains a human review decision.
 
+## D-031 — Home Affairs relative alert URLs are valid provenance after safe resolution
+
+**Date:** 2026-09-20  
+**Status:** ACCEPTED
+
+Review of the real Home Affairs `siteData.alertItems` payload showed that `alertItems.urls` commonly contains root-relative paths such as `/Visa-subsite/Pages/work/...`, not absolute URLs.
+
+For Home Affairs structured discovery:
+
+- a relative alert URL may be resolved against the already allowlisted fetched Home Affairs page URL;
+- the resolved absolute URL must then pass the same HTTPS, exact-host allowlist and canonicalisation checks;
+- out-of-scope absolute or resolved URLs remain rejected;
+- alert URLs remain provenance pointers only and are not fetched in P11-003C;
+- seed fallback is used only when no usable alert URL remains after safe resolution.
+
+Generic fetched-page provenance must not be mislabeled as seed provenance.
+

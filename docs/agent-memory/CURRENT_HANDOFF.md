@@ -21,7 +21,8 @@
 - P11-002B: **VERIFIED**
 - P11-003A: **VERIFIED**
 - P11-003B: **VERIFIED**
-- P11-003C-R2: **IMPLEMENTED IN WORKING TREE — OWNER REVIEW PENDING**
+- P11-003C-R1/R2: **IMPLEMENTED AND PUSHED — R3 CORRECTION REQUIRED**
+- P11-003C overall: **NOT YET VERIFIED**
 
 ## P11-003B accepted architecture
 
@@ -49,7 +50,7 @@ No DB, admin-write API, crawler, scheduler, LLM summariser, legal-service change
 
 ## P11-003C + R1 + R2 implementation
 
-P11-003C, its R1 security correction, and R2 structured Home Affairs strategy are implemented in the working tree and remain uncommitted/unpushed. The operator-only discovery path is separate from the public application:
+P11-003C, its R1 security correction, and R2 structured Home Affairs strategy are pushed at `009e7f964f86bd6b755d4fe5ded82c922ea48f09`. The operator-only discovery path is separate from the public application:
 
 ```text
 allowlisted official source
@@ -110,3 +111,26 @@ Recommended next action: owner/reviewer inspect the uncommitted diff, then manua
 ## Review rule
 
 The coding model must leave P11-003C changes uncommitted/unpushed. The owner will provide `git status --short` and `git diff --stat`; reviewer will then provide exact commit/push commands and inspect the GitHub diff after push.
+
+
+## Post-push R3 review finding
+
+GitHub review confirmed the main R1/R2 security and structured-discovery architecture, but P11-003C is not yet VERIFIED.
+
+The real uploaded Home Affairs `siteData.alertItems` payload shows that `urls` commonly contains root-relative paths such as:
+
+`/Visa-subsite/Pages/work/186-employer-nomination-scheme.aspx`
+
+The current R2 helper passes each raw alert URL directly to `assertOfficialUrlAllowed()`, which requires an absolute URL. As a result, valid relative Home Affairs alert URLs are rejected and live candidates use seed fallback provenance even when a specific alert target exists.
+
+Required correction:
+
+- resolve relative alert URLs against `page.finalUrl`;
+- then run the resolved absolute URL through the existing HTTPS/exact-host/canonicalisation boundary;
+- never fetch the alert URL in this phase;
+- retain seed fallback only when no usable URL exists;
+- add deterministic tests using root-relative, same-host absolute and out-of-scope absolute URLs.
+
+A secondary provenance semantics issue should be corrected in the same narrow task: generic fetched detail/page candidates currently set `sourceMetadata.provenanceUrl` to `"seed"`, even when the candidate URL is a fetched child page. The provenance kind should truthfully distinguish a fetched page from an actual seed fallback.
+
+Next task: `docs/agent-memory/tasks/P11-003C-R3.md`.
