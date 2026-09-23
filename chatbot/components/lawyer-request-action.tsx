@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getWorkspaceCopy } from "@/lib/workspace-copy";
+import { useSiteLocale } from "./site-locale-provider";
 
 type AccessState = "loading" | "unauthenticated" | "upgrade" | "allowed";
 
@@ -14,6 +16,8 @@ export function LawyerRequestAction({
   assistantMessageId: string;
   answerPreview: string;
 }) {
+  const { locale } = useSiteLocale();
+  const copy = getWorkspaceCopy(locale).lawyerRequest;
   const [accessState, setAccessState] = useState<AccessState>("loading");
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -84,9 +88,9 @@ export function LawyerRequestAction({
   if (submitted) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        Your lawyer review request has been submitted. View its status in{" "}
+        {copy.submitted}{" "}
         <Link className="font-semibold underline" href="/lawyer-requests">
-          Lawyer requests
+          {copy.viewStatus}
         </Link>
         .
       </div>
@@ -101,9 +105,9 @@ export function LawyerRequestAction({
     return (
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
         <Link className="font-semibold text-sky-800 underline" href="/login">
-          Sign in
-        </Link>{" "}
-        to ask a lawyer to review this answer.
+          {copy.signIn}
+        </Link>
+        {copy.toReview}
       </div>
     );
   }
@@ -112,9 +116,9 @@ export function LawyerRequestAction({
     return (
       <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
         <Link className="font-semibold underline" href="/vip">
-          Upgrade to VIP
-        </Link>{" "}
-        to request a human lawyer review of this answer.
+          {copy.upgrade}
+        </Link>
+        {copy.toAskReview}
       </div>
     );
   }
@@ -127,23 +131,23 @@ export function LawyerRequestAction({
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        Ask a lawyer to review this answer
+        {copy.askReview}
       </button>
       {open ? (
         <div className="mt-3 space-y-3">
           <p className="rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-600">
-            The lawyer will receive the saved question, answer, visible context,
-            and allowlisted evidence from this conversation.
+            {copy.details}
             <br />
             <span className="text-slate-500">
-              Answer preview: {answerPreview.slice(0, 240)}
+              {copy.answerPreview}
+              {answerPreview.slice(0, 240)}
             </span>
           </p>
           <textarea
             className="min-h-20 w-full rounded-xl border border-sky-200 bg-white p-3 text-sm outline-none focus:border-sky-500"
             maxLength={4000}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Optional note for the lawyer"
+            placeholder={copy.optionalNote}
             value={note}
           />
           {error ? <p className="text-red-700">{error}</p> : null}
@@ -153,7 +157,7 @@ export function LawyerRequestAction({
             onClick={submit}
             type="button"
           >
-            {submitting ? "Submitting..." : "Submit review request"}
+            {submitting ? copy.submitting : copy.submit}
           </button>
         </div>
       ) : null}

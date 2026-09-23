@@ -88,6 +88,7 @@ export function GuidedIntakeCard({
     return (
       <ConsultationEscalationCard
         onBookConsultation={onBookConsultation}
+        responseLanguage={responseLanguage}
         warnings={interactionPlan.warnings}
       />
     );

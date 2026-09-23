@@ -177,3 +177,46 @@ P11-004 Stage 1 should change presentation/localized copy around the existing co
 P11-004 Stage 2 will remain inside the same Task Packet and will be triggered only after Stage 1 Git/source review plus owner browser screenshots.
 
 Next executable packet: `docs/agent-memory/tasks/P11-004.md`, Stage 1 only.
+
+## P11-004 Stage 1 implementation — 2026-09-24
+
+**Scope:** Stage 1 only. P11-004 remains **IN PROGRESS**; Stage 2 has not started and P11-004 is not VERIFIED.
+
+The `/ai-workspace` route now reaches the operational workspace shortly after the shared `SiteHeader`. The page-level promotional hero was removed. The answer mode control is a compact bilingual toolbar, and the existing workspace controller is presented as three regions: conversation/history, active consultation, and matter/source/human-service context. At narrower widths, the consultation remains first and the history/context regions flow below it; desktop uses three columns.
+
+Static workspace copy is centralized in `chatbot/lib/workspace-copy.ts` as `Record<SiteLocale, WorkspaceCopy>` and read through the existing `SiteLocaleProvider`. Chinese is the default through the existing site locale. English switching changes workspace chrome, mode labels, history, quick questions, composer, facts, sources, and lawyer-request UI. Assistant answer markdown, research status, guided-intake prompts, and processing progress continue to follow response/question language; site locale does not feed answer requests or choose answer language. Quick questions remain generic, have no outcome guarantees, and still call `submitMessage(question)`.
+
+The presentation changes retain the existing controller paths and payload semantics: conversation list/create/reopen endpoints; URL `chatId` and legal `matterId`; `widgetRouteForAssistantMode(assistantMode)`; server-backed mode access, disabled states and `ASSISTANT_MODE_STORAGE_KEY`; political submission evaluation, `sanitizePoliticalHistory()` and blocked-turn cleanup; current and merged intake facts; persisted assistant message IDs for `LawyerRequestAction`; citations, compact sources, research status, typewriter rendering, progress, errors, auto-scroll and debug output. Stable workspace input/message/send test IDs remain. No backend, schema, scheduling, legal-reasoning, provider, Phase-6, billing, or ReasoningBank work was performed.
+
+The appointment placeholder is labeled as planned and does not claim availability or create a booking. The existing lawyer-review request action remains available with its entitlement check and request payload unchanged. AI confidence is now labeled as an AI signal and explicitly distinguished from lawyer advice/legal certainty.
+
+Changed files:
+
+- `chatbot/app/(chat)/ai-workspace/page.tsx`
+- `chatbot/components/consultation-escalation-card.tsx`
+- `chatbot/components/guided-intake-card.tsx`
+- `chatbot/components/immigration-ai-workspace.tsx`
+- `chatbot/components/lawyer-request-action.tsx`
+- `chatbot/components/premium-answer-mode-workspace.tsx`
+- `chatbot/lib/workspace-copy.ts`
+- `chatbot/lib/workspace-copy.test.ts`
+- `chatbot/package.json`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+The V4 reference was inspected at `jiangdizhao/immigration_temporal_ui@8abbba2d6b94e7fb31048447b9831aaac6a6b029`, including the workspace composition and design system. Its visual direction informed the compact, dense workspace and semantic AI/human distinction. No mock facts, credentials, prototype behavior, or Vite code were copied.
+
+Validation:
+
+- `pnpm test:unit`: **187 passed, 0 failed, 0 skipped** (includes 3 workspace-copy tests).
+- `pnpm build`: **passed** on the final JSX.
+- `pnpm lint`: **failed with the existing 22 repository diagnostics**; no changed-file diagnostics were reported by focused Biome.
+- Changed-file `pnpm exec biome check`: **passed** for all changed frontend source, test, and package files.
+- `git diff --check`: **passed**.
+- Browser smoke: **attempted but blocked before the workspace mounted**. The first guest-auth redirect returned Auth.js `UntrustedHost` for `localhost:3000`; retrying with process-only trusted-host handling entered a redirect loop. No conversation API or answer-provider request was reached, and no screenshot was captured. The answer endpoint had been planned as a stub so no paid provider would be called. Owner screenshots are required before Stage 2.
+
+Known Stage 1 limits / owner review:
+
+- Please review Chinese-default and English-switched screenshots at desktop and narrow/mobile widths, especially the long consultation column and side-region order.
+- Conversation creation/reopen, mode access states, locale switching and message submission were not exercised because guest authentication did not complete. They were preserved by source inspection and compilation.
+- Final responsive/accessibility acceptance and visual polish remain Stage 2 / P11-008 work.
+- No owner product decision is currently required; screenshot review is the gate before starting Stage 2.

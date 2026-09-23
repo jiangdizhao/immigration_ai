@@ -6,18 +6,25 @@ import { Button } from "@/components/ui/button";
 type Props = {
   warnings?: string[] | null;
   onBookConsultation?: () => void;
+  responseLanguage?: string | null;
 };
 
 export function ConsultationEscalationCard({
   warnings,
   onBookConsultation,
+  responseLanguage,
 }: Props) {
+  const zh = (responseLanguage ?? "").toLowerCase().startsWith("zh");
   return (
     <Alert className="border-amber-300/60 bg-amber-50/60">
-      <AlertTitle>Lawyer review recommended</AlertTitle>
+      <AlertTitle>
+        {zh ? "建议由律师审阅" : "Lawyer review recommended"}
+      </AlertTitle>
       <AlertDescription className="mt-2 space-y-3">
         <p className="text-sm">
-          This may depend on key dates, current visa status, and documents.
+          {zh
+            ? "此事项可能取决于关键日期、当前签证状态和相关材料。"
+            : "This may depend on key dates, current visa status, and documents."}
         </p>
 
         {warnings?.length ? (
@@ -29,7 +36,7 @@ export function ConsultationEscalationCard({
         ) : null}
 
         <Button onClick={onBookConsultation} size="sm">
-          Book a consultation
+          {zh ? "预约流程筹备中" : "Appointment workflow planned"}
         </Button>
       </AlertDescription>
     </Alert>

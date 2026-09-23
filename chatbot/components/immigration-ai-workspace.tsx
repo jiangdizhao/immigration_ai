@@ -1,17 +1,11 @@
 "use client";
 
 import {
-  ArrowRight,
   Bot,
   CalendarDays,
-  ChevronRight,
   Clock3,
-  ExternalLink,
-  FileText,
   Loader2,
-  MessageSquareText,
   Send,
-  ShieldCheck,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -31,6 +25,7 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import {
   AssistantRichMarkdown,
   hasTerminalReferenceSection,
@@ -45,60 +40,15 @@ import type {
   WidgetRouteResponse,
 } from "./guided-intake-types";
 import { LawyerRequestAction } from "./lawyer-request-action";
+import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
-import { Progress } from "./ui/progress";
 import { Textarea } from "./ui/textarea";
 
 const TYPEWRITER_TICK_MS = 38;
 const TYPEWRITER_WORDS_PER_TICK = 3;
 const SHOW_WORKSPACE_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
-
-const quickQuestions = [
-  "I am 36 and finished a master by coursework. Can I still apply for a 485 visa?",
-  "My student visa was refused. What should I do next?",
-  "Can I still apply for review?",
-  "Can I leave Australia and come back if I only hold a bridging visa?",
-  "What does visa condition 8501 mean?",
-  "I want to book a lawyer consultation.",
-];
-
-const processSteps = [
-  {
-    icon: MessageSquareText,
-    title: "Ask your question",
-    text: "Start with a plain-English migration question or choose a suggested scenario.",
-  },
-  {
-    icon: FileText,
-    title: "Clarify key facts",
-    text: "The assistant asks one decisive follow-up at a time instead of exposing backend state.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Escalate safely",
-    text: "Urgent or case-specific issues are routed toward a real lawyer consultation.",
-  },
-];
-
-const FACT_DISPLAY_LABELS: Record<string, string> = {
-  completion_date: "course completion date",
-  qualification_level: "qualification level",
-  course_cricos_registered: "CRICOS course status",
-  australian_study_requirement_met: "Australian Study Requirement status",
-  first_485_or_subsequent: "first/subsequent 485 status",
-  current_visa: "current visa/status",
-  current_location: "current location",
-  application_timing: "application timing",
-  refusal_notice_available: "refusal notice availability",
-  notification_date: "notification date",
-  onshore_offshore: "location at decision",
-  refusal_reason_if_known: "refusal reason",
-  age: "age",
-  qualification: "qualification",
-  visa_subclass: "visa subclass",
-};
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -130,18 +80,27 @@ function buildGuidedIntakeSummary(draftFacts: IntakeFacts) {
   return `Guided intake update:\n${lines.join("\n")}`;
 }
 
-function buildGuidedIntakeDisplaySummary(draftFacts: IntakeFacts) {
+function buildGuidedIntakeDisplaySummary(
+  draftFacts: IntakeFacts,
+  copy: ReturnType<typeof getWorkspaceCopy>,
+  locale: "zh-CN" | "en"
+) {
   const populatedEntries = Object.entries(draftFacts).filter(
     ([, value]) => value !== null && value !== undefined && value !== ""
   );
 
   if (!populatedEntries.length) {
-    return "I updated the intake details.";
+    return locale === "zh-CN"
+      ? "我已更新咨询信息。"
+      : "I updated the intake details.";
   }
 
   const labels = populatedEntries.map(
-    ([key]) => FACT_DISPLAY_LABELS[key] ?? key.replaceAll("_", " ")
+    ([key]) => copy.factLabels[key] ?? key.replaceAll("_", " ")
   );
+  if (locale === "zh-CN") {
+    return `我已更新以下信息：${labels.join("、")}。`;
+  }
   if (labels.length === 1) {
     return `I updated my ${labels[0]}.`;
   }
@@ -170,45 +129,57 @@ function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
   return Array.from(new Set(fallback));
 }
 
-function formatKey(value?: string | null) {
+function formatKey(
+  value: string | null | undefined,
+  copy: ReturnType<typeof getWorkspaceCopy>
+) {
   if (!value) {
-    return "Not classified yet";
+    return copy.answerValues.not_classified_yet;
   }
-  return value.replaceAll("_", " ");
+  return copy.answerValues[value] ?? value.replaceAll("_", " ");
 }
 
 function formatConversationUpdatedAt(
-  updatedAt?: string | null,
-  createdAt?: string | null
+  updatedAt: string | null | undefined,
+  createdAt: string | null | undefined,
+  locale: "zh-CN" | "en",
+  unavailable: string
 ) {
   const value = updatedAt ?? createdAt;
   if (!value) {
-    return "Updated time unavailable";
+    return unavailable;
   }
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return "Updated time unavailable";
+    return unavailable;
   }
 
-  return `Updated ${new Intl.DateTimeFormat("en-AU", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed)} UTC`;
+  const formatted = new Intl.DateTimeFormat(
+    locale === "zh-CN" ? "zh-CN" : "en-AU",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }
+  ).format(parsed);
+  return locale === "zh-CN"
+    ? `更新于 ${formatted} UTC`
+    : `Updated ${formatted} UTC`;
 }
 
-function statusText(status: "ready" | "submitted" | "typing") {
-  if (status === "submitted") {
-    return "Checking sources";
-  }
-  if (status === "typing") {
-    return "Drafting answer";
-  }
-  return "Ready";
+function statusText(
+  status: "ready" | "submitted" | "typing",
+  copy: ReturnType<typeof getWorkspaceCopy>
+) {
+  return status === "submitted"
+    ? copy.status.submitted
+    : status === "typing"
+      ? copy.status.typing
+      : copy.status.ready;
 }
 
-function confidencePercent(confidence?: string | null) {
+function _confidencePercent(confidence?: string | null) {
   if (confidence === "high") {
     return 92;
   }
@@ -221,12 +192,15 @@ function confidencePercent(confidence?: string | null) {
   return 18;
 }
 
-function valuePreview(value: string | number | boolean | null | undefined) {
+function valuePreview(
+  value: string | number | boolean | null | undefined,
+  locale: "zh-CN" | "en"
+) {
   if (value === true) {
-    return "Yes";
+    return locale === "zh-CN" ? "是" : "Yes";
   }
   if (value === false) {
-    return "No";
+    return locale === "zh-CN" ? "否" : "No";
   }
   if (value === null || value === undefined || value === "") {
     return "—";
@@ -489,6 +463,9 @@ export function ImmigrationAIWorkspace({
 }: {
   assistantMode?: AssistantMode;
 }) {
+  const { locale } = useSiteLocale();
+  const copy = getWorkspaceCopy(locale);
+  const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
@@ -900,7 +877,11 @@ export function ImmigrationAIWorkspace({
 
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
-    const visibleText = buildGuidedIntakeDisplaySummary(draftFacts);
+    const visibleText = buildGuidedIntakeDisplaySummary(
+      draftFacts,
+      copy,
+      locale
+    );
 
     const visibleUserMessage: WidgetMessage = {
       id: generateUUID(),
@@ -967,9 +948,11 @@ export function ImmigrationAIWorkspace({
       setSubmittedAt(null);
     }
   };
-  const handleBookConsultation = () => {
+  const handleBookConsultation = (responseLanguage?: string | null) => {
     toast.info(
-      "Booking flow placeholder. Connect this to your lawyer's calendar or booking page next."
+      isZhLanguage(responseLanguage)
+        ? "预约流程将在后续阶段接入。"
+        : "Appointment booking will be added in a later phase."
     );
   };
 
@@ -984,246 +967,198 @@ export function ImmigrationAIWorkspace({
 
   return (
     <section
-      className="relative mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"
+      className="mx-auto w-full max-w-[1600px] px-3 pb-4 pt-3 sm:px-6 lg:px-8"
       id="ai-workspace"
     >
-      <div className="pointer-events-none absolute inset-0 -z-10 rounded-[48px] bg-[radial-gradient(circle_at_18%_20%,rgba(125,211,252,0.28),transparent_32%),radial-gradient(circle_at_84%_12%,rgba(168,85,247,0.25),transparent_30%),linear-gradient(135deg,#001736_0%,#002b5b_48%,#0f172a_100%)]" />
-
-      <div className="mb-7 flex flex-col justify-between gap-5 px-2 text-white md:flex-row md:items-end">
-        <div className="max-w-3xl">
-          <Badge
-            className="mb-4 rounded-full border-white/15 bg-white/10 px-4 py-1.5 text-white hover:bg-white/10"
-            variant="outline"
-          >
-            <Sparkles className="mr-2 size-3.5 text-cyan-200" />
-            AI-powered first contact · Lawyer handoff ready
-          </Badge>
-          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-            Ask the AI Legal Desk in a full workspace, not a tiny chat bubble.
-          </h2>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-            This central workspace follows the Stitch template direction:
-            premium legal-tech branding, rich context panels, guided intake,
-            compact sources, and a clear consultation path.
-          </p>
-        </div>
-
-        <div className="grid min-w-[220px] gap-2 rounded-3xl border border-white/10 bg-white/10 p-4 text-sm text-white shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-300">Assistant status</span>
-            <span className="inline-flex items-center gap-2 font-medium">
-              <span className="size-2 rounded-full bg-emerald-300" />
-              {statusText(status)}
-            </span>
+      <header className="mb-3 flex flex-col gap-3 rounded-2xl bg-[#001736] px-4 py-3 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-cyan-200">
+            <Bot className="size-4" />
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-300">Conversation</span>
-            <span className="font-mono text-xs text-cyan-100">
-              {conversationId ? conversationId.slice(0, 8) : "loading"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-300">Matter</span>
-            <span className="font-mono text-xs text-cyan-100">
-              {matterId ? matterId.slice(0, 8) : "none yet"}
-            </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold">
+              {copy.identity.title}
+            </h1>
+            <p className="truncate text-xs text-slate-300">
+              {copy.identity.subtitle}
+            </p>
           </div>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-200">
+          <span aria-live="polite" className="inline-flex items-center gap-2">
+            <span className="size-2 rounded-full bg-emerald-300" />
+            <span>
+              {copy.status.label} · {statusText(status, copy)}
+            </span>
+          </span>
+          <span>
+            {copy.history.chat}{" "}
+            <span className="font-mono text-cyan-100">
+              {conversationId
+                ? conversationId.slice(0, 8)
+                : copy.status.loading}
+            </span>
+          </span>
+          <span>
+            {copy.history.matter}{" "}
+            <span className="font-mono text-cyan-100">
+              {matterId ? matterId.slice(0, 8) : copy.status.noMatter}
+            </span>
+          </span>
+        </div>
+      </header>
 
-      <div className="grid min-w-0 h-[calc(100vh-170px)] min-h-[680px] max-h-[860px] overflow-hidden rounded-[36px] border border-white/15 bg-white/95 shadow-[0_32px_120px_-32px_rgba(0,0,0,0.65)] backdrop-blur-xl lg:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <aside className="hidden min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50/90 p-5 lg:block">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-2xl bg-[#001736] p-2 text-white">
-              <Bot className="size-5" />
-            </div>
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:h-[calc(100dvh-176px)] xl:min-h-[620px] xl:max-h-[860px] xl:grid-cols-[250px_minmax(0,1fr)_290px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
+        <aside className="order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="font-semibold text-slate-950">Sovereign Nexus AI</p>
-              <p className="text-xs text-slate-500">
-                Migration intake workspace
+              <h2 className="text-sm font-semibold text-slate-950">
+                {copy.history.title}
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                {copy.history.quickQuestions}
               </p>
             </div>
+            <button
+              className="shrink-0 rounded-xl bg-[#001736] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
+              disabled={status !== "ready" || conversationLoading}
+              onClick={() => {
+                createConversation().catch((conversationError) => {
+                  const message =
+                    conversationError instanceof Error
+                      ? conversationError.message
+                      : "Unable to create a new conversation.";
+                  toast.error(message);
+                });
+              }}
+              type="button"
+            >
+              + {copy.history.newConversation}
+            </button>
           </div>
 
-          <div className="mb-6 space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Conversations
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Start a clean matter or reopen an earlier test conversation.
-                </p>
-              </div>
+          <div className="space-y-2 xl:max-h-none xl:overflow-visible">
+            {conversationLoading ? (
+              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+                {copy.history.loading}
+              </p>
+            ) : null}
+            {conversations.map((conversation) => (
               <button
-                className="flex w-full items-center justify-center rounded-2xl bg-[#001736] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#002b5b] disabled:opacity-50"
+                className={cn(
+                  "w-full rounded-xl p-3 text-left text-xs leading-5 transition",
+                  conversation.chatId === conversationId
+                    ? "bg-[#001736] text-white"
+                    : "bg-white text-slate-700 hover:bg-slate-100"
+                )}
                 disabled={status !== "ready" || conversationLoading}
-                onClick={() => {
-                  createConversation().catch((conversationError) => {
-                    const message =
-                      conversationError instanceof Error
-                        ? conversationError.message
-                        : "Unable to create a new conversation.";
-                    toast.error(message);
-                  });
-                }}
+                key={conversation.chatId}
+                onClick={() => loadConversation(conversation.chatId)}
                 type="button"
               >
-                + New conversation
-              </button>
-            </div>
-
-            <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-              {conversationLoading ? (
-                <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
-                  Loading conversations...
-                </p>
-              ) : null}
-              {conversations.map((conversation) => (
-                <button
-                  className={cn(
-                    "w-full rounded-2xl border p-3 text-left text-xs leading-5 shadow-sm transition",
-                    conversation.chatId === conversationId
-                      ? "border-[#001736] bg-[#001736] text-white"
-                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-[#002b5b]/40 hover:bg-white"
+                <span className="block truncate font-semibold">
+                  {conversation.title || copy.history.unnamed}
+                </span>
+                <span className="mt-1 block text-[11px] opacity-75">
+                  {formatConversationUpdatedAt(
+                    conversation.updatedAt,
+                    conversation.createdAt,
+                    locale,
+                    copy.history.updatedUnavailable
                   )}
-                  disabled={status !== "ready" || conversationLoading}
-                  key={conversation.chatId}
-                  onClick={() => loadConversation(conversation.chatId)}
-                  type="button"
-                >
-                  <span className="block truncate font-semibold">
-                    {conversation.title || "Immigration conversation"}
-                  </span>
-                  <span className="mt-1 block text-[11px] opacity-75">
-                    {formatConversationUpdatedAt(
-                      conversation.updatedAt,
-                      conversation.createdAt
-                    )}
-                  </span>
-                  <span className="mt-1 block font-mono text-[11px] opacity-75">
-                    chat {conversation.chatId.slice(0, 8)} · matter{" "}
-                    {conversation.legalMatterId
-                      ? conversation.legalMatterId.slice(0, 8)
-                      : "none yet"}
-                  </span>
-                </button>
-              ))}
-              {!conversationLoading && conversations.length === 0 ? (
-                <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
-                  No conversations yet.
-                </p>
-              ) : null}
-            </div>
+                </span>
+                <span className="mt-1 block break-all font-mono text-[10px] opacity-75">
+                  {copy.history.chat} {conversation.chatId.slice(0, 8)} ·{" "}
+                  {copy.history.matter}{" "}
+                  {conversation.legalMatterId
+                    ? conversation.legalMatterId.slice(0, 8)
+                    : copy.status.noMatter}
+                </span>
+              </button>
+            ))}
+            {!conversationLoading && conversations.length === 0 ? (
+              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+                {copy.history.empty}
+              </p>
+            ) : null}
           </div>
 
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Try a scenario
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold text-slate-500">
+              {copy.history.quickQuestions}
             </p>
             {quickQuestions.map((question) => (
               <button
-                className="group w-full rounded-2xl border border-slate-200 bg-white p-3 text-left text-sm leading-6 text-slate-700 shadow-sm transition hover:border-[#002b5b]/30 hover:bg-[#001736] hover:text-white"
+                className="w-full rounded-xl bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
                 disabled={status !== "ready" || !conversationReady}
                 key={question}
                 onClick={() => submitMessage(question)}
                 type="button"
               >
-                <span>{question}</span>
-                <ChevronRight className="mt-2 size-4 text-slate-400 transition group-hover:translate-x-1 group-hover:text-cyan-200" />
+                {question}
               </button>
             ))}
           </div>
-
-          <div className="mt-8 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Process
-            </p>
-            {processSteps.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm"
-                  key={item.title}
-                >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#002b5b]">
-                    <Icon className="size-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-950">
-                      {item.title}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {item.text}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-col bg-white">
-          <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="order-1 flex h-[min(72dvh,780px)] min-h-[560px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:order-2 xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none">
+          <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+                <p className="inline-flex items-center gap-2 text-xs text-slate-500">
                   <span className="inline-flex size-2 rounded-full bg-emerald-400" />
-                  Live AI legal assistant
-                </div>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">
-                  Immigration consultation workspace
-                </h3>
+                  {copy.consultation.status}
+                </p>
+                <h2 className="mt-1 text-base font-semibold text-slate-950">
+                  {copy.consultation.title}
+                </h2>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <Badge
-                  className="rounded-full bg-slate-100 text-slate-700 hover:bg-slate-100"
+                  className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
                   variant="secondary"
                 >
-                  General information only
+                  {copy.consultation.generalInformation}
                 </Badge>
                 <Badge
-                  className="rounded-full bg-cyan-50 text-cyan-800 hover:bg-cyan-50"
+                  className="rounded-full bg-cyan-50 text-[10px] text-cyan-800 hover:bg-cyan-50"
                   variant="secondary"
                 >
-                  AU migration focus
+                  {copy.consultation.australiaFocus}
                 </Badge>
               </div>
             </div>
           </div>
 
           <div
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5"
             data-testid="workspace-message-list"
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
             {messages.length === 0 ? (
-              <div className="flex h-full min-h-[440px] items-center justify-center">
+              <div className="flex min-h-full items-center justify-center py-8">
                 <div className="mx-auto max-w-2xl text-center">
-                  <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-3xl bg-[#001736] text-white shadow-xl">
-                    <Sparkles className="size-7" />
+                  <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-[#001736] text-cyan-200">
+                    <Sparkles className="size-5" />
                   </div>
-                  <h4 className="text-2xl font-semibold tracking-tight text-slate-950">
-                    Start with a visa question, refusal issue, condition, or
-                    consultation request.
-                  </h4>
+                  <h3 className="text-xl font-semibold tracking-tight text-slate-950">
+                    {copy.consultation.emptyTitle}
+                  </h3>
                   <p className="mt-3 text-sm leading-7 text-slate-600">
-                    The assistant will answer in a customer-friendly way, ask
-                    one decisive follow-up when needed, and keep technical state
-                    in the background.
+                    {copy.consultation.emptyDescription}
                   </p>
-                  <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {quickQuestions.slice(0, 3).map((question) => (
                       <button
-                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-[#002b5b]/40 hover:bg-slate-50"
+                        className="rounded-full bg-slate-100 px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50"
                         disabled={status !== "ready" || !conversationReady}
                         key={question}
                         onClick={() => submitMessage(question)}
                         type="button"
                       >
                         {question.length > 58
-                          ? `${question.slice(0, 58)}...`
+                          ? `${question.slice(0, 58)}…`
                           : question}
                       </button>
                     ))}
@@ -1245,24 +1180,23 @@ export function ImmigrationAIWorkspace({
                       key={message.id}
                     >
                       {isAssistant ? (
-                        <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-[#001736] text-white shadow-sm">
+                        <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#001736] text-cyan-200">
                           <Bot className="size-4" />
                         </div>
                       ) : null}
-
                       <div
                         className={cn(
                           "min-w-0 space-y-3",
                           isAssistant
-                            ? "min-w-0 w-full max-w-full"
-                            : "max-w-[86%] flex flex-col items-end"
+                            ? "w-full max-w-full"
+                            : "flex max-w-[86%] flex-col items-end"
                         )}
                       >
                         <div
                           className={cn(
-                            "min-w-0 max-w-full overflow-hidden rounded-[24px] px-4 py-3 text-sm leading-7 shadow-sm",
+                            "min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-3 text-sm leading-7",
                             isAssistant
-                              ? "border border-slate-200 bg-white text-slate-700"
+                              ? "bg-[#f3f4f5] text-slate-700"
                               : "bg-[#001736] text-white"
                           )}
                           data-testid={
@@ -1284,13 +1218,15 @@ export function ImmigrationAIWorkspace({
                           {isAssistant && message.isStreaming ? (
                             <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                               <Loader2 className="size-3.5 animate-spin" />
-                              Drafting...
+                              {isZhLanguage(message.responseLanguage)
+                                ? "正在整理答复…"
+                                : "Preparing answer…"}
                             </div>
                           ) : null}
                           {isAssistant &&
                           !message.isStreaming &&
                           message.researchStatus === "incomplete" ? (
-                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                            <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
                               {isZhLanguage(message.responseLanguage)
                                 ? "研究未完成：来源核对已达到时间限制。这是尽力答复，部分内容可能仍需进一步核实。"
                                 : "Research incomplete: the source check reached its time limit. This is a best-effort answer and some points may require further verification."}
@@ -1303,25 +1239,24 @@ export function ImmigrationAIWorkspace({
                         !hasTerminalReferenceSection(message.text) &&
                         compactSourcesForMessage(message).length ? (
                           <CollapsibleSourceList
-                            className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                            className="rounded-xl bg-slate-50 p-3"
                             items={compactSourcesForMessage(message)}
-                            label="Sources considered"
+                            label={copy.consultation.sources}
                           />
                         ) : null}
 
                         {isAssistant &&
                         !message.isStreaming &&
                         message.escalate ? (
-                          <Card className="rounded-2xl border-amber-200 bg-amber-50 shadow-sm">
+                          <Card className="rounded-xl border-amber-200 bg-amber-50 shadow-none">
                             <CardContent className="flex items-start gap-3 p-4 text-sm leading-6 text-amber-900">
                               <CalendarDays className="mt-0.5 size-5 shrink-0" />
                               <div>
                                 <p className="font-medium">
-                                  A lawyer consultation is recommended.
+                                  {copy.consultation.escalationTitle}
                                 </p>
                                 <p className="mt-1 text-amber-800">
-                                  This matter may depend on deadlines,
-                                  documents, or case-specific facts.
+                                  {copy.consultation.escalationDescription}
                                 </p>
                               </div>
                             </CardContent>
@@ -1350,7 +1285,9 @@ export function ImmigrationAIWorkspace({
                             factSlotStates={message.factSlotStates}
                             interactionPlan={message.interactionPlan}
                             isSubmitting={status !== "ready"}
-                            onBookConsultation={handleBookConsultation}
+                            onBookConsultation={() =>
+                              handleBookConsultation(message.responseLanguage)
+                            }
                             onDraftChange={handleDraftChange}
                             onSubmitDraftFacts={handleSubmitDraftFacts}
                             responseLanguage={message.responseLanguage}
@@ -1360,7 +1297,7 @@ export function ImmigrationAIWorkspace({
                         {SHOW_WORKSPACE_DEBUG &&
                         isAssistant &&
                         message.retrievalDebug ? (
-                          <details className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+                          <details className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
                             <summary className="cursor-pointer font-medium text-slate-700">
                               Debug
                             </summary>
@@ -1370,9 +1307,8 @@ export function ImmigrationAIWorkspace({
                           </details>
                         ) : null}
                       </div>
-
                       {isAssistant ? null : (
-                        <div className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                        <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
                           <UserRound className="size-4" />
                         </div>
                       )}
@@ -1384,7 +1320,7 @@ export function ImmigrationAIWorkspace({
           </div>
 
           {status === "submitted" ? (
-            <div className="px-0 pb-4">
+            <div className="px-3 pb-3">
               <WorkspaceProcessingCard
                 assistantMode={assistantMode}
                 elapsedMs={pendingElapsedMs}
@@ -1392,30 +1328,28 @@ export function ImmigrationAIWorkspace({
               />
             </div>
           ) : null}
-
           {error ? (
-            <div className="border-t border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700 sm:px-6">
+            <div className="border-t border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}
 
-          <div className="border-t border-slate-200 bg-white p-4 sm:p-5">
-            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3 shadow-sm">
+          <div className="border-t border-slate-100 bg-white p-3 sm:p-4">
+            <div className="rounded-2xl bg-slate-100/80 p-3">
               <Textarea
-                className="min-h-[96px] max-h-48 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+                className="min-h-[76px] max-h-40 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
                 data-testid="workspace-input"
                 disabled={status !== "ready"}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Type your question. Press Enter for a new paragraph; click Send to submit."
+                placeholder={copy.consultation.placeholder}
                 value={input}
               />
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-slate-500">
-                  Press Enter for a new paragraph. Click Send to submit. General
-                  information only, not legal advice.
+                  {copy.consultation.composerHelp}
                 </p>
                 <Button
-                  className="rounded-full bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
+                  className="rounded-xl bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
                   data-testid="workspace-send"
                   disabled={
                     !input.trim() || status !== "ready" || !conversationReady
@@ -1428,178 +1362,149 @@ export function ImmigrationAIWorkspace({
                   ) : (
                     <Loader2 className="mr-2 size-4 animate-spin" />
                   )}
-                  Send
+                  {copy.consultation.send}
                 </Button>
               </div>
             </div>
           </div>
         </div>
 
-        <aside className="hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-slate-50/90 p-5 xl:block">
-          <div className="space-y-5">
-            <Card className="rounded-[28px] border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Case snapshot
-                    </p>
-                    <h4 className="mt-1 font-semibold text-slate-950">
-                      Current matter
-                    </h4>
-                  </div>
-                  <div className="rounded-2xl bg-cyan-50 p-2 text-[#002b5b]">
-                    <Clock3 className="size-4" />
-                  </div>
-                </div>
-
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-slate-500">Operation</span>
-                    <span className="max-w-[150px] truncate font-medium capitalize text-slate-800">
-                      {formatKey(
-                        latestAssistant?.caseHypothesis?.primary_operation_type
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-slate-500">Next action</span>
-                    <span className="font-medium capitalize text-slate-800">
-                      {formatKey(latestAssistant?.nextAction)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-slate-500">Confidence</span>
-                    <span className="font-medium capitalize text-slate-800">
-                      {confidence ?? "pending"}
-                    </span>
-                  </div>
-                </div>
-
-                <Progress
-                  className="mt-4"
-                  value={confidencePercent(confidence)}
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Known facts
-                    </p>
-                    <h4 className="mt-1 font-semibold text-slate-950">
-                      Intake summary
-                    </h4>
-                  </div>
-                  <Badge
-                    className="rounded-full bg-slate-100 text-slate-600 hover:bg-slate-100"
-                    variant="secondary"
-                  >
-                    {Object.keys(latestKnownFacts).length} facts
-                  </Badge>
-                </div>
-
-                {Object.keys(latestKnownFacts).length ? (
-                  <div className="space-y-2">
-                    {Object.entries(latestKnownFacts)
-                      .slice(0, 6)
-                      .map(([key, value]) => (
-                        <div
-                          className="rounded-2xl bg-slate-50 p-3 text-sm"
-                          key={key}
-                        >
-                          <p className="text-xs text-slate-500">
-                            {FACT_DISPLAY_LABELS[key] ??
-                              key.replaceAll("_", " ")}
-                          </p>
-                          <p className="mt-1 font-medium text-slate-800">
-                            {valuePreview(value)}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="text-sm leading-6 text-slate-500">
-                    Facts gathered through guided intake will appear here after
-                    the first assistant response.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Sources
+        <aside className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
+          <section className="rounded-xl bg-white p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {copy.matter.title}
                 </p>
-                <h4 className="mt-1 font-semibold text-slate-950">
-                  Latest authorities
-                </h4>
-                {latestSources.length ? (
-                  <CollapsibleSourceList
-                    className="mt-4 rounded-2xl bg-slate-50 p-3"
-                    items={latestSources}
-                    label="Latest authorities"
-                  />
-                ) : (
-                  <p className="mt-3 text-sm leading-6 text-slate-500">
-                    Relevant source titles will appear after retrieval-backed
-                    answers.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[28px] border-0 bg-gradient-to-br from-[#001736] via-[#002b5b] to-[#1d0052] text-white shadow-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                  Human lawyer handoff
-                </p>
-                <h4 className="mt-2 text-xl font-semibold">
-                  Need case-specific advice?
-                </h4>
-                <p className="mt-3 text-sm leading-6 text-slate-200">
-                  Convert qualified users into a real consultation once
-                  deadlines, documents, or risk factors appear.
-                </p>
-                <Button
-                  className="mt-5 rounded-full bg-white text-[#001736] hover:bg-slate-100"
-                  onClick={handleBookConsultation}
-                >
-                  Book consultation
-                  <ArrowRight className="ml-2 size-4" />
-                </Button>
-              </CardContent>
-            </Card>
-
-            {latestRequestedFact ? (
-              <div className="rounded-[28px] border border-cyan-200 bg-cyan-50 p-4 text-sm leading-6 text-cyan-900">
-                <p className="font-medium">Current follow-up</p>
-                <p className="mt-1">
-                  {latestRequestedFact.prompt ?? latestRequestedFact.label}
-                </p>
+                <h3 className="mt-1 font-semibold text-slate-950">
+                  {copy.matter.currentMatter}
+                </h3>
               </div>
-            ) : null}
-          </div>
+              <div className="rounded-xl bg-cyan-50 p-2 text-[#002b5b]">
+                <Clock3 className="size-4" />
+              </div>
+            </div>
+            <dl className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-slate-500">{copy.matter.operation}</dt>
+                <dd className="max-w-[150px] truncate text-right font-medium capitalize text-slate-800">
+                  {formatKey(
+                    latestAssistant?.caseHypothesis?.primary_operation_type,
+                    copy
+                  )}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-slate-500">{copy.matter.nextAction}</dt>
+                <dd className="font-medium capitalize text-slate-800">
+                  {formatKey(latestAssistant?.nextAction, copy)}
+                </dd>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <dt className="text-slate-500">{copy.matter.confidence}</dt>
+                <dd className="text-right font-medium capitalize text-slate-800">
+                  {confidence
+                    ? formatKey(confidence, copy)
+                    : copy.matter.pending}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-[11px] leading-5 text-slate-500">
+              {copy.matter.confidenceNote}
+            </p>
+          </section>
+
+          <section className="rounded-xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {copy.matter.knownFacts}
+                </p>
+                <h3 className="mt-1 font-semibold text-slate-950">
+                  {copy.matter.intakeSummary}
+                </h3>
+              </div>
+              <Badge
+                className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
+                variant="secondary"
+              >
+                {copy.matter.factsCount(Object.keys(latestKnownFacts).length)}
+              </Badge>
+            </div>
+            {Object.keys(latestKnownFacts).length ? (
+              <div className="space-y-2">
+                {Object.entries(latestKnownFacts)
+                  .slice(0, 6)
+                  .map(([key, value]) => (
+                    <div
+                      className="rounded-lg bg-slate-50 p-3 text-sm"
+                      key={key}
+                    >
+                      <p className="text-xs text-slate-500">
+                        {copy.factLabels[key] ?? key.replaceAll("_", " ")}
+                      </p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {valuePreview(value, locale)}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="text-sm leading-6 text-slate-500">
+                {copy.matter.noFacts}
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-xl bg-white p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {copy.matter.sources}
+            </p>
+            <h3 className="mt-1 font-semibold text-slate-950">
+              {copy.matter.latestSources}
+            </h3>
+            {latestSources.length ? (
+              <CollapsibleSourceList
+                className="mt-3 rounded-lg bg-slate-50 p-2"
+                items={latestSources}
+                label={copy.matter.latestSources}
+              />
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {copy.matter.noSources}
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-xl bg-[#001736] p-4 text-white">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+              {copy.matter.lawyerHandoff}
+            </p>
+            <h3 className="mt-2 text-base font-semibold">
+              {copy.matter.lawyerTitle}
+            </h3>
+            <p className="mt-2 text-xs leading-5 text-slate-200">
+              {copy.matter.lawyerDescription}
+            </p>
+            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs text-amber-100">
+              <UserRound className="size-3.5" />
+              {copy.matter.bookingPlanned}
+            </div>
+          </section>
+
+          {latestRequestedFact ? (
+            <div className="rounded-xl bg-cyan-50 p-4 text-sm leading-6 text-cyan-900">
+              <p className="font-medium">{copy.consultation.requestedFact}</p>
+              <p className="mt-1">
+                {latestRequestedFact.prompt ?? latestRequestedFact.label}
+              </p>
+            </div>
+          ) : null}
         </aside>
       </div>
-
-      <div className="mt-5 flex flex-col gap-3 px-2 text-xs leading-5 text-slate-200 md:flex-row md:items-center md:justify-between">
-        <span>
-          Designed for customer mode: answer, one quick question, compact
-          sources, lawyer handoff.
-        </span>
-        <a
-          className="inline-flex items-center gap-1 text-cyan-200 hover:text-white"
-          href="#contact"
-        >
-          Connect booking workflow later
-          <ExternalLink className="size-3.5" />
-        </a>
-      </div>
+      <p className="mt-3 px-1 text-xs leading-5 text-slate-500">
+        {copy.legalDisclaimer}
+      </p>
     </section>
   );
 }

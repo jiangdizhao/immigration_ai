@@ -9,9 +9,13 @@ import {
   normalizeAssistantMode,
   resolveAllowedAssistantMode,
 } from "@/lib/assistant-mode";
+import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
+import { useSiteLocale } from "./site-locale-provider";
 
 export function PremiumAnswerModeWorkspace() {
+  const { locale } = useSiteLocale();
+  const copy = getWorkspaceCopy(locale).mode;
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("fast");
   const [modeHydrated, setModeHydrated] = useState(false);
   const [accessPolicy, setAccessPolicy] =
@@ -56,9 +60,9 @@ export function PremiumAnswerModeWorkspace() {
 
   if (!accessPolicy || !modeHydrated) {
     return (
-      <section className="mx-auto mt-8 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-[28px] border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-          Preparing the assistant…
+      <section className="mx-auto w-full max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+          {copy.loading}
         </div>
       </section>
     );
@@ -74,31 +78,31 @@ export function PremiumAnswerModeWorkspace() {
 
   return (
     <>
-      <section className="mx-auto mt-8 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Answer mode
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">
-              Choose speed or verification before sending the next question
-            </h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-              Fast gives a concise first answer with optional native web search.
-              Slow / Legal Check uses the current source-aware verification
-              pipeline. Premium preserves its existing VIP-only direct path.
+      <section className="mx-auto w-full max-w-[1600px] px-4 pt-3 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-3 rounded-2xl bg-white/90 px-4 py-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {copy.title}
+            </span>
+            <span
+              aria-hidden="true"
+              className="hidden h-5 w-px bg-slate-200 sm:block"
+            />
+            <p className="min-w-0 text-sm leading-5 text-slate-600">
+              {assistantMode === "fast"
+                ? copy.fastDescription
+                : assistantMode === "default"
+                  ? copy.legalCheckDescription
+                  : copy.premiumDescription}
             </p>
           </div>
 
-          <div className="mt-4 min-w-[280px] sm:mt-0">
-            <label
-              className="block text-xs font-medium text-slate-500"
-              htmlFor="assistant-mode-select"
-            >
-              Processing mode
+          <div className="w-full shrink-0 sm:w-auto sm:min-w-[260px]">
+            <label className="sr-only" htmlFor="assistant-mode-select">
+              {copy.processingMode}
             </label>
             <select
-              className="mt-1 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
               id="assistant-mode-select"
               onChange={(event) =>
                 setAssistantMode((current) => {
@@ -108,49 +112,38 @@ export function PremiumAnswerModeWorkspace() {
               }
               value={assistantMode}
             >
-              <option value="fast">Fast — Quick Answer</option>
+              <option value="fast">{copy.fast}</option>
               <option
                 disabled={!hydratedAccessPolicy.slowAllowed}
                 value="default"
               >
-                Slow — Legal Check
+                {copy.legalCheck}
               </option>
               <option
                 disabled={!hydratedAccessPolicy.premiumAllowed}
                 value="premium"
               >
-                Premium — Premium Answer
+                {copy.premium}
               </option>
             </select>
             {hydratedAccessPolicy.userType === "guest" ? (
-              <div className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
-                <p>Fast is available without signing in.</p>
-                <p>
-                  Slow is disabled —{" "}
+              <div className="mt-2 flex flex-wrap gap-x-1 text-xs leading-5 text-slate-600">
+                <span>{copy.guestFast}</span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {copy.guestLegalCheck}{" "}
                   <Link className="font-semibold underline" href="/login">
-                    sign in to use Legal Check
+                    {copy.signIn}
                   </Link>
-                  .
-                </p>
-                <p>Premium is disabled — VIP membership required.</p>
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>{copy.guestPremium}</span>
               </div>
             ) : assistantMode === "premium" ? (
-              <div className="mt-2 space-y-1 text-xs leading-5 text-amber-700">
-                <p>
-                  Premium is the existing direct answer lane for VIP members.
-                </p>
+              <div className="mt-2 text-xs leading-5 text-amber-700">
+                {copy.premiumDescription}
               </div>
-            ) : assistantMode === "fast" ? (
-              <p className="mt-2 text-xs leading-5 text-slate-500">
-                Speed-first answer; native web search is used only when Luna
-                decides freshness matters. Use Legal Check for deeper
-                source-aware verification.
-              </p>
-            ) : (
-              <p className="mt-2 text-xs leading-5 text-slate-500">
-                Slow mode keeps the source-aware legal workflow.
-              </p>
-            )}
+            ) : null}
           </div>
         </div>
       </section>
