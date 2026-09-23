@@ -180,7 +180,7 @@ Next executable packet: `docs/agent-memory/tasks/P11-004.md`, Stage 1 only.
 
 ## P11-004 Stage 1 implementation — 2026-09-24
 
-**Scope:** Stage 1 only. P11-004 remains **IN PROGRESS**; Stage 2 has not started and P11-004 is not VERIFIED.
+**Original implementation scope:** Stage 1 only. This entry records the implementation state at that time; the post-review completion status is recorded below.
 
 The `/ai-workspace` route now reaches the operational workspace shortly after the shared `SiteHeader`. The page-level promotional hero was removed. The answer mode control is a compact bilingual toolbar, and the existing workspace controller is presented as three regions: conversation/history, active consultation, and matter/source/human-service context. At narrower widths, the consultation remains first and the history/context regions flow below it; desktop uses three columns.
 
@@ -216,7 +216,48 @@ Validation:
 
 Known Stage 1 limits / owner review:
 
-- Please review Chinese-default and English-switched screenshots at desktop and narrow/mobile widths, especially the long consultation column and side-region order.
+- Desktop and mobile visual review has since been completed; the remaining Stage 2 polish scope is recorded below.
 - Conversation creation/reopen, mode access states, locale switching and message submission were not exercised because guest authentication did not complete. They were preserved by source inspection and compilation.
-- Final responsive/accessibility acceptance and visual polish remain Stage 2 / P11-008 work.
-- No owner product decision is currently required; screenshot review is the gate before starting Stage 2.
+- Browser smoke remains blocked before the workspace mounted, as described above; visual review does not change that validation limitation.
+
+## P11-004 Stage 1 completion
+
+**Status:** Stage 1 completed and reviewed.
+
+- Commit: `1e879c0`
+- Scope: AI workspace presentation rebase.
+
+Completed:
+
+- Rebased the AI workspace into a Chinese-first immigration service platform style.
+- Preserved the existing conversation lifecycle, AI answer flow, matter IDs, lawyer-review workflow, citations, authentication, and backend contracts.
+- Added bilingual workspace presentation.
+- Removed the misleading confidence progress visualization.
+- Clarified the AI confidence signal versus legal certainty.
+
+Validation:
+
+- Unit tests passed.
+- Build passed.
+- Desktop and mobile visual review completed.
+
+The earlier browser-smoke limitation remains: authentication prevented the workspace from mounting, so conversation and answer routes were not exercised by that smoke.
+
+## P11-004 Stage 2 scope
+
+**Goal:** Polish the mobile consultation experience without changing system behavior.
+
+Planned:
+
+1. Improve mobile lawyer-review visibility.
+2. Compact the mobile answer-mode presentation.
+3. Replace internal development wording with customer-facing consultation wording.
+
+Constraints:
+
+- No backend changes.
+- No API changes.
+- No database changes.
+- No AI reasoning changes.
+- No booking implementation.
+
