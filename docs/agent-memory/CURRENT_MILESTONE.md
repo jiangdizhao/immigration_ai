@@ -37,7 +37,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | VERIFIED |
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
-| P11-004 | AI Workspace presentation rebase preserving current behavior | PLANNED |
+| P11-004 | AI Workspace presentation rebase preserving current behavior | IN PROGRESS |
 | P11-005 | Matter-centered Client Portal | PLANNED |
 | P11-006 | Lawyer Workspace continuity | PLANNED |
 | P11-007 | Real appointment/consultation workflow | PLANNED |
@@ -45,11 +45,15 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 
 ## Current active task
 
-No implementation task is active.
-
 P11-003C is closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9`.
 
-P11-004 remains **PLANNED** and has not been started.
+P11-004 is now **IN PROGRESS** under one major Task Packet:
+
+- `docs/agent-memory/tasks/P11-004.md`
+- current gate: **Stage 1 — bilingual structural/presentation rebase**
+- later gate inside the same task: **Stage 2 — visual/responsive acceptance and bounded polish**
+
+Do not create P11-004A/B-style subtasks for ordinary refinement.
 
 ## Evidence that triggered R2
 
@@ -119,3 +123,47 @@ Accepted behavior now includes:
 Local validation recorded at R3: 184 unit tests passed, production build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint retains the known 22 baseline diagnostics. The bounded live Home Affairs dry-run completed successfully with five structured candidates.
 
 Known non-blocking observation: the feed includes operational/navigation records as well as policy-like records. No legal-importance inference is performed.
+
+
+## P11-004 plan
+
+P11-004 has two internal stages only.
+
+### Stage 1 — bilingual structural/presentation rebase
+
+Rebase the existing production AI Workspace into a dedicated operational shell while preserving behavior.
+
+Primary presentation direction:
+
+- remove the duplicated large marketing-style workspace hero treatment;
+- keep the shared production `SiteHeader` and account/locale controls;
+- make answer-mode selection a compact workspace control rather than a separate marketing card;
+- use a desktop three-region workspace: conversation/history, active consultation, matter/source/handoff context;
+- make static workspace copy Chinese-first and switchable to English through the existing site locale;
+- preserve backend answer language independently;
+- preserve conversation persistence, guided intake, citations, source lists, lawyer request actions, political gate, matter identity and all answer-mode access rules;
+- provide a functional responsive layout without inventing P11-008's final acceptance work.
+
+### Stage 2 — visual/responsive acceptance and bounded polish
+
+After Stage 1 is reviewed in source and browser screenshots:
+
+- correct hierarchy, density, spacing and responsive behavior;
+- improve mobile/tablet access to conversation/context regions;
+- polish loading/empty/error states and long-answer/source presentation;
+- fix presentation regressions found by smoke testing.
+
+Stage 2 remains presentation-focused and stays inside P11-004. It must not become a backend rewrite.
+
+## P11-004 success boundary
+
+P11-004 is complete only when:
+
+- site-locale switching controls workspace chrome in both Chinese and English;
+- assistant answer language remains backend-driven and independent;
+- conversation create/reopen/history behavior is unchanged;
+- Fast / Legal Check / Premium entitlement behavior is unchanged;
+- guided intake, citations, political gate, lawyer-request action and matter/source context still work;
+- desktop/tablet/mobile layouts remain usable;
+- no DB, legal-service, billing, scheduling, provider/model-routing, Phase-6 or ReasoningBank change is introduced;
+- the owner reviews the final workspace visually before closure.

@@ -113,6 +113,9 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Production policy registry remains intentionally empty; discovery cannot publish or write `MANUAL_POLICY_ENTRIES`.
 - P11-003C remains operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
 - Known non-blocking observation: the live Home Affairs alert feed contains operational/navigation items alongside policy-like candidates, so human review remains necessary.
+- **P11-004 — IN PROGRESS:** AI Workspace presentation rebase has been planned as one major task with two internal stages, not separate A/B/C subtasks.
+- P11-004 Stage 1 is the active implementation gate: bilingual structural/presentation rebase while preserving all current conversation, mode, source, intake, political-gate and lawyer-request behavior.
+- P11-004 Stage 2 will be visual/responsive acceptance and bounded polish after Stage 1 source/browser review; it remains part of the same P11-004 task.
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 

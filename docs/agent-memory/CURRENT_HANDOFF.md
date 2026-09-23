@@ -157,3 +157,23 @@ R3 live Home Affairs dry-run: exit 0, runtime **787 ms**, 5 candidates. All five
 No alert URL was fetched: the Home Affairs strategy still performs exactly one configured seed fetch, while deterministic tests record that the fetch target list contains only the seed URL. No publication, LLM, database, or `legal-service/` behavior changed.
 
 Known non-blocking observation: the live feed still includes operational/navigation alerts alongside policy-like alerts; R3 intentionally preserves them as raw non-public candidates and performs no legal-importance or publication inference. Any future relevance filtering requires a separately approved task.
+
+
+## P11-004 activation — 2026-09-24
+
+P11-004 is now the active Phase 11 task. The project owner requested coarser task granularity, so P11-004 is one Task Packet with two internal review stages rather than a family of A/B/C subtasks.
+
+Current code observations that drive the task:
+
+- `chatbot/app/(chat)/ai-workspace/page.tsx` currently wraps the workspace in a large English-only marketing hero.
+- `chatbot/components/premium-answer-mode-workspace.tsx` owns server-backed Fast / Legal Check / Premium entitlement hydration but its visible copy is English-only and presented as a separate large card.
+- `chatbot/components/immigration-ai-workspace.tsx` already contains real high-value behavior: persistent conversation list/create/reopen, URL `chatId` continuity, legal `matterId`, answer-mode route selection, political-history sanitization, guided intake, citations, compact sources, lawyer-request action, matter snapshot, known facts and source context.
+- much of the workspace chrome is still English-only even though the site locale foundation is Chinese-first.
+- `handleBookConsultation` is still a placeholder; real scheduling remains P11-007 and must not be invented here.
+- the approved V4 workspace reference supports the direction of a dense operational shell with conversation navigation + central chat + context panel, but the main repository remains functional authority.
+
+P11-004 Stage 1 should change presentation/localized copy around the existing controller, not rewrite the working legal/customer flow.
+
+P11-004 Stage 2 will remain inside the same Task Packet and will be triggered only after Stage 1 Git/source review plus owner browser screenshots.
+
+Next executable packet: `docs/agent-memory/tasks/P11-004.md`, Stage 1 only.

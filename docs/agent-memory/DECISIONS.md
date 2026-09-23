@@ -434,3 +434,62 @@ R3 also makes URL provenance explicit as `alert`, `seed`, or `fetched_page`.
 
 The remaining observation that the live Home Affairs alert feed includes operational/navigation items as well as policy-like items is not a discovery-safety blocker because candidates remain non-public and require human review. Any automated relevance/legal-importance filtering requires a separate future decision.
 
+## D-033 — Phase 11 task granularity is coarser from P11-004 onward
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+From P11-004 onward, Phase 11 work should avoid proliferating small lettered/correction tasks for normal implementation refinement.
+
+Each major milestone should normally have one Task Packet, for example `P11-004.md`, with a small number of internal implementation stages and review gates.
+
+Create a separate correction task only when review exposes a materially new architecture/security boundary, a distinct rollback unit, or a change that cannot reasonably remain inside the active major task.
+
+This does not weaken the existing inspect -> commit/push -> GitHub review workflow.
+
+## D-034 — P11-004 is a presentation rebase around preserved production behavior
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+P11-004 will redesign the AI Workspace presentation while preserving its current functional controller and production contracts.
+
+The rebase must preserve:
+
+- conversation creation, history, reopening and ownership;
+- frontend chat / legal matter identity continuity;
+- Fast / Legal Check / Premium access policy and route selection;
+- political/privacy gate and sanitized history behavior;
+- guided intake submission;
+- citations/source rendering;
+- lawyer-request action and persisted assistant-message identity;
+- VIP/server entitlement boundaries;
+- existing legal-service and answer-lane contracts.
+
+P11-004 is not authorization to change legal reasoning, provider/model routing, database schema, billing, lawyer workflow semantics, or booking infrastructure.
+
+## D-035 — AI Workspace uses a dedicated bilingual operational shell
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+The production AI Workspace should use a denser operational layout inspired by the approved V4 reference rather than stacking public-marketing hero sections around the chat.
+
+Desktop direction:
+
+```text
+shared site header
+    ->
+compact workspace toolbar / answer mode
+    ->
+left: conversations
+center: active consultation/chat
+right: matter facts + source context + lawyer handoff
+```
+
+The existing shared site header/account controls remain production authority.
+
+Static workspace chrome follows the persisted site locale (`zh-CN` default, English switch). User question language and assistant answer language remain independent from the site locale.
+
+The real appointment flow remains owned by P11-007; P11-004 must not invent a booking integration.
+
