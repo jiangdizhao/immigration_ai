@@ -951,8 +951,8 @@ export function ImmigrationAIWorkspace({
   const handleBookConsultation = (responseLanguage?: string | null) => {
     toast.info(
       isZhLanguage(responseLanguage)
-        ? "预约流程将在后续阶段接入。"
-        : "Appointment booking will be added in a later phase."
+        ? "如需进一步个案支持，请使用此答复下方的律师审阅请求。"
+        : "For case-specific support, use the lawyer review request shown with this answer."
     );
   };
 
@@ -1486,10 +1486,6 @@ export function ImmigrationAIWorkspace({
             <p className="mt-2 text-xs leading-5 text-slate-200">
               {copy.matter.lawyerDescription}
             </p>
-            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs text-amber-100">
-              <UserRound className="size-3.5" />
-              {copy.matter.bookingPlanned}
-            </div>
           </section>
 
           {latestRequestedFact ? (

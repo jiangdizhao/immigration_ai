@@ -104,10 +104,13 @@ export function LawyerRequestAction({
   if (accessState === "unauthenticated") {
     return (
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        <Link className="font-semibold text-sky-800 underline" href="/login">
-          {copy.signIn}
-        </Link>
-        {copy.toReview}
+        <p className="mb-2 font-semibold text-slate-900">{copy.reviewPrompt}</p>
+        <p>
+          <Link className="font-semibold text-sky-800 underline" href="/login">
+            {copy.signIn}
+          </Link>
+          {copy.toReview}
+        </p>
       </div>
     );
   }
@@ -115,18 +118,22 @@ export function LawyerRequestAction({
   if (accessState === "upgrade") {
     return (
       <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-        <Link className="font-semibold underline" href="/vip">
-          {copy.upgrade}
-        </Link>
-        {copy.toAskReview}
+        <p className="mb-2 font-semibold">{copy.reviewPrompt}</p>
+        <p>
+          <Link className="font-semibold underline" href="/vip">
+            {copy.upgrade}
+          </Link>
+          {copy.toAskReview}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 sm:p-4">
+      <p className="mb-2 font-semibold">{copy.reviewPrompt}</p>
       <button
-        className="font-semibold underline"
+        className="inline-flex min-h-10 items-center rounded-lg bg-sky-800 px-3 py-2 font-semibold text-white underline-offset-2 hover:bg-sky-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
         data-testid="ask-lawyer-review"
         onClick={() => setOpen((current) => !current)}
         type="button"

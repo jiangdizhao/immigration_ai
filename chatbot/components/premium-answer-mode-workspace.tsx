@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -18,6 +19,7 @@ export function PremiumAnswerModeWorkspace() {
   const copy = getWorkspaceCopy(locale).mode;
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("fast");
   const [modeHydrated, setModeHydrated] = useState(false);
+  const [mobileModeOpen, setMobileModeOpen] = useState(false);
   const [accessPolicy, setAccessPolicy] =
     useState<AssistantModeAccessPolicy | null>(null);
 
@@ -79,71 +81,96 @@ export function PremiumAnswerModeWorkspace() {
   return (
     <>
       <section className="mx-auto w-full max-w-[1600px] px-4 pt-3 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 rounded-2xl bg-white/90 px-4 py-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {copy.title}
-            </span>
-            <span
-              aria-hidden="true"
-              className="hidden h-5 w-px bg-slate-200 sm:block"
-            />
-            <p className="min-w-0 text-sm leading-5 text-slate-600">
-              {assistantMode === "fast"
-                ? copy.fastDescription
-                : assistantMode === "default"
-                  ? copy.legalCheckDescription
-                  : copy.premiumDescription}
-            </p>
-          </div>
+        <button
+          aria-controls="assistant-mode-panel"
+          aria-expanded={mobileModeOpen}
+          className="mb-2 flex w-full items-center justify-between rounded-xl bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm md:hidden"
+          onClick={() => setMobileModeOpen((open) => !open)}
+          type="button"
+        >
+          <span>
+            {assistantMode === "fast"
+              ? copy.fast
+              : assistantMode === "default"
+                ? copy.legalCheck
+                : copy.premium}
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-4 shrink-0 transition-transform ${mobileModeOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        <div
+          className={mobileModeOpen ? "block" : "hidden md:block"}
+          id="assistant-mode-panel"
+        >
+          <div className="flex flex-col gap-3 rounded-2xl bg-white/90 px-4 py-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                {copy.title}
+              </span>
+              <span
+                aria-hidden="true"
+                className="hidden h-5 w-px bg-slate-200 sm:block"
+              />
+              <p className="min-w-0 text-sm leading-5 text-slate-600">
+                {assistantMode === "fast"
+                  ? copy.fastDescription
+                  : assistantMode === "default"
+                    ? copy.legalCheckDescription
+                    : copy.premiumDescription}
+              </p>
+            </div>
 
-          <div className="w-full shrink-0 sm:w-auto sm:min-w-[260px]">
-            <label className="sr-only" htmlFor="assistant-mode-select">
-              {copy.processingMode}
-            </label>
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
-              id="assistant-mode-select"
-              onChange={(event) =>
-                setAssistantMode((current) => {
+            <div className="w-full shrink-0 sm:w-auto sm:min-w-[260px]">
+              <label className="sr-only" htmlFor="assistant-mode-select">
+                {copy.processingMode}
+              </label>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-cyan-100"
+                id="assistant-mode-select"
+                onChange={(event) => {
                   const next = normalizeAssistantMode(event.target.value);
-                  return modeAllowed(next) ? next : current;
-                })
-              }
-              value={assistantMode}
-            >
-              <option value="fast">{copy.fast}</option>
-              <option
-                disabled={!hydratedAccessPolicy.slowAllowed}
-                value="default"
+                  setAssistantMode((current) =>
+                    modeAllowed(next) ? next : current
+                  );
+                  setMobileModeOpen(false);
+                }}
+                value={assistantMode}
               >
-                {copy.legalCheck}
-              </option>
-              <option
-                disabled={!hydratedAccessPolicy.premiumAllowed}
-                value="premium"
-              >
-                {copy.premium}
-              </option>
-            </select>
-            {hydratedAccessPolicy.userType === "guest" ? (
-              <div className="mt-2 flex flex-wrap gap-x-1 text-xs leading-5 text-slate-600">
-                <span>{copy.guestFast}</span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {copy.guestLegalCheck}{" "}
-                  <Link className="font-semibold underline" href="/login">
-                    {copy.signIn}
-                  </Link>
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>{copy.guestPremium}</span>
-              </div>
-            ) : assistantMode === "premium" ? (
-              <div className="mt-2 text-xs leading-5 text-amber-700">
-                {copy.premiumDescription}
-              </div>
-            ) : null}
+                <option value="fast">{copy.fast}</option>
+                <option
+                  disabled={!hydratedAccessPolicy.slowAllowed}
+                  value="default"
+                >
+                  {copy.legalCheck}
+                </option>
+                <option
+                  disabled={!hydratedAccessPolicy.premiumAllowed}
+                  value="premium"
+                >
+                  {copy.premium}
+                </option>
+              </select>
+              {hydratedAccessPolicy.userType === "guest" ? (
+                <div className="mt-2 flex flex-wrap gap-x-1 text-xs leading-5 text-slate-600">
+                  <span>{copy.guestFast}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {copy.guestLegalCheck}{" "}
+                    <Link className="font-semibold underline" href="/login">
+                      {copy.signIn}
+                    </Link>
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>{copy.guestPremium}</span>
+                </div>
+              ) : assistantMode === "premium" ? (
+                <div className="mt-2 text-xs leading-5 text-amber-700">
+                  {copy.premiumDescription}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>

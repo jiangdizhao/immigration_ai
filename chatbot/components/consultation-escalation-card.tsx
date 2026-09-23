@@ -36,7 +36,7 @@ export function ConsultationEscalationCard({
         ) : null}
 
         <Button onClick={onBookConsultation} size="sm">
-          {zh ? "预约流程筹备中" : "Appointment workflow planned"}
+          {zh ? "了解进一步服务" : "Explore further support"}
         </Button>
       </AlertDescription>
     </Alert>

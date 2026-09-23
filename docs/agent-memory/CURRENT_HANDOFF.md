@@ -261,3 +261,41 @@ Constraints:
 - No AI reasoning changes.
 - No booking implementation.
 
+## P11-004 Stage 2 implementation — 2026-09-24
+
+**Status:** Stage 2 presentation changes are implemented and ready for owner review. P11-004 remains **IN PROGRESS** and is not VERIFIED.
+
+Presentation improvements:
+
+- The existing `LawyerRequestAction` now has a clear Chinese/English professional-review prompt and a more prominent mobile action. Persisted assistant-message identity, VIP/auth checks, request ownership and submission API/payload remain unchanged.
+- The existing answer-mode control is collapsed by default on mobile and expands to show the current explanation and options. Desktop continues to show the full control. Mode values, server access policy, disabled states, `ASSISTANT_MODE_STORAGE_KEY`, and route selection remain unchanged.
+- Removed appointment-development wording from the active workspace. Consultation prompts now direct customers to the existing lawyer-review request and do not claim that booking or availability exists.
+
+Changed files:
+
+- `chatbot/components/consultation-escalation-card.tsx`
+- `chatbot/components/immigration-ai-workspace.tsx`
+- `chatbot/components/lawyer-request-action.tsx`
+- `chatbot/components/premium-answer-mode-workspace.tsx`
+- `chatbot/lib/workspace-copy.ts`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+Validation:
+
+- `cd chatbot && pnpm test:unit`: **187 passed, 0 failed, 0 skipped**.
+- `cd chatbot && pnpm build`: **passed**.
+- `cd chatbot && pnpm lint`: **failed with the 22 known repository baseline diagnostics**; changed-file `pnpm exec biome check` passed for all five changed frontend source files with no new diagnostics.
+- `git diff --check`: **passed**.
+
+Browser smoke:
+
+- Local `/ai-workspace` loaded through the existing guest flow. A preliminary unmocked page load automatically created one empty guest conversation through `POST /api/immigration-conversations` (`chatId` `a089c4fe-b296-448b-9945-f5e904a8b870`); no user message or AI answer was submitted.
+- The visual pass used intercepted/mock access, conversation, and VIP responses with sample answer text. It covered Chinese and English at 1536px, 1280px, and 390px. The desktop three-region layout remained present; mobile kept the chat and composer available, showed the lawyer-review entry with the sample answer, and collapsed the mode panel until expanded. No horizontal overflow was detected.
+- No AI answer endpoint or lawyer-request submission endpoint was called during the mocked visual pass. The mocked sample was not legal guidance.
+
+Remaining limitations / review:
+
+- The initial automatic guest-conversation creation is a local smoke-test artifact; it has not been deleted.
+- Entitlement and conversation responses in the visual pass were mocked. No submission or booking flow was exercised.
+- Owner review remains required. Do not mark P11-004 VERIFIED until that review is complete.
+

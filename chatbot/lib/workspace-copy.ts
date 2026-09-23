@@ -55,7 +55,6 @@ export type WorkspaceCopy = {
     lawyerHandoff: string;
     lawyerTitle: string;
     lawyerDescription: string;
-    bookingPlanned: string;
   };
   factLabels: Readonly<Record<string, string>>;
   answerValues: Readonly<Record<string, string>>;
@@ -76,6 +75,7 @@ export type WorkspaceCopy = {
     loading: string;
   };
   lawyerRequest: {
+    reviewPrompt: string;
     signIn: string;
     toReview: string;
     upgrade: string;
@@ -155,8 +155,7 @@ const zh: WorkspaceCopy = {
     lawyerHandoff: "人工律师服务",
     lawyerTitle: "需要个案法律意见？",
     lawyerDescription:
-      "你可以通过答复下方现有的律师审阅请求提交人工审阅。预约功能将在后续阶段接入。",
-    bookingPlanned: "预约功能筹备中",
+      "如需进一步个案支持，可通过答复下方的律师审阅请求提交人工审阅。",
   },
   factLabels: {
     completion_date: "课程完成日期",
@@ -207,6 +206,7 @@ const zh: WorkspaceCopy = {
     loading: "正在加载助手…",
   },
   lawyerRequest: {
+    reviewPrompt: "需要进一步专业审核？",
     signIn: "登录",
     toReview: "后可请求律师审阅此答复。",
     upgrade: "升级 VIP",
@@ -295,8 +295,7 @@ const en: WorkspaceCopy = {
     lawyerHandoff: "Human lawyer service",
     lawyerTitle: "Need case-specific legal advice?",
     lawyerDescription:
-      "You can submit a human review request from an answer using the existing lawyer-review action. Appointment booking will be added in a later phase.",
-    bookingPlanned: "Appointment workflow planned",
+      "For further case-specific support, submit a lawyer review request from an answer.",
   },
   factLabels: {
     completion_date: "Course completion date",
@@ -349,6 +348,7 @@ const en: WorkspaceCopy = {
     loading: "Preparing the assistant…",
   },
   lawyerRequest: {
+    reviewPrompt: "Need professional review?",
     signIn: "Sign in",
     toReview: " to ask a lawyer to review this answer.",
     upgrade: "Upgrade to VIP",
