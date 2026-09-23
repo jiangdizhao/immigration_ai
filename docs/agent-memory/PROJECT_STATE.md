@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-09-20  
+**Updated:** 2026-09-24
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -113,9 +113,13 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Production policy registry remains intentionally empty; discovery cannot publish or write `MANUAL_POLICY_ENTRIES`.
 - P11-003C remains operator-run discovery infrastructure only: no scheduler, no automatic publication, no LLM-generated public analysis.
 - Known non-blocking observation: the live Home Affairs alert feed contains operational/navigation items alongside policy-like candidates, so human review remains necessary.
-- **P11-004 — IN PROGRESS:** AI Workspace presentation rebase has been planned as one major task with two internal stages, not separate A/B/C subtasks.
-- P11-004 Stage 1 is the active implementation gate: bilingual structural/presentation rebase while preserving all current conversation, mode, source, intake, political-gate and lawyer-request behavior.
-- P11-004 Stage 2 will be visual/responsive acceptance and bounded polish after Stage 1 source/browser review; it remains part of the same P11-004 task.
+- **P11-004 — VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`.
+- Accepted result: Chinese-first bilingual operational AI workspace; desktop conversation/consultation/matter-context layout accepted; mobile answer-mode selector collapsed by default and expandable; mobile lawyer-review action clearly discoverable.
+- Existing conversation lifecycle, matter identity, Fast / Legal Check / Premium modes, political gate, guided intake, citations and lawyer-review workflow remain preserved.
+- No backend, database, legal-reasoning or booking implementation was added.
+- Final validation: 187 unit tests passed; build, changed-file Biome and `git diff --check` passed; repository lint retains the known 22-diagnostic baseline; desktop/mobile owner visual acceptance passed.
+- Deployment note: the local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave this disabled unless intentionally debugging.
+- **P11-005 — PLANNED, not started.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 

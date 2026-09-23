@@ -1,6 +1,6 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-09-20  
+**Updated:** 2026-09-24
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -11,6 +11,7 @@
 **P11-003B verified checkpoint:** `081ef46dd040b6131d475750d0968c9f2e461bb2`  
 **P11-003C starting checkpoint:** `f54b525c225c33877954fab306d615c88213e89b`  
 **P11-003C verified checkpoint:** `fa02295675dc4343430ae0a109722141e669bbf9`
+**P11-004 verified checkpoint:** `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`
 **Git-state rule:** verify the live branch tip with `git rev-parse HEAD`; documentation-only memory commits may advance HEAD without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
 
@@ -26,6 +27,7 @@
 - P11-003C-R2: **VERIFIED**
 - P11-003C-R3: **VERIFIED**
 - P11-003C overall: **VERIFIED**
+- P11-004: **VERIFIED** at `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`
 
 ## P11-003B accepted architecture
 
@@ -115,7 +117,7 @@ Recommended next action: owner/reviewer inspect the uncommitted diff, then manua
 
 GitHub review of the pushed R3 checkpoint found no remaining blocking defect. No GitHub Actions checks were attached to the commit; acceptance is based on the inspected source/diff plus the recorded local validation and bounded live smoke.
 
-P11-003C is closed. Do not start P11-004 until the project owner explicitly requests it.
+P11-003C is closed. P11-004 was activated after a separate owner request; its final status is recorded below.
 
 
 ## P11-003C-R3 correction
@@ -174,9 +176,9 @@ Current code observations that drive the task:
 
 P11-004 Stage 1 should change presentation/localized copy around the existing controller, not rewrite the working legal/customer flow.
 
-P11-004 Stage 2 will remain inside the same Task Packet and will be triggered only after Stage 1 Git/source review plus owner browser screenshots.
+P11-004 Stage 2 remained inside the same Task Packet and proceeded after Stage 1 Git/source review and owner visual review.
 
-Next executable packet: `docs/agent-memory/tasks/P11-004.md`, Stage 1 only.
+P11-004 is now closed as VERIFIED at `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. P11-005 remains PLANNED and has not started.
 
 ## P11-004 Stage 1 implementation — 2026-09-24
 
@@ -218,7 +220,7 @@ Known Stage 1 limits / owner review:
 
 - Desktop and mobile visual review has since been completed; the remaining Stage 2 polish scope is recorded below.
 - Conversation creation/reopen, mode access states, locale switching and message submission were not exercised because guest authentication did not complete. They were preserved by source inspection and compilation.
-- Browser smoke remains blocked before the workspace mounted, as described above; visual review does not change that validation limitation.
+- The Stage 1 browser smoke was blocked before the workspace mounted. The later Stage 2 local visual pass succeeded through guest access, and owner desktop/mobile visual acceptance is recorded below.
 
 ## P11-004 Stage 1 completion
 
@@ -241,13 +243,13 @@ Validation:
 - Build passed.
 - Desktop and mobile visual review completed.
 
-The earlier browser-smoke limitation remains: authentication prevented the workspace from mounting, so conversation and answer routes were not exercised by that smoke.
+The Stage 1 browser-smoke limitation was later superseded by the Stage 2 local visual pass and owner review recorded below.
 
-## P11-004 Stage 2 scope
+## P11-004 Stage 2 accepted scope
 
 **Goal:** Polish the mobile consultation experience without changing system behavior.
 
-Planned:
+Completed:
 
 1. Improve mobile lawyer-review visibility.
 2. Compact the mobile answer-mode presentation.
@@ -263,7 +265,7 @@ Constraints:
 
 ## P11-004 Stage 2 implementation — 2026-09-24
 
-**Status:** Stage 2 presentation changes are implemented and ready for owner review. P11-004 remains **IN PROGRESS** and is not VERIFIED.
+**Status:** Stage 2 completed and accepted. P11-004 is **VERIFIED** at `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`.
 
 Presentation improvements:
 
@@ -287,15 +289,16 @@ Validation:
 - `cd chatbot && pnpm lint`: **failed with the 22 known repository baseline diagnostics**; changed-file `pnpm exec biome check` passed for all five changed frontend source files with no new diagnostics.
 - `git diff --check`: **passed**.
 
-Browser smoke:
+Browser and owner visual acceptance:
 
-- Local `/ai-workspace` loaded through the existing guest flow. A preliminary unmocked page load automatically created one empty guest conversation through `POST /api/immigration-conversations` (`chatId` `a089c4fe-b296-448b-9945-f5e904a8b870`); no user message or AI answer was submitted.
-- The visual pass used intercepted/mock access, conversation, and VIP responses with sample answer text. It covered Chinese and English at 1536px, 1280px, and 390px. The desktop three-region layout remained present; mobile kept the chat and composer available, showed the lawyer-review entry with the sample answer, and collapsed the mode panel until expanded. No horizontal overflow was detected.
+- Local `/ai-workspace` loaded through the existing guest flow. A preliminary unmocked page load automatically created one empty guest conversation through `POST /api/immigration-conversations` (`chatId` `a089c4fe-b296-448b-9945-f5e904a8b870`); no user message or AI answer was submitted. This local smoke artifact was left intact.
+- The mocked visual pass covered Chinese and English at 1536px, 1280px, and 390px. No horizontal overflow was detected; the desktop three-region layout and mobile lawyer-review entry were visible. The mobile mode control was confirmed collapsed by default and expandable.
+- Owner review passed for desktop, mobile collapsed and expanded mode selector states, and lawyer-review visibility.
 - No AI answer endpoint or lawyer-request submission endpoint was called during the mocked visual pass. The mocked sample was not legal guidance.
 
-Remaining limitations / review:
+Non-blocking deployment note:
 
-- The initial automatic guest-conversation creation is a local smoke-test artifact; it has not been deleted.
-- Entitlement and conversation responses in the visual pass were mocked. No submission or booking flow was exercised.
-- Owner review remains required. Do not mark P11-004 VERIFIED until that review is complete.
+- The local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`. Staging and production should leave this disabled unless intentionally debugging.
+
+P11-005 remains **PLANNED** and has not started.
 

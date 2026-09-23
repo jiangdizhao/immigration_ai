@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-09-20
+**Updated:** 2026-09-24
 
 ## Objective
 
@@ -37,23 +37,19 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R1 | Full-operation timeout + mapped-IPv6/private-network hardening | VERIFIED |
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
-| P11-004 | AI Workspace presentation rebase preserving current behavior | IN PROGRESS |
+| P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
 | P11-005 | Matter-centered Client Portal | PLANNED |
 | P11-006 | Lawyer Workspace continuity | PLANNED |
 | P11-007 | Real appointment/consultation workflow | PLANNED |
 | P11-008 | Bilingual/responsive/accessibility/E2E + staging acceptance | PLANNED |
 
-## Current active task
+## P11-004 closure / next task state
 
-P11-003C is closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9`.
+P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9`.
 
-P11-004 is now **IN PROGRESS** under one major Task Packet:
+P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-- `docs/agent-memory/tasks/P11-004.md`
-- current gate: **Stage 1 — bilingual structural/presentation rebase**
-- later gate inside the same task: **Stage 2 — visual/responsive acceptance and bounded polish**
-
-Do not create P11-004A/B-style subtasks for ordinary refinement.
+P11-005 remains **PLANNED** and has not started. Do not activate it as part of this P11-004 closure.
 
 ## Evidence that triggered R2
 
@@ -144,16 +140,15 @@ Primary presentation direction:
 - preserve conversation persistence, guided intake, citations, source lists, lawyer request actions, political gate, matter identity and all answer-mode access rules;
 - provide a functional responsive layout without inventing P11-008's final acceptance work.
 
-### Stage 2 — visual/responsive acceptance and bounded polish
+### Stage 2 — completed and owner accepted
 
-After Stage 1 is reviewed in source and browser screenshots:
+Stage 2 made bounded presentation improvements inside P11-004:
 
-- correct hierarchy, density, spacing and responsive behavior;
-- improve mobile/tablet access to conversation/context regions;
-- polish loading/empty/error states and long-answer/source presentation;
-- fix presentation regressions found by smoke testing.
+- the mobile answer-mode control is collapsed by default and expandable;
+- the existing lawyer-review action is clearly discoverable on mobile;
+- internal appointment-development wording was replaced with customer-facing guidance.
 
-Stage 2 remains presentation-focused and stays inside P11-004. It must not become a backend rewrite.
+The desktop conversation/consultation/matter-context layout and mobile collapsed/expanded states passed owner visual review. No backend rewrite or booking implementation was added.
 
 ## P11-004 success boundary
 
@@ -167,3 +162,19 @@ P11-004 is complete only when:
 - desktop/tablet/mobile layouts remain usable;
 - no DB, legal-service, billing, scheduling, provider/model-routing, Phase-6 or ReasoningBank change is introduced;
 - the owner reviews the final workspace visually before closure.
+
+All success-boundary items were accepted at `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`.
+
+
+## P11-004 final validation and deployment note
+
+- `pnpm test:unit`: 187 passed.
+- `pnpm build`: passed.
+- Changed-file Biome: passed.
+- `git diff --check`: passed.
+- `pnpm lint`: retains the known repository-wide 22-diagnostic baseline.
+- Desktop and mobile owner visual acceptance: passed.
+
+The local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave it disabled unless intentionally debugging.
+
+P11-005 remains PLANNED and has not started.
