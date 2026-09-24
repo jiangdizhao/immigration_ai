@@ -38,7 +38,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 CORRECTION REQUIRED |
+| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 ACCEPTED; STAGE 2 NOT STARTED |
 | P11-006 | Matter-centered Client Portal | PLANNED |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
@@ -50,7 +50,7 @@ P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9
 
 P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 base implementation is pushed at `15c72449f74879c10167be27cc059dc415301967`, but GitHub review requires a bounded Stage 1 correction before acceptance. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
+P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at hardening checkpoint `df5335356ac7c7fc908236a270e78f280e5387e6`. Stage 2 document understanding/provenance is not started and requires a separate activation/review gate. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
 ## Evidence that triggered R2
 
@@ -214,3 +214,24 @@ Stage 1 is **not yet accepted** because:
 - current Chat -> ImmigrationConversation -> MatterDocument cascade deletion can remove metadata without deleting the private object, creating a normal-path orphan-object lifecycle defect.
 
 Both corrections remain inside P11-005 Stage 1 under D-033. Stage 2 must not start.
+
+
+### Stage 1 acceptance — 2026-09-24
+
+P11-005 Stage 1 is accepted at `df5335356ac7c7fc908236a270e78f280e5387e6`.
+
+GitHub source/security review confirmed:
+
+- centralized initial mainstream format registry for PDF, JPEG/PNG, DOCX/DOC, TXT/MD/JSON/CSV and XLSX/XLS;
+- bounded signature/container/text validation with canonical MIME normalization;
+- arbitrary ZIP, swapped OOXML identity, encrypted/path-traversal/duplicate/macro-bearing OOXML and mismatched legacy OLE containers rejected by the Stage 1 validator;
+- customer files remain untrusted with `securityStatus=pending` and are not used by AI/lawyer flows;
+- durable pre-PUT document intent and independent `storageStatus` prevent untracked private-object writes;
+- only `stored` records enter normal customer list/metadata/download/soft-delete paths;
+- conversation deletion uses explicit private-object cleanup and a restrictive document-to-conversation foreign key rather than cascade-dropping the only metadata reference;
+- migration sequence `0019_light_loki.sql` then `0020_odd_lockheed.sql`, snapshots and journal are coherent; `0018` remains unchanged;
+- no migration was applied and no live AWS/S3 service was contacted.
+
+Recorded local validation: 211 unit tests passed, build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint remains at the known 21-diagnostic baseline. No GitHub Actions checks are attached to the accepted commit.
+
+Non-blocking follow-ups before production readiness remain: private bucket/IAM/Block Public Access verification, physical retention/purge policy, and an operator/background recovery mechanism for stale non-`stored` upload intents. Stage 2 must preserve the broad accepted format set and must not treat a successful parse as malware/security clearance.

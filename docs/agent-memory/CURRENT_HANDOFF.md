@@ -491,3 +491,50 @@ Next gate: implement this bounded Stage 1 correction, stop uncommitted/unpushed,
 
 - Production private-bucket/IAM configuration and the physical-purge/retention policy for customer soft-deleted documents remain before production readiness. Stale `uploading` intents after abrupt process termination require an operator/job to invoke the internal cleanup operation once the upload attempt is known to have ended; no scheduler/background worker was added.
 - Stage 2 is **NOT started**. Stage 3 is **NOT started**. P11-005 remains in progress pending GitHub review; do not mark VERIFIED or activate later stages.
+
+## P11-005 Stage 1 accepted after GitHub review — 2026-09-24
+
+**Accepted checkpoint:** `df5335356ac7c7fc908236a270e78f280e5387e6`
+
+The pushed hardening diff was reviewed directly on GitHub. No remaining Stage 1 blocking defect was found.
+
+Accepted behavior:
+
+- private matter-document storage remains behind the authenticated application boundary;
+- initial format registry supports PDF, JPEG/PNG, DOCX/DOC, TXT/MD/JSON/CSV and XLSX/XLS;
+- OOXML and legacy OLE files receive bounded container identification rather than extension-only trust;
+- text/JSON inputs receive bounded UTF-8/structural validation;
+- canonical MIME is stored/downloaded; arbitrary public storage URLs remain absent;
+- upload creates a durable DB intent before object PUT and only `storageStatus=stored` becomes normally customer-visible;
+- ambiguous/failed upload paths retain durable storage identity and fail closed;
+- chat/history deletion removes private objects through the explicit coordinator and `MatterDocument.chatId` is restrictive rather than cascading;
+- customer soft-delete remains separate from physical conversation cleanup;
+- `securityStatus=pending` remains independent from storage durability and no document is promoted to clean/lawyer-reviewed by Stage 1.
+
+Migration review:
+
+- `0018_steep_hobgoblin.sql` — original MatterDocument foundation, unchanged;
+- `0019_light_loki.sql` — document/conversation FK becomes `ON DELETE RESTRICT`;
+- `0020_odd_lockheed.sql` — adds `storageStatus`, backfills existing Stage 1 rows as `stored`, then defaults new rows to `uploading`;
+- snapshots and journal align with the sequence;
+- **MIGRATIONS NOT APPLIED**.
+
+Validation recorded from the implementation run:
+
+- `pnpm test:unit`: 211 passed;
+- `pnpm build`: passed;
+- changed-file Biome: passed;
+- `git diff --check`: passed;
+- repository lint: known 21-diagnostic baseline;
+- AWS/S3: not contacted.
+
+GitHub attached no Actions run/status to the commit, so acceptance is based on direct source/diff review plus the recorded local validation.
+
+Known non-blocking operational items:
+
+- stale `uploading` / `cleanup_pending` intents need a future enumerating operator/background recovery path;
+- production S3 bucket/IAM/Block Public Access configuration still needs deployment verification;
+- customer soft-delete physical retention/purge policy is not yet implemented;
+- conversation deletion performs external object cleanup before DB finalization, so a later DB failure can temporarily leave metadata referring to already-deleted bytes; retries converge safely, but a future deletion-state/outbox design may improve observability and recovery.
+
+**Stage 1 is ACCEPTED. P11-005 as a whole is not VERIFIED. Stage 2 is NOT started. Stage 3 is NOT started.**
