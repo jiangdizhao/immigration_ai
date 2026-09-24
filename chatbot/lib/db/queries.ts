@@ -38,6 +38,8 @@ import {
   lawyerClarificationRequest,
   type MatterDocument,
   matterDocument,
+  matterDocumentEvidenceUnit,
+  matterDocumentProcessingRun,
   message,
   passwordResetToken,
   type Suggestion,
@@ -73,6 +75,230 @@ function rawPgTimestamp(date: Date): string {
   return date.toISOString();
 }
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export function beginMatterDocumentProcessing(input: {
+  documentId: string;
+  userId: string;
+  runId: string;
+  extractorVersion: string;
+  retryFailed: boolean;
+  startedAt: Date;
+}) {
+  return db.transaction(async (tx) => {
+    const [record] = await tx
+      .update(matterDocument)
+      .set({ processingStatus: "processing", updatedAt: input.startedAt })
+      .where(
+        and(
+          eq(matterDocument.id, input.documentId),
+          eq(matterDocument.userId, input.userId),
+          eq(matterDocument.storageStatus, "stored"),
+          isNull(matterDocument.deletedAt),
+          input.retryFailed
+            ? eq(matterDocument.processingStatus, "failed")
+            : eq(matterDocument.processingStatus, "not_started"),
+          sql`exists (select 1 from "Chat" where "Chat"."id" = ${matterDocument.chatId} and "Chat"."userId" = ${input.userId})`
+        )
+      )
+      .returning();
+    if (!record) {
+      return null;
+    }
+    const [run] = await tx
+      .insert(matterDocumentProcessingRun)
+      .values({
+        id: input.runId,
+        documentId: record.id,
+        extractorVersion: input.extractorVersion,
+        status: "processing",
+        startedAt: input.startedAt,
+      })
+      .returning();
+    return { record, run };
+  });
+}
+
+export async function getLatestMatterDocumentProcessing(input: {
+  documentId: string;
+  userId: string;
+}) {
+  const [run] = await db
+    .select({ run: matterDocumentProcessingRun })
+    .from(matterDocumentProcessingRun)
+    .innerJoin(
+      matterDocument,
+      eq(matterDocumentProcessingRun.documentId, matterDocument.id)
+    )
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(
+      and(
+        eq(matterDocument.id, input.documentId),
+        eq(matterDocument.userId, input.userId),
+        eq(chat.userId, input.userId),
+        eq(matterDocument.storageStatus, "stored"),
+        isNull(matterDocument.deletedAt),
+        inArray(matterDocumentProcessingRun.status, [
+          "complete",
+          "partial",
+          "needs_review",
+        ])
+      )
+    )
+    .orderBy(desc(matterDocumentProcessingRun.startedAt))
+    .limit(1);
+  return run?.run ?? null;
+}
+
+export function finalizeMatterDocumentProcessing(input: {
+  runId: string;
+  documentId: string;
+  completedAt: Date;
+  status: "complete" | "partial" | "needs_review";
+  extractionMethod: "native" | "vision_fallback" | "mixed";
+  units: Array<{
+    ordinal: number;
+    sourceClass: "customer_document";
+    locator: Record<string, string | number>;
+    provenance: Record<string, string | number | boolean | null>;
+    extractionMethod: "native" | "vision_fallback";
+    extractedText: string;
+  }>;
+  totalTextChars: number;
+  truncated: boolean;
+  errorCode: string | null;
+}) {
+  return db.transaction(async (tx) => {
+    if (input.units.length) {
+      await tx.insert(matterDocumentEvidenceUnit).values(
+        input.units.map((unit) => ({
+          ...unit,
+          documentId: input.documentId,
+          runId: input.runId,
+        }))
+      );
+    }
+    const [run] = await tx
+      .update(matterDocumentProcessingRun)
+      .set({
+        status: input.status,
+        extractionMethod: input.extractionMethod,
+        completedAt: input.completedAt,
+        unitCount: input.units.length,
+        totalTextChars: input.totalTextChars,
+        truncated: input.truncated,
+        errorCode: input.errorCode,
+      })
+      .where(
+        and(
+          eq(matterDocumentProcessingRun.id, input.runId),
+          eq(matterDocumentProcessingRun.status, "processing")
+        )
+      )
+      .returning();
+    if (!run) {
+      throw new Error("processing_run_not_active");
+    }
+    const [record] = await tx
+      .update(matterDocument)
+      .set({ processingStatus: "complete", updatedAt: input.completedAt })
+      .where(
+        and(
+          eq(matterDocument.id, input.documentId),
+          eq(matterDocument.processingStatus, "processing")
+        )
+      )
+      .returning();
+    if (!record) {
+      throw new Error("processing_document_not_active");
+    }
+    return run;
+  });
+}
+
+export async function failMatterDocumentProcessing(input: {
+  runId: string;
+  documentId: string;
+  failedAt: Date;
+  errorCode: string;
+}) {
+  await db.transaction(async (tx) => {
+    await tx
+      .update(matterDocumentProcessingRun)
+      .set({
+        status: "failed",
+        completedAt: input.failedAt,
+        errorCode: input.errorCode,
+      })
+      .where(
+        and(
+          eq(matterDocumentProcessingRun.id, input.runId),
+          eq(matterDocumentProcessingRun.status, "processing")
+        )
+      );
+    await tx
+      .update(matterDocument)
+      .set({ processingStatus: "failed", updatedAt: input.failedAt })
+      .where(
+        and(
+          eq(matterDocument.id, input.documentId),
+          eq(matterDocument.processingStatus, "processing")
+        )
+      );
+  });
+}
+
+export async function getMatterDocumentProcessingEvidence(input: {
+  documentId: string;
+  userId: string;
+  runId?: string;
+}) {
+  const access = await getMatterDocumentRecordForOwner(input);
+  if (!access) {
+    return null;
+  }
+  const run = input.runId
+    ? (
+        await db
+          .select()
+          .from(matterDocumentProcessingRun)
+          .where(
+            and(
+              eq(matterDocumentProcessingRun.id, input.runId),
+              eq(matterDocumentProcessingRun.documentId, input.documentId)
+            )
+          )
+          .limit(1)
+      )[0]
+    : await getLatestMatterDocumentProcessing(input);
+  const latestAttempt = run
+    ? run
+    : (
+        await db
+          .select()
+          .from(matterDocumentProcessingRun)
+          .where(eq(matterDocumentProcessingRun.documentId, input.documentId))
+          .orderBy(desc(matterDocumentProcessingRun.startedAt))
+          .limit(1)
+      )[0];
+  if (
+    !latestAttempt ||
+    latestAttempt.status === "failed" ||
+    latestAttempt.status === "processing"
+  ) {
+    return { document: access, run: latestAttempt ?? null, units: [] };
+  }
+  const units = await db
+    .select()
+    .from(matterDocumentEvidenceUnit)
+    .where(
+      and(
+        eq(matterDocumentEvidenceUnit.documentId, input.documentId),
+        eq(matterDocumentEvidenceUnit.runId, latestAttempt.id)
+      )
+    )
+    .orderBy(asc(matterDocumentEvidenceUnit.ordinal));
+  return { document: access, run: latestAttempt, units };
+}
 
 export async function getUser(email: string): Promise<User[]> {
   try {

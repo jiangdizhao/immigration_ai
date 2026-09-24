@@ -1,14 +1,21 @@
 import "server-only";
 
 import {
+  beginMatterDocumentProcessing,
   createMatterDocumentRecord,
+  failMatterDocumentProcessing,
+  finalizeMatterDocumentProcessing,
   getImmigrationConversationByChatId,
+  getLatestMatterDocumentProcessing,
+  getMatterDocumentProcessingEvidence,
   getMatterDocumentRecordForOwner,
   getMatterDocumentRecordForStorageCleanup,
   listMatterDocumentRecordsForOwner,
   softDeleteMatterDocumentRecord,
   transitionMatterDocumentStorageStatus,
 } from "@/lib/db/queries";
+import { getConfiguredDocumentVision } from "./processing/openai-vision";
+import { createMatterDocumentProcessingService } from "./processing/service";
 import { createMatterDocumentService } from "./service";
 import { createS3MatterDocumentStorage } from "./storage";
 import type { MatterDocumentRepository } from "./types";
@@ -34,4 +41,21 @@ const service = createMatterDocumentService({
 
 export function getMatterDocumentService() {
   return service;
+}
+
+const processingService = createMatterDocumentProcessingService({
+  storage: createS3MatterDocumentStorage(),
+  vision: getConfiguredDocumentVision(),
+  repository: {
+    getForOwner: getMatterDocumentRecordForOwner,
+    latest: getLatestMatterDocumentProcessing,
+    begin: beginMatterDocumentProcessing,
+    finalize: finalizeMatterDocumentProcessing,
+    fail: failMatterDocumentProcessing,
+    getEvidence: getMatterDocumentProcessingEvidence,
+  },
+});
+
+export function getMatterDocumentProcessingService() {
+  return processingService;
 }

@@ -148,6 +148,13 @@
       "when": 1790214695025,
       "tag": "0020_odd_lockheed",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790217490892,
+      "tag": "0021_sudden_warbird",
+      "breakpoints": true
     }
   ]
 }

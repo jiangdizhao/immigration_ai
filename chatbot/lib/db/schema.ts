@@ -625,6 +625,71 @@ export const matterDocument = pgTable(
 
 export type MatterDocument = InferSelectModel<typeof matterDocument>;
 
+export const matterDocumentProcessingRun = pgTable(
+  "MatterDocumentProcessingRun",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    documentId: uuid("documentId")
+      .notNull()
+      .references(() => matterDocument.id, { onDelete: "cascade" }),
+    extractorVersion: varchar("extractorVersion", { length: 80 }).notNull(),
+    status: varchar("status", {
+      enum: ["processing", "complete", "partial", "needs_review", "failed"],
+    }).notNull(),
+    extractionMethod: varchar("extractionMethod", {
+      enum: ["native", "vision_fallback", "mixed"],
+    }),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    completedAt: timestamp("completedAt"),
+    unitCount: integer("unitCount").notNull().default(0),
+    totalTextChars: integer("totalTextChars").notNull().default(0),
+    truncated: boolean("truncated").notNull().default(false),
+    errorCode: varchar("errorCode", { length: 64 }),
+  },
+  (table) => ({
+    documentStartedIndex: index(
+      "MatterDocumentProcessingRun_document_started_idx"
+    ).on(table.documentId, table.startedAt),
+  })
+);
+
+export const matterDocumentEvidenceUnit = pgTable(
+  "MatterDocumentEvidenceUnit",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    documentId: uuid("documentId")
+      .notNull()
+      .references(() => matterDocument.id, { onDelete: "cascade" }),
+    runId: uuid("runId")
+      .notNull()
+      .references(() => matterDocumentProcessingRun.id, {
+        onDelete: "cascade",
+      }),
+    ordinal: integer("ordinal").notNull(),
+    sourceClass: varchar("sourceClass", { enum: ["customer_document"] })
+      .notNull()
+      .default("customer_document"),
+    locator: json("locator").$type<Record<string, string | number>>().notNull(),
+    provenance: json("provenance")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
+    extractionMethod: varchar("extractionMethod", {
+      enum: ["native", "vision_fallback"],
+    }).notNull(),
+    extractedText: text("extractedText").notNull(),
+  },
+  (table) => ({
+    runOrdinalUnique: uniqueIndex(
+      "MatterDocumentEvidenceUnit_run_ordinal_unique"
+    ).on(table.runId, table.ordinal),
+    documentRunIndex: index("MatterDocumentEvidenceUnit_document_run_idx").on(
+      table.documentId,
+      table.runId
+    ),
+  })
+);
+
 // DEPRECATED: The following schema is deprecated and will be removed in the future.
 // Read the migration guide at https://chatbot.dev/docs/migration-guides/message-parts
 export const messageDeprecated = pgTable("Message", {

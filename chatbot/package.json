@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build",
+    "build": "pnpm build:document-parser-worker && next build",
     "start": "next start",
     "lint": "ultracite check",
-    "test:unit": "node --import tsx --test lib/assistant-mode.test.ts lib/political-gate/index.test.ts lib/default-agent-runtime-debug.test.ts lib/legal-service-transport.test.ts lib/server-http-timeouts.test.ts lib/vip/entitlement.test.ts lib/vip/config.test.ts lib/vip/payment-provider.test.ts lib/vip/billing/money.test.ts lib/vip/billing/config.test.ts lib/vip/billing/price-decision.test.ts lib/vip/billing/schema.test.ts lib/vip/billing/admin-price-api.test.ts lib/vip/billing/webhook-events.test.ts lib/vip/billing/provisioning.test.ts lib/vip/billing/webhook-verification.test.ts lib/vip/billing/webhook-processing.test.ts lib/vip/billing/checkout-api.test.ts lib/vip/billing/customer-billing-api.test.ts lib/vip/billing/billing-emails.test.ts lib/vip/billing/m3-safety.test.ts lib/lawyer-requests/status.test.ts lib/lawyer-requests/authorization.test.ts lib/lawyer-requests/snapshot.test.ts lib/lawyer-requests/message-identity.test.ts lib/lawyer-requests/target-validation.test.ts lib/lawyer-requests/rbac.test.ts lib/lawyer-requests/admin-update.test.ts lib/lawyer-requests/learning-bridge-policy.test.ts lib/lawyer-requests/trace-link.test.ts lib/constants.test.ts lib/site-locale.test.ts lib/workspace-copy.test.ts lib/public-content.test.ts lib/policy-intelligence.test.ts lib/policy-intelligence-registry.test.ts lib/policy-intelligence-discovery.test.ts lib/auth/tokens.test.ts lib/auth/email.test.ts lib/auth/session-version.test.ts lib/auth/server-action-boundary.test.ts lib/matter-documents/service.test.ts lib/matter-documents/formats.test.ts lib/matter-documents/chat-deletion.test.ts",
+    "test:unit": "pnpm build:document-parser-worker && node --import tsx --test lib/assistant-mode.test.ts lib/political-gate/index.test.ts lib/default-agent-runtime-debug.test.ts lib/legal-service-transport.test.ts lib/server-http-timeouts.test.ts lib/vip/entitlement.test.ts lib/vip/config.test.ts lib/vip/payment-provider.test.ts lib/vip/billing/money.test.ts lib/vip/billing/config.test.ts lib/vip/billing/price-decision.test.ts lib/vip/billing/schema.test.ts lib/vip/billing/admin-price-api.test.ts lib/vip/billing/webhook-events.test.ts lib/vip/billing/provisioning.test.ts lib/vip/billing/webhook-verification.test.ts lib/vip/billing/webhook-processing.test.ts lib/vip/billing/checkout-api.test.ts lib/vip/billing/customer-billing-api.test.ts lib/vip/billing/billing-emails.test.ts lib/vip/billing/m3-safety.test.ts lib/lawyer-requests/status.test.ts lib/lawyer-requests/authorization.test.ts lib/lawyer-requests/snapshot.test.ts lib/lawyer-requests/message-identity.test.ts lib/lawyer-requests/target-validation.test.ts lib/lawyer-requests/rbac.test.ts lib/lawyer-requests/admin-update.test.ts lib/lawyer-requests/learning-bridge-policy.test.ts lib/lawyer-requests/trace-link.test.ts lib/constants.test.ts lib/site-locale.test.ts lib/workspace-copy.test.ts lib/public-content.test.ts lib/policy-intelligence.test.ts lib/policy-intelligence-registry.test.ts lib/policy-intelligence-discovery.test.ts lib/auth/tokens.test.ts lib/auth/email.test.ts lib/auth/session-version.test.ts lib/auth/server-action-boundary.test.ts lib/matter-documents/service.test.ts lib/matter-documents/formats.test.ts lib/matter-documents/chat-deletion.test.ts lib/matter-documents/processing.test.ts",
     "test:political-gate": "PHASE2_POLITICAL_GATE_ISOLATED=true pnpm exec playwright test -c playwright.political-gate.config.ts",
     "format": "ultracite fix",
     "policy:discover": "node --import tsx scripts/policy-discover.ts",
@@ -21,7 +21,8 @@
     "phase9:m3": "tsx scripts/phase9_m3_billing_acceptance.ts",
     "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
     "prod:prepare": "pnpm db:migrate && npx tsx scripts/apply-phase0-chatbot-schema.ts && pnpm build",
-    "prod:start": "next start -H 127.0.0.1 -p 3000"
+    "prod:start": "next start -H 127.0.0.1 -p 3000",
+    "build:document-parser-worker": "node scripts/build-document-parser-worker.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",
@@ -36,6 +37,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.35.3",
     "@icons-pack/react-simple-icons": "^13.7.0",
+    "@napi-rs/canvas": "^1.0.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.200.0",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -82,6 +84,7 @@
     "next-themes": "^0.3.0",
     "orderedmap": "^2.1.1",
     "papaparse": "^5.5.2",
+    "pdfjs-dist": "^6.3.289",
     "postgres": "^3.4.4",
     "prosemirror-example-setup": "^1.2.3",
     "prosemirror-inputrules": "^1.4.0",
@@ -99,6 +102,7 @@
     "react-syntax-highlighter": "^15.6.6",
     "redis": "^5.0.0",
     "resumable-stream": "^2.2.10",
+    "saxes": "^6.0.0",
     "server-only": "^0.0.1",
     "shiki": "^3.21.0",
     "sonner": "^1.5.0",
@@ -110,6 +114,8 @@
     "undici": "^6.21.3",
     "use-stick-to-bottom": "^1.1.1",
     "usehooks-ts": "^3.1.0",
+    "word-extractor": "^1.0.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yauzl": "^3.4.0",
     "zod": "^3.25.76"
   },
@@ -125,13 +131,17 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/word-extractor": "^1.0.6",
     "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "drizzle-kit": "^0.25.0",
+    "esbuild": "^0.28.2",
     "postcss": "^8",
     "tailwindcss": "^4.1.13",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
-    "ultracite": "^7.0.11"
+    "ultracite": "^7.0.11",
+    "yazl": "^3.3.1"
   },
   "packageManager": "pnpm@9.12.3"
 }

@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+  outputFileTracingIncludes: {
+    "/api/matter-documents/\\[documentId\\]/processing": [
+      "./lib/matter-documents/processing/worker-runtime/parser-worker.mjs",
+      "./lib/matter-documents/processing/worker-runtime/**/*",
+    ],
+  },
   images: {
     remotePatterns: [
       {

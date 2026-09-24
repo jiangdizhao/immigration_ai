@@ -12,3 +12,4 @@ test-results/
 
 .DS_Store
 Thumbs.db
+/lib/matter-documents/processing/worker-runtime/

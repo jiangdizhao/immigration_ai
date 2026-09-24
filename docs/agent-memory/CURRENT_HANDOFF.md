@@ -537,4 +537,59 @@ Known non-blocking operational items:
 - customer soft-delete physical retention/purge policy is not yet implemented;
 - conversation deletion performs external object cleanup before DB finalization, so a later DB failure can temporarily leave metadata referring to already-deleted bytes; retries converge safely, but a future deletion-state/outbox design may improve observability and recovery.
 
-**Stage 1 is ACCEPTED. P11-005 as a whole is not VERIFIED. Stage 2 is NOT started. Stage 3 is NOT started.**
+**Stage 1 is ACCEPTED. Stage 2 implementation is recorded below but is not yet accepted or verified. P11-005 is not VERIFIED. Stage 3 is NOT started.**
+
+
+## P11-005 Stage 2 implementation checkpoint — 2026-09-24
+
+Status:
+
+- P11-005 Stage 2 implementation remains in the working tree for review; it is not accepted or verified.
+- Stage 1 remains accepted at df5335356ac7c7fc908236a270e78f280e5387e6.
+- Base branch is `phase11-chinese-service-platform-ui-rebase` at `a2ea495e1aafc9ace2a69e9295e23260bff15a86`.
+- No commit or push was made. Stage 3 is NOT started.
+
+Implemented Stage 2 scope:
+
+- Added processing-run and normalized customer-document evidence persistence, with provenance units and explicit storage, processing, and security states. Original bytes remain in private object storage; extracted text is persisted as `sourceClass=customer_document` and is not injected into answer prompts, legal retrieval, citations, or lawyer sharing.
+- Owner-authenticated processing and status/evidence routes enforce ownership and keep storage keys private. Completed runs are idempotent; failed runs require explicit retry; evidence and completion are committed together so partial results are not exposed as complete.
+- Migration `0021_sudden_warbird.sql` is created and uncommitted. **MIGRATION NOT APPLIED.** No migration or schema-push command was run.
+- Native extraction covers PDF, DOC/DOCX, XLS/XLSX, CSV, TXT, Markdown, and JSON. PDF native text is handled page by page; only blank pages are rendered and sent to vision, preserving page provenance and mixed native/vision units.
+
+OpenAI document vision:
+
+- Production adapter: `lib/matter-documents/processing/openai-vision.ts`; it uses the repository's `@ai-sdk/openai` and `ai` dependencies directly, independently of Fast, Legal Check, Premium, assistant-mode access, and chat model routing.
+- Configuration is server-only: `MATTER_DOCUMENT_VISION_ENABLED` must be exactly `true`, `MATTER_DOCUMENT_VISION_MODEL` must be explicitly set to a non-empty model ID, and `OPENAI_API_KEY` must be present. There is no default model. If any condition is absent, vision is disabled and images/scanned pages return `needs_review` with `vision_unavailable`; native extraction continues.
+- The request uses fixed transcription-only system instructions, image bytes as a separate user data part, no tools, no URL following, no retries, a 20-second abort timeout, and a 6,000-token output cap. Normalized page text is bounded to 16,000 characters; excess is truncated and marked partial.
+- When enabled, customer JPEG/PNG bytes and rasterized scanned-PDF page bytes are sent to the configured OpenAI API for transcription. This is the customer-data boundary; content is not fully local. Errors are reduced to safe machine codes and document/provider contents are not logged. No live OpenAI request was made during validation.
+- Vision output is transcription only. The application owns document/page provenance; success does not assess authenticity, safety, evidence sufficiency, or legal meaning. `securityStatus` remains `pending`.
+
+PDF page rendering:
+
+- `processing/pdf-renderer.ts` uses `pdfjs-dist` with `@napi-rs/canvas`; it renders only each specific blank/native-text-less page, with PDF page count capped at 100. XFA/eval are disabled and annotations are not rendered.
+- Output is JPEG, bounded to 2,400 pixels per dimension, 25 million pixels, 10 MiB per page, and 20 MiB aggregate raster data. Native pages remain native; scanned pages use vision individually, with `mixed` overall method when both types occur.
+- No daemon or external rendering service is required. Local production tracing was verified for Linux x64 GNU, including the worker bundle, PDF.js standard fonts, PDF.js module, and `@napi-rs/canvas` native binding. Deployment must package the native binding matching its actual OS/libc/CPU architecture; the AWS deployment architecture was not inferred or tested.
+
+Parser isolation and production packaging:
+
+- CPU-bound parsing runs in a Node `worker_threads` worker for PDF, DOC/DOCX, XLS/XLSX, CSV, TXT, Markdown, and JSON. It is a hard-cancellable CPU/memory isolation boundary within the Node process: the parent can terminate work, and V8 heap/stack resource limits are applied. It is NOT a full OS or malware sandbox.
+- Worker construction explicitly sets `env: {}` and `execArgv: []`; no parent application environment or credential variables are inherited. Only the bundled parser code and bounded format/bytes/limits are sent through the worker contract. OpenAI vision stays in the parent/provider layer and is not loaded by the native parser worker.
+- A test-only worker fixture verifies a parent-only secret probe and `OPENAI_API_KEY` are absent in the worker; a normal parser worker succeeds without OpenAI credentials. The probe fixture is under `processing/worker-fixtures` and is not part of production parsing.
+- The parent enforces a 30-second wall-clock timeout and calls `worker.terminate()` before returning `processing_timeout`. Worker resource limits are 192 MiB old generation, 32 MiB young generation, and 4 MiB stack. Crash, malformed output, and invalid worker messages fail closed as `parser_worker_failed`; no partial evidence is finalized.
+- Successful parsing does not change `securityStatus` from `pending` or establish that a file is safe. Worker threads are NOT a full OS/malware sandbox. Malware scanning, quarantine, and related file-security controls remain a separate production-readiness requirement.
+- `scripts/build-document-parser-worker.mjs` creates the bundled worker and copies PDF.js standard fonts. `next.config.ts` externalizes PDF.js/canvas and includes the generated worker assets in the processing route's output trace. The worker artifact is ignored by Git and is generated by build/test scripts.
+
+Validation on 2026-09-24:
+
+- `pnpm test:unit`: 236 passed, 0 failed, 0 skipped, including the parser worker environment-boundary test.
+- `pnpm build`: passed. Production trace contains the worker entry, 16 standard-font/license assets, PDF.js legacy module, and Linux x64 GNU canvas binding. A bounded production-bundle smoke resolved the worker and parsed local text input.
+- Changed-file Biome: passed across 29 changed source/config files with no diagnostics.
+- `pnpm lint`: 21 repository diagnostics/errors (matching the recorded baseline) plus one generated parser-worker bundle size warning; no fixes were applied.
+- `git diff --check`: passed.
+- Tests use local synthetic fixtures and fake vision/storage dependencies. **AWS/S3 NOT CONTACTED. OPENAI NOT CONTACTED during validation.** Package-registry downloads were used for local dependencies.
+
+Remaining review/deployment items:
+
+- Production deployment must confirm its platform-compatible `@napi-rs/canvas` binding and runtime packaging before enabling scanned-PDF vision.
+- Existing Stage 1 operational items remain: verify private S3 bucket/IAM/public-access settings; define retention/purge and stale storage-intent recovery operations.
+- Stage 2 remains subject to owner review. Do not mark P11-005 VERIFIED until review gates pass. **Stage 3 is NOT started.**
