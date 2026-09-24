@@ -731,3 +731,39 @@ Recorded validation for the final correction: chatbot unit suite 264 passed, bui
 P11-005 remains **IN PROGRESS / NOT VERIFIED** because explicit production-readiness gates remain open: deployment-compatible canvas binding verification, authorized migration application/DB smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy.
 
 Migrations `0018`–`0021` remain **NOT APPLIED**. P11-006 is NOT STARTED.
+
+
+## Owner decision — defer P11-005 production-readiness gates to P11-009 — 2026-09-25
+
+The owner approved proceeding to P11-006 while explicitly deferring the remaining P11-005 production-readiness gates to P11-009 AWS/staging acceptance.
+
+**Do not forget or silently close these gates.** P11-005 remains NOT VERIFIED until P11-009 closes or separately accepts:
+
+1. deployment-compatible `@napi-rs/canvas` native binding/package trace;
+2. authorized application of migrations `0018`–`0021` plus DB-backed smoke;
+3. private S3 bucket/IAM/Block Public Access verification;
+4. retention/purge and stale storage-intent operational recovery;
+5. malware/quarantine/scanning strategy.
+
+This deferral does not authorize applying migrations, deploying, enabling live document vision, or representing the document subsystem as production-ready.
+
+## P11-006 activation — Matter-centered Client Portal
+
+**Status:** ACTIVE / READY TO IMPLEMENT  
+**Task packet:** `docs/agent-memory/tasks/P11-006.md`
+
+Frozen implementation direction:
+
+- add a registered-customer `/client-portal` operational hub;
+- use the existing DB and legal-service Matter data as authority; no presentation-driven schema redesign;
+- group customer activity by exact `legalMatterId` when present, otherwise by the owned conversation as a provisional portal group;
+- aggregate owned conversations, document metadata/status, lawyer-review requests and VIP entitlement;
+- fetch legal-service Matter context server-side only for matter IDs already proven to belong to the authenticated customer through owned conversations;
+- project only bounded customer-safe fields; never expose raw `metadata_json`, document evidence text, storage keys, provider IDs or internal traces;
+- present confirmed/user-origin facts separately from items still missing/uncertain/conflicting;
+- do not infer deadlines, legal status, lawyer assignment, case progress or success;
+- existing AI Workspace, lawyer-request detail and VIP/billing flows remain the action authorities; the portal is a continuity/aggregation layer, not a replacement engine;
+- no new DB migration is expected;
+- P11-007 lawyer-workspace continuity, P11-008 booking and P11-009 AWS/staging acceptance remain separate.
+
+The coding model must stop uncommitted/unpushed for owner/ChatGPT review.

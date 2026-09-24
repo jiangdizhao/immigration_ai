@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -119,7 +119,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - No backend, database, legal-reasoning or booking implementation was added.
 - Final validation: 187 unit tests passed; build, changed-file Biome and `git diff --check` passed; repository lint retains the known 22-diagnostic baseline; desktop/mobile owner visual acceptance passed.
 - Deployment note: the local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave this disabled unless intentionally debugging.
-- **P11-005 — Secure Matter Documents & AI File Intake: IN PROGRESS; Stages 1–3 ACCEPTED. Stage 3 accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`; production-readiness gates remain open, so P11-005 is not yet VERIFIED.**
+- **P11-005 — Secure Matter Documents & AI File Intake: IMPLEMENTATION COMPLETE / STAGES 1–3 ACCEPTED; production-readiness gates are explicitly DEFERRED to P11-009 AWS/staging acceptance. P11-005 remains NOT VERIFIED until those deferred gates are closed.**
 - P11-005 is now the prerequisite to the customer portal because current generic upload support is not a secure matter-document system.
 - Current scaffold: `Message_v2.attachments` exists; generic `/api/files/upload` accepts JPEG/PNG up to 5 MiB and writes public Vercel Blob objects; the Phase 11 AI Workspace does not use that path for customer matter evidence.
 - Required P11-005 boundary: private matter-scoped documents, a centralized mainstream-format registry (PDF, JPEG/PNG, DOCX/DOC, TXT/MD/JSON/CSV, XLSX/XLS initially), authenticated ownership, integrity/type/size validation, processing lifecycle, document/page provenance, and safe AI/lawyer continuity.
@@ -127,11 +127,12 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Accepted Stage 1 boundary: centralized PDF/JPEG/PNG/DOCX/DOC/TXT/MD/JSON/CSV/XLSX/XLS registry with bounded format-aware validation; durable upload intents and `storageStatus`; private S3 abstraction; customer-only ownership; `ON DELETE RESTRICT` plus explicit conversation-document cleanup.
 - Stage 1 migrations `0018`, `0019`, and `0020` are repository artifacts only and remain **NOT APPLIED**.
 - Accepted Stage 2 boundary: bounded normalized extraction/provenance for PDF/JPEG/PNG/DOCX/DOC/TXT/MD/JSON/CSV/XLSX/XLS; isolated hard-cancellable native parsing; native-first mixed-PDF handling; dedicated OpenAI transcription adapter for image/scanned-page fallback; explicit incomplete reprocessing and stale-run recovery; customer-document evidence remains untrusted and separate from legal authority.
-- Stage 2 migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. Stage 3 is not started.
-- **P11-006 — Matter-centered Client Portal: PLANNED.**
+- Stage 2 migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. Stage 3 is accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`.
+- **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
+- **P11-006 — Matter-centered Client Portal: ACTIVE / READY TO IMPLEMENT.**
 - **P11-007 — Lawyer Workspace Continuity: PLANNED.**
 - **P11-008 — Appointment / Consultation Workflow: PLANNED.**
-- **P11-009 — Final bilingual/responsive/accessibility/E2E + staging acceptance: PLANNED.**
+- **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -185,3 +186,18 @@ Accepted integration boundary:
 No schema change or new migration was introduced by Stage 3. Migrations `0018`–`0021` remain **NOT APPLIED**.
 
 P11-005 remains **NOT VERIFIED** until its explicit production-readiness gates are closed or separately accepted: actual deployment-compatible canvas binding/package trace, controlled migration application and DB-backed smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy.
+
+
+### P11-005 production-readiness deferral — 2026-09-25
+
+Owner decision: all three P11-005 implementation stages are accepted, but the remaining operational/security deployment gates are intentionally deferred to P11-009 AWS/staging acceptance so Phase 11 product work can proceed.
+
+This is a **deferral, not a waiver**. P11-005 remains **NOT VERIFIED** until P11-009 explicitly closes or separately accepts:
+
+- actual deployment-platform `@napi-rs/canvas` binding/package trace;
+- authorized application of migrations `0018`–`0021` and DB-backed smoke;
+- private S3 bucket/IAM/Block Public Access verification;
+- retention/purge and stale storage-intent operational recovery;
+- malware/quarantine/scanning strategy.
+
+P11-006 is activated only because these gates have been durably carried forward into P11-009.

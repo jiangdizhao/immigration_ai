@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 
 ## Objective
 
@@ -38,11 +38,11 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS GATES OPEN |
-| P11-006 | Matter-centered Client Portal | PLANNED |
+| P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
+| P11-006 | Matter-centered Client Portal | ACTIVE — TASK PACKET FROZEN / READY TO IMPLEMENT |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
-| P11-009 | Bilingual/responsive/accessibility/E2E + staging acceptance | PLANNED |
+| P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
 
@@ -279,3 +279,30 @@ The final post-push correction also closes two provenance edge cases: guided-int
 No new migration was created; migrations `0018`–`0021` remain **NOT APPLIED**. GitHub attached no Actions/status run to the accepted checkpoint; acceptance is based on direct source review plus recorded local validation.
 
 P11-005 remains **IN PROGRESS / NOT VERIFIED** because production-readiness gates are intentionally still open.
+
+
+## P11-005 deferral / P11-006 activation — 2026-09-25
+
+The owner explicitly approved deferring the remaining P11-005 production-readiness gates to P11-009 AWS/staging acceptance.
+
+Consequences:
+
+- P11-005 implementation is complete: Stages 1–3 are accepted.
+- P11-005 remains **NOT VERIFIED**; the deferred gates are still mandatory.
+- P11-006 may now proceed without implying that secure-document production readiness has been established.
+- P11-009 must not declare staging/production acceptance while any deferred P11-005 gate remains unresolved.
+
+### P11-006 direction
+
+P11-006 creates a registered-customer portal that **aggregates existing authoritative data instead of inventing a new matter database**.
+
+The first production portal should unify:
+
+- owned immigration conversations and their linked legal-matter identity;
+- bounded matter context from the existing legal-service Matter record;
+- P11-005 matter-document metadata/status;
+- existing lawyer-request status/unread state;
+- existing VIP entitlement/subscription state;
+- direct continuity links back to AI Workspace, lawyer-request detail and VIP management.
+
+No new appointment workflow belongs here; that remains P11-008.

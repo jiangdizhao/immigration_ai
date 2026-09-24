@@ -583,3 +583,48 @@ A normal Chat / ImmigrationConversation deletion must not cascade away the only 
 P11-005 Stage 1 must close this lifecycle gap before acceptance. The implementation may use an explicit cleanup/tombstone/outbox/retention-safe design consistent with the existing architecture, but it must be deterministic, tested, and must not depend on best-effort memory-only cleanup.
 
 The migration remains unapplied. If the lifecycle correction requires a new SQL change after the already-pushed `0018` migration, prefer generating a follow-up migration rather than silently rewriting an already-pushed migration history, unless repository migration tooling clearly requires otherwise.
+
+
+## D-040 — P11-005 production-readiness gates are deferred, not waived
+
+**Date:** 2026-09-25  
+**Status:** ACCEPTED
+
+All three P11-005 implementation stages are accepted. The owner explicitly chose to defer the remaining deployment/operational production-readiness gates to P11-009 AWS/staging acceptance so P11-006 product work can proceed.
+
+The deferred gates remain mandatory:
+
+- deployment-compatible `@napi-rs/canvas` native binding/package trace;
+- authorized migrations `0018`–`0021` plus DB-backed smoke;
+- private S3/IAM/Block Public Access verification;
+- retention/purge and stale storage-intent recovery operations;
+- malware/quarantine/scanning strategy.
+
+This decision does **not** mark P11-005 VERIFIED and does not authorize deployment, migration application, live OpenAI document vision or production claims.
+
+P11-009 must explicitly carry and close these gates before staging/production acceptance.
+
+## D-041 — P11-006 is an aggregation-first, matter-centered customer portal
+
+**Date:** 2026-09-25  
+**Status:** ACCEPTED
+
+P11-006 will build a registered-customer portal using existing authoritative production data before considering any new schema.
+
+Portal identity rules:
+
+- exact non-null `legalMatterId` is the strongest existing matter grouping key;
+- conversations sharing the same exact `legalMatterId` may be presented as one portal matter group;
+- a conversation without a legal matter ID remains a provisional conversation-backed portal group and must not be presented as a fully established legal matter;
+- the portal must not create or rewrite legal-matter identity merely for UI convenience.
+
+Data authority rules:
+
+- chatbot PostgreSQL remains authority for customer ownership, conversations, MatterDocuments, lawyer requests and VIP/billing state;
+- legal-service Matter data may be projected only after the chatbot has established that the requested `legalMatterId` is linked to an owned conversation;
+- raw legal-service `metadata_json`, hidden traces and provider/debug data must never be exposed to the browser;
+- confirmed/user-origin facts and unresolved/missing facts must remain visibly distinct;
+- customer-document text must not be copied into the portal overview;
+- no inferred deadline, case-status, lawyer-status or legal conclusion may be invented by the portal.
+
+P11-006 is a continuity and navigation layer. AI Workspace, lawyer-request detail, VIP billing, future lawyer workspace and future appointment workflow remain their own authorities.
