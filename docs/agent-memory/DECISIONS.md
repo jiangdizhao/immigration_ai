@@ -646,3 +646,26 @@ The accepted rollout-compatibility behavior is:
 - unrelated database failures must not be broadly swallowed.
 
 This decision is a compatibility bridge only. It does not apply migrations, weaken P11-005 security, or mark P11-005 production-ready. D-040 remains fully in force.
+
+
+## D-043 — Lawyer continuity is request-scoped, not matter-wide staff access
+
+**Date:** 2026-09-25  
+**Status:** ACCEPTED
+
+P11-007 improves the assigned-lawyer workspace using the existing immutable `LawyerClarificationRequest` handoff contract.
+
+Assignment authorizes the lawyer to work on that request; it does **not** automatically authorize unrestricted access to the customer's:
+
+- full conversation history;
+- all conversations sharing a `legalMatterId`;
+- raw MatterDocuments or private object downloads;
+- all document extraction/evidence units;
+- raw Legal Service `Matter.metadata_json`;
+- internal AI traces outside the existing request/learning workflow.
+
+The accepted lawyer continuity package is the request itself plus its bounded immutable snapshot, clarification thread and existing disposition/learning fields.
+
+P11-007 may restructure and safely project that data for human usability, but must not silently widen the authorization model. Any future matter-wide staff workspace or generic document browsing requires a separate architecture/security decision.
+
+Official/legal evidence, AI analysis, customer-document evidence and lawyer advice must remain visibly separate in the lawyer UI.

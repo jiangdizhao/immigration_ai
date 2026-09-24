@@ -130,7 +130,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Stage 2 migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. Stage 3 is accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
-- **P11-007 — Lawyer Workspace Continuity: PLANNED.**
+- **P11-007 — Lawyer Workspace Continuity: ACTIVE / READY TO IMPLEMENT.**
 - **P11-008 — Appointment / Consultation Workflow: PLANNED.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
@@ -224,3 +224,24 @@ Verified result:
 Validation recorded for the final runtime-compatibility correction: 281 chatbot unit tests passed, build passed, changed-file Biome passed, `git diff --check` passed, and repository lint remained at the known 21-diagnostic baseline with none in changed P11-006 files. GitHub attached no Actions/workflow status to the accepted checkpoint.
 
 P11-006 verification does **not** close P11-005 production-readiness. D-040 remains in force and P11-005 remains NOT VERIFIED until P11-009 closes its deferred gates.
+
+
+### P11-007 activation — Lawyer Workspace Continuity — 2026-09-25
+
+P11-007 is activated after P11-006 verification.
+
+The objective is to turn the existing assigned-request lawyer portal into a Chinese-first bilingual human-review workspace **without expanding lawyer authority beyond the request already assigned to that lawyer**.
+
+Frozen continuity boundary:
+
+- the existing `LawyerClarificationRequest` and immutable request snapshots remain the handoff authority;
+- lawyer access remains assigned-request-only; P11-007 does not create a customer/matter/document browser for staff;
+- the lawyer may see the bounded context already captured in the request: customer question, AI answer, up to the existing context snapshot, official/compact-source evidence, exact bounded customer-document excerpts, customer note and clarification messages;
+- official/legal sources, customer-document evidence, AI answer and lawyer disposition must remain visibly distinct;
+- customer-document evidence comes only from the immutable lawyer-request snapshot accepted in P11-005; P11-007 does not grant raw MatterDocument browsing/download authority;
+- no full customer conversation history or arbitrary Legal Service Matter metadata is fetched merely because a request is assigned;
+- existing status transitions, assignment rules, notifications and learning-bridge behavior are preserved;
+- raw snapshot JSON should be replaced by a typed, bounded human-readable projection rather than exposed as an operational UI;
+- no new schema/migration is expected.
+
+P11-007 is one major Task Packet under D-033. P11-008 booking and P11-009 staging/deferred P11-005 production gates remain separate.

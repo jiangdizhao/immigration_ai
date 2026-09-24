@@ -40,7 +40,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
-| P11-007 | Lawyer Workspace continuity | PLANNED |
+| P11-007 | Lawyer Workspace continuity | ACTIVE — TASK PACKET FROZEN / READY TO IMPLEMENT |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
@@ -325,3 +325,32 @@ The final portal remains aggregation-first and matter-centered. It does not crea
 The runtime compatibility behavior is intentional: while P11-005 migrations remain deferred, the Client Portal may show the document subsystem as unavailable while retaining conversations, lawyer-review summaries, membership state and other safe portal functions. It must not represent unavailable document data as an authoritative zero.
 
 P11-005 production-readiness remains deferred to P11-009 under D-040 and is not closed by P11-006.
+
+
+## P11-007 activation — 2026-09-25
+
+P11-006 is VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.
+
+P11-007 is now ACTIVE with authority document:
+
+`docs/agent-memory/tasks/P11-007.md`
+
+P11-007 is intentionally narrower than a generic staff case-management system. It improves the existing assigned-lawyer experience while preserving the Phase-8 request/assignment/RBAC/state-machine contract.
+
+The handoff continuity chain is:
+
+```text
+customer AI answer
+    ->
+immutable lawyer-request snapshot
+    ->
+admin assignment
+    ->
+assigned lawyer workspace
+    ->
+clarification / confirmation / correction
+    ->
+customer request detail + existing notification/learning bridge
+```
+
+The lawyer workspace does not gain arbitrary conversation, MatterDocument, or Legal Service matter browsing merely because an assigned request contains a chat ID or legalMatterId.

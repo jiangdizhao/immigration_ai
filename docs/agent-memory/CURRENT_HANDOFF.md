@@ -870,3 +870,41 @@ Recorded final correction validation: 281 unit tests passed, build passed, chang
 **P11-006 is VERIFIED. P11-007 remains NOT STARTED.**
 
 D-040 remains authoritative: P11-005 is still NOT VERIFIED and its production-readiness gates remain deferred to P11-009.
+
+
+## P11-007 activation — Lawyer Workspace Continuity — 2026-09-25
+
+**Status:** ACTIVE / READY TO IMPLEMENT  
+**Task packet:** `docs/agent-memory/tasks/P11-007.md`  
+**Planning base:** `596ea345ee9df673f183aa1f8230034201fe36d4`
+
+Current production authority already includes:
+
+- lawyer-only `/lawyer-portal` and `/lawyer-portal/[id]`;
+- assigned-request queue via `/api/lawyer-portal/requests`;
+- assigned-request authorization on detail/update;
+- administrator-only assignment in the existing admin/VIP request workflow;
+- request statuses `pending`, `in_review`, `needs_more_information`, `confirmed`, `corrected`, `closed`;
+- immutable question/answer/context/evidence snapshots;
+- clarification messages;
+- exact bounded P11-005 customer-document excerpts inside `evidenceSnapshot`;
+- existing notification and learning-bridge behavior.
+
+P11-007 must improve continuity and presentation without widening authority.
+
+Frozen implementation direction:
+
+- Chinese-first bilingual assigned-lawyer queue and detail workspace;
+- typed server-owned queue/detail projections rather than spreading raw DB rows;
+- preserve exact assigned-only lawyer RBAC and admin assignment authority;
+- organize the detail around customer question, AI answer, handoff context, evidence, clarification thread and lawyer disposition;
+- render official/compact legal evidence separately from customer-document evidence;
+- replace raw evidence/context JSON dumps with bounded human-readable sections;
+- show only the immutable snapshot and request thread already authorized by the assigned request;
+- no general customer conversation history, no raw MatterDocument download/browser, no Legal Service `metadata_json` or arbitrary matter lookup;
+- preserve all status-transition validation, substantive-response requirements, notification behavior and learning bridge;
+- treat optional AI-improvement/lesson-candidate controls as an advanced/internal concern rather than the primary human-service workflow;
+- responsive desktop/mobile and existing site locale;
+- no DB migration expected.
+
+P11-005 remains NOT VERIFIED. D-040 deferred production-readiness gates remain owned by P11-009 and must not be silently closed during P11-007.
