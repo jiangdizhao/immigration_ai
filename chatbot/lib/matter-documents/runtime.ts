@@ -4,8 +4,10 @@ import {
   createMatterDocumentRecord,
   getImmigrationConversationByChatId,
   getMatterDocumentRecordForOwner,
+  getMatterDocumentRecordForStorageCleanup,
   listMatterDocumentRecordsForOwner,
   softDeleteMatterDocumentRecord,
+  transitionMatterDocumentStorageStatus,
 } from "@/lib/db/queries";
 import { createMatterDocumentService } from "./service";
 import { createS3MatterDocumentStorage } from "./storage";
@@ -20,6 +22,8 @@ const repository: MatterDocumentRepository = {
     return records.map(({ matterDocument }) => matterDocument);
   },
   getForOwner: getMatterDocumentRecordForOwner,
+  getForStorageCleanup: getMatterDocumentRecordForStorageCleanup,
+  transitionStorageStatus: transitionMatterDocumentStorageStatus,
   softDelete: softDeleteMatterDocumentRecord,
 };
 

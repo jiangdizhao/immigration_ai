@@ -48,7 +48,60 @@ export function createMatterDocumentService(deps: {
   const newId = deps.newId ?? randomUUID;
   const now = deps.now ?? (() => new Date());
 
+  async function cleanupUpload(documentId: string): Promise<boolean> {
+    const record = await deps.repository.getForStorageCleanup(documentId);
+    if (!record || record.storageStatus === "stored") {
+      return false;
+    }
+    let pending = record;
+    if (record.storageStatus !== "cleanup_pending") {
+      const transitioned = await deps.repository.transitionStorageStatus({
+        documentId,
+        expected:
+          record.storageStatus === "uploading"
+            ? ["uploading"]
+            : ["storage_failed"],
+        next: "cleanup_pending",
+      });
+      if (!transitioned) {
+        const latest = await deps.repository.getForStorageCleanup(documentId);
+        if (latest?.storageStatus === "storage_failed") {
+          return true;
+        }
+        if (latest?.storageStatus === "stored") {
+          return false;
+        }
+        throw new MatterDocumentStorageError();
+      }
+      pending = transitioned;
+    }
+
+    try {
+      await deps.storage.delete({ key: pending.storageKey });
+    } catch {
+      throw new MatterDocumentStorageError();
+    }
+
+    const cleaned = await deps.repository.transitionStorageStatus({
+      documentId,
+      expected: ["cleanup_pending"],
+      next: "storage_failed",
+    });
+    if (!cleaned) {
+      const latest = await deps.repository.getForStorageCleanup(documentId);
+      if (latest?.storageStatus === "storage_failed") {
+        return true;
+      }
+      if (latest?.storageStatus === "stored") {
+        return false;
+      }
+      throw new MatterDocumentStorageError();
+    }
+    return true;
+  }
+
   return {
+    cleanupUpload,
     async upload(input: {
       userId: string;
       chatId: string;
@@ -64,29 +117,16 @@ export function createMatterDocumentService(deps: {
         throw new MatterDocumentNotFoundError();
       }
 
-      const validated = validateMatterDocument({
+      const validated = await validateMatterDocument({
         bytes: input.bytes,
         declaredMimeType: input.declaredMimeType,
         filename: input.filename,
       });
       const sha256 = createHash("sha256").update(input.bytes).digest("hex");
       const storageKey = `matter-documents/${newId()}`;
-      const storageInput = {
-        key: storageKey,
-        body: input.bytes,
-        contentType: validated.mimeType,
-        sha256,
-      };
-
+      let intent: MatterDocument;
       try {
-        await deps.storage.put(storageInput);
-      } catch {
-        await deps.storage.delete({ key: storageKey }).catch(() => undefined);
-        throw new MatterDocumentStorageError();
-      }
-
-      try {
-        const record = await deps.repository.create({
+        intent = await deps.repository.create({
           userId: input.userId,
           chatId: input.chatId,
           legalMatterId: conversation.legalMatterId,
@@ -97,13 +137,40 @@ export function createMatterDocumentService(deps: {
           sha256,
           processingStatus: "not_started",
           securityStatus: "pending",
+          storageStatus: "uploading",
         });
-        return publicMatterDocument(record);
       } catch {
-        // No successful metadata is returned if persistence fails. Remove the
-        // private object when possible; a failed cleanup remains inaccessible
-        // through the application because no document row was committed.
-        await deps.storage.delete({ key: storageKey }).catch(() => undefined);
+        throw new MatterDocumentStorageError();
+      }
+
+      const storageInput = {
+        key: storageKey,
+        body: input.bytes,
+        contentType: validated.mimeType,
+        sha256,
+      };
+      try {
+        await deps.storage.put(storageInput);
+      } catch {
+        await cleanupUpload(intent.id).catch(() => false);
+        throw new MatterDocumentStorageError();
+      }
+
+      try {
+        const stored = await deps.repository.transitionStorageStatus({
+          documentId: intent.id,
+          expected: ["uploading"],
+          next: "stored",
+        });
+        if (!stored) {
+          throw new MatterDocumentStorageError();
+        }
+        return publicMatterDocument(stored);
+      } catch {
+        // The original intent retains the storage key if the final state write
+        // fails. Try durable cleanup; if the database is unavailable, the row
+        // remains hidden in uploading and can be recovered later.
+        await cleanupUpload(intent.id).catch(() => false);
         throw new MatterDocumentStorageError();
       }
     },

@@ -134,6 +134,20 @@
       "when": 1790210579124,
       "tag": "0018_steep_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790213598126,
+      "tag": "0019_light_loki",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790214695025,
+      "tag": "0020_odd_lockheed",
+      "breakpoints": true
     }
   ]
 }

@@ -33,6 +33,7 @@ import {
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
+import { MatterDocumentCleanupPendingError } from "@/lib/matter-documents/chat-deletion";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
@@ -302,7 +303,19 @@ export async function DELETE(request: Request) {
     return new ChatbotError("forbidden:chat").toResponse();
   }
 
-  const deletedChat = await deleteChatById({ id });
-
-  return Response.json(deletedChat, { status: 200 });
+  try {
+    const deletedChat = await deleteChatById({ id });
+    return Response.json(deletedChat, { status: 200 });
+  } catch (error) {
+    if (error instanceof MatterDocumentCleanupPendingError) {
+      return Response.json(
+        {
+          error:
+            "Conversation documents are still being removed. Please retry.",
+        },
+        { status: 503 }
+      );
+    }
+    throw error;
+  }
 }

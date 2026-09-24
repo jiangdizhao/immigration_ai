@@ -32,6 +32,7 @@ function makeRecord(overrides: Partial<MatterDocument> = {}): MatterDocument {
     sha256: createHash("sha256").update(PDF).digest("hex"),
     processingStatus: "not_started",
     securityStatus: "pending",
+    storageStatus: "stored",
     deletedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -47,6 +48,9 @@ function makeHarness(
       role: "user" | "lawyer" | "admin";
     } | null;
     failStoragePut?: boolean;
+    failAfterStoragePut?: boolean;
+    failStorageDelete?: boolean;
+    failStoredTransition?: boolean;
     failCreate?: boolean;
     existingRecord?: MatterDocument;
   } = {}
@@ -60,6 +64,7 @@ function makeHarness(
     records.set(options.existingRecord.id, options.existingRecord);
   }
   let createdCount = 0;
+  let putCount = 0;
   const repository: MatterDocumentRepository = {
     async getOwnedConversation({ chatId, userId }) {
       const conversation = conversations.get(chatId);
@@ -84,11 +89,27 @@ function makeHarness(
       records.set(record.id, record);
       return record;
     },
+    async getForStorageCleanup(documentId) {
+      return records.get(documentId) ?? null;
+    },
+    async transitionStorageStatus({ documentId, expected, next }) {
+      const record = records.get(documentId);
+      if (!record || !expected.includes(record.storageStatus)) {
+        return null;
+      }
+      if (next === "stored" && options.failStoredTransition) {
+        return null;
+      }
+      const updated = { ...record, storageStatus: next };
+      records.set(documentId, updated);
+      return updated;
+    },
     async list({ chatId, userId }) {
       return [...records.values()].filter(
         (record) =>
           record.chatId === chatId &&
           record.userId === userId &&
+          record.storageStatus === "stored" &&
           record.deletedAt === null
       );
     },
@@ -97,6 +118,7 @@ function makeHarness(
       if (
         !record ||
         record.userId !== userId ||
+        record.storageStatus !== "stored" ||
         conversations.get(record.chatId)?.userId !== userId ||
         (!includeDeleted && record.deletedAt !== null)
       ) {
@@ -117,6 +139,7 @@ function makeHarness(
   const storage = new MemoryMatterDocumentStorage();
   const basePut = storage.put.bind(storage);
   storage.put = async (input) => {
+    putCount += 1;
     if (options.failStoragePut) {
       throw new Error("storage down");
     }
@@ -124,6 +147,13 @@ function makeHarness(
     if (options.failAfterStoragePut) {
       throw new Error("storage response lost after write");
     }
+  };
+  const baseDelete = storage.delete.bind(storage);
+  storage.delete = async ({ key }) => {
+    if (options.failStorageDelete) {
+      throw new Error("storage delete failed");
+    }
+    await baseDelete({ key });
   };
   const service = createMatterDocumentService({
     repository,
@@ -135,7 +165,16 @@ function makeHarness(
     authenticate: async () => options.authenticatedUser ?? null,
     service,
   });
-  return { handlers, records, storage, repository, service };
+  return {
+    handlers,
+    records,
+    storage,
+    repository,
+    service,
+    get putCount() {
+      return putCount;
+    },
+  };
 }
 
 function userA() {
@@ -323,6 +362,27 @@ test("owner can list metadata and download only through private authorized route
   assert.deepEqual(new Uint8Array(await download.arrayBuffer()), PDF);
 });
 
+test("new text formats download with canonical MIME and safe attachment headers", async () => {
+  const h = makeHarness({ authenticatedUser: userA() });
+  const bytes = new TextEncoder().encode(
+    "# customer supplied\noriginal bytes\n"
+  );
+  const uploaded = await h.handlers.upload(
+    uploadRequest(CHAT_A, "notes.md", "text/plain", bytes)
+  );
+  assert.equal(uploaded.status, 201);
+  const downloaded = await h.handlers.download(request("GET", "/"), DOC_ID);
+  assert.equal(downloaded.status, 200);
+  assert.equal(downloaded.headers.get("content-type"), "text/markdown");
+  assert.equal(downloaded.headers.get("cache-control"), "private, no-store");
+  assert.equal(downloaded.headers.get("x-content-type-options"), "nosniff");
+  assert.match(
+    downloaded.headers.get("content-disposition") ?? "",
+    /attachment/
+  );
+  assert.deepEqual(new Uint8Array(await downloaded.arrayBuffer()), bytes);
+});
+
 test("unsupported MIME, signature mismatch, malformed, and wrong-extension files fail", async () => {
   const invalidCases = [
     [
@@ -361,35 +421,7 @@ test("oversized uploads are rejected at the HTTP boundary", async () => {
   assert.equal(h.records.size, 0);
 });
 
-test("storage failures and metadata failures do not report a successful upload", async () => {
-  const storageFailure = makeHarness({
-    authenticatedUser: userA(),
-    failStoragePut: true,
-  });
-  assert.equal(
-    (
-      await storageFailure.handlers.upload(
-        uploadRequest(CHAT_A, "passport.pdf", "application/pdf", PDF)
-      )
-    ).status,
-    503
-  );
-  assert.equal(storageFailure.records.size, 0);
-  const partialStorageFailure = makeHarness({
-    authenticatedUser: userA(),
-    failAfterStoragePut: true,
-  });
-  assert.equal(
-    (
-      await partialStorageFailure.handlers.upload(
-        uploadRequest(CHAT_A, "passport.pdf", "application/pdf", PDF)
-      )
-    ).status,
-    503
-  );
-  assert.equal(partialStorageFailure.records.size, 0);
-  assert.equal(partialStorageFailure.storage.objects.size, 0);
-
+test("upload intent failure happens before object PUT", async () => {
   const metadataFailure = makeHarness({
     authenticatedUser: userA(),
     failCreate: true,
@@ -402,8 +434,108 @@ test("storage failures and metadata failures do not report a successful upload",
     ).status,
     503
   );
+  assert.equal(metadataFailure.putCount, 0);
   assert.equal(metadataFailure.records.size, 0);
   assert.equal(metadataFailure.storage.objects.size, 0);
+});
+
+test("PUT failures and ambiguous responses retain hidden durable cleanup state", async () => {
+  for (const failure of [
+    { failStoragePut: true },
+    { failAfterStoragePut: true },
+  ]) {
+    const h = makeHarness({ authenticatedUser: userA(), ...failure });
+    const response = await h.handlers.upload(
+      uploadRequest(CHAT_A, "passport.pdf", "application/pdf", PDF)
+    );
+    assert.equal(response.status, 503);
+    const record = h.records.get(DOC_ID);
+    assert.ok(record);
+    assert.equal(record.storageStatus, "storage_failed");
+    assert.equal(record.securityStatus, "pending");
+    assert.equal(h.records.size, 1);
+    assert.equal(h.storage.objects.size, 0);
+    assert.deepEqual(
+      await h.service.list({ userId: USER_A, chatId: CHAT_A }),
+      []
+    );
+    const listed = await h.handlers.list(
+      request("GET", `/api/matter-documents?chatId=${CHAT_A}`)
+    );
+    assert.deepEqual(await listed.json(), { documents: [] });
+    assert.equal(
+      (await h.handlers.metadata(request("GET", "/"), DOC_ID)).status,
+      404
+    );
+    assert.equal(
+      (await h.handlers.download(request("GET", "/"), DOC_ID)).status,
+      404
+    );
+    assert.equal(
+      await h.service.get({ userId: USER_A, documentId: DOC_ID }),
+      null
+    );
+    assert.equal(
+      await h.service.download({ userId: USER_A, documentId: DOC_ID }),
+      null
+    );
+  }
+});
+
+test("failed cleanup stays durable and explicit retry completes idempotently", async () => {
+  const h = makeHarness({
+    authenticatedUser: userA(),
+    failAfterStoragePut: true,
+    failStorageDelete: true,
+  });
+  assert.equal(
+    (
+      await h.handlers.upload(
+        uploadRequest(CHAT_A, "passport.pdf", "application/pdf", PDF)
+      )
+    ).status,
+    503
+  );
+  const record = h.records.get(DOC_ID);
+  assert.ok(record);
+  assert.equal(record.storageStatus, "cleanup_pending");
+  assert.equal(h.storage.objects.has(record.storageKey), true);
+  assert.deepEqual(
+    await h.service.list({ userId: USER_A, chatId: CHAT_A }),
+    []
+  );
+
+  h.storage.delete = async ({ key }) => {
+    h.storage.objects.delete(key);
+  };
+  assert.equal(await h.service.cleanupUpload(DOC_ID), true);
+  assert.equal(h.records.get(DOC_ID)?.storageStatus, "storage_failed");
+  assert.equal(h.storage.objects.has(record.storageKey), false);
+  assert.equal(await h.service.cleanupUpload(DOC_ID), true);
+});
+
+test("a failed final stored transition leaves the intent and cleanup record durable", async () => {
+  const h = makeHarness({
+    authenticatedUser: userA(),
+    failStoredTransition: true,
+  });
+  assert.equal(
+    (
+      await h.handlers.upload(
+        uploadRequest(CHAT_A, "passport.pdf", "application/pdf", PDF)
+      )
+    ).status,
+    503
+  );
+  const record = h.records.get(DOC_ID);
+  assert.ok(record);
+  assert.equal(record.storageKey, "matter-documents/generated-object-id");
+  assert.equal(record.storageStatus, "storage_failed");
+  assert.equal(h.storage.objects.size, 0);
+  assert.equal(
+    await h.service.download({ userId: USER_A, documentId: DOC_ID }),
+    null
+  );
 });
 
 test("soft deletion hides documents and is idempotent while retaining private bytes", async () => {

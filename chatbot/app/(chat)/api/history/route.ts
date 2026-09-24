@@ -42,5 +42,16 @@ export async function DELETE() {
 
   const result = await deleteAllChatsByUserId({ userId: session.user.id });
 
-  return Response.json(result, { status: 200 });
+  if (result.cleanupPendingCount > 0) {
+    return Response.json(
+      {
+        error:
+          "Some conversation documents are still being removed. Please retry.",
+        deletedCount: result.deletedCount,
+        cleanupPendingCount: result.cleanupPendingCount,
+      },
+      { status: 503 }
+    );
+  }
+  return Response.json({ deletedCount: result.deletedCount }, { status: 200 });
 }

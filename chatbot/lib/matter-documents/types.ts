@@ -1,9 +1,13 @@
 import type { MatterDocument } from "@/lib/db/schema";
+import type { MatterDocumentMimeType } from "./formats";
 
-export type MatterDocumentMimeType =
-  | "application/pdf"
-  | "image/jpeg"
-  | "image/png";
+export type { MatterDocumentMimeType } from "./formats";
+
+export type MatterDocumentStorageStatus =
+  | "uploading"
+  | "stored"
+  | "cleanup_pending"
+  | "storage_failed";
 
 export type PublicMatterDocument = Pick<
   MatterDocument,
@@ -36,7 +40,14 @@ export type MatterDocumentRepository = {
     sha256: string;
     processingStatus: "not_started";
     securityStatus: "pending";
+    storageStatus: "uploading";
   }): Promise<MatterDocument>;
+  getForStorageCleanup(documentId: string): Promise<MatterDocument | null>;
+  transitionStorageStatus(input: {
+    documentId: string;
+    expected: readonly MatterDocumentStorageStatus[];
+    next: MatterDocumentStorageStatus;
+  }): Promise<MatterDocument | null>;
   list(input: { chatId: string; userId: string }): Promise<MatterDocument[]>;
   getForOwner(input: {
     documentId: string;

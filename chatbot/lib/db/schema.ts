@@ -13,6 +13,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { MATTER_DOCUMENT_MIME_TYPES } from "@/lib/matter-documents/formats";
 
 export const user = pgTable(
   "User",
@@ -577,13 +578,13 @@ export const matterDocument = pgTable(
     chatId: uuid("chatId")
       .notNull()
       .references(() => immigrationConversation.chatId, {
-        onDelete: "cascade",
+        onDelete: "restrict",
       }),
     legalMatterId: varchar("legalMatterId", { length: 255 }),
     originalFilename: varchar("originalFilename", { length: 255 }).notNull(),
     storageKey: varchar("storageKey", { length: 512 }).notNull(),
     mimeType: varchar("mimeType", {
-      enum: ["application/pdf", "image/jpeg", "image/png"],
+      enum: MATTER_DOCUMENT_MIME_TYPES,
     }).notNull(),
     byteSize: integer("byteSize").notNull(),
     sha256: varchar("sha256", { length: 64 }).notNull(),
@@ -597,6 +598,11 @@ export const matterDocument = pgTable(
     })
       .notNull()
       .default("pending"),
+    storageStatus: varchar("storageStatus", {
+      enum: ["uploading", "stored", "cleanup_pending", "storage_failed"],
+    })
+      .notNull()
+      .default("uploading"),
     deletedAt: timestamp("deletedAt"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),

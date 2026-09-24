@@ -20,6 +20,11 @@ import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
 import { ChatbotError } from "../errors";
+import {
+  createChatDeletionService,
+  MatterDocumentCleanupPendingError,
+} from "../matter-documents/chat-deletion";
+import { createS3MatterDocumentStorage } from "../matter-documents/storage";
 import { generateUUID } from "../utils";
 import { calculateVipWindow } from "../vip/entitlement";
 import {
@@ -1828,10 +1833,47 @@ export async function createMatterDocumentRecord(
     | "sha256"
     | "processingStatus"
     | "securityStatus"
+    | "storageStatus"
   >
 ) {
   const [created] = await db.insert(matterDocument).values(values).returning();
   return created;
+}
+
+export async function getMatterDocumentRecordForStorageCleanup(
+  documentId: string
+) {
+  const [record] = await db
+    .select()
+    .from(matterDocument)
+    .where(eq(matterDocument.id, documentId))
+    .limit(1);
+  return record ?? null;
+}
+
+export async function transitionMatterDocumentStorageStatus({
+  documentId,
+  expected,
+  next,
+}: {
+  documentId: string;
+  expected: readonly MatterDocument["storageStatus"][];
+  next: MatterDocument["storageStatus"];
+}) {
+  if (expected.length === 0) {
+    return null;
+  }
+  const [record] = await db
+    .update(matterDocument)
+    .set({ storageStatus: next, updatedAt: new Date() })
+    .where(
+      and(
+        eq(matterDocument.id, documentId),
+        inArray(matterDocument.storageStatus, [...expected])
+      )
+    )
+    .returning();
+  return record ?? null;
 }
 
 export async function listMatterDocumentRecordsForOwner({
@@ -1850,6 +1892,7 @@ export async function listMatterDocumentRecordsForOwner({
         eq(matterDocument.userId, userId),
         eq(chat.userId, userId),
         eq(matterDocument.chatId, chatId),
+        eq(matterDocument.storageStatus, "stored"),
         isNull(matterDocument.deletedAt)
       )
     )
@@ -1869,6 +1912,7 @@ export async function getMatterDocumentRecordForOwner({
     eq(matterDocument.id, documentId),
     eq(matterDocument.userId, userId),
     eq(chat.userId, userId),
+    eq(matterDocument.storageStatus, "stored"),
   ];
   if (!includeDeleted) {
     predicates.push(isNull(matterDocument.deletedAt));
@@ -1899,6 +1943,7 @@ export async function softDeleteMatterDocumentRecord({
       and(
         eq(matterDocument.id, documentId),
         eq(matterDocument.userId, userId),
+        eq(matterDocument.storageStatus, "stored"),
         isNull(matterDocument.deletedAt),
         sql`exists (
           select 1 from "Chat"
@@ -2004,18 +2049,53 @@ export async function saveChat({
   }
 }
 
+const chatDeletionService = createChatDeletionService({
+  storage: createS3MatterDocumentStorage(),
+  repository: {
+    listConversationDocuments(chatId) {
+      return db
+        .select({
+          id: matterDocument.id,
+          storageKey: matterDocument.storageKey,
+          storageStatus: matterDocument.storageStatus,
+        })
+        .from(matterDocument)
+        .where(eq(matterDocument.chatId, chatId));
+    },
+    deleteConversationAndData({ chatId, documentIds }) {
+      return db.transaction(async (tx) => {
+        if (documentIds.length > 0) {
+          await tx
+            .delete(matterDocument)
+            .where(inArray(matterDocument.id, documentIds));
+        }
+        await tx.delete(vote).where(eq(vote.chatId, chatId));
+        await tx.delete(message).where(eq(message.chatId, chatId));
+        await tx.delete(stream).where(eq(stream.chatId, chatId));
+        const [deleted] = await tx
+          .delete(chat)
+          .where(eq(chat.id, chatId))
+          .returning();
+        return deleted;
+      });
+    },
+    async listUserChatIds(userId) {
+      const rows = await db
+        .select({ id: chat.id })
+        .from(chat)
+        .where(eq(chat.userId, userId));
+      return rows.map(({ id }) => id);
+    },
+  },
+});
+
 export async function deleteChatById({ id }: { id: string }) {
   try {
-    await db.delete(vote).where(eq(vote.chatId, id));
-    await db.delete(message).where(eq(message.chatId, id));
-    await db.delete(stream).where(eq(stream.chatId, id));
-
-    const [chatsDeleted] = await db
-      .delete(chat)
-      .where(eq(chat.id, id))
-      .returning();
-    return chatsDeleted;
-  } catch (_error) {
+    return await chatDeletionService.deleteChatById(id);
+  } catch (error) {
+    if (error instanceof MatterDocumentCleanupPendingError) {
+      throw error;
+    }
     throw new ChatbotError(
       "bad_request:database",
       "Failed to delete chat by id"
@@ -2025,27 +2105,7 @@ export async function deleteChatById({ id }: { id: string }) {
 
 export async function deleteAllChatsByUserId({ userId }: { userId: string }) {
   try {
-    const userChats = await db
-      .select({ id: chat.id })
-      .from(chat)
-      .where(eq(chat.userId, userId));
-
-    if (userChats.length === 0) {
-      return { deletedCount: 0 };
-    }
-
-    const chatIds = userChats.map((c) => c.id);
-
-    await db.delete(vote).where(inArray(vote.chatId, chatIds));
-    await db.delete(message).where(inArray(message.chatId, chatIds));
-    await db.delete(stream).where(inArray(stream.chatId, chatIds));
-
-    const deletedChats = await db
-      .delete(chat)
-      .where(eq(chat.userId, userId))
-      .returning();
-
-    return { deletedCount: deletedChats.length };
+    return await chatDeletionService.deleteAllChatsByUserId(userId);
   } catch (_error) {
     throw new ChatbotError(
       "bad_request:database",
