@@ -544,9 +544,9 @@ Known non-blocking operational items:
 
 Status:
 
-- The pushed Stage 2 baseline is `8f63cb1b3d68a000589b029b24abc8c9dc00df62`. This bounded post-push correction remains uncommitted and is not accepted or verified.
-- Stage 1 remains accepted at df5335356ac7c7fc908236a270e78f280e5387e6.
-- Branch is `phase11-chinese-service-platform-ui-rebase`; no correction commit or push was made. Stage 3 is NOT started.
+- Stage 2 baseline: `8f63cb1b3d68a000589b029b24abc8c9dc00df62`; bounded recovery correction: `38e19c75bc131cc372c8c2682ec21e72834f8fb7`.
+- Stage 2 is ACCEPTED after direct GitHub source review at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`.
+- Stage 1 remains accepted at `df5335356ac7c7fc908236a270e78f280e5387e6`. Stage 3 is NOT started.
 
 Implemented Stage 2 scope:
 
@@ -596,4 +596,31 @@ Remaining review/deployment items:
 
 - Production deployment must confirm its platform-compatible `@napi-rs/canvas` binding and runtime packaging before enabling scanned-PDF vision.
 - Existing Stage 1 operational items remain: verify private S3 bucket/IAM/public-access settings; define retention/purge and stale storage-intent recovery operations.
-- Stage 2 remains subject to owner review. Do not mark P11-005 VERIFIED until review gates pass. **Stage 3 is NOT started.**
+- Stage 2 passed direct GitHub source review and is ACCEPTED at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`. P11-005 is not yet VERIFIED because Stage 3 and production-readiness gates remain. **Stage 3 is NOT started.**
+
+
+## P11-005 Stage 2 accepted after GitHub review — 2026-09-24
+
+**Accepted checkpoint:** `38e19c75bc131cc372c8c2682ec21e72834f8fb7`
+
+The pushed Stage 2 baseline and bounded recovery correction were reviewed directly on GitHub. No remaining Stage 2 blocking defect was found.
+
+The review confirmed:
+
+- one processing attempt has a single parent-controlled deadline spanning parser work, scanned-page rendering, sequential vision transcription and normalization;
+- the native parser worker listens to that signal and is terminated on timeout;
+- the OpenAI document-vision adapter combines the global abort signal with its per-call timeout and exposes no tools;
+- incomplete terminal runs require explicit `reprocessIncomplete`; fully complete runs remain idempotent;
+- stale processing requires explicit recovery, uses a 90-second lease threshold, and is serialized by a transactionally locked document row so only one recovery wins;
+- old terminal evidence remains readable while a retry is processing and after a failed retry;
+- failure-state persistence can remain recoverable via the durable stale-run lease if the failure mutation itself is unavailable;
+- owner-scoped GET/POST APIs retain safe access semantics;
+- the duplicate tracked generated parser bundle is removed and the generated runtime worker remains outside source control.
+
+No migration/schema change was introduced by the correction. `0021_sudden_warbird.sql` remains **NOT APPLIED**.
+
+Recorded local validation for the accepted correction: 243 unit tests passed, build passed, changed-file Biome passed, `git diff --check` passed, and lint remained at the known 21-error repository baseline. GitHub has no attached Actions/status check for this commit.
+
+Production/deployment gates remain separate: real ECS/Fargate canvas-binding packaging, authorized migration application and DB-backed smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine controls.
+
+**Stage 2 is ACCEPTED. Stage 3 is NOT started. P11-005 is not VERIFIED.**

@@ -38,7 +38,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 ACCEPTED; STAGE 2 NOT STARTED |
+| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 + STAGE 2 ACCEPTED; STAGE 3 NOT STARTED |
 | P11-006 | Matter-centered Client Portal | PLANNED |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
@@ -50,7 +50,7 @@ P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9
 
 P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at hardening checkpoint `df5335356ac7c7fc908236a270e78f280e5387e6`. Stage 2 document understanding/provenance is not started and requires a separate activation/review gate. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
+P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at hardening checkpoint `df5335356ac7c7fc908236a270e78f280e5387e6`. Stage 2 document understanding/provenance is accepted at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`. Stage 3 matter/AI/lawyer integration is not started and requires a separate activation/review gate. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
 ## Evidence that triggered R2
 
@@ -235,3 +235,30 @@ GitHub source/security review confirmed:
 Recorded local validation: 211 unit tests passed, build passed, changed-file Biome passed, and `git diff --check` passed. Repository-wide lint remains at the known 21-diagnostic baseline. No GitHub Actions checks are attached to the accepted commit.
 
 Non-blocking follow-ups before production readiness remain: private bucket/IAM/Block Public Access verification, physical retention/purge policy, and an operator/background recovery mechanism for stale non-`stored` upload intents. Stage 2 must preserve the broad accepted format set and must not treat a successful parse as malware/security clearance.
+
+
+## P11-005 Stage 2 acceptance — 2026-09-24
+
+**Accepted checkpoint:** `38e19c75bc131cc372c8c2682ec21e72834f8fb7`
+
+Direct GitHub source review accepted the Stage 2 document-understanding/provenance boundary after the bounded recovery correction.
+
+Accepted behavior includes:
+
+- normalized `customer_document` evidence units with document/run identity, stable ordering, format-specific locators and provenance;
+- native processing coverage for PDF, DOCX/DOC, XLSX/XLS, CSV, TXT, Markdown and JSON;
+- JPEG/PNG plus scanned-PDF page fallback behind a dedicated OpenAI transcription adapter that is disabled unless explicitly configured;
+- native-first mixed-PDF processing so only native-text-less pages enter the visual fallback path;
+- isolated `worker_threads` native parsing with explicit empty environment, no inherited application secrets, V8 resource limits and hard termination;
+- one parent-controlled document-processing deadline spanning parser execution, page rendering, sequential vision calls and normalized-unit assembly;
+- compare-and-set processing claims, explicit incomplete reprocessing, and explicit stale-processing recovery while retaining previous terminal evidence;
+- successful extraction never promotes `securityStatus` from `pending`, and parser workers are not treated as malware sandboxes;
+- duplicate generated worker bundle removed from source control; runtime worker remains build-generated and traced.
+
+Migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. No live OpenAI, AWS or S3 service was contacted during validation.
+
+Recorded validation: 243 unit tests passed, production build passed, changed-file Biome passed, `git diff --check` passed, and repository lint remained at its known 21-error baseline. GitHub attached no Actions status/workflow run to the accepted commit.
+
+Non-blocking production/deployment gates remain: verify the actual ECS/Fargate-compatible `@napi-rs/canvas` native binding/package trace, apply and smoke-test migrations only under separate authorization, verify private S3/IAM/Block Public Access, define retention/purge and stale storage-intent operations, and add malware/quarantine controls before production-ready document handling.
+
+Stage 3 remains NOT STARTED.
