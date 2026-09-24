@@ -316,7 +316,7 @@ Repository inspection confirmed:
 
 Therefore Phase 11 is rebaselined:
 
-- P11-005 — **Secure Matter Documents & AI File Intake** — PLANNED / READY, not started;
+- P11-005 — **Secure Matter Documents & AI File Intake** — Stage 1 implemented locally and awaiting source/security review;
 - P11-006 — Matter-centered Client Portal — PLANNED;
 - P11-007 — Lawyer Workspace Continuity — PLANNED;
 - P11-008 — Appointment / Consultation Workflow — PLANNED;
@@ -328,4 +328,79 @@ The production target is private object storage with AWS S3 behind an abstractio
 
 No application code, database migration, AWS resource, or deployment is changed by this documentation rebaseline. Applying any DB migration remains separately authorized.
 
-Next executable packet after owner authorization: `docs/agent-memory/tasks/P11-005.md`.
+Next gate: review the uncommitted Stage 1 diff; do not start Stage 2 before that review.
+
+## P11-005 Stage 1 — secure document foundation implementation
+
+**Status:** Stage 1 implemented locally; awaiting source/security review. P11-005 is **not VERIFIED**. Stage 2 and Stage 3 have not started.
+
+Scope is limited to private matter-document storage, authenticated customer ownership, first-class metadata/lifecycle, original-file download and soft deletion. The legacy `/api/files/upload` Vercel Blob path remains unchanged and is not used by this subsystem.
+
+### Data model and migration
+
+- Added the additive `MatterDocument` Drizzle model, linked to `User` and `ImmigrationConversation` / `Chat`.
+- Metadata includes server-derived `legalMatterId`, display filename, internal storage key, allowlisted MIME type, byte size, SHA-256, processing status, security status, and lifecycle timestamps.
+- New uploads are `processingStatus: not_started` and `securityStatus: pending`. This stage has no transition that marks files clean or feeds them to AI or lawyer review.
+- Migration: `chatbot/lib/db/migrations/0018_steep_hobgoblin.sql`.
+- **MIGRATION CREATED**
+- **MIGRATION NOT APPLIED**
+
+### Storage and access
+
+- Added an application storage interface and a production AWS S3 adapter using the minimal `@aws-sdk/client-s3` dependency. Writes specify server-side AES256 encryption and do not set a public ACL. The adapter returns no object URL.
+- Production storage requires `AWS_REGION`, `MATTER_DOCUMENTS_S3_BUCKET`, server IAM permissions, and an S3 bucket configured with Block Public Access. No bucket or AWS resource was provisioned or inspected in this task.
+- Added deterministic `MemoryMatterDocumentStorage` for tests. Tests make no AWS calls.
+- Downloads are proxied through the authenticated application route after checking both document ownership and the owner of its linked conversation. Responses use private/no-store caching, `nosniff`, and a sandbox content policy.
+- Upload checks ownership of the requested conversation first. It accepts no `legalMatterId`; the metadata snapshot is resolved from the server-side owned conversation record.
+- Anonymous access returns 401. Guest sessions and lawyer/admin roles are denied. Cross-owner and foreign-conversation lookups return 404.
+- Metadata/list responses omit `storageKey` and all storage URLs.
+- Delete is an idempotent soft delete: `deletedAt` hides the record from list/read/download flows. The S3 object remains private and is not physically deleted in Stage 1; no purge/retention automation exists.
+- A storage write error or failed metadata insert triggers best-effort deletion of the generated private key. If compensation also fails, the private unreferenced object remains inaccessible through this application.
+
+### API and upload boundary
+
+- `POST /api/matter-documents?chatId=<owned-chat-uuid>` uploads a single raw file body; `Content-Type` and `X-Original-Filename` are required. `GET` on the collection lists by required owned `chatId`.
+- `GET /api/matter-documents/[documentId]` returns owner-scoped metadata; `DELETE` soft-deletes it.
+- `GET /api/matter-documents/[documentId]/download` performs an owner-authorized download.
+- Accepted types only: `application/pdf`, `image/jpeg`, and `image/png`; filenames/extensions must match the detected type. Signature checks require `%PDF-`, JPEG `FF D8 FF`, or the PNG 8-byte signature. Browser MIME and extension alone are not trusted.
+- Maximum upload size is centralized at 25 MiB. Request bodies are read incrementally and rejected once the limit is exceeded. Filename path components/control characters are removed; filenames never contribute to storage keys.
+- The generic chat upload route and `multimodal-input` behavior were not changed.
+
+### Validation
+
+- `cd chatbot && pnpm test:unit`: **198 passed, 0 failed, 0 skipped**.
+- `cd chatbot && pnpm build`: **passed**.
+- Changed-file Biome over source, tests, API routes, schema, migration metadata, and package configuration: **passed; no diagnostics**.
+- `cd chatbot && pnpm lint`: **failed with 21 repository-wide diagnostics in existing files** (the previously recorded baseline was 22); no diagnostics were reported in the changed files. Changed-file Biome is clean.
+- `git diff --check`: **passed**.
+- Browser/live API smoke was not attempted. The database migration remains intentionally unapplied, so a real route smoke would require a schema change that is outside this authorization. Handler/API behavior is covered with deterministic fake repository, auth and storage dependencies.
+- No real AWS/S3 service was contacted. No migration was applied, no database data was changed, and no paid AI endpoint was called.
+
+### Review gates and unresolved work
+
+- Stage 2 is **NOT started**. Document text extraction/OCR, page bounds, provenance, and prompt-injection handling remain unimplemented and require their own review gate.
+- Stage 3 is **NOT started**. No workspace integration, AI document selection, lawyer access, lawyer-request attachments, or booking work was added.
+- Before production use, configure and verify the private S3 bucket/IAM policy, decide the controlled physical-purge/retention process for soft-deleted and orphaned objects, and apply the migration only through the authorized deployment procedure.
+- P11-005 remains open pending Stage 1 source/security review; do not activate Stage 2 automatically.
+
+### Stage 1 changed files
+
+- `chatbot/app/api/matter-documents/route.ts`
+- `chatbot/app/api/matter-documents/[documentId]/route.ts`
+- `chatbot/app/api/matter-documents/[documentId]/download/route.ts`
+- `chatbot/lib/db/migrations/0018_steep_hobgoblin.sql`
+- `chatbot/lib/db/migrations/meta/0018_snapshot.json`
+- `chatbot/lib/db/migrations/meta/_journal.json`
+- `chatbot/lib/db/queries.ts`
+- `chatbot/lib/db/schema.ts`
+- `chatbot/lib/matter-documents/http.ts`
+- `chatbot/lib/matter-documents/memory-storage.ts`
+- `chatbot/lib/matter-documents/runtime.ts`
+- `chatbot/lib/matter-documents/service.test.ts`
+- `chatbot/lib/matter-documents/service.ts`
+- `chatbot/lib/matter-documents/storage.ts`
+- `chatbot/lib/matter-documents/types.ts`
+- `chatbot/lib/matter-documents/validation.ts`
+- `chatbot/package.json`
+- `chatbot/pnpm-lock.yaml`
+- `docs/agent-memory/CURRENT_HANDOFF.md`

@@ -564,6 +564,61 @@ export type ImmigrationConversation = InferSelectModel<
   typeof immigrationConversation
 >;
 
+// Customer-provided matter files are private, untrusted evidence. Stage 1
+// stores only their original bytes and lifecycle metadata; it does not process
+// them or make them available to AI/lawyer workflows.
+export const matterDocument = pgTable(
+  "MatterDocument",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chatId: uuid("chatId")
+      .notNull()
+      .references(() => immigrationConversation.chatId, {
+        onDelete: "cascade",
+      }),
+    legalMatterId: varchar("legalMatterId", { length: 255 }),
+    originalFilename: varchar("originalFilename", { length: 255 }).notNull(),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    mimeType: varchar("mimeType", {
+      enum: ["application/pdf", "image/jpeg", "image/png"],
+    }).notNull(),
+    byteSize: integer("byteSize").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    processingStatus: varchar("processingStatus", {
+      enum: ["not_started", "processing", "complete", "failed"],
+    })
+      .notNull()
+      .default("not_started"),
+    securityStatus: varchar("securityStatus", {
+      enum: ["pending", "clean", "rejected", "failed"],
+    })
+      .notNull()
+      .default("pending"),
+    deletedAt: timestamp("deletedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    storageKeyUnique: uniqueIndex("MatterDocument_storage_key_unique").on(
+      table.storageKey
+    ),
+    ownerConversationIndex: index("MatterDocument_owner_conversation_idx").on(
+      table.userId,
+      table.chatId,
+      table.createdAt
+    ),
+    ownerLookupIndex: index("MatterDocument_owner_lookup_idx").on(
+      table.userId,
+      table.id
+    ),
+  })
+);
+
+export type MatterDocument = InferSelectModel<typeof matterDocument>;
+
 // DEPRECATED: The following schema is deprecated and will be removed in the future.
 // Read the migration guide at https://chatbot.dev/docs/migration-guides/message-parts
 export const messageDeprecated = pgTable("Message", {

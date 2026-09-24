@@ -31,6 +31,8 @@ import {
   immigrationConversation,
   type LawyerClarificationRequest,
   lawyerClarificationRequest,
+  type MatterDocument,
+  matterDocument,
   message,
   passwordResetToken,
   type Suggestion,
@@ -1811,6 +1813,102 @@ export async function getImmigrationConversationByChatId({
     .limit(1);
 
   return conversation ?? null;
+}
+
+export async function createMatterDocumentRecord(
+  values: Pick<
+    MatterDocument,
+    | "userId"
+    | "chatId"
+    | "legalMatterId"
+    | "originalFilename"
+    | "storageKey"
+    | "mimeType"
+    | "byteSize"
+    | "sha256"
+    | "processingStatus"
+    | "securityStatus"
+  >
+) {
+  const [created] = await db.insert(matterDocument).values(values).returning();
+  return created;
+}
+
+export async function listMatterDocumentRecordsForOwner({
+  userId,
+  chatId,
+}: {
+  userId: string;
+  chatId: string;
+}) {
+  return await db
+    .select({ matterDocument })
+    .from(matterDocument)
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(
+      and(
+        eq(matterDocument.userId, userId),
+        eq(chat.userId, userId),
+        eq(matterDocument.chatId, chatId),
+        isNull(matterDocument.deletedAt)
+      )
+    )
+    .orderBy(desc(matterDocument.createdAt));
+}
+
+export async function getMatterDocumentRecordForOwner({
+  documentId,
+  userId,
+  includeDeleted = false,
+}: {
+  documentId: string;
+  userId: string;
+  includeDeleted?: boolean;
+}) {
+  const predicates = [
+    eq(matterDocument.id, documentId),
+    eq(matterDocument.userId, userId),
+    eq(chat.userId, userId),
+  ];
+  if (!includeDeleted) {
+    predicates.push(isNull(matterDocument.deletedAt));
+  }
+
+  const [record] = await db
+    .select({ matterDocument })
+    .from(matterDocument)
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(and(...predicates))
+    .limit(1);
+  return record?.matterDocument ?? null;
+}
+
+export async function softDeleteMatterDocumentRecord({
+  documentId,
+  userId,
+  deletedAt = new Date(),
+}: {
+  documentId: string;
+  userId: string;
+  deletedAt?: Date;
+}) {
+  const [deleted] = await db
+    .update(matterDocument)
+    .set({ deletedAt, updatedAt: deletedAt })
+    .where(
+      and(
+        eq(matterDocument.id, documentId),
+        eq(matterDocument.userId, userId),
+        isNull(matterDocument.deletedAt),
+        sql`exists (
+          select 1 from "Chat"
+          where "Chat"."id" = ${matterDocument.chatId}
+            and "Chat"."userId" = ${userId}
+        )`
+      )
+    )
+    .returning();
+  return deleted ?? null;
 }
 
 export async function updateImmigrationConversation({
