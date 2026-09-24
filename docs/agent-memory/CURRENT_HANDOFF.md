@@ -404,3 +404,41 @@ Scope is limited to private matter-document storage, authenticated customer owne
 - `chatbot/package.json`
 - `chatbot/pnpm-lock.yaml`
 - `docs/agent-memory/CURRENT_HANDOFF.md`
+
+
+## P11-005 Stage 1 GitHub review — correction required
+
+Pushed implementation reviewed at:
+
+`15c72449f74879c10167be27cc059dc415301967`
+
+The private-storage and ownership architecture is retained:
+
+- dedicated `MatterDocument` model and migration;
+- customer-only authorization;
+- server-derived matter identity;
+- private S3 adapter with no public object URL;
+- bounded 25 MiB request read;
+- SHA-256 integrity;
+- `securityStatus: pending` / `processingStatus: not_started`;
+- owner-authorized download;
+- Stage 2/3 not started.
+
+Stage 1 is **not accepted yet**.
+
+Blocking findings:
+
+1. **Format requirement expanded by owner.** Production evidence intake must support mainstream formats, not only PDF/JPEG/PNG. The first broad allowlist is PDF, JPG/JPEG, PNG, DOCX, DOC, TXT, MD, JSON, CSV, XLSX and XLS, implemented through a centralized format registry with format-aware bounded validation.
+2. **Normal conversation deletion can orphan object bytes.** `MatterDocument.chatId` currently cascades from `ImmigrationConversation`, while Stage 1 soft-delete intentionally retains S3 bytes. Existing Chat/ImmigrationConversation deletion can therefore delete the only metadata row and leave a private S3 object without a lifecycle record. The correction must close this gap for single-chat and bulk-user deletion paths.
+
+Security notes for the format correction:
+
+- DOCX/XLSX are ZIP containers, but arbitrary ZIP must remain rejected;
+- legacy DOC/XLS require OLE/CFB-aware validation;
+- text-like formats require bounded text/binary validation; JSON requires bounded structural validation;
+- accepted Office files remain untrusted/pending and must not execute macros or active content;
+- no extraction, OCR, AI reasoning or lawyer access begins in this correction.
+
+Migration `0018_steep_hobgoblin.sql` remains **CREATED / NOT APPLIED**. If the lifecycle fix needs SQL changes, generate a follow-up migration rather than applying anything.
+
+Next gate: implement this bounded Stage 1 correction, stop uncommitted/unpushed, and repeat the normal review workflow. Stage 2 remains NOT started.

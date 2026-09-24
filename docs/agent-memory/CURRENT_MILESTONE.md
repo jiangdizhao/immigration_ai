@@ -38,7 +38,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Secure Matter Documents & AI File Intake | PLANNED / READY |
+| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 CORRECTION REQUIRED |
 | P11-006 | Matter-centered Client Portal | PLANNED |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
@@ -50,7 +50,7 @@ P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9
 
 P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **PLANNED / READY** and has not started implementation. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
+P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 base implementation is pushed at `15c72449f74879c10167be27cc059dc415301967`, but GitHub review requires a bounded Stage 1 correction before acceptance. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
 ## Evidence that triggered R2
 
@@ -200,3 +200,17 @@ P11-005 is one major Task Packet with three internal stages:
 P11-005 does not authorize public object URLs, arbitrary file types, production DB migration execution, booking/calendar work, legal reasoning redesign, or weakening existing auth/VIP/lawyer ownership controls.
 
 Executable packet after owner authorization: `docs/agent-memory/tasks/P11-005.md`.
+
+
+### Stage 1 GitHub review finding
+
+Pushed Stage 1 foundation commit: `15c72449f74879c10167be27cc059dc415301967`.
+
+Core direction is retained: private S3 abstraction, owner-scoped document APIs, additive metadata model, bounded upload, integrity hash, pending security state and no AI/lawyer integration.
+
+Stage 1 is **not yet accepted** because:
+
+- owner requirement now expands supported evidence beyond PDF/JPEG/PNG to mainstream formats including DOCX/DOC, TXT/MD/JSON/CSV and XLSX/XLS;
+- current Chat -> ImmigrationConversation -> MatterDocument cascade deletion can remove metadata without deleting the private object, creating a normal-path orphan-object lifecycle defect.
+
+Both corrections remain inside P11-005 Stage 1 under D-033. Stage 2 must not start.

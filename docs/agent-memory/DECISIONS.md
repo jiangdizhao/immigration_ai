@@ -540,3 +540,46 @@ Production direction:
 P11-005 is a distinct architecture/security task under D-033. Additive schema/migration code may be proposed where the current generic attachment field cannot represent the required lifecycle, but applying migrations to any shared/staging/production database remains separately authorized.
 
 The real scheduling workflow remains outside P11-005.
+
+## D-038 — Matter-document format support is broad and registry-driven
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+The production matter-document system must not be limited to PDF/JPEG/PNG. Customer evidence may arrive in mainstream document, spreadsheet, text/data and image formats.
+
+The first broad production allowlist must include at least:
+
+- PDF: `.pdf`
+- images: `.jpg`, `.jpeg`, `.png`
+- word-processing: `.docx`, legacy `.doc`
+- plain/structured text: `.txt`, `.md`, `.json`, `.csv`
+- spreadsheets: `.xlsx`, legacy `.xls`
+
+The implementation should use a centralized format registry so later additions do not require duplicating MIME/extension/policy logic across routes and processors.
+
+This is still an allowlist, not arbitrary-file acceptance. Executables, scripts, HTML/SVG active content, generic archives and macro-enabled Office formats remain out of scope unless separately approved.
+
+Validation must be format-aware:
+
+- binary formats require signature/container validation rather than trusting the browser MIME or filename;
+- OOXML formats such as DOCX/XLSX are ZIP containers and must be distinguished from arbitrary ZIP files by bounded container inspection;
+- legacy DOC/XLS compound files require OLE/CFB-aware recognition rather than extension-only trust;
+- text-like formats such as TXT/MD/CSV require bounded text/binary validation;
+- JSON should receive bounded structural validation;
+- files remain untrusted/pending until the later security/processing gates permit downstream use.
+
+Stage 2 document understanding must eventually cover the accepted Stage 1 formats rather than silently processing only PDF/images.
+
+## D-039 — Conversation deletion must not orphan private document objects
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+Matter-document metadata and private object bytes must have an explicit lifecycle relationship.
+
+A normal Chat / ImmigrationConversation deletion must not cascade away the only database reference while silently leaving the corresponding private object permanently orphaned in object storage.
+
+P11-005 Stage 1 must close this lifecycle gap before acceptance. The implementation may use an explicit cleanup/tombstone/outbox/retention-safe design consistent with the existing architecture, but it must be deterministic, tested, and must not depend on best-effort memory-only cleanup.
+
+The migration remains unapplied. If the lifecycle correction requires a new SQL change after the already-pushed `0018` migration, prefer generating a follow-up migration rather than silently rewriting an already-pushed migration history, unless repository migration tooling clearly requires otherwise.

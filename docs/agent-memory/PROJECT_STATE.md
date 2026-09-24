@@ -119,10 +119,12 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - No backend, database, legal-reasoning or booking implementation was added.
 - Final validation: 187 unit tests passed; build, changed-file Biome and `git diff --check` passed; repository lint retains the known 22-diagnostic baseline; desktop/mobile owner visual acceptance passed.
 - Deployment note: the local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave this disabled unless intentionally debugging.
-- **P11-005 — Secure Matter Documents & AI File Intake: PLANNED / READY, not started.**
+- **P11-005 — Secure Matter Documents & AI File Intake: IN PROGRESS; Stage 1 correction required.**
 - P11-005 is now the prerequisite to the customer portal because current generic upload support is not a secure matter-document system.
 - Current scaffold: `Message_v2.attachments` exists; generic `/api/files/upload` accepts JPEG/PNG up to 5 MiB and writes public Vercel Blob objects; the Phase 11 AI Workspace does not use that path for customer matter evidence.
-- Required P11-005 boundary: private matter-scoped documents, PDF/JPEG/PNG intake, authenticated ownership, integrity/type/size validation, processing lifecycle, document/page provenance, and safe AI/lawyer continuity.
+- Required P11-005 boundary: private matter-scoped documents, a centralized mainstream-format registry (PDF, JPEG/PNG, DOCX/DOC, TXT/MD/JSON/CSV, XLSX/XLS initially), authenticated ownership, integrity/type/size validation, processing lifecycle, document/page provenance, and safe AI/lawyer continuity.
+- Stage 1 pushed checkpoint: `15c72449f74879c10167be27cc059dc415301967`; core private-storage/ownership direction retained, but not VERIFIED.
+- Blocking Stage 1 review findings: broaden the format allowlist/validation beyond PDF/JPEG/PNG, and prevent normal conversation deletion from cascading away document metadata while leaving private storage objects orphaned.
 - **P11-006 — Matter-centered Client Portal: PLANNED.**
 - **P11-007 — Lawyer Workspace Continuity: PLANNED.**
 - **P11-008 — Appointment / Consultation Workflow: PLANNED.**
