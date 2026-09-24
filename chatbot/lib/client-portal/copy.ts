@@ -35,6 +35,13 @@ export const CLIENT_PORTAL_COPY = {
     updateAvailable: "有新的律师审核更新",
     activeReview: "审核处理中",
     closedReview: "已结束",
+    requestNeedsMoreInformation: "需要补充信息",
+    requestPending: "等待律师审核",
+    requestInReview: "律师审核中",
+    requestConfirmed: "律师审核已确认",
+    requestCorrected: "已提供修正答复",
+    requestClosed: "请求已结束",
+    requestStatusUnavailable: "暂不可用",
     free: "免费账户",
     vipActive: "VIP 有效",
     vipExpired: "VIP 已过期",
@@ -85,6 +92,13 @@ export const CLIENT_PORTAL_COPY = {
     updateAvailable: "Lawyer review update available",
     activeReview: "Review in progress",
     closedReview: "Closed",
+    requestNeedsMoreInformation: "More information needed",
+    requestPending: "Awaiting lawyer review",
+    requestInReview: "Lawyer review in progress",
+    requestConfirmed: "Lawyer review confirmed",
+    requestCorrected: "Corrected response provided",
+    requestClosed: "Request closed",
+    requestStatusUnavailable: "Unavailable",
     free: "Free account",
     vipActive: "VIP active",
     vipExpired: "VIP expired",
@@ -103,4 +117,27 @@ export const CLIENT_PORTAL_COPY = {
 
 export function getClientPortalCopy(locale: SiteLocale) {
   return CLIENT_PORTAL_COPY[locale];
+}
+
+export function getLawyerRequestStatusLabel(
+  status: string,
+  locale: SiteLocale
+) {
+  const copy = getClientPortalCopy(locale);
+  switch (status) {
+    case "needs_more_information":
+      return copy.requestNeedsMoreInformation;
+    case "pending":
+      return copy.requestPending;
+    case "in_review":
+      return copy.requestInReview;
+    case "confirmed":
+      return copy.requestConfirmed;
+    case "corrected":
+      return copy.requestCorrected;
+    case "closed":
+      return copy.requestClosed;
+    default:
+      return copy.requestStatusUnavailable;
+  }
 }

@@ -783,7 +783,7 @@ Authorization and ownership:
 
 Projection and aggregation:
 
-- Matter data is fetched server-side from the existing Legal Service `/api/v1/matters/{matterId}` endpoint with `LEGAL_SERVICE_URL` and `LEGAL_SERVICE_API_KEY`. Each request uses `cache: "no-store"`, an 1800 ms abort timeout and no retries; at most four run concurrently. Missing configuration, non-2xx, malformed JSON, timeout or other fetch failure makes only that Matter snapshot unavailable.
+- Matter data is fetched server-side from the existing Legal Service `/api/v1/matters/{matterId}` endpoint with `LEGAL_SERVICE_URL` and `LEGAL_SERVICE_API_KEY`. Each request uses `cache: "no-store"`, an 1800 ms abort timeout and no retries; at most four run concurrently. Non-2xx, malformed JSON, timeout or other fetch failure makes only that Matter snapshot unavailable. The chatbot-side API key is optional when the Legal Service is configured without key authentication; the header is sent only when the key is configured.
 - The browser receives only Matter ID/status, bounded issue summary/type/visa context, up to 12 compact confirmed facts, up to 12 structured To-confirm slots, validated structured interaction progress and an allowlisted next action. Raw `metadata_json`, history, research state, risk classifications, prompts, provider telemetry and hidden reasoning are excluded.
 - Confirmed facts require compact-state status `confirmed`; complex values and non-scalar data are omitted. To-confirm items come only from `missing`, `user_unsure`, `document_unavailable` or `conflicting` structured slots. Values from non-user/system/model extraction sources are not presented as confirmed.
 - Documents are batch queried for owned chat IDs and only when `storageStatus=stored` and `deletedAt IS NULL`. The projection contains safe display metadata/statuses only; no storage key, hash, extracted text, evidence, provenance body or download URL. Security state and processing state are presented separately; pending security is described as not yet verified.
@@ -801,3 +801,24 @@ Validation on the current worktree:
 - Matter-fetch behavior is covered with an injected fake fetch; no live Legal Service was required.
 
 No owner visual acceptance or independent source review is recorded yet. Keep P11-006 unaccepted/unverified until review. D-040 remains in force: P11-005 remains **NOT VERIFIED** and its deployment-compatible canvas binding, authorized migrations `0018`–`0021` plus DB smoke, private S3/IAM/Block Public Access, retention/purge and stale-intent recovery, and malware/quarantine/scanning gates remain deferred to P11-009. No P11-005 gate was attempted or closed. P11-007, P11-008 and P11-009 were not started. No migration was created or applied; OpenAI and AWS/S3 were not contacted.
+
+
+## P11-006 post-push correction — 2026-09-25
+
+Direct GitHub source review at pushed HEAD `f1e001ab3df6d7f6a637e207cfce93ff1b563d00` identified two bounded corrections. The worktree began clean on the expected branch and HEAD. These corrections do not change P11-006 acceptance status: it remains **NOT ACCEPTED / NOT VERIFIED** pending review.
+
+- `LEGAL_SERVICE_API_KEY` is optional. The server-side Matter fetch sends `X-API-Key` only when configured and still performs the bounded `cache: "no-store"` request when it is absent. Non-2xx (including 401/403/404), invalid JSON, timeout and network failures return an unavailable snapshot for that matter only. No credential-presence signal is projected to the browser.
+- The portal refetches `/api/client-portal` when the existing site locale changes. The site-locale provider writes its cookie synchronously before the effect runs; the API continues to read the existing cookie-based locale. Fetches remain no-store and cancellation prevents stale locale responses from overwriting the latest projection. A pure selection helper preserves the current group when it still exists and otherwise selects the first group (or none).
+- Lawyer request statuses `needs_more_information`, `pending`, `in_review`, `confirmed`, `corrected`, and `closed` now have explicit Chinese and English labels. Unknown values use `Unavailable` / `暂不可用`, not raw enum text.
+
+Correction validation:
+
+- Focused Client Portal tests: **14 passed, 0 failed**.
+- `pnpm test:unit`: **278 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including `/client-portal` and `/api/client-portal`.
+- Changed-file Biome: **passed** for all five corrected source/test files.
+- `pnpm lint`: the known **21-diagnostic repository baseline** remains; no P11-006 correction files are reported.
+- `git diff --check`: **passed**.
+- Tests use injected fetch functions; no live Legal Service was contacted.
+
+No migration or backend source changed. D-040 and every P11-005 production-readiness gate remain deferred to P11-009. P11-005 remains NOT VERIFIED; P11-007 remains NOT STARTED. OpenAI and AWS/S3 were not contacted. No commit or push was made.

@@ -12,7 +12,11 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSiteLocale } from "@/components/site-locale-provider";
-import { getClientPortalCopy } from "@/lib/client-portal/copy";
+import {
+  getClientPortalCopy,
+  getLawyerRequestStatusLabel,
+} from "@/lib/client-portal/copy";
+import { preservePortalGroupSelection } from "@/lib/client-portal/grouping";
 import type {
   ClientPortalView,
   PortalMatterGroup,
@@ -29,22 +33,6 @@ function displayDate(value: PortalTimestamp, locale: string) {
 
 function aiWorkspaceHref(chatId: string) {
   return `/ai-workspace?chatId=${encodeURIComponent(chatId)}`;
-}
-
-function requestStatus(
-  status: string,
-  copy: ReturnType<typeof getClientPortalCopy>
-) {
-  if (status === "needs_more_information") {
-    return copy.updateAvailable;
-  }
-  if (status === "pending" || status === "in_review") {
-    return copy.activeReview;
-  }
-  if (status === "closed") {
-    return copy.closedReview;
-  }
-  return status;
 }
 
 function MatterDetails({
@@ -254,7 +242,10 @@ function MatterDetails({
                     {request.unread ||
                     request.status === "needs_more_information"
                       ? copy.updateAvailable
-                      : requestStatus(request.status, copy)}
+                      : getLawyerRequestStatusLabel(
+                          request.status,
+                          locale === "en" ? "en" : "zh-CN"
+                        )}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {displayDate(request.updatedAt, locale)}
@@ -362,6 +353,7 @@ export function ClientPortal() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: locale intentionally refetches the cookie-localized server projection.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -377,9 +369,7 @@ export function ClientPortal() {
         if (!cancelled) {
           setView(data);
           setSelectedKey((current) =>
-            data.matterGroups.some((group) => group.groupKey === current)
-              ? current
-              : (data.matterGroups[0]?.groupKey ?? null)
+            preservePortalGroupSelection(data.matterGroups, current)
           );
         }
       })
@@ -396,7 +386,7 @@ export function ClientPortal() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
   const selected = useMemo(
     () =>
       view?.matterGroups.find((group) => group.groupKey === selectedKey) ??

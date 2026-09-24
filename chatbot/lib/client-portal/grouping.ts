@@ -84,3 +84,16 @@ export function groupOwnedConversations(
     )
     .slice(0, Math.min(MAX_PORTAL_GROUPS, Math.max(0, groupLimit)));
 }
+
+export function preservePortalGroupSelection(
+  groups: Pick<PortalMatterGroup, "groupKey">[],
+  currentGroupKey: string | null
+): string | null {
+  if (
+    currentGroupKey &&
+    groups.some((group) => group.groupKey === currentGroupKey)
+  ) {
+    return currentGroupKey;
+  }
+  return groups[0]?.groupKey ?? null;
+}

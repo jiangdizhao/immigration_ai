@@ -16,15 +16,15 @@ export async function fetchLegalMatterSnapshot(
     timeoutMs = MATTER_FETCH_TIMEOUT_MS,
   }: MatterFetchOptions
 ): Promise<unknown | null> {
-  if (!apiKey) {
-    return null;
-  }
   try {
+    const headers: Record<string, string> = apiKey
+      ? { "X-API-Key": apiKey }
+      : {};
     const response = await fetchImpl(
       `${baseUrl}/api/v1/matters/${encodeURIComponent(matterId)}`,
       {
         method: "GET",
-        headers: { "X-API-Key": apiKey },
+        headers,
         cache: "no-store",
         signal: AbortSignal.timeout(timeoutMs),
       }

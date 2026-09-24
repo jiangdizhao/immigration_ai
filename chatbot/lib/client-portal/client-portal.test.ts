@@ -4,8 +4,12 @@ import {
   authorizeClientPortalIdentity,
   clientPortalRedirectForRole,
 } from "./access";
-import { getClientPortalCopy } from "./copy";
-import { groupOwnedConversations, portalGroupKey } from "./grouping";
+import { getClientPortalCopy, getLawyerRequestStatusLabel } from "./copy";
+import {
+  groupOwnedConversations,
+  portalGroupKey,
+  preservePortalGroupSelection,
+} from "./grouping";
 import { fetchLegalMatterSnapshot } from "./matter-fetch";
 import {
   buildClientPortalViewWithDependencies,
@@ -93,6 +97,13 @@ test("exact legal matter IDs group, while same titles and null IDs remain separa
   );
   assert.equal(portalGroupKey("chat-z", null), "chat:chat-z");
   assert.equal(portalGroupKey("chat-z", "matter-z"), "matter:matter-z");
+});
+
+test("portal refresh preserves the selected group when available and falls back to the first", () => {
+  const groups = [{ groupKey: "matter:a" }, { groupKey: "chat:b" }];
+  assert.equal(preservePortalGroupSelection(groups, "chat:b"), "chat:b");
+  assert.equal(preservePortalGroupSelection(groups, "removed"), "matter:a");
+  assert.equal(preservePortalGroupSelection([], "removed"), null);
 });
 
 test("most recently updated owned conversation continues a matter; groups are newest first", () => {
@@ -479,6 +490,27 @@ test("client portal copy includes Chinese default and English language", () => {
   assert.equal(getClientPortalCopy("en").title, "Client Portal");
   assert.equal(getClientPortalCopy("zh-CN").confirmed, "已确认信息");
   assert.equal(getClientPortalCopy("en").confirmed, "Confirmed by you");
+  for (const [status, zh, en] of [
+    ["needs_more_information", "需要补充信息", "More information needed"],
+    ["pending", "等待律师审核", "Awaiting lawyer review"],
+    ["in_review", "律师审核中", "Lawyer review in progress"],
+    ["confirmed", "律师审核已确认", "Lawyer review confirmed"],
+    ["corrected", "已提供修正答复", "Corrected response provided"],
+    ["closed", "请求已结束", "Request closed"],
+  ]) {
+    assert.equal(getLawyerRequestStatusLabel(status, "zh-CN"), zh);
+    assert.equal(getLawyerRequestStatusLabel(status, "en"), en);
+    assert.notEqual(getLawyerRequestStatusLabel(status, "zh-CN"), status);
+    assert.notEqual(getLawyerRequestStatusLabel(status, "en"), status);
+  }
+  assert.equal(
+    getLawyerRequestStatusLabel("unexpected_enum", "zh-CN"),
+    "暂不可用"
+  );
+  assert.equal(
+    getLawyerRequestStatusLabel("unexpected_enum", "en"),
+    "Unavailable"
+  );
 });
 
 test("portal service fetches only owned conversation matter IDs and keeps failed snapshots local", async () => {
@@ -594,54 +626,95 @@ test("portal service bounds concurrent legal-service calls at four", async () =>
   assert.ok(peak > 1);
 });
 
-test("legal matter fetch is bounded, authenticated and fails closed", async () => {
-  let request: RequestInit | undefined;
-  let requestUrl = "";
-  const fetchImpl = ((input, init) => {
-    requestUrl = String(input);
-    request = init;
-    return Response.json({ id: "m/a" });
+test("legal matter fetch supports optional API keys and fails soft", async () => {
+  const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+  const successfulFetch = ((input, init) => {
+    const url = String(input);
+    requests.push({ url, init });
+    return Response.json({
+      id: url.endsWith("matter-b") ? "matter-b" : "matter-a",
+      status: "NEW",
+      metadata_json: {},
+    });
   }) as typeof fetch;
 
+  const keyed = await fetchLegalMatterSnapshot("matter-a", {
+    baseUrl: "https://legal.example",
+    apiKey: "service-secret",
+    fetchImpl: successfulFetch,
+  });
+  assert.equal(requests.length, 1);
   assert.equal(
-    await fetchLegalMatterSnapshot("m/a", {
-      baseUrl: "https://legal.example",
-      apiKey: "service-secret",
-      fetchImpl,
-    }).then((value) => (value as { id: string }).id),
-    "m/a"
+    requests[0].url,
+    "https://legal.example/api/v1/matters/matter-a"
   );
-  assert.equal(requestUrl, "https://legal.example/api/v1/matters/m%2Fa");
-  assert.ok(request);
-  assert.equal(request.method, "GET");
+  const keyedRequest = requests[0].init;
+  assert.ok(keyedRequest);
+  assert.equal(keyedRequest.method, "GET");
+  assert.equal(keyedRequest.cache, "no-store");
+  assert.ok(keyedRequest.signal instanceof AbortSignal);
   assert.equal(
-    (request.headers as Record<string, string>)["X-API-Key"],
+    (keyedRequest.headers as Record<string, string>)["X-API-Key"],
     "service-secret"
   );
-  assert.equal(request?.cache, "no-store");
-  assert.ok(request?.signal instanceof AbortSignal);
   assert.equal(
-    await fetchLegalMatterSnapshot("m", {
-      baseUrl: "https://legal.example",
-      fetchImpl,
-    }),
-    null
+    projectMatterSnapshot(keyed, "matter-a", "en")?.matterId,
+    "matter-a"
   );
+
+  const unkeyed = await fetchLegalMatterSnapshot("matter-b", {
+    baseUrl: "https://legal.example",
+    fetchImpl: successfulFetch,
+  });
+  assert.equal(requests.length, 2, "missing key must still make the request");
+  assert.deepEqual(requests[1].init?.headers, {});
   assert.equal(
-    await fetchLegalMatterSnapshot("m", {
-      baseUrl: "https://legal.example",
-      apiKey: "secret",
-      fetchImpl: (async () =>
-        new Response(null, { status: 404 })) as typeof fetch,
-    }),
-    null
+    projectMatterSnapshot(unkeyed, "matter-b", "en")?.matterId,
+    "matter-b"
   );
+
+  for (const status of [401, 403, 404]) {
+    assert.equal(
+      await fetchLegalMatterSnapshot("matter-a", {
+        baseUrl: "https://legal.example",
+        apiKey: "secret",
+        fetchImpl: (async () => new Response(null, { status })) as typeof fetch,
+      }),
+      null,
+      `HTTP ${status} should fail soft`
+    );
+  }
   assert.equal(
-    await fetchLegalMatterSnapshot("m", {
+    await fetchLegalMatterSnapshot("matter-a", {
       baseUrl: "https://legal.example",
       apiKey: "secret",
       fetchImpl: (async () =>
         new Response("not-json", { status: 200 })) as typeof fetch,
+    }),
+    null
+  );
+  assert.equal(
+    await fetchLegalMatterSnapshot("matter-a", {
+      baseUrl: "https://legal.example",
+      apiKey: "secret",
+      fetchImpl: (() =>
+        Promise.reject(new Error("network failure"))) as typeof fetch,
+    }),
+    null
+  );
+  assert.equal(
+    await fetchLegalMatterSnapshot("matter-a", {
+      baseUrl: "https://legal.example",
+      apiKey: "secret",
+      timeoutMs: 1,
+      fetchImpl: ((_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true }
+          );
+        })) as typeof fetch,
     }),
     null
   );
