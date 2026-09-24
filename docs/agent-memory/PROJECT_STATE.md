@@ -129,7 +129,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Accepted Stage 2 boundary: bounded normalized extraction/provenance for PDF/JPEG/PNG/DOCX/DOC/TXT/MD/JSON/CSV/XLSX/XLS; isolated hard-cancellable native parsing; native-first mixed-PDF handling; dedicated OpenAI transcription adapter for image/scanned-page fallback; explicit incomplete reprocessing and stale-run recovery; customer-document evidence remains untrusted and separate from legal authority.
 - Stage 2 migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. Stage 3 is accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
-- **P11-006 — Matter-centered Client Portal: ACTIVE / READY TO IMPLEMENT.**
+- **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: PLANNED.**
 - **P11-008 — Appointment / Consultation Workflow: PLANNED.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
@@ -201,3 +201,26 @@ This is a **deferral, not a waiver**. P11-005 remains **NOT VERIFIED** until P11
 - malware/quarantine/scanning strategy.
 
 P11-006 is activated only because these gates have been durably carried forward into P11-009.
+
+
+### P11-006 verified boundary — 2026-09-25
+
+P11-006 is **VERIFIED** at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c` after direct GitHub source review plus owner desktop/mobile bilingual visual acceptance.
+
+Verified result:
+
+- registered customers have a Chinese-first bilingual `/client-portal` continuity hub;
+- customer ownership and role checks are enforced server-side;
+- conversations group only by exact non-null `legalMatterId`; null IDs remain provisional per-chat groups;
+- Legal Service Matter reads use only matter IDs derived from owned conversations and fail soft per matter;
+- raw `metadata_json`, document evidence, storage keys, hashes, provider identifiers and internal traces are not exposed to the browser;
+- confirmed facts and To-confirm items preserve structured provenance/status boundaries;
+- document, lawyer-request and VIP summaries reuse existing authorities rather than creating a parallel workflow;
+- document-schema rollout compatibility is explicit: deferred P11-005 schema absence produces an availability-aware partial portal instead of a 500 or a false zero-document claim;
+- only the expected document-schema SQLSTATEs are fail-soft at the document-query boundary; unrelated DB failures still surface;
+- locale changes refetch server-projected values and preserve the selected group when still present;
+- owner desktop/mobile Chinese/English visual acceptance passed with no blocking responsive or hierarchy defect.
+
+Validation recorded for the final runtime-compatibility correction: 281 chatbot unit tests passed, build passed, changed-file Biome passed, `git diff --check` passed, and repository lint remained at the known 21-diagnostic baseline with none in changed P11-006 files. GitHub attached no Actions/workflow status to the accepted checkpoint.
+
+P11-006 verification does **not** close P11-005 production-readiness. D-040 remains in force and P11-005 remains NOT VERIFIED until P11-009 closes its deferred gates.

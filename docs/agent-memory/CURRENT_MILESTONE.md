@@ -39,7 +39,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
-| P11-006 | Matter-centered Client Portal | ACTIVE — TASK PACKET FROZEN / READY TO IMPLEMENT |
+| P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
@@ -306,3 +306,22 @@ The first production portal should unify:
 - direct continuity links back to AI Workspace, lawyer-request detail and VIP management.
 
 No new appointment workflow belongs here; that remains P11-008.
+
+
+## P11-006 closure — 2026-09-25
+
+**Verified checkpoint:** `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`
+
+P11-006 is VERIFIED after:
+
+- implementation at `f1e001ab3df6d7f6a637e207cfce93ff1b563d00`;
+- locale/matter-fetch hardening at `e9a91ef0bc280e85bd4b6fdb50b4d314aecf352c`;
+- deferred-document-schema runtime compatibility at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`;
+- direct GitHub source review;
+- owner desktop/mobile Chinese/English visual acceptance.
+
+The final portal remains aggregation-first and matter-centered. It does not create a new matter database, legal reasoning engine, lawyer workflow, billing workflow or booking system.
+
+The runtime compatibility behavior is intentional: while P11-005 migrations remain deferred, the Client Portal may show the document subsystem as unavailable while retaining conversations, lawyer-review summaries, membership state and other safe portal functions. It must not represent unavailable document data as an authoritative zero.
+
+P11-005 production-readiness remains deferred to P11-009 under D-040 and is not closed by P11-006.

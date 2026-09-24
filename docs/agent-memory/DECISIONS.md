@@ -628,3 +628,21 @@ Data authority rules:
 - no inferred deadline, case-status, lawyer-status or legal conclusion may be invented by the portal.
 
 P11-006 is a continuity and navigation layer. AI Workspace, lawyer-request detail, VIP billing, future lawyer workspace and future appointment workflow remain their own authorities.
+
+
+## D-042 — Client Portal degrades explicitly when deferred document schema is unavailable
+
+**Date:** 2026-09-25  
+**Status:** ACCEPTED
+
+Because P11-005 migrations `0018`–`0021` are intentionally deferred to P11-009, P11-006 must not treat the MatterDocument schema as a hard prerequisite for rendering the customer portal.
+
+The accepted rollout-compatibility behavior is:
+
+- the document-summary query may fail soft for the expected missing-schema condition;
+- the public projection exposes document availability explicitly and must not translate unavailable data into an authoritative zero-document count;
+- the portal continues to expose safe owned conversation, lawyer-request and membership state;
+- Legal Service Matter unavailability remains an independent per-matter fail-soft condition;
+- unrelated database failures must not be broadly swallowed.
+
+This decision is a compatibility bridge only. It does not apply migrations, weaken P11-005 security, or mark P11-005 production-ready. D-040 remains fully in force.

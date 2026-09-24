@@ -843,3 +843,30 @@ Validation for this correction:
 - No live Legal Service or external provider was contacted.
 
 D-040 is unchanged. P11-005 remains NOT VERIFIED; migrations `0018`–`0021`, DB smoke, ECS/Fargate canvas verification, S3/IAM/public-access checks, retention/purge/stale-intent operations, and malware/quarantine/scanning remain deferred to P11-009. P11-006 remains NOT ACCEPTED / NOT VERIFIED. No new migration or backend/legal-service change was made, and no commit or push was made.
+
+
+## P11-006 verified — 2026-09-25
+
+**Verified checkpoint:** `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`
+
+Direct GitHub review of the final runtime compatibility correction found no remaining P11-006 blocker.
+
+Confirmed final behavior:
+
+- `/client-portal` is customer-only; guest/unauthenticated users leave the portal path, and lawyer/admin roles retain their own portals;
+- legal matter grouping remains exact-ID-only; title/visa/semantic similarity never merges matters;
+- Legal Service Matter fetch is server-only, ownership-derived, bounded, no-store, optional-API-key compatible and per-matter fail-soft;
+- document summaries are owner/chat-scoped and safe-projected;
+- when the intentionally deferred P11-005 schema is absent, only the document-query boundary degrades, `documentsAvailable=false`, and document count is non-authoritative/null rather than zero;
+- SQLSTATE `42P01` is handled at that narrow document-query boundary; `42703` is accepted only for the expected `storageStatus` partial-schema case; unrelated DB failures still propagate;
+- Legal Service offline and document schema unavailable can coexist while conversations, lawyer-review summaries and VIP state remain usable;
+- bilingual status/copy and locale-refetch behavior are consistent;
+- no migration, legal-service source change or external-service call was introduced by the final correction.
+
+Owner visual acceptance passed on desktop and mobile in both Chinese and English. The accepted layout preserves matter list, selected matter, recent activity, membership, conversations, lawyer review and explicit unavailable states without blocking responsive defects.
+
+Recorded final correction validation: 281 unit tests passed, build passed, changed-file Biome passed, `git diff --check` passed, and repository lint remained at the known 21-diagnostic baseline with no diagnostics in changed P11-006 files.
+
+**P11-006 is VERIFIED. P11-007 remains NOT STARTED.**
+
+D-040 remains authoritative: P11-005 is still NOT VERIFIED and its production-readiness gates remain deferred to P11-009.
