@@ -38,10 +38,11 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Matter-centered Client Portal | PLANNED |
-| P11-006 | Lawyer Workspace continuity | PLANNED |
-| P11-007 | Real appointment/consultation workflow | PLANNED |
-| P11-008 | Bilingual/responsive/accessibility/E2E + staging acceptance | PLANNED |
+| P11-005 | Secure Matter Documents & AI File Intake | PLANNED / READY |
+| P11-006 | Matter-centered Client Portal | PLANNED |
+| P11-007 | Lawyer Workspace continuity | PLANNED |
+| P11-008 | Real appointment/consultation workflow | PLANNED |
+| P11-009 | Bilingual/responsive/accessibility/E2E + staging acceptance | PLANNED |
 
 ## P11-004 closure / next task state
 
@@ -49,7 +50,7 @@ P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9
 
 P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-P11-005 remains **PLANNED** and has not started. Do not activate it as part of this P11-004 closure.
+P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **PLANNED / READY** and has not started implementation. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
 ## Evidence that triggered R2
 
@@ -178,3 +179,24 @@ All success-boundary items were accepted at `f2d941734d256c9e0a0e42988cd67cdb828
 The local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave it disabled unless intentionally debugging.
 
 P11-005 remains PLANNED and has not started.
+
+## P11-005 rebaseline — Secure Matter Documents & AI File Intake
+
+P11-005 is introduced before the Client Portal because current production code does not yet provide a secure matter-document lifecycle.
+
+Observed current-state boundaries:
+
+- generic `Message_v2.attachments` metadata exists but is not a matter-document model;
+- the generic `/api/files/upload` route accepts JPEG/PNG only, up to 5 MiB, and stores them as public Vercel Blob objects;
+- the Phase 11 AI Workspace does not currently upload or reason over customer PDFs/JPEGs/PNGs;
+- there is no private document ownership/download boundary, PDF extraction, scanned-document/image understanding, page provenance, or authorized lawyer document continuity.
+
+P11-005 is one major Task Packet with three internal stages:
+
+1. **Stage 1 — Secure document foundation:** private storage boundary, additive document metadata/lifecycle, ownership authorization, upload/read/delete contracts, integrity/type/size controls and deterministic security tests.
+2. **Stage 2 — Document understanding:** native PDF text extraction first, bounded scanned-PDF/JPEG/PNG visual extraction fallback, normalized text and page-level provenance, prompt-injection-safe evidence handling.
+3. **Stage 3 — Matter / AI / lawyer integration:** matter-scoped document UI, selected-document evidence in AI analysis, provenance-aware display, and authorized document references in human handoff.
+
+P11-005 does not authorize public object URLs, arbitrary file types, production DB migration execution, booking/calendar work, legal reasoning redesign, or weakening existing auth/VIP/lawyer ownership controls.
+
+Executable packet after owner authorization: `docs/agent-memory/tasks/P11-005.md`.

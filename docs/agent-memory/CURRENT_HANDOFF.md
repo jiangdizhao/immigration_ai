@@ -300,5 +300,32 @@ Non-blocking deployment note:
 
 - The local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`. Staging and production should leave this disabled unless intentionally debugging.
 
-P11-005 remains **PLANNED** and has not started.
+The former Client Portal P11-005 is superseded by the document-system rebaseline below.
 
+## P11-005 roadmap rebaseline — 2026-09-24
+
+After P11-004 closure, owner review identified a missing production prerequisite: the service cannot yet securely process customer PDFs, JPEGs and PNGs as matter evidence.
+
+Repository inspection confirmed:
+
+- `Message_v2` has a generic `attachments` JSON field, but this is not a matter-document lifecycle;
+- `chatbot/components/multimodal-input.tsx` can upload through `/api/files/upload`;
+- that generic upload route currently accepts only `image/jpeg` and `image/png`, limits files to 5 MiB, and writes Vercel Blob objects with `access: "public"`;
+- the active Phase 11 AI Workspace does not use that upload path;
+- PDF intake, private matter-scoped document authorization, extraction/vision processing, page provenance and lawyer document continuity do not yet exist.
+
+Therefore Phase 11 is rebaselined:
+
+- P11-005 — **Secure Matter Documents & AI File Intake** — PLANNED / READY, not started;
+- P11-006 — Matter-centered Client Portal — PLANNED;
+- P11-007 — Lawyer Workspace Continuity — PLANNED;
+- P11-008 — Appointment / Consultation Workflow — PLANNED;
+- P11-009 — final bilingual/responsive/accessibility/E2E + staging acceptance — PLANNED.
+
+P11-005 uses one Task Packet with three internal stages: secure document foundation; document understanding/provenance; matter/AI/lawyer integration.
+
+The production target is private object storage with AWS S3 behind an abstraction, PostgreSQL metadata/lifecycle, explicit ownership checks, PDF/JPEG/PNG support, untrusted-content handling and document/page provenance. Customer-document evidence must remain distinct from official legal sources, AI analysis and lawyer advice.
+
+No application code, database migration, AWS resource, or deployment is changed by this documentation rebaseline. Applying any DB migration remains separately authorized.
+
+Next executable packet after owner authorization: `docs/agent-memory/tasks/P11-005.md`.

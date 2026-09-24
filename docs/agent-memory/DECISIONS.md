@@ -493,3 +493,50 @@ Static workspace chrome follows the persisted site locale (`zh-CN` default, Engl
 
 The real appointment flow remains owned by P11-007; P11-004 must not invent a booking integration.
 
+## D-036 — Secure matter documents precede the Client Portal
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+The Phase 11 roadmap is rebaselined from P11-005 onward because a real matter-centered service platform requires secure customer document handling before the Client Portal is consolidated around matter continuity.
+
+Repository inspection established that the existing file scaffold is not a production matter-document system:
+
+- `Message_v2.attachments` exists as generic chat JSON metadata, but the Phase 11 AI Workspace does not use it as a matter-document lifecycle;
+- `chatbot/components/multimodal-input.tsx` can call the generic `/api/files/upload` route, but that route accepts only JPEG/PNG up to 5 MiB;
+- the existing upload route writes to Vercel Blob with `access: "public"`, which is not an acceptable production boundary for passports, refusal notices, bank statements, CoEs and similar immigration materials;
+- PDF intake, private matter-scoped ownership, document lifecycle/status, extraction, page provenance, and AI/lawyer continuity are not implemented.
+
+Therefore the roadmap becomes:
+
+1. **P11-005 — Secure Matter Documents & AI File Intake**
+2. **P11-006 — Matter-centered Client Portal**
+3. **P11-007 — Lawyer Workspace Continuity**
+4. **P11-008 — Appointment / Consultation Workflow**
+5. **P11-009 — Bilingual / responsive / accessibility / E2E + staging acceptance**
+
+This decision supersedes only the P11-005-and-later numbering/order in Section 10 of `SERVICE_PLATFORM_UI_REBASE_V1.md`. The architecture document's product, matter-continuity, provenance, incremental-migration, legal-backend and deployment invariants remain authoritative.
+
+## D-037 — Matter documents are private evidence, not public chat attachments
+
+**Date:** 2026-09-24  
+**Status:** ACCEPTED
+
+P11-005 establishes a security boundary for customer-supplied matter documents.
+
+Production direction:
+
+- support PDF, JPEG and PNG first;
+- store file bytes outside PostgreSQL in private object storage, with AWS S3 as the production target behind a storage abstraction;
+- store document identity, ownership, matter/chat linkage, integrity metadata, processing status and provenance metadata in PostgreSQL;
+- never rely on a public object URL as authorization;
+- every upload/read/download/delete operation must re-check authenticated ownership/role and applicable matter/chat access;
+- use server-generated object keys and validate file type/size/content before processing;
+- keep customer documents semantically distinct from official legal sources, AI analysis and lawyer advice;
+- document content is untrusted evidence and must never become model/system instructions;
+- extraction must retain document/page provenance so later answers can identify which customer document/page supplied a fact;
+- lawyer handoff may reuse matter documents only through explicit authorized document references, not copied public URLs.
+
+P11-005 is a distinct architecture/security task under D-033. Additive schema/migration code may be proposed where the current generic attachment field cannot represent the required lifecycle, but applying migrations to any shared/staging/production database remains separately authorized.
+
+The real scheduling workflow remains outside P11-005.
