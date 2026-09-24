@@ -113,6 +113,16 @@ function AccountMenu({
           <span>{accountLabel}</span>
         </div>
         <DropdownMenuSeparator />
+        {!isAdmin && !isLawyer ? (
+          <DropdownMenuItem asChild>
+            <Link
+              className="cursor-pointer font-semibold"
+              href="/client-portal"
+            >
+              {copy.account.clientPortal}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem asChild>
           <Link className="cursor-pointer" href="/ai-workspace">
             {isAdmin
@@ -133,10 +143,14 @@ function AccountMenu({
             </Link>
           </DropdownMenuItem>
         )}
-        {!isAdmin && !activeVip ? (
+        {!isAdmin && !isLawyer ? (
           <DropdownMenuItem asChild>
             <Link className="cursor-pointer" href="/vip">
-              {expiredVip ? copy.account.renewVip : copy.account.upgradeVip}
+              {activeVip
+                ? copy.account.manageVip
+                : expiredVip
+                  ? copy.account.renewVip
+                  : copy.account.upgradeVip}
             </Link>
           </DropdownMenuItem>
         ) : null}

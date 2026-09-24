@@ -767,3 +767,37 @@ Frozen implementation direction:
 - P11-007 lawyer-workspace continuity, P11-008 booking and P11-009 AWS/staging acceptance remain separate.
 
 The coding model must stop uncommitted/unpushed for owner/ChatGPT review.
+
+
+## P11-006 implementation checkpoint — local, unaccepted — 2026-09-25
+
+**Status:** implementation is present in the worktree for owner/source review. P11-006 is **NOT ACCEPTED** and **NOT VERIFIED**. No commit or push was made. The original implementation base remains `2a873b13cfd548c9dceae5aaee23c57ecc70c69f`.
+
+Implemented the customer-only `/client-portal` aggregation layer. The page uses `SiteHeader`, the persisted site locale (Chinese default with English toggle), a responsive matter selector/overview, recent activity and membership summaries. The `/api/client-portal` route authenticates independently and returns one bounded safe projection; the browser does not supply Matter IDs. Header navigation adds Client Portal as the customer continuity hub while retaining AI Workspace, lawyer-request and VIP links without changing staff navigation.
+
+Authorization and ownership:
+
+- Unauthenticated and guest page visits redirect to `/login`; lawyer and admin page visits redirect to their existing portals. The API separately rejects any identity whose current entitlement role is not `user`.
+- The service begins with the authenticated owner's conversation query. At most 80 owner-linked conversations are considered. Legal-service Matter IDs are derived only from those rows; client query parameters cannot select Matter fetches.
+- Exact non-null `legalMatterId` values group conversations. A null ID remains a per-chat provisional group. Titles and semantic similarity never merge groups. Up to 50 groups are returned, newest activity first; a linked group's continuation chat is its most recently updated owned conversation.
+
+Projection and aggregation:
+
+- Matter data is fetched server-side from the existing Legal Service `/api/v1/matters/{matterId}` endpoint with `LEGAL_SERVICE_URL` and `LEGAL_SERVICE_API_KEY`. Each request uses `cache: "no-store"`, an 1800 ms abort timeout and no retries; at most four run concurrently. Missing configuration, non-2xx, malformed JSON, timeout or other fetch failure makes only that Matter snapshot unavailable.
+- The browser receives only Matter ID/status, bounded issue summary/type/visa context, up to 12 compact confirmed facts, up to 12 structured To-confirm slots, validated structured interaction progress and an allowlisted next action. Raw `metadata_json`, history, research state, risk classifications, prompts, provider telemetry and hidden reasoning are excluded.
+- Confirmed facts require compact-state status `confirmed`; complex values and non-scalar data are omitted. To-confirm items come only from `missing`, `user_unsure`, `document_unavailable` or `conflicting` structured slots. Values from non-user/system/model extraction sources are not presented as confirmed.
+- Documents are batch queried for owned chat IDs and only when `storageStatus=stored` and `deletedAt IS NULL`. The projection contains safe display metadata/statuses only; no storage key, hash, extracted text, evidence, provenance body or download URL. Security state and processing state are presented separately; pending security is described as not yet verified.
+- Lawyer requests are bounded to the existing 100-row owner query, aligned to owned chat/matter groups, ordered by explicit needs-more-information/unread/active/completed/closed state, and omit message/evidence contents. VIP projection reports safe entitlement/period/cancellation state and excludes provider identifiers.
+- Recent activity contains conversation, document and lawyer-request events only, sorted newest first and capped at 20. Actions continue in the existing AI Workspace, lawyer-request detail and VIP flows; no duplicate workflow was added.
+- The new owner-scoped document query selects only display fields and does not change schema or document security behavior. No legal-service source changed.
+
+Validation on the current worktree:
+
+- `pnpm test:unit`: **277 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**; `/client-portal` and `/api/client-portal` are present in the production build.
+- Changed-file Biome: **passed** across all 15 changed application/test files.
+- `git diff --check`: **passed**.
+- `pnpm lint`: retains the **21-diagnostic repository baseline**; no diagnostics reference P11-006 changed files.
+- Matter-fetch behavior is covered with an injected fake fetch; no live Legal Service was required.
+
+No owner visual acceptance or independent source review is recorded yet. Keep P11-006 unaccepted/unverified until review. D-040 remains in force: P11-005 remains **NOT VERIFIED** and its deployment-compatible canvas binding, authorized migrations `0018`–`0021` plus DB smoke, private S3/IAM/Block Public Access, retention/purge and stale-intent recovery, and malware/quarantine/scanning gates remain deferred to P11-009. No P11-005 gate was attempted or closed. P11-007, P11-008 and P11-009 were not started. No migration was created or applied; OpenAI and AWS/S3 were not contacted.

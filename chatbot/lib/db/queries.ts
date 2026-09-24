@@ -2302,6 +2302,51 @@ export async function listMatterDocumentRecordsForOwner({
     .orderBy(desc(matterDocument.createdAt));
 }
 
+/**
+ * Bounded owner-scoped document summaries for the customer portal.
+ * The selected columns intentionally exclude storage and evidence material.
+ */
+export async function listMatterDocumentsForPortal({
+  userId,
+  chatIds,
+  limit = 400,
+}: {
+  userId: string;
+  chatIds: string[];
+  limit?: number;
+}) {
+  if (chatIds.length === 0) {
+    return [];
+  }
+  return await db
+    .select({
+      id: matterDocument.id,
+      userId: matterDocument.userId,
+      chatId: matterDocument.chatId,
+      legalMatterId: matterDocument.legalMatterId,
+      originalFilename: matterDocument.originalFilename,
+      mimeType: matterDocument.mimeType,
+      byteSize: matterDocument.byteSize,
+      processingStatus: matterDocument.processingStatus,
+      securityStatus: matterDocument.securityStatus,
+      createdAt: matterDocument.createdAt,
+      updatedAt: matterDocument.updatedAt,
+    })
+    .from(matterDocument)
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(
+      and(
+        eq(matterDocument.userId, userId),
+        eq(chat.userId, userId),
+        inArray(matterDocument.chatId, chatIds),
+        eq(matterDocument.storageStatus, "stored"),
+        isNull(matterDocument.deletedAt)
+      )
+    )
+    .orderBy(desc(matterDocument.updatedAt))
+    .limit(Math.max(1, Math.min(limit, 500)));
+}
+
 export async function getMatterDocumentRecordForOwner({
   documentId,
   userId,

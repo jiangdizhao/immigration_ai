@@ -33,6 +33,8 @@ export type SiteTranslation = {
     vipUntil: string;
     vipExpired: string;
     freeAccount: string;
+    clientPortal: string;
+    manageVip: string;
     aiWorkspace: string;
     conversationsAndWorkspace: string;
     lawyerPortal: string;
@@ -87,6 +89,8 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
       vipUntil: "VIP 有效期至",
       vipExpired: "VIP 已过期",
       freeAccount: "免费账户",
+      clientPortal: "客户中心",
+      manageVip: "管理 VIP 会员",
       aiWorkspace: "AI 工作台",
       conversationsAndWorkspace: "我的对话 / AI 工作台",
       lawyerPortal: "律师工作台",
@@ -140,6 +144,8 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
       vipUntil: "VIP until",
       vipExpired: "VIP expired",
       freeAccount: "Free account",
+      clientPortal: "Client Portal",
+      manageVip: "Manage VIP membership",
       aiWorkspace: "AI Workspace",
       conversationsAndWorkspace: "My conversations / AI Workspace",
       lawyerPortal: "Lawyer portal",
