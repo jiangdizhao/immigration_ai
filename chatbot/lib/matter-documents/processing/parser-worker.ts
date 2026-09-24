@@ -127,8 +127,12 @@ export function runParserWorker(input: {
   bytes: Uint8Array;
   renderScannedPages: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
   workerPath?: string;
 }): Promise<NativeParserOutput> {
+  if (input.signal?.aborted) {
+    return Promise.reject(new ParserWorkerError("processing_timeout"));
+  }
   const workerPath =
     input.workerPath ??
     join(
@@ -161,12 +165,15 @@ export function runParserWorker(input: {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timedOut = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let onAbort = () => undefined;
     const finish = (error?: Error, output?: NativeParserOutput) => {
       if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timer);
+      input.signal?.removeEventListener("abort", onAbort);
       if (error) {
         reject(error);
       } else if (output) {
@@ -175,14 +182,21 @@ export function runParserWorker(input: {
         reject(new ParserWorkerError("parser_worker_failed"));
       }
     };
-    const timer = setTimeout(() => {
+    onAbort = () => {
       timedOut = true;
       worker.terminate().then(
         () => finish(new ParserWorkerError("processing_timeout")),
         () => finish(new ParserWorkerError("processing_timeout"))
       );
+    };
+    timer = setTimeout(() => {
+      onAbort();
     }, input.timeoutMs ?? DOCUMENT_PROCESSING_LIMITS.parserWorkerTimeoutMs);
     timer.unref?.();
+    input.signal?.addEventListener("abort", onAbort, { once: true });
+    if (input.signal?.aborted) {
+      onAbort();
+    }
     worker.once("message", (message: unknown) => {
       if (!isRecord(message)) {
         worker.terminate().then(

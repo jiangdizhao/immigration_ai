@@ -49,6 +49,7 @@ export type DocumentVisionExtractor = {
     mediaType: "image/jpeg" | "image/png";
     pageNumber?: number;
     instructions: string;
+    signal?: AbortSignal;
   }): Promise<string>;
 };
 
@@ -66,4 +67,6 @@ export type ProcessorInput = {
   documentId: string;
   vision?: DocumentVisionExtractor;
   pdfRenderer?: PdfPageRenderer;
+  deadlineAt?: number;
+  signal?: AbortSignal;
 };

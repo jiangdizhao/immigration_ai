@@ -1,5 +1,7 @@
 export const DOCUMENT_PROCESSING_LIMITS = {
   runtimeMs: 30_000,
+  // Allow three default processing windows before explicit stale recovery.
+  staleProcessingAfterMs: 90_000,
   parserWorkerTimeoutMs: 30_000,
   parserWorkerMemoryMb: 192,
   parserWorkerYoungGenerationMb: 32,

@@ -82,22 +82,115 @@ export function beginMatterDocumentProcessing(input: {
   runId: string;
   extractorVersion: string;
   retryFailed: boolean;
+  reprocessIncomplete: boolean;
+  recoverStaleProcessing: boolean;
+  staleBefore: Date;
   startedAt: Date;
 }) {
   return db.transaction(async (tx) => {
+    const ownership = and(
+      eq(matterDocument.id, input.documentId),
+      eq(matterDocument.userId, input.userId),
+      eq(matterDocument.storageStatus, "stored"),
+      isNull(matterDocument.deletedAt),
+      sql`exists (select 1 from "Chat" where "Chat"."id" = ${matterDocument.chatId} and "Chat"."userId" = ${input.userId})`
+    );
+
+    if (input.recoverStaleProcessing) {
+      const [record] = await tx
+        .select()
+        .from(matterDocument)
+        .where(
+          and(ownership, eq(matterDocument.processingStatus, "processing"))
+        )
+        .for("update")
+        .limit(1);
+      if (!record) {
+        return null;
+      }
+      const [latestAttempt] = await tx
+        .select({ run: matterDocumentProcessingRun })
+        .from(matterDocumentProcessingRun)
+        .where(eq(matterDocumentProcessingRun.documentId, input.documentId))
+        .orderBy(desc(matterDocumentProcessingRun.startedAt))
+        .limit(1);
+      if (
+        latestAttempt?.run.status !== "processing" ||
+        latestAttempt.run.startedAt >= input.staleBefore
+      ) {
+        return null;
+      }
+      const [recovered] = await tx
+        .update(matterDocumentProcessingRun)
+        .set({
+          status: "failed",
+          completedAt: input.startedAt,
+          errorCode: "stale_processing_recovered",
+        })
+        .where(
+          and(
+            eq(matterDocumentProcessingRun.id, latestAttempt.run.id),
+            eq(matterDocumentProcessingRun.documentId, input.documentId),
+            eq(matterDocumentProcessingRun.status, "processing"),
+            lt(matterDocumentProcessingRun.startedAt, input.staleBefore)
+          )
+        )
+        .returning();
+      if (!recovered) {
+        return null;
+      }
+      const [claimedRecord] = await tx
+        .update(matterDocument)
+        .set({ updatedAt: input.startedAt })
+        .where(
+          and(ownership, eq(matterDocument.processingStatus, "processing"))
+        )
+        .returning();
+      if (!claimedRecord) {
+        return null;
+      }
+      const [run] = await tx
+        .insert(matterDocumentProcessingRun)
+        .values({
+          id: input.runId,
+          documentId: claimedRecord.id,
+          extractorVersion: input.extractorVersion,
+          status: "processing",
+          startedAt: input.startedAt,
+        })
+        .returning();
+      return { record: claimedRecord, run };
+    }
+
+    const latestAttemptIsFailed = sql`(
+      select "status" from "MatterDocumentProcessingRun"
+      where "documentId" = ${matterDocument.id}
+      order by "startedAt" desc
+      limit 1
+    ) = 'failed'`;
+    const latestTerminalIsIncomplete = sql`(
+      select "status" from "MatterDocumentProcessingRun"
+      where "documentId" = ${matterDocument.id}
+        and "status" in ('complete', 'partial', 'needs_review')
+      order by "startedAt" desc
+      limit 1
+    ) in ('partial', 'needs_review')`;
+    const expectedStatus = input.reprocessIncomplete
+      ? eq(matterDocument.processingStatus, "complete")
+      : input.retryFailed
+        ? and(
+            eq(matterDocument.processingStatus, "failed"),
+            latestAttemptIsFailed
+          )
+        : eq(matterDocument.processingStatus, "not_started");
     const [record] = await tx
       .update(matterDocument)
       .set({ processingStatus: "processing", updatedAt: input.startedAt })
       .where(
         and(
-          eq(matterDocument.id, input.documentId),
-          eq(matterDocument.userId, input.userId),
-          eq(matterDocument.storageStatus, "stored"),
-          isNull(matterDocument.deletedAt),
-          input.retryFailed
-            ? eq(matterDocument.processingStatus, "failed")
-            : eq(matterDocument.processingStatus, "not_started"),
-          sql`exists (select 1 from "Chat" where "Chat"."id" = ${matterDocument.chatId} and "Chat"."userId" = ${input.userId})`
+          ownership,
+          expectedStatus,
+          input.reprocessIncomplete ? latestTerminalIsIncomplete : undefined
         )
       )
       .returning();
@@ -168,14 +261,19 @@ export function finalizeMatterDocumentProcessing(input: {
   errorCode: string | null;
 }) {
   return db.transaction(async (tx) => {
-    if (input.units.length) {
-      await tx.insert(matterDocumentEvidenceUnit).values(
-        input.units.map((unit) => ({
-          ...unit,
-          documentId: input.documentId,
-          runId: input.runId,
-        }))
-      );
+    const [activeDocument] = await tx
+      .select({ id: matterDocument.id })
+      .from(matterDocument)
+      .where(
+        and(
+          eq(matterDocument.id, input.documentId),
+          eq(matterDocument.processingStatus, "processing")
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!activeDocument) {
+      throw new Error("processing_document_not_active");
     }
     const [run] = await tx
       .update(matterDocumentProcessingRun)
@@ -191,12 +289,22 @@ export function finalizeMatterDocumentProcessing(input: {
       .where(
         and(
           eq(matterDocumentProcessingRun.id, input.runId),
+          eq(matterDocumentProcessingRun.documentId, input.documentId),
           eq(matterDocumentProcessingRun.status, "processing")
         )
       )
       .returning();
     if (!run) {
       throw new Error("processing_run_not_active");
+    }
+    if (input.units.length) {
+      await tx.insert(matterDocumentEvidenceUnit).values(
+        input.units.map((unit) => ({
+          ...unit,
+          documentId: input.documentId,
+          runId: input.runId,
+        }))
+      );
     }
     const [record] = await tx
       .update(matterDocument)
@@ -222,7 +330,21 @@ export async function failMatterDocumentProcessing(input: {
   errorCode: string;
 }) {
   await db.transaction(async (tx) => {
-    await tx
+    const [activeDocument] = await tx
+      .select({ id: matterDocument.id })
+      .from(matterDocument)
+      .where(
+        and(
+          eq(matterDocument.id, input.documentId),
+          eq(matterDocument.processingStatus, "processing")
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!activeDocument) {
+      return;
+    }
+    const [failedRun] = await tx
       .update(matterDocumentProcessingRun)
       .set({
         status: "failed",
@@ -232,9 +354,14 @@ export async function failMatterDocumentProcessing(input: {
       .where(
         and(
           eq(matterDocumentProcessingRun.id, input.runId),
+          eq(matterDocumentProcessingRun.documentId, input.documentId),
           eq(matterDocumentProcessingRun.status, "processing")
         )
-      );
+      )
+      .returning({ id: matterDocumentProcessingRun.id });
+    if (!failedRun) {
+      return;
+    }
     await tx
       .update(matterDocument)
       .set({ processingStatus: "failed", updatedAt: input.failedAt })

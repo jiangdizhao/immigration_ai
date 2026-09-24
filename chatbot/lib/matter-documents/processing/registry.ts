@@ -2,6 +2,7 @@ import {
   MATTER_DOCUMENT_FORMATS,
   type MatterDocumentFormatId,
 } from "../formats";
+import { assertProcessingDeadline, createProcessingDeadline } from "./deadline";
 import {
   DOCUMENT_PROCESSING_LIMITS,
   VISION_EXTRACTION_INSTRUCTIONS,
@@ -37,6 +38,8 @@ async function transcribeVisionPages(input: {
   base: ProcessingResult;
   pages: Awaited<ReturnType<typeof runParserWorker>>["pendingVisionPages"];
   vision?: ProcessorInput["vision"];
+  signal?: AbortSignal;
+  deadlineAt?: number;
 }): Promise<ProcessingResult> {
   if (input.pages.length === 0) {
     return input.base;
@@ -56,13 +59,16 @@ async function transcribeVisionPages(input: {
     0
   );
   for (const page of input.pages) {
+    assertProcessingDeadline(input);
     try {
       const text = await input.vision.extract({
         bytes: page.bytes,
         mediaType: page.mediaType,
         pageNumber: page.pageNumber,
         instructions: VISION_EXTRACTION_INSTRUCTIONS,
+        signal: input.signal,
       });
+      assertProcessingDeadline(input);
       const bounded = text.slice(0, DOCUMENT_PROCESSING_LIMITS.pageTextChars);
       if (text.length > bounded.length) {
         truncated = true;
@@ -87,7 +93,13 @@ async function transcribeVisionPages(input: {
         extractionMethod: "vision_fallback",
         provenance: { source: "vision_fallback" },
       });
-    } catch {
+    } catch (error) {
+      if (
+        input.signal?.aborted ||
+        (error instanceof Error && error.message === "processing_timeout")
+      ) {
+        throw new ParserWorkerError("processing_timeout");
+      }
       unresolved = true;
     }
   }
@@ -128,35 +140,60 @@ async function transcribeVisionPages(input: {
 export async function processMatterDocument(
   input: ProcessorInput
 ): Promise<ProcessingResult> {
-  if (!byFormat.has(input.format)) {
-    throw new Error("unsupported_processing_format");
-  }
-  const startedAt = Date.now();
-  if (input.format === "jpeg" || input.format === "png") {
-    return extractImage({
+  const ownedDeadline =
+    input.signal === undefined && input.deadlineAt === undefined
+      ? createProcessingDeadline()
+      : undefined;
+  const signal = input.signal ?? ownedDeadline?.signal;
+  const deadlineAt = input.deadlineAt ?? ownedDeadline?.deadlineAt;
+  const deadlineContext = { signal, deadlineAt };
+  try {
+    assertProcessingDeadline(deadlineContext);
+    if (!byFormat.has(input.format)) {
+      throw new Error("unsupported_processing_format");
+    }
+    if (input.format === "jpeg" || input.format === "png") {
+      return await extractImage({
+        bytes: input.bytes,
+        mediaType: input.format === "jpeg" ? "image/jpeg" : "image/png",
+        vision: input.vision,
+        signal,
+        deadlineAt,
+      });
+    }
+    if (input.format === "pdf") {
+      await import("pdfjs-dist/legacy/build/pdf.mjs");
+    }
+    if (input.format === "pdf" && input.vision) {
+      await import("@napi-rs/canvas");
+    }
+    const remainingMs = deadlineAt
+      ? deadlineAt - Date.now()
+      : DOCUMENT_PROCESSING_LIMITS.runtimeMs;
+    if (remainingMs <= 0) {
+      throw new ParserWorkerError("processing_timeout");
+    }
+    const parsed = await runParserWorker({
+      format: input.format,
       bytes: input.bytes,
-      mediaType: input.format === "jpeg" ? "image/jpeg" : "image/png",
-      vision: input.vision,
+      renderScannedPages: Boolean(input.vision),
+      timeoutMs: Math.min(
+        DOCUMENT_PROCESSING_LIMITS.parserWorkerTimeoutMs,
+        remainingMs
+      ),
+      signal,
     });
+    assertProcessingDeadline(deadlineContext);
+    const result = await transcribeVisionPages({
+      base: parsed.result,
+      pages: parsed.pendingVisionPages,
+      vision: input.vision,
+      signal,
+      deadlineAt,
+    });
+    assertProcessingDeadline(deadlineContext);
+    return result;
+  } finally {
+    ownedDeadline?.dispose();
   }
-  if (input.format === "pdf") {
-    await import("pdfjs-dist/legacy/build/pdf.mjs");
-  }
-  if (input.format === "pdf" && input.vision) {
-    await import("@napi-rs/canvas");
-  }
-  const parsed = await runParserWorker({
-    format: input.format,
-    bytes: input.bytes,
-    renderScannedPages: Boolean(input.vision),
-  });
-  const result = await transcribeVisionPages({
-    base: parsed.result,
-    pages: parsed.pendingVisionPages,
-    vision: input.vision,
-  });
-  if (Date.now() - startedAt > DOCUMENT_PROCESSING_LIMITS.runtimeMs) {
-    throw new ParserWorkerError("processing_timeout");
-  }
-  return result;
 }

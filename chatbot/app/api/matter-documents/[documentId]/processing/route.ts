@@ -51,21 +51,50 @@ export async function POST(request: Request, context: RouteContext) {
     return json({ error: "Document not found." }, 404);
   }
   let retryFailed = false;
+  let reprocessIncomplete = false;
+  let recoverStaleProcessing = false;
   try {
     const bodyText = await request.text();
     if (bodyText.length > 1024) {
       throw new Error("body_too_large");
     }
-    const body = (bodyText ? JSON.parse(bodyText) : {}) as {
-      retryFailed?: unknown;
-    };
+    const body: unknown = bodyText ? JSON.parse(bodyText) : {};
     if (
-      body.retryFailed !== undefined &&
-      typeof body.retryFailed !== "boolean"
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body) ||
+      Object.keys(body).some(
+        (key) =>
+          ![
+            "retryFailed",
+            "reprocessIncomplete",
+            "recoverStaleProcessing",
+          ].includes(key)
+      )
     ) {
       return json({ error: "Invalid processing request." }, 400);
     }
-    retryFailed = body.retryFailed === true;
+    const fields = body as Record<string, unknown>;
+    for (const key of [
+      "retryFailed",
+      "reprocessIncomplete",
+      "recoverStaleProcessing",
+    ]) {
+      if (fields[key] !== undefined && typeof fields[key] !== "boolean") {
+        return json({ error: "Invalid processing request." }, 400);
+      }
+    }
+    const enabledModes = [
+      fields.retryFailed === true,
+      fields.reprocessIncomplete === true,
+      fields.recoverStaleProcessing === true,
+    ].filter(Boolean).length;
+    if (enabledModes > 1) {
+      return json({ error: "Invalid processing request." }, 400);
+    }
+    retryFailed = fields.retryFailed === true;
+    reprocessIncomplete = fields.reprocessIncomplete === true;
+    recoverStaleProcessing = fields.recoverStaleProcessing === true;
   } catch {
     return json({ error: "Invalid processing request." }, 400);
   }
@@ -75,6 +104,8 @@ export async function POST(request: Request, context: RouteContext) {
         documentId,
         userId,
         retryFailed,
+        reprocessIncomplete,
+        recoverStaleProcessing,
       })
     );
   } catch (error) {

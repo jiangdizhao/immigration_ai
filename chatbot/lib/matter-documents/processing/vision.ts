@@ -1,3 +1,4 @@
+import { assertProcessingDeadline } from "./deadline";
 import {
   DOCUMENT_PROCESSING_LIMITS,
   VISION_EXTRACTION_INSTRUCTIONS,
@@ -49,6 +50,8 @@ export async function extractImage(input: {
   bytes: Uint8Array;
   mediaType: "image/jpeg" | "image/png";
   vision?: DocumentVisionExtractor;
+  signal?: AbortSignal;
+  deadlineAt?: number;
 }): Promise<ProcessingResult> {
   const pixels = imagePixelCount(input.bytes, input.mediaType);
   if (!pixels || pixels > DOCUMENT_PROCESSING_LIMITS.imagePixels) {
@@ -63,14 +66,23 @@ export async function extractImage(input: {
       errorCode: "vision_unavailable",
     };
   }
+  assertProcessingDeadline(input);
   let text: string;
   try {
     text = await input.vision.extract({
       bytes: input.bytes,
       mediaType: input.mediaType,
       instructions: VISION_EXTRACTION_INSTRUCTIONS,
+      signal: input.signal,
     });
-  } catch {
+    assertProcessingDeadline(input);
+  } catch (error) {
+    if (
+      input.signal?.aborted ||
+      (error instanceof Error && error.message === "processing_timeout")
+    ) {
+      throw new Error("processing_timeout");
+    }
     return {
       status: "needs_review",
       method: "vision_fallback",
@@ -79,6 +91,7 @@ export async function extractImage(input: {
       errorCode: "vision_unavailable",
     };
   }
+  assertProcessingDeadline(input);
   const wasTruncated = text.length > DOCUMENT_PROCESSING_LIMITS.pageTextChars;
   const boundedText = text.slice(0, DOCUMENT_PROCESSING_LIMITS.pageTextChars);
   const collector = createUnitCollector();

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { MatterDocument } from "@/lib/db/schema";
 import type { MatterDocumentStorage } from "../types";
-import { ProcessingLimitError } from "./limits";
+import { createProcessingDeadline } from "./deadline";
+import { DOCUMENT_PROCESSING_LIMITS, ProcessingLimitError } from "./limits";
 import {
   DOCUMENT_EXTRACTOR_VERSION,
   formatIdForDocument,
@@ -61,6 +62,9 @@ export type ProcessingRepository = {
     runId: string;
     extractorVersion: string;
     retryFailed: boolean;
+    reprocessIncomplete: boolean;
+    recoverStaleProcessing: boolean;
+    staleBefore: Date;
     startedAt: Date;
   }): Promise<{ record: MatterDocument; run: { id: string } } | null>;
   finalize(input: FinalizeProcessingInput): Promise<unknown>;
@@ -105,6 +109,7 @@ export function createMatterDocumentProcessingService(deps: {
   vision?: DocumentVisionExtractor;
   pdfRenderer?: PdfPageRenderer;
   processor?: typeof processMatterDocument;
+  runtimeMs?: number;
   now?: () => Date;
   createId?: () => string;
 }) {
@@ -115,26 +120,44 @@ export function createMatterDocumentProcessingService(deps: {
       documentId: string;
       userId: string;
       retryFailed?: boolean;
+      reprocessIncomplete?: boolean;
+      recoverStaleProcessing?: boolean;
     }) {
+      const retryFailed = input.retryFailed === true;
+      const reprocessIncomplete = input.reprocessIncomplete === true;
+      const recoverStaleProcessing = input.recoverStaleProcessing === true;
+      if (
+        Number(retryFailed) +
+          Number(reprocessIncomplete) +
+          Number(recoverStaleProcessing) >
+        1
+      ) {
+        throw new ProcessingConflictError();
+      }
       const existing = await deps.repository.getForOwner(input);
       if (existing?.storageStatus !== "stored" || existing.deletedAt !== null) {
         throw new ProcessingNotFoundError();
       }
       if (existing.processingStatus === "complete") {
         const prior = await deps.repository.latest(input);
-        if (prior) {
+        if (!prior) {
+          throw new ProcessingConflictError();
+        }
+        if (!reprocessIncomplete) {
           return { runId: prior.id, status: prior.status, idempotent: true };
         }
-        throw new ProcessingConflictError();
-      }
-      if (existing.processingStatus === "processing") {
-        throw new ProcessingConflictError();
-      }
-      const retryFailed = input.retryFailed === true;
-      if (existing.processingStatus === "failed" && !retryFailed) {
-        throw new ProcessingConflictError();
-      }
-      if (existing.processingStatus === "not_started" && retryFailed) {
+        if (!["partial", "needs_review"].includes(prior.status)) {
+          return { runId: prior.id, status: prior.status, idempotent: true };
+        }
+      } else if (existing.processingStatus === "processing") {
+        if (!recoverStaleProcessing) {
+          throw new ProcessingConflictError();
+        }
+      } else if (existing.processingStatus === "failed") {
+        if (!retryFailed) {
+          throw new ProcessingConflictError();
+        }
+      } else if (retryFailed || reprocessIncomplete || recoverStaleProcessing) {
         throw new ProcessingConflictError();
       }
 
@@ -146,15 +169,24 @@ export function createMatterDocumentProcessingService(deps: {
         runId,
         extractorVersion: DOCUMENT_EXTRACTOR_VERSION,
         retryFailed,
+        reprocessIncomplete,
+        recoverStaleProcessing,
+        staleBefore: new Date(
+          startedAt.getTime() -
+            DOCUMENT_PROCESSING_LIMITS.staleProcessingAfterMs
+        ),
         startedAt,
       });
       if (!claimed) {
         throw new ProcessingConflictError();
       }
+      const deadline = createProcessingDeadline(deps.runtimeMs);
       try {
+        deadline.assertActive();
         const bytes = await deps.storage.get({
           key: claimed.record.storageKey,
         });
+        deadline.assertActive();
         if (
           bytes.byteLength !== claimed.record.byteSize ||
           createHash("sha256").update(bytes).digest("hex") !==
@@ -162,9 +194,7 @@ export function createMatterDocumentProcessingService(deps: {
         ) {
           throw new ProcessingIntegrityError();
         }
-        if (Date.now() - startedAt.getTime() > 30_000) {
-          throw new ProcessingLimitError();
-        }
+        deadline.assertActive();
         const format = formatIdForDocument(claimed.record);
         const extracted = await (deps.processor ?? processMatterDocument)({
           format,
@@ -172,13 +202,21 @@ export function createMatterDocumentProcessingService(deps: {
           documentId: claimed.record.id,
           vision: deps.vision,
           pdfRenderer: deps.pdfRenderer,
+          signal: deadline.signal,
+          deadlineAt: deadline.deadlineAt,
         });
+        deadline.assertActive();
+        const units: FinalizeProcessingInput["units"] = [];
+        for (const [index, unit] of extracted.units.entries()) {
+          deadline.assertActive();
+          units.push({
+            ...unit,
+            ordinal: index + 1,
+            sourceClass: "customer_document",
+          });
+        }
+        deadline.assertActive();
         const completedAt = now();
-        const units = extracted.units.map((unit, index) => ({
-          ...unit,
-          ordinal: index + 1,
-          sourceClass: "customer_document" as const,
-        }));
         await deps.repository.finalize({
           runId,
           documentId: claimed.record.id,
@@ -211,6 +249,8 @@ export function createMatterDocumentProcessingService(deps: {
           throw error;
         }
         throw new ProcessingConflictError();
+      } finally {
+        deadline.dispose();
       }
     },
     getEvidence(input: { documentId: string; userId: string; runId?: string }) {

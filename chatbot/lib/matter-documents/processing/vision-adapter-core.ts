@@ -27,7 +27,10 @@ export function createDocumentVisionExtractor(input: {
   timeoutMs?: number;
 }): DocumentVisionExtractor {
   return {
-    async extract({ bytes, mediaType }) {
+    async extract({ bytes, mediaType, signal: processingSignal }) {
+      if (processingSignal?.aborted) {
+        throw new Error("processing_timeout");
+      }
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(new Error("vision_timeout")),
@@ -35,6 +38,9 @@ export function createDocumentVisionExtractor(input: {
       );
       timeout.unref?.();
       try {
+        const combinedSignal = processingSignal
+          ? AbortSignal.any([processingSignal, controller.signal])
+          : controller.signal;
         return await input.call({
           model: input.model,
           system: DOCUMENT_VISION_SYSTEM_INSTRUCTIONS,
@@ -42,9 +48,12 @@ export function createDocumentVisionExtractor(input: {
           bytes,
           mediaType,
           maxOutputTokens: DOCUMENT_PROCESSING_LIMITS.visionMaxOutputTokens,
-          signal: controller.signal,
+          signal: combinedSignal,
         });
       } catch {
+        if (processingSignal?.aborted) {
+          throw new Error("processing_timeout");
+        }
         throw new Error("vision_unavailable");
       } finally {
         clearTimeout(timeout);

@@ -127,6 +127,161 @@ function documentRecord(
   };
 }
 
+function processingHarness(input: {
+  bytes: Uint8Array;
+  record?: MatterDocument;
+  now?: () => Date;
+  runtimeMs?: number;
+  processor?: typeof processMatterDocument;
+  initialRuns?: Array<{
+    id: string;
+    status: string;
+    startedAt: Date;
+    errorCode?: string;
+  }>;
+  vision?: {
+    extract(input: {
+      signal?: AbortSignal;
+      pageNumber?: number;
+      bytes: Uint8Array;
+      mediaType: "image/jpeg" | "image/png";
+      instructions: string;
+    }): Promise<string>;
+  };
+}) {
+  const record = input.record ?? documentRecord(input.bytes);
+  const runs: Array<{
+    id: string;
+    status: string;
+    startedAt: Date;
+    errorCode?: string;
+  }> = [...(input.initialRuns ?? [])];
+  const evidence = new Map<string, unknown[]>();
+  let nextId = 1;
+  let failPersistence = false;
+  const terminal = (run: (typeof runs)[number]) =>
+    ["complete", "partial", "needs_review"].includes(run.status);
+  const latestTerminal = () => [...runs].reverse().find(terminal) ?? null;
+  const repository = {
+    async getForOwner() {
+      return record;
+    },
+    async latest() {
+      const run = latestTerminal();
+      return run ? { id: run.id, status: run.status } : null;
+    },
+    async begin(claim: {
+      runId: string;
+      retryFailed: boolean;
+      reprocessIncomplete: boolean;
+      recoverStaleProcessing: boolean;
+      staleBefore: Date;
+      startedAt: Date;
+    }) {
+      if (record.storageStatus !== "stored" || record.deletedAt !== null) {
+        return null;
+      }
+      if (claim.recoverStaleProcessing) {
+        if (record.processingStatus !== "processing") {
+          return null;
+        }
+        const active = runs.at(-1);
+        if (
+          active?.status !== "processing" ||
+          active.startedAt >= claim.staleBefore
+        ) {
+          return null;
+        }
+        active.status = "failed";
+        active.errorCode = "stale_processing_recovered";
+      } else if (claim.reprocessIncomplete) {
+        const terminalRun = latestTerminal();
+        if (
+          record.processingStatus !== "complete" ||
+          !terminalRun ||
+          !["partial", "needs_review"].includes(terminalRun.status)
+        ) {
+          return null;
+        }
+      } else if (claim.retryFailed) {
+        if (
+          record.processingStatus !== "failed" ||
+          runs.at(-1)?.status !== "failed"
+        ) {
+          return null;
+        }
+      } else if (record.processingStatus !== "not_started") {
+        return null;
+      }
+      record.processingStatus = "processing";
+      const run = {
+        id: claim.runId,
+        status: "processing",
+        startedAt: claim.startedAt,
+      };
+      runs.push(run);
+      return { record, run };
+    },
+    async finalize(input: { runId: string; status: string; units: unknown[] }) {
+      const run = runs.find((item) => item.id === input.runId);
+      if (run?.status !== "processing") {
+        throw new Error("test repository run is not active");
+      }
+      run.status = input.status;
+      evidence.set(input.runId, input.units);
+      record.processingStatus = "complete";
+    },
+    async fail(input: { runId: string; errorCode: string }) {
+      if (failPersistence) {
+        throw new Error("database unavailable");
+      }
+      const run = runs.find((item) => item.id === input.runId);
+      if (run?.status !== "processing") {
+        return;
+      }
+      run.status = "failed";
+      run.errorCode = input.errorCode;
+      record.processingStatus = "failed";
+    },
+    async getEvidence(input: { runId?: string }) {
+      const run = input.runId
+        ? runs.find((item) => item.id === input.runId)
+        : latestTerminal();
+      return run
+        ? { document: record, run, units: evidence.get(run.id) ?? [] }
+        : { document: record, run: null, units: [] };
+    },
+  };
+  const service = createMatterDocumentProcessingService({
+    repository,
+    storage: {
+      async get() {
+        return input.bytes;
+      },
+      async put() {
+        await Promise.resolve();
+      },
+      async delete() {
+        await Promise.resolve();
+      },
+    },
+    processor: input.processor,
+    vision: input.vision,
+    runtimeMs: input.runtimeMs,
+    now: input.now,
+    createId: () => `run-${nextId++}`,
+  });
+  return {
+    service,
+    record,
+    runs,
+    evidence,
+    setFailPersistence(value: boolean) {
+      failPersistence = value;
+    },
+  };
+}
+
 test("PDF native pages preserve page locators and text", async () => {
   const result = await extractPdf({
     bytes: pdf(["Page one sample", "Page two sample"]),
@@ -829,6 +984,379 @@ test("failed parser worker run stores no partial evidence", async () => {
   );
   assert.equal(failedCode, "processing_timeout");
   assert.equal(finalized, 0);
+});
+
+test("one global deadline aborts multi-page scanned-PDF vision and prevents partial finalization", async () => {
+  const bytes = pdf(["", "", ""]);
+  const record = documentRecord(bytes, {
+    originalFilename: "scanned.pdf",
+    mimeType: "application/pdf",
+  });
+  const processedPages: number[] = [];
+  const harness = processingHarness({
+    bytes,
+    record,
+    runtimeMs: 2200,
+    vision: {
+      async extract({ pageNumber, signal }) {
+        if (pageNumber !== undefined) {
+          processedPages.push(pageNumber);
+        }
+        return new Promise<string>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve(`page ${pageNumber}`);
+          }, 1800);
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new Error("processing_timeout"));
+          };
+          signal?.addEventListener("abort", onAbort, { once: true });
+        });
+      },
+    },
+  });
+  await assert.rejects(
+    harness.service.process({ documentId: record.id, userId: record.userId }),
+    ProcessingConflictError
+  );
+  assert.deepEqual(processedPages, [1, 2]);
+  assert.equal(harness.runs[0]?.errorCode, "processing_timeout");
+  assert.equal(harness.evidence.size, 0);
+  const visible = (await harness.service.getEvidence({
+    documentId: record.id,
+    userId: record.userId,
+  })) as { units: unknown[] };
+  assert.deepEqual(visible.units, []);
+});
+
+test("global deadline aborts active image OpenAI request and fails the run", async () => {
+  const bytes = imagePng();
+  const record = documentRecord(bytes, {
+    originalFilename: "scan.png",
+    mimeType: "image/png",
+  });
+  let providerAborted = false;
+  const vision = createDocumentVisionExtractor({
+    model: "test-vision-model",
+    timeoutMs: 5000,
+    async call({ signal }) {
+      return new Promise<string>((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            providerAborted = true;
+            reject(new Error("aborted"));
+          },
+          { once: true }
+        );
+      });
+    },
+  });
+  const harness = processingHarness({ bytes, record, runtimeMs: 40, vision });
+  await assert.rejects(
+    harness.service.process({ documentId: record.id, userId: record.userId }),
+    ProcessingConflictError
+  );
+  assert.equal(providerAborted, true);
+  assert.equal(harness.runs[0]?.errorCode, "processing_timeout");
+  assert.equal(harness.evidence.size, 0);
+});
+
+test("needs_review is idempotent unless explicitly reprocessed; prior evidence stays visible during retry", async () => {
+  const bytes = Buffer.from("incomplete document text");
+  const record = documentRecord(bytes);
+  let calls = 0;
+  let signalStarted: (() => void) | undefined;
+  let releaseRetry: (() => void) | undefined;
+  const retryStarted = new Promise<void>((resolve) => {
+    signalStarted = resolve;
+  });
+  const retryGate = new Promise<void>((resolve) => {
+    releaseRetry = resolve;
+  });
+  const processor: typeof processMatterDocument = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        status: "needs_review",
+        method: "native",
+        units: [
+          {
+            locator: { kind: "lines", lineStart: 1, lineEnd: 1 },
+            extractedText: "old review evidence",
+            extractionMethod: "native",
+            provenance: {},
+          },
+        ],
+        truncated: false,
+      };
+    }
+    signalStarted?.();
+    await retryGate;
+    return {
+      status: "partial",
+      method: "native",
+      units: [
+        {
+          locator: { kind: "lines", lineStart: 1, lineEnd: 1 },
+          extractedText: "new partial evidence",
+          extractionMethod: "native",
+          provenance: {},
+        },
+      ],
+      truncated: true,
+    };
+  };
+  const harness = processingHarness({ bytes, record, processor });
+  const initial = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+  });
+  const normal = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+  });
+  assert.equal(normal.idempotent, true);
+  assert.equal(calls, 1);
+
+  const retry = harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+    reprocessIncomplete: true,
+  });
+  await retryStarted;
+  const visible = (await harness.service.getEvidence({
+    documentId: record.id,
+    userId: record.userId,
+  })) as { run: { id: string }; units: Array<{ extractedText: string }> };
+  assert.equal(visible.run.id, initial.runId);
+  assert.equal(visible.units[0]?.extractedText, "old review evidence");
+  releaseRetry?.();
+  const retried = await retry;
+  assert.notEqual(retried.runId, initial.runId);
+  const latest = (await harness.service.getEvidence({
+    documentId: record.id,
+    userId: record.userId,
+  })) as { run: { id: string }; units: Array<{ extractedText: string }> };
+  assert.equal(latest.run.id, retried.runId);
+  assert.equal(latest.units[0]?.extractedText, "new partial evidence");
+  const old = (await harness.service.getEvidence({
+    documentId: record.id,
+    userId: record.userId,
+    runId: initial.runId,
+  })) as { units: Array<{ extractedText: string }> };
+  assert.equal(old.units[0]?.extractedText, "old review evidence");
+  assert.equal(harness.runs.length, 2);
+});
+
+test("partial results can be explicitly reprocessed; complete results remain idempotent", async () => {
+  const bytes = Buffer.from("document content");
+  const record = documentRecord(bytes);
+  let calls = 0;
+  const harness = processingHarness({
+    bytes,
+    record,
+    processor: async () => {
+      calls += 1;
+      return {
+        status: calls === 1 ? "partial" : "complete",
+        method: "native",
+        units: [],
+        truncated: calls === 1,
+      };
+    },
+  });
+  await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+  });
+  const reprocessed = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+    reprocessIncomplete: true,
+  });
+  assert.equal(reprocessed.status, "complete");
+  assert.equal(calls, 2);
+  const explicitComplete = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+    reprocessIncomplete: true,
+  });
+  assert.equal(explicitComplete.idempotent, true);
+  const ordinary = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+  });
+  assert.equal(ordinary.idempotent, true);
+  assert.equal(calls, 2);
+});
+
+test("failed reprocessing preserves prior terminal evidence", async () => {
+  const bytes = Buffer.from("old terminal evidence");
+  const record = documentRecord(bytes);
+  let calls = 0;
+  const harness = processingHarness({
+    bytes,
+    record,
+    processor: async () => {
+      calls += 1;
+      if (calls === 2) {
+        throw new ParserWorkerError("parser_worker_failed");
+      }
+      return {
+        status: "needs_review",
+        method: "native",
+        units: [
+          {
+            locator: { kind: "lines", lineStart: 1, lineEnd: 1 },
+            extractedText: "previous terminal evidence",
+            extractionMethod: "native",
+            provenance: {},
+          },
+        ],
+        truncated: false,
+      };
+    },
+  });
+  const first = await harness.service.process({
+    documentId: record.id,
+    userId: record.userId,
+  });
+  await assert.rejects(
+    harness.service.process({
+      documentId: record.id,
+      userId: record.userId,
+      reprocessIncomplete: true,
+    }),
+    ProcessingConflictError
+  );
+  const retained = (await harness.service.getEvidence({
+    documentId: record.id,
+    userId: record.userId,
+  })) as { run: { id: string }; units: Array<{ extractedText: string }> };
+  assert.equal(retained.run.id, first.runId);
+  assert.equal(retained.units[0]?.extractedText, "previous terminal evidence");
+  assert.equal(harness.runs[1]?.status, "failed");
+});
+
+test("fresh processing cannot be stolen; concurrent stale recoveries have one winner", async () => {
+  const bytes = Buffer.from("recoverable text");
+  const now = new Date();
+  const oldRun = {
+    id: "old-processing-run",
+    status: "processing",
+    startedAt: new Date(now.getTime() - 1000),
+  };
+  const fresh = processingHarness({
+    bytes,
+    record: documentRecord(bytes, { processingStatus: "processing" }),
+    now: () => now,
+    initialRuns: [oldRun],
+  });
+  await assert.rejects(
+    fresh.service.process({
+      documentId: fresh.record.id,
+      userId: fresh.record.userId,
+      recoverStaleProcessing: true,
+    }),
+    ProcessingConflictError
+  );
+  assert.equal(fresh.runs.length, 1);
+
+  const staleRun = {
+    id: "stale-processing-run",
+    status: "processing",
+    startedAt: new Date(
+      now.getTime() - DOCUMENT_PROCESSING_LIMITS.staleProcessingAfterMs - 1
+    ),
+  };
+  let markStarted: (() => void) | undefined;
+  let release: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const stale = processingHarness({
+    bytes,
+    record: documentRecord(bytes, { processingStatus: "processing" }),
+    now: () => now,
+    initialRuns: [staleRun],
+    processor: async () => {
+      markStarted?.();
+      await gate;
+      return {
+        status: "complete",
+        method: "native",
+        units: [],
+        truncated: false,
+      };
+    },
+  });
+  const winner = stale.service.process({
+    documentId: stale.record.id,
+    userId: stale.record.userId,
+    recoverStaleProcessing: true,
+  });
+  await started;
+  await assert.rejects(
+    stale.service.process({
+      documentId: stale.record.id,
+      userId: stale.record.userId,
+      recoverStaleProcessing: true,
+    }),
+    ProcessingConflictError
+  );
+  assert.equal(stale.runs.length, 2);
+  assert.equal(stale.runs[0]?.errorCode, "stale_processing_recovered");
+  release?.();
+  await winner;
+});
+
+test("failure persistence outage leaves a run recoverable after the stale threshold", async () => {
+  const bytes = Buffer.from("stale recovery source");
+  let clock = new Date();
+  let shouldFail = true;
+  const harness = processingHarness({
+    bytes,
+    now: () => clock,
+    processor: async () => {
+      if (shouldFail) {
+        throw new ParserWorkerError("parser_worker_failed");
+      }
+      return {
+        status: "complete",
+        method: "native",
+        units: [],
+        truncated: false,
+      };
+    },
+  });
+  harness.setFailPersistence(true);
+  await assert.rejects(
+    harness.service.process({
+      documentId: harness.record.id,
+      userId: harness.record.userId,
+    }),
+    ProcessingConflictError
+  );
+  assert.equal(harness.record.processingStatus, "processing");
+  assert.equal(harness.runs[0]?.status, "processing");
+  clock = new Date(
+    clock.getTime() + DOCUMENT_PROCESSING_LIMITS.staleProcessingAfterMs + 1
+  );
+  harness.setFailPersistence(false);
+  shouldFail = false;
+  const recovered = await harness.service.process({
+    documentId: harness.record.id,
+    userId: harness.record.userId,
+    recoverStaleProcessing: true,
+  });
+  assert.notEqual(recovered.runId, harness.runs[0]?.id);
+  assert.equal(harness.runs[0]?.errorCode, "stale_processing_recovered");
+  assert.equal(harness.record.processingStatus, "complete");
 });
 
 test("dedicated vision configuration is disabled by default and requires its own model plus OpenAI credentials", () => {
