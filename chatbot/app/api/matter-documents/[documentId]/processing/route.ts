@@ -138,6 +138,19 @@ export async function GET(request: Request, context: RouteContext) {
     if (!result) {
       return json({ error: "Document not found." }, 404);
     }
+    if (new URL(request.url).searchParams.get("summary") === "1") {
+      return json({
+        document: publicMatterDocument(result.document),
+        run: result.run,
+        unitCount: result.units.length,
+        errorCode:
+          result.run &&
+          typeof result.run === "object" &&
+          "errorCode" in result.run
+            ? (result.run as Record<string, unknown>).errorCode
+            : null,
+      });
+    }
     return json({
       document: publicMatterDocument(result.document),
       run: result.run,

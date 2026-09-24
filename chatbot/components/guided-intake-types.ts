@@ -1,3 +1,13 @@
+export interface CustomerDocumentSource {
+  documentId: string;
+  runId: string;
+  originalFilename: string;
+  runStatus: "complete" | "partial" | "needs_review";
+  extractionMethod: string;
+  truncated: boolean;
+  locators: Record<string, string | number>[];
+}
+
 export type ResponseLanguage = "en" | "zh" | string;
 export type AnswerPreference =
   | "auto"
@@ -112,6 +122,7 @@ export interface WidgetAssistantMessage {
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
+  customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];
   missingFacts?: string[];
@@ -142,6 +153,7 @@ export interface WidgetRouteResponse {
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
+  customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];
   missingFacts?: string[];

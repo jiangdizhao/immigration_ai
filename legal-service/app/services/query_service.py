@@ -523,7 +523,7 @@ class QueryService:
         )
         timing.mark("semantic_turn", conversation_act=semantic_turn.conversation_act)
 
-        if self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
+        if not payload.customer_document_evidence.documents and self._should_use_general_topic_fast_path(semantic_turn=semantic_turn):
             return self._handle_general_topic_fast_path(
                 db=db,
                 matter=matter,
@@ -535,7 +535,7 @@ class QueryService:
                 timing=timing,
             )
 
-        continuation_response = self.continuation_contract_service.try_fulfill(
+        continuation_response = None if payload.customer_document_evidence.documents else self.continuation_contract_service.try_fulfill(
             raw_user_message=original_question,
             internal_question_en=payload.question,
             response_language=language_context.response_language,
@@ -601,7 +601,7 @@ class QueryService:
             )
             return continuation_response
 
-        if self._should_use_llm_triage_fast_path(
+        if not payload.customer_document_evidence.documents and self._should_use_llm_triage_fast_path(
             semantic_turn=semantic_turn,
             current_state=current_state,
             pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
@@ -647,7 +647,7 @@ class QueryService:
             semantic_turn=semantic_turn,
             pending_offer=pending_offer if isinstance(pending_offer, dict) else None,
         )
-        if task_action.should_handle_as_task and full_context_resolution.allow_early_task_execution:
+        if not payload.customer_document_evidence.documents and task_action.should_handle_as_task and full_context_resolution.allow_early_task_execution:
             return self._handle_task_action(
                 db=db,
                 matter=matter,
@@ -1556,7 +1556,7 @@ class QueryService:
             "fact_confidence": turn_analysis.extraction.fact_confidence,
         }
 
-        if self.lightweight_response_service.can_answer_without_llm(
+        if not payload.customer_document_evidence.documents and self.lightweight_response_service.can_answer_without_llm(
             analysis=turn_analysis,
             chunks=merged_chunks,
             sufficiency_gate=final_sufficiency_gate,
@@ -1602,6 +1602,7 @@ class QueryService:
                     "raw_user_question": original_question,
                     "internal_question_en": payload.question,
                     "answer_preference": frame_decision.answer_preference,
+                    "customer_document_evidence": payload.customer_document_evidence,
                 },
             )
             response.matter_id = matter.id

@@ -43,6 +43,65 @@ function extractTextFromParts(parts: unknown): string {
     .join("\n");
 }
 
+function safeCustomerDocumentSources(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.slice(0, 4).flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+    const source = item as Record<string, unknown>;
+    if (
+      typeof source.documentId !== "string" ||
+      typeof source.runId !== "string" ||
+      typeof source.originalFilename !== "string"
+    ) {
+      return [];
+    }
+    const locators = Array.isArray(source.locators)
+      ? source.locators.slice(0, 8).flatMap((locator) => {
+          if (
+            !locator ||
+            typeof locator !== "object" ||
+            Array.isArray(locator)
+          ) {
+            return [];
+          }
+          return [
+            Object.fromEntries(
+              Object.entries(locator as Record<string, unknown>)
+                .filter(
+                  ([key, entry]) =>
+                    key.length <= 64 &&
+                    ((typeof entry === "string" && entry.length <= 256) ||
+                      (typeof entry === "number" && Number.isFinite(entry)))
+                )
+                .slice(0, 16)
+            ),
+          ];
+        })
+      : [];
+    return [
+      {
+        documentId: source.documentId,
+        runId: source.runId,
+        originalFilename: source.originalFilename.slice(0, 255),
+        runStatus:
+          source.runStatus === "partial" || source.runStatus === "needs_review"
+            ? source.runStatus
+            : "complete",
+        extractionMethod:
+          typeof source.extractionMethod === "string"
+            ? source.extractionMethod.slice(0, 32)
+            : "native",
+        truncated: Boolean(source.truncated),
+        locators,
+      },
+    ];
+  });
+}
+
 function extractMetadataFromParts(parts: unknown) {
   if (!Array.isArray(parts)) {
     return {};
@@ -68,6 +127,9 @@ function extractMetadataFromParts(parts: unknown) {
         )
       : [],
     citations: Array.isArray(value.citations) ? value.citations : [],
+    customerDocumentSources: safeCustomerDocumentSources(
+      value.customerDocumentManifest
+    ),
     confidence: typeof value.confidence === "string" ? value.confidence : null,
     researchStatus:
       value.researchStatus === "not_required" ||

@@ -624,3 +624,39 @@ Recorded local validation for the accepted correction: 243 unit tests passed, bu
 Production/deployment gates remain separate: real ECS/Fargate canvas-binding packaging, authorized migration application and DB-backed smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine controls.
 
 **Stage 2 is ACCEPTED. Stage 3 is NOT started. P11-005 is not VERIFIED.**
+
+## P11-005 Stage 3 implementation — local, unaccepted — 2026-09-24
+
+Status: implemented locally for owner review. **Stage 3 is NOT ACCEPTED. P11-005 is NOT VERIFIED.** No commit or push was made.
+
+### Scope and data flow
+
+- Added the active workspace Matter Documents panel with bilingual Chinese-first/English copy, private upload, processing/readiness status, selection, retry/reprocess, download, and delete controls. It uses the existing private MatterDocument API; it does not use /api/files/upload. The processing summary endpoint returns only safe document/run metadata and a unit count, not extracted text.
+- All three workspace chat routes accept top-level selectedDocumentIds. The UUID list defaults empty, rejects duplicates, and is capped at four. The client cannot send document text or manifest content.
+- The server loads each selected document by authenticated owner, verifies it belongs to the active chat, is stored and not deleted, then resolves its latest terminal processing run. Only complete, partial, or needs-review runs with usable evidence units can be selected. Foreign, cross-chat, deleted, and unavailable documents fail closed.
+- Server-built evidence is capped at 4 documents, 8 units per document, 24 units total, 4,000 characters per unit, 8,000 per document, and 24,000 characters total. Units are ordered by provenance ordinal; every omission or clipping marks the document as truncated/incomplete.
+- The assistant message stores a server-generated manifest containing document/run identity, filename/MIME, run and extraction status, truncation state, and the exact included unit ordinals and locators. It contains no document text, storage key, or private object URL. Conversation reload projects that persisted manifest into customer-document source UI; it does not recompute from a later run.
+- Bounded extracted text is sent to the legal service only as the separate typed customer_document_evidence field. No raw file bytes reach answer models. The user question remains unchanged, and document text is not placed in intake facts, official retrieval chunks, citations, or legal evidence registries.
+- The shared deterministic formatter marks the packet as customer-provided, untrusted, not official law or verified fact, potentially partial, and not an instruction or tool authorization. Fast and Premium preserve their existing model, timeout, research, and tool policy. Default final reasoning receives the document section while document-selected turns bypass shortcuts that cannot consume it. The optional ANSWER_ENGINE=v2 Default draft path also receives the same isolated context. Document contents do not authorize web search.
+- Review-trace persistence removes packet text and keeps only bounded count/size/truncation metadata. Official citations remain in their existing separate channel. UI source blocks distinguish customer documents from legal sources and display partial/truncated warnings.
+- Lawyer escalation derives document references only from persisted assistant metadata. The server revalidates the same owner and chat, exact run, and exact included unit ordinals before building the existing request snapshot. It supports the existing same-owner internal reconstruction for soft-deleted referenced files; it does not expose them in the normal document list. Exact reconstruction failure returns 409 instead of inventing evidence. Bounded excerpts (up to 500 characters per unit and 12,000 characters total) are stored under customer_document, separate from citations and compact sources, and displayed through the existing authorized lawyer request view. The lawyer-request client schema still cannot add document IDs.
+- No database schema change was made, no migration was created, and no migration was applied. Migrations 0018–0021 remain NOT APPLIED.
+
+### Validation on 2026-09-24
+
+- Chatbot pnpm test:unit: 251 passed, 0 failed, 0 skipped.
+- Chatbot pnpm build: passed, including the bundled document-parser worker.
+- Legal-service focused customer-document/Fast/Premium tests: 38 passed.
+- Legal-service full suite using /home/rico/anaconda3/envs/torch/bin/python -m pytest -q: 1,219 passed, with 2 existing Pydantic deprecation warnings.
+- Changed-file Biome: passed across 18 chatbot TypeScript/TSX/JSON files.
+- Chatbot pnpm lint: 21 errors, equal to the documented 21-error repository baseline. A direct HEAD-archive comparison found the same diagnostic rules and files; the existing useOptionalChain finding in lib/lawyer-requests/snapshot.ts is now reported at line 137 instead of line 130 because fields were added above it. No new rule/file diagnostics were introduced. Changed-file Biome is clean.
+- git diff --check: passed.
+- Validation used synthetic documents and fake provider/storage adapters. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED.
+
+### Remaining production and acceptance gates
+
+- Stage 3 source/security review and owner review remain outstanding. Do not mark Stage 3 accepted or P11-005 verified until the required owner commit/push and independent GitHub source review occur.
+- Existing deployment gates remain open: ECS/Fargate native canvas binding verification; controlled application of migrations 0018–0021 and DB-backed smoke; private S3 bucket/IAM/Block Public Access verification; retention/purge operations; stale storage-intent operations; malware/quarantine/scanning.
+- P11-006 is NOT STARTED. No appointment/calendar or booking implementation was added.
+
+NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-006 NOT STARTED. P11-005 NOT VERIFIED. NO COMMIT. NO PUSH.

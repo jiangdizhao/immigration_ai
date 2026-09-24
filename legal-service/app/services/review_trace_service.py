@@ -64,7 +64,15 @@ class ReviewTraceService:
             if metrics_dump is None and active_observability is not None:
                 metrics_dump = active_observability.get("execution_metrics")
             trace_payload = {
-                "request": self._safe_json(payload),
+                "request": self._safe_json(
+                    payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()})
+                ),
+                "customer_document_evidence_summary": {
+                    "selected_document_count": len(payload.customer_document_evidence.documents),
+                    "selected_unit_count": sum(len(document.units) for document in payload.customer_document_evidence.documents),
+                    "packet_char_count": sum(len(unit.text) for document in payload.customer_document_evidence.documents for unit in document.units),
+                    "packet_truncated": any(document.truncated for document in payload.customer_document_evidence.documents),
+                },
                 "response": response_dump,
                 "state": state_dump,
                 "semantic_turn": self._safe_json(semantic_turn),

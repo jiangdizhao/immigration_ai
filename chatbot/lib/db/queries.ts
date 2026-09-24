@@ -374,6 +374,56 @@ export async function failMatterDocumentProcessing(input: {
   });
 }
 
+export async function getMatterDocumentEvidenceForLawyerSnapshot(input: {
+  documentId: string;
+  userId: string;
+  chatId: string;
+  runId: string;
+  ordinals: number[];
+}) {
+  const record = await getMatterDocumentRecordForOwner({
+    documentId: input.documentId,
+    userId: input.userId,
+    includeDeleted: true,
+  });
+  if (!record || record.chatId !== input.chatId) {
+    return null;
+  }
+  const [run] = await db
+    .select()
+    .from(matterDocumentProcessingRun)
+    .where(
+      and(
+        eq(matterDocumentProcessingRun.id, input.runId),
+        eq(matterDocumentProcessingRun.documentId, input.documentId),
+        inArray(matterDocumentProcessingRun.status, [
+          "complete",
+          "partial",
+          "needs_review",
+        ])
+      )
+    )
+    .limit(1);
+  if (!run || !input.ordinals.length) {
+    return null;
+  }
+  const units = await db
+    .select()
+    .from(matterDocumentEvidenceUnit)
+    .where(
+      and(
+        eq(matterDocumentEvidenceUnit.documentId, input.documentId),
+        eq(matterDocumentEvidenceUnit.runId, input.runId),
+        inArray(matterDocumentEvidenceUnit.ordinal, input.ordinals)
+      )
+    )
+    .orderBy(asc(matterDocumentEvidenceUnit.ordinal));
+  if (units.length !== new Set(input.ordinals).size) {
+    return null;
+  }
+  return { document: record, run, units };
+}
+
 export async function getMatterDocumentProcessingEvidence(input: {
   documentId: string;
   userId: string;

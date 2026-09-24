@@ -128,6 +128,59 @@ export function LawyerPortalDetail({ id }: { id: string }) {
           <p className="mt-1 whitespace-pre-wrap">{request.customerNote}</p>
         </div>
       ) : null}
+      {Array.isArray(request.evidenceSnapshot) &&
+      request.evidenceSnapshot.some(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          "kind" in item &&
+          item.kind === "customer_document"
+      ) ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <h2 className="font-semibold text-amber-950">
+            Customer-provided document evidence
+          </h2>
+          <ul className="mt-3 space-y-3 text-sm text-amber-950">
+            {request.evidenceSnapshot
+              .filter(
+                (item) =>
+                  item &&
+                  typeof item === "object" &&
+                  "kind" in item &&
+                  item.kind === "customer_document"
+              )
+              .map((item) => {
+                const evidence = item as Record<string, unknown>;
+                return (
+                  <li
+                    className="rounded-xl bg-white/70 p-3"
+                    key={`${String(evidence.document_id)}:${String(evidence.run_id)}:${JSON.stringify(evidence.locator ?? {})}`}
+                  >
+                    <p className="font-medium">
+                      {String(evidence.filename ?? "Customer document")} ·{" "}
+                      {String(evidence.run_status ?? "")}
+                    </p>
+                    {evidence.locator ? (
+                      <p className="mt-1 text-xs">
+                        {JSON.stringify(evidence.locator)}
+                      </p>
+                    ) : null}
+                    {typeof evidence.quote === "string" ? (
+                      <p className="mt-2 whitespace-pre-wrap">
+                        {evidence.quote}
+                      </p>
+                    ) : null}
+                    {evidence.truncated ? (
+                      <p className="mt-2 text-xs">
+                        Bounded excerpt; this is not the full document.
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+          </ul>
+        </section>
+      ) : null}
       <details className="rounded-2xl border border-slate-200 bg-white p-5">
         <summary className="cursor-pointer font-semibold">
           Evidence and context snapshot
@@ -135,7 +188,15 @@ export function LawyerPortalDetail({ id }: { id: string }) {
         <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap text-xs text-slate-600">
           {JSON.stringify(
             {
-              evidence: request.evidenceSnapshot,
+              evidence: Array.isArray(request.evidenceSnapshot)
+                ? request.evidenceSnapshot.filter(
+                    (item) =>
+                      !item ||
+                      typeof item !== "object" ||
+                      !("kind" in item) ||
+                      item.kind !== "customer_document"
+                  )
+                : request.evidenceSnapshot,
               context: request.contextSnapshot,
             },
             null,

@@ -3,6 +3,7 @@ import {
   getChatById,
   getImmigrationConversationByChatId,
   getLawyerClarificationRequestByUserAndAssistantMessage,
+  getMatterDocumentEvidenceForLawyerSnapshot,
   getMessagesByChatId,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
@@ -122,6 +123,70 @@ export async function POST(request: Request) {
   const snapshot = buildLawyerRequestSnapshot({ messages, assistantMessageId });
   if ("error" in snapshot) {
     return Response.json({ error: snapshot.error }, { status: 400 });
+  }
+  const metadata = Array.isArray(selectedMessage?.parts)
+    ? (selectedMessage.parts.find(
+        (part) =>
+          part &&
+          typeof part === "object" &&
+          "type" in part &&
+          part.type === "metadata"
+      ) as Record<string, unknown> | undefined)
+    : undefined;
+  const manifest = Array.isArray(metadata?.customerDocumentManifest)
+    ? metadata.customerDocumentManifest
+    : [];
+  let excerptBudget = 12_000;
+  for (const entry of manifest.slice(0, 4)) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const item = entry as Record<string, unknown>;
+    if (
+      typeof item.documentId !== "string" ||
+      typeof item.runId !== "string" ||
+      !Array.isArray(item.includedUnitOrdinals)
+    ) {
+      continue;
+    }
+    const ordinals = item.includedUnitOrdinals.filter(
+      (value): value is number => Number.isInteger(value)
+    );
+    const exact = await getMatterDocumentEvidenceForLawyerSnapshot({
+      documentId: item.documentId,
+      userId: access.userId,
+      chatId,
+      runId: item.runId,
+      ordinals,
+    });
+    if (!exact) {
+      return Response.json(
+        {
+          error:
+            "The answer's customer document evidence is no longer available for an exact lawyer snapshot.",
+        },
+        { status: 409 }
+      );
+    }
+    for (const unit of exact.units) {
+      if (excerptBudget <= 0) {
+        break;
+      }
+      const quote = unit.extractedText.slice(0, Math.min(500, excerptBudget));
+      excerptBudget -= quote.length;
+      snapshot.evidenceSnapshot.push({
+        kind: "customer_document",
+        document_id: exact.document.id,
+        run_id: exact.run.id,
+        filename: exact.document.originalFilename,
+        run_status: exact.run.status,
+        extraction_method: exact.run.extractionMethod ?? unit.extractionMethod,
+        locator: unit.locator,
+        quote,
+        truncated:
+          Boolean(item.truncated) || quote.length < unit.extractedText.length,
+      });
+    }
   }
 
   const conversation = await getImmigrationConversationByChatId({

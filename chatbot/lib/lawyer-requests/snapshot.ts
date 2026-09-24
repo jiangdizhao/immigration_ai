@@ -9,7 +9,14 @@ export type LawyerRequestContextItem = {
 };
 
 export type LawyerRequestEvidenceItem = {
-  kind: "compact_source" | "citation";
+  kind: "compact_source" | "citation" | "customer_document";
+  document_id?: string | null;
+  run_id?: string | null;
+  filename?: string | null;
+  run_status?: string | null;
+  extraction_method?: string | null;
+  locator?: Record<string, string | number> | null;
+  truncated?: boolean | null;
   title?: string | null;
   source_id?: string | null;
   quote?: string | null;

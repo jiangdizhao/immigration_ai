@@ -40,6 +40,7 @@ import type {
   WidgetRouteResponse,
 } from "./guided-intake-types";
 import { LawyerRequestAction } from "./lawyer-request-action";
+import { MatterDocumentsPanel } from "./matter-documents-panel";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -342,6 +343,7 @@ type ImmigrationStoredMessage = {
   followUpQuestions?: string[];
   matterId?: string | null;
   retrievalDebug?: WidgetAssistantMessage["retrievalDebug"];
+  customerDocumentSources?: WidgetAssistantMessage["customerDocumentSources"];
 };
 
 type ImmigrationConversationDetail = ImmigrationConversationSummary & {
@@ -361,6 +363,7 @@ function assistantFromStoredMessage(
     researchStatus: message.researchStatus ?? null,
     citations: message.citations ?? [],
     compactSources: message.compactSources ?? [],
+    customerDocumentSources: message.customerDocumentSources ?? [],
     userDisplayMode: null,
     followUpQuestions: message.followUpQuestions ?? [],
     missingFacts: [],
@@ -467,6 +470,7 @@ export function ImmigrationAIWorkspace({
   const copy = getWorkspaceCopy(locale);
   const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
   >([]);
@@ -569,6 +573,7 @@ export function ImmigrationAIWorkspace({
         );
         const data = (await response.json()) as ImmigrationConversationDetail;
         setConversationId(data.chatId);
+        setSelectedDocumentIds([]);
         setWorkspaceChatParam(data.chatId);
         setMatterId(data.legalMatterId ?? null);
         setMessages(
@@ -600,6 +605,7 @@ export function ImmigrationAIWorkspace({
       );
       const data = (await response.json()) as ImmigrationConversationSummary;
       setConversationId(data.chatId);
+      setSelectedDocumentIds([]);
       setWorkspaceChatParam(data.chatId);
       setMatterId(data.legalMatterId ?? null);
       setMessages([]);
@@ -700,6 +706,7 @@ export function ImmigrationAIWorkspace({
       researchStatus: data.researchStatus ?? null,
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
+      customerDocumentSources: data.customerDocumentSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
       followUpQuestions: data.followUpQuestions ?? [],
       missingFacts: data.missingFacts ?? [],
@@ -762,7 +769,8 @@ export function ImmigrationAIWorkspace({
     facts: IntakeFacts,
     currentFacts: IntakeFacts = {},
     answerPreference: AnswerPreference = "answer_first",
-    activeConversationId: string | null = conversationId
+    activeConversationId: string | null = conversationId,
+    selectedIds: string[] = selectedDocumentIds
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
@@ -782,6 +790,7 @@ export function ImmigrationAIWorkspace({
           answerPreference,
           selectedChatModel: DEFAULT_CHAT_MODEL,
           assistantMode,
+          selectedDocumentIds: selectedIds,
           messages: nextMessages.map((message) => ({
             id: message.id,
             role: message.role,
@@ -848,6 +857,7 @@ export function ImmigrationAIWorkspace({
         activeConversationId
       );
       await appendAssistantMessage(data, nextUserMessage.id);
+      setSelectedDocumentIds([]);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -934,6 +944,7 @@ export function ImmigrationAIWorkspace({
         activeConversationId
       );
       await appendAssistantMessage(data, visibleUserMessage.id);
+      setSelectedDocumentIds([]);
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -1130,6 +1141,13 @@ export function ImmigrationAIWorkspace({
             </div>
           </div>
 
+          <MatterDocumentsPanel
+            chatId={conversationId}
+            copy={copy}
+            disabled={status !== "ready" || !conversationReady}
+            onSelectionChange={setSelectedDocumentIds}
+            selectedDocumentIds={selectedDocumentIds}
+          />
           <div
             className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5"
             data-testid="workspace-message-list"
@@ -1233,6 +1251,49 @@ export function ImmigrationAIWorkspace({
                             </div>
                           ) : null}
                         </div>
+
+                        {isAssistant &&
+                        !message.isStreaming &&
+                        message.customerDocumentSources?.length ? (
+                          <section
+                            className="rounded-xl border border-amber-200 bg-amber-50 p-3"
+                            data-testid="customer-document-sources"
+                          >
+                            <h4 className="text-xs font-semibold text-amber-950">
+                              {copy.documents.customerEvidence}
+                            </h4>
+                            <ul className="mt-2 space-y-2 text-xs text-amber-950">
+                              {message.customerDocumentSources.map((source) => (
+                                <li
+                                  key={`${source.documentId}:${source.runId}`}
+                                >
+                                  <p className="font-medium">
+                                    {source.originalFilename} ·{" "}
+                                    {source.runStatus.replaceAll("_", " ")}
+                                  </p>
+                                  {source.locators.map((locator) => (
+                                    <p
+                                      className="text-amber-800"
+                                      key={JSON.stringify(locator)}
+                                    >
+                                      {Object.entries(locator)
+                                        .map(
+                                          ([key, value]) => `${key}: ${value}`
+                                        )
+                                        .join(" · ")}
+                                    </p>
+                                  ))}
+                                  {source.truncated ||
+                                  source.runStatus !== "complete" ? (
+                                    <p className="mt-1">
+                                      {copy.documents.warning}
+                                    </p>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        ) : null}
 
                         {isAssistant &&
                         !message.isStreaming &&
