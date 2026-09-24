@@ -38,7 +38,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-003C-R2 | Home Affairs structured alert discovery + bounded fetch calibration | VERIFIED |
 | P11-003C-R3 | Relative Home Affairs alert URL resolution + provenance-kind correction | VERIFIED |
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
-| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGE 1 + STAGE 2 ACCEPTED; STAGE 3 NOT STARTED |
+| P11-005 | Secure Matter Documents & AI File Intake | IN PROGRESS — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS GATES OPEN |
 | P11-006 | Matter-centered Client Portal | PLANNED |
 | P11-007 | Lawyer Workspace continuity | PLANNED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
@@ -50,7 +50,7 @@ P11-003C remains closed as VERIFIED at `fa02295675dc4343430ae0a109722141e669bbf9
 
 P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`. Both internal stages are complete and owner accepted; see `docs/agent-memory/tasks/P11-004.md` and `docs/agent-memory/CURRENT_HANDOFF.md`.
 
-P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at hardening checkpoint `df5335356ac7c7fc908236a270e78f280e5387e6`. Stage 2 document understanding/provenance is accepted at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`. Stage 3 matter/AI/lawyer integration is not started and requires a separate activation/review gate. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
+P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at `df5335356ac7c7fc908236a270e78f280e5387e6`; Stage 2 at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`; Stage 3 matter/AI/lawyer integration is accepted after direct GitHub review at `b29816c56255762998d8fa55b56df64436a0b3c3`. P11-005 is not yet VERIFIED because production-readiness gates remain open. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
 ## Evidence that triggered R2
 
@@ -262,3 +262,20 @@ Recorded validation: 243 unit tests passed, production build passed, changed-fil
 Non-blocking production/deployment gates remain: verify the actual ECS/Fargate-compatible `@napi-rs/canvas` native binding/package trace, apply and smoke-test migrations only under separate authorization, verify private S3/IAM/Block Public Access, define retention/purge and stale storage-intent operations, and add malware/quarantine controls before production-ready document handling.
 
 Stage 3 remains NOT STARTED.
+
+
+## P11-005 Stage 3 acceptance — 2026-09-25
+
+**Accepted checkpoint:** `b29816c56255762998d8fa55b56df64436a0b3c3`
+
+Direct GitHub review accepted the final Stage 3 matter/AI/lawyer integration boundary.
+
+The accepted Stage 3 chain is:
+
+`authorized MatterDocument -> bounded normalized evidence -> explicit per-turn selection -> server-side reauthorization -> answer-lane customer-document context -> usage-acknowledged persisted provenance -> exact lawyer snapshot reconstruction`.
+
+The final post-push correction also closes two provenance edge cases: guided-intake submissions no longer clear unused selected documents, and chatbot route-level answer replacement/fallbacks cannot retain document provenance for an answer different from the backend answer that consumed the packet.
+
+No new migration was created; migrations `0018`–`0021` remain **NOT APPLIED**. GitHub attached no Actions/status run to the accepted checkpoint; acceptance is based on direct source review plus recorded local validation.
+
+P11-005 remains **IN PROGRESS / NOT VERIFIED** because production-readiness gates are intentionally still open.

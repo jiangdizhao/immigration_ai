@@ -702,3 +702,32 @@ Review boundary:
 - Default, Fast, and Premium widget routes now retain customer-document provenance only when the legal service acknowledged use and the backend answer was preserved. Default public-safety replacement and empty-answer fallbacks, plus Fast/Premium empty-answer fallbacks, omit the manifest and return `customerDocumentEvidenceUsed: false`.
 - Validation: `pnpm test:unit` 264 passed; `pnpm build` passed; changed-file Biome passed (8 files); `pnpm lint` reports 21 repository diagnostics with none in changed files; `git diff --check` passed.
 - No migration or external-service call. Stage 3 remains pending review; P11-005 is not verified and P11-006 has not started.
+
+
+## P11-005 Stage 3 accepted after GitHub review — 2026-09-25
+
+**Accepted checkpoint:** `b29816c56255762998d8fa55b56df64436a0b3c3`
+
+The final Stage 3 correction was reviewed directly on GitHub and no remaining Stage 3 blocking defect was found.
+
+Confirmed final invariants:
+
+- customer document evidence is server-authorized, bounded and structurally separate from official law/citations;
+- raw file bytes, storage keys and private object URLs never enter answer models or public provenance;
+- exact per-unit `includedTextChars` + SHA-256 allow lawyer handoff to reconstruct only the text actually supplied to AI and fail closed on mismatch/legacy manifests;
+- `customer_document_evidence_used` is authoritative only for answer paths that actually consumed the bounded document context;
+- chatbot persists/renders document provenance only when the backend acknowledged use and the final public answer preserved that backend answer;
+- route-level forbidden/empty-answer replacement strips document provenance;
+- ordinary and guided-intake paths share the same selection-clearing rule; unused files stay selected for retry, while political-gate blocks preserve selection without false warnings;
+- conversation reload exposes only persisted acknowledged provenance;
+- document-selected V2 turns do not persist contract-derived document claims as durable `v2_known_facts`;
+- review traces and Experience Archive exclude the raw customer-document packet;
+- lawyer requests still derive document references only from persisted server-generated assistant metadata.
+
+Recorded validation for the final correction: chatbot unit suite 264 passed, build passed, changed-file Biome passed, repository lint remained at its known 21-diagnostic baseline with none in changed files, and `git diff --check` passed. No legal-service files were changed by the final correction. GitHub has no attached Actions/status run for this checkpoint.
+
+**Stage 3 is ACCEPTED. All three P11-005 implementation stages are ACCEPTED.**
+
+P11-005 remains **IN PROGRESS / NOT VERIFIED** because explicit production-readiness gates remain open: deployment-compatible canvas binding verification, authorized migration application/DB smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy.
+
+Migrations `0018`–`0021` remain **NOT APPLIED**. P11-006 is NOT STARTED.

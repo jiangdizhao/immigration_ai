@@ -119,7 +119,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - No backend, database, legal-reasoning or booking implementation was added.
 - Final validation: 187 unit tests passed; build, changed-file Biome and `git diff --check` passed; repository lint retains the known 22-diagnostic baseline; desktop/mobile owner visual acceptance passed.
 - Deployment note: the local visual environment displayed the Debug panel because `NEXT_PUBLIC_WIDGET_DEBUG` was enabled. The active workspace guards it with `process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true"`; staging/production should leave this disabled unless intentionally debugging.
-- **P11-005 — Secure Matter Documents & AI File Intake: IN PROGRESS; Stage 1 ACCEPTED at `df5335356ac7c7fc908236a270e78f280e5387e6`; Stage 2 ACCEPTED at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`; Stage 3 not started.**
+- **P11-005 — Secure Matter Documents & AI File Intake: IN PROGRESS; Stages 1–3 ACCEPTED. Stage 3 accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`; production-readiness gates remain open, so P11-005 is not yet VERIFIED.**
 - P11-005 is now the prerequisite to the customer portal because current generic upload support is not a secure matter-document system.
 - Current scaffold: `Message_v2.attachments` exists; generic `/api/files/upload` accepts JPEG/PNG up to 5 MiB and writes public Vercel Blob objects; the Phase 11 AI Workspace does not use that path for customer matter evidence.
 - Required P11-005 boundary: private matter-scoped documents, a centralized mainstream-format registry (PDF, JPEG/PNG, DOCX/DOC, TXT/MD/JSON/CSV, XLSX/XLS initially), authenticated ownership, integrity/type/size validation, processing lifecycle, document/page provenance, and safe AI/lawyer continuity.
@@ -162,3 +162,26 @@ Conversations are working memory only.
 - database/schema changes made prematurely for presentation goals.
 - sensitive customer-document storage, access control, provenance, malware/untrusted-content handling and accidental public-object exposure.
 
+
+
+### P11-005 Stage 3 accepted boundary — 2026-09-25
+
+Direct GitHub source/security review accepted Stage 3 at `b29816c56255762998d8fa55b56df64436a0b3c3`.
+
+Accepted integration boundary:
+
+- customers select authorized processed MatterDocuments by ID for one AI turn;
+- the chatbot server re-authorizes ownership/chat linkage and builds a bounded derived-evidence packet;
+- raw file bytes/storage keys/private object URLs do not enter answer models;
+- Fast, Legal Check/Default and Premium consume customer-document evidence in a separate untrusted authority class;
+- official citations remain structurally separate from customer-document provenance;
+- exact per-unit AI clipping is recorded with included character count and SHA-256, allowing fail-closed lawyer-snapshot reconstruction of only the text actually supplied to AI;
+- answer provenance is persisted/rendered only when the legal-service answer path acknowledged document use and the final public answer preserved that backend answer;
+- guided-intake and ordinary-message submissions share the same selected-document retention semantics;
+- document-selected V2 turns do not promote model-derived document claims into durable `v2_known_facts`;
+- review traces and Experience Archive do not retain the raw customer-document packet;
+- lawyer handoff derives exact document evidence from persisted server-generated assistant metadata, never client-supplied document references.
+
+No schema change or new migration was introduced by Stage 3. Migrations `0018`–`0021` remain **NOT APPLIED**.
+
+P11-005 remains **NOT VERIFIED** until its explicit production-readiness gates are closed or separately accepted: actual deployment-compatible canvas binding/package trace, controlled migration application and DB-backed smoke, private S3/IAM/public-access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy.
