@@ -96,9 +96,10 @@ export type ClientPortalView = {
   summary: {
     matterGroupCount: number;
     conversationCount: number;
-    documentCount: number;
+    documentCount: number | null;
     lawyerRequestCount: number;
   };
+  documentsAvailable: boolean;
   membership: PortalMembership;
   matterGroups: PortalMatterGroup[];
   recentActivity: PortalActivity[];

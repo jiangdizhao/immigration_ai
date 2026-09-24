@@ -36,6 +36,37 @@ function conversations(count: number, matterPrefix = "matter") {
   }));
 }
 
+function portalDependencies(
+  overrides: Partial<ClientPortalDependencies> = {}
+): ClientPortalDependencies {
+  return {
+    listConversations: async () => [
+      {
+        chatId: "portal-chat",
+        legalMatterId: "portal-matter",
+        title: "Portal conversation",
+        createdAt: at(1),
+        updatedAt: at(2),
+      },
+    ],
+    listDocuments: async () => [],
+    listLawyerRequests: async () => [],
+    getEntitlement: async () => ({
+      id: userId,
+      role: "user",
+      membershipTier: "vip",
+      vipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
+    }),
+    getSubscription: async () => null,
+    fetchMatter: async () => null,
+    ...overrides,
+  } as unknown as ClientPortalDependencies;
+}
+
+function postgresError(code: string, message: string) {
+  return Object.assign(new Error(message), { code });
+}
+
 test("customer role boundary denies absent, guest, lawyer, and admin identities", () => {
   assert.deepEqual(authorizeClientPortalIdentity(null), {
     allowed: false,
@@ -490,6 +521,22 @@ test("client portal copy includes Chinese default and English language", () => {
   assert.equal(getClientPortalCopy("en").title, "Client Portal");
   assert.equal(getClientPortalCopy("zh-CN").confirmed, "已确认信息");
   assert.equal(getClientPortalCopy("en").confirmed, "Confirmed by you");
+  assert.equal(
+    getClientPortalCopy("zh-CN").documentsUnavailableTitle,
+    "材料功能暂不可用"
+  );
+  assert.equal(
+    getClientPortalCopy("en").documentsUnavailableTitle,
+    "Documents temporarily unavailable"
+  );
+  assert.match(
+    getClientPortalCopy("zh-CN").documentsUnavailableDescription,
+    /其他客户中心功能仍可使用/
+  );
+  assert.match(
+    getClientPortalCopy("en").documentsUnavailableDescription,
+    /Other Client Portal features remain usable/
+  );
   for (const [status, zh, en] of [
     ["needs_more_information", "需要补充信息", "More information needed"],
     ["pending", "等待律师审核", "Awaiting lawyer review"],
@@ -718,4 +765,100 @@ test("legal matter fetch supports optional API keys and fails soft", async () =>
     }),
     null
   );
+});
+
+test("portal document query success returns an available authoritative count", async () => {
+  const row = {
+    id: "document-a",
+    userId,
+    chatId: "portal-chat",
+    legalMatterId: "portal-matter",
+    originalFilename: "identity.pdf",
+    mimeType: "application/pdf",
+    byteSize: 42,
+    processingStatus: "complete" as const,
+    securityStatus: "pending" as const,
+    createdAt: at(1),
+    updatedAt: at(2),
+  };
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({ listDocuments: async () => [row] })
+  );
+  assert.equal(view.documentsAvailable, true);
+  assert.equal(view.summary.documentCount, 1);
+  assert.equal(view.matterGroups[0].documents[0].documentId, "document-a");
+});
+
+test("MatterDocument undefined-table errors return a safe partial portal view", async () => {
+  const request = {
+    id: "request-a",
+    userId,
+    chatId: "portal-chat",
+    legalMatterId: "portal-matter",
+    status: "pending",
+    assignedLawyerUserId: null,
+    customerLastViewedAt: null,
+    createdAt: at(1),
+    updatedAt: at(2),
+    reviewedAt: null,
+  };
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      listDocuments: () =>
+        Promise.reject(
+          postgresError("42P01", 'relation "MatterDocument" does not exist')
+        ),
+      listLawyerRequests: () => Promise.resolve([request]),
+      fetchMatter: () => Promise.reject(new Error("legal service offline")),
+    })
+  );
+  assert.equal(view.documentsAvailable, false);
+  assert.equal(view.summary.documentCount, null);
+  assert.equal(view.summary.conversationCount, 1);
+  assert.equal(view.matterGroups[0].conversations[0].chatId, "portal-chat");
+  assert.equal(view.matterGroups[0].matterSnapshotUnavailable, true);
+  assert.equal(view.matterGroups[0].lawyerRequests[0].requestId, "request-a");
+  assert.equal(view.membership.active, true);
+  const serialized = JSON.stringify(view);
+  assert.equal(serialized.includes("MatterDocument"), false);
+  assert.equal(serialized.includes("42P01"), false);
+  assert.equal(serialized.includes("relation"), false);
+  assert.equal(serialized.includes("0018"), false);
+});
+
+test("only the expected document schema SQLSTATEs fail soft", async () => {
+  for (const error of [
+    postgresError("42703", 'column "storageStatus" does not exist'),
+    Object.assign(new Error('column "storageStatus" does not exist'), {
+      cause: postgresError("42703", 'column "storageStatus" does not exist'),
+    }),
+  ]) {
+    const view = await buildClientPortalViewWithDependencies(
+      { userId, email: "person@example.test" },
+      "zh-CN",
+      portalDependencies({
+        listDocuments: () => Promise.reject(error),
+      })
+    );
+    assert.equal(view.documentsAvailable, false);
+    assert.equal(view.summary.documentCount, null);
+  }
+
+  for (const error of [
+    postgresError("08006", "database connection failed"),
+    postgresError("42703", 'column "unexpectedColumn" does not exist'),
+  ]) {
+    const build = buildClientPortalViewWithDependencies(
+      { userId, email: "person@example.test" },
+      "en",
+      portalDependencies({
+        listDocuments: () => Promise.reject(error),
+      })
+    );
+    await assert.rejects(build, error);
+  }
 });

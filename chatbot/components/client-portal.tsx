@@ -169,47 +169,57 @@ function MatterDetails({
             {copy.documents}
           </h3>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs">
-            {group.documents.length}
+            {view.documentsAvailable
+              ? group.documents.length
+              : copy.unavailable}
           </span>
         </div>
-        {group.documents.length ? (
-          <ul className="mt-4 divide-y divide-slate-100">
-            {group.documents.map((document) => (
-              <li
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
-                key={document.documentId}
-              >
-                <div className="min-w-0">
-                  <p className="break-all text-sm font-medium">
-                    {document.originalFilename}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {document.mimeType} · {Math.ceil(document.byteSize / 1024)}{" "}
-                    KB · {displayDate(document.updatedAt, locale)}
-                  </p>
-                </div>
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-900">
-                  {document.securityStatus === "pending"
-                    ? copy.securityPending
-                    : document.securityStatus === "rejected"
-                      ? copy.securityRejected
-                      : document.securityStatus === "failed"
-                        ? copy.securityFailed
-                        : copy.securityRecorded}
-                  {" · "}
-                  {document.processingStatus === "not_started"
-                    ? copy.processingNotStarted
-                    : document.processingStatus === "processing"
-                      ? copy.processing
-                      : document.processingStatus === "complete"
-                        ? copy.processingComplete
-                        : copy.processingFailed}
-                </span>
-              </li>
-            ))}
-          </ul>
+        {view.documentsAvailable ? (
+          group.documents.length ? (
+            <ul className="mt-4 divide-y divide-slate-100">
+              {group.documents.map((document) => (
+                <li
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  key={document.documentId}
+                >
+                  <div className="min-w-0">
+                    <p className="break-all text-sm font-medium">
+                      {document.originalFilename}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {document.mimeType} ·{" "}
+                      {Math.ceil(document.byteSize / 1024)} KB ·{" "}
+                      {displayDate(document.updatedAt, locale)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-900">
+                    {document.securityStatus === "pending"
+                      ? copy.securityPending
+                      : document.securityStatus === "rejected"
+                        ? copy.securityRejected
+                        : document.securityStatus === "failed"
+                          ? copy.securityFailed
+                          : copy.securityRecorded}
+                    {" · "}
+                    {document.processingStatus === "not_started"
+                      ? copy.processingNotStarted
+                      : document.processingStatus === "processing"
+                        ? copy.processing
+                        : document.processingStatus === "complete"
+                          ? copy.processingComplete
+                          : copy.processingFailed}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">{copy.noDocuments}</p>
+          )
         ) : (
-          <p className="mt-4 text-sm text-slate-500">{copy.noDocuments}</p>
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold">{copy.documentsUnavailableTitle}</p>
+            <p className="mt-1">{copy.documentsUnavailableDescription}</p>
+          </div>
         )}
         <Link
           className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-cyan-900 underline"
@@ -418,7 +428,12 @@ export function ClientPortal() {
           {[
             [copy.matters, view.summary.matterGroupCount],
             [copy.conversations, view.summary.conversationCount],
-            [copy.documents, view.summary.documentCount],
+            [
+              copy.documents,
+              view.documentsAvailable
+                ? view.summary.documentCount
+                : copy.unavailable,
+            ],
             [copy.lawyerReview, view.summary.lawyerRequestCount],
           ].map(([label, count]) => (
             <div

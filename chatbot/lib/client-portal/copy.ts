@@ -51,6 +51,9 @@ export const CLIENT_PORTAL_COPY = {
     noFacts: "暂无已确认信息",
     noToConfirm: "暂无待确认项目",
     noDocuments: "暂无已存储文件",
+    documentsUnavailableTitle: "材料功能暂不可用",
+    documentsUnavailableDescription:
+      "材料服务尚未启用，其他客户中心功能仍可使用。",
     noLawyerRequests: "暂无律师审核请求",
     unavailable: "暂不可用",
     confirmedCount: "已收集必填信息",
@@ -108,6 +111,9 @@ export const CLIENT_PORTAL_COPY = {
     noFacts: "No confirmed information yet",
     noToConfirm: "No items to confirm",
     noDocuments: "No stored documents",
+    documentsUnavailableTitle: "Documents temporarily unavailable",
+    documentsUnavailableDescription:
+      "The document service is not currently available. Other Client Portal features remain usable.",
     noLawyerRequests: "No lawyer review requests",
     unavailable: "Unavailable",
     confirmedCount: "Required information collected",

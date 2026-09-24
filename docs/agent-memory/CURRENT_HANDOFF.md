@@ -822,3 +822,24 @@ Correction validation:
 - Tests use injected fetch functions; no live Legal Service was contacted.
 
 No migration or backend source changed. D-040 and every P11-005 production-readiness gate remain deferred to P11-009. P11-005 remains NOT VERIFIED; P11-007 remains NOT STARTED. OpenAI and AWS/S3 were not contacted. No commit or push was made.
+
+
+## P11-006 rollout compatibility correction — 2026-09-25
+
+A local runtime visual smoke at pushed HEAD `e9a91ef0bc280e85bd4b6fdb50b4d314aecf352c` observed `GET /api/client-portal -> 500` with PostgreSQL undefined-table `42P01` because the intentionally deferred P11-005 `MatterDocument` schema was absent. This was a rollout compatibility defect; no migration was applied to work around it.
+
+The portal now catches schema-unavailable errors only around its document-summary query. The bounded cause-chain check recognizes SQLSTATE `42P01`, and `42703` only when the missing column is specifically identified as `storageStatus`. Other SQLSTATEs and unrelated undefined columns are rethrown. The public projection exposes `documentsAvailable`; `summary.documentCount` is numeric when available and `null` when unavailable. It does not include SQLSTATEs, DB messages, table names or migration details. The UI keeps the document section visible and shows bilingual customer-facing unavailable copy; it does not render an authoritative zero count.
+
+Conversation ownership/grouping, lawyer-request and VIP aggregation, and Legal Service Matter failure isolation remain independent. Tests cover simultaneous Legal Service failure and missing document schema while retaining conversation, lawyer-request and membership data in the partial projection.
+
+Validation for this correction:
+
+- Focused Client Portal tests: **17 passed, 0 failed**.
+- `pnpm test:unit`: **281 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**; Client Portal page and API route remain in the build.
+- Changed-file Biome: **passed** for all six changed application/test files.
+- `pnpm lint`: known **21-diagnostic repository baseline**, with no diagnostics in changed P11-006 files.
+- `git diff --check`: **passed**.
+- No live Legal Service or external provider was contacted.
+
+D-040 is unchanged. P11-005 remains NOT VERIFIED; migrations `0018`–`0021`, DB smoke, ECS/Fargate canvas verification, S3/IAM/public-access checks, retention/purge/stale-intent operations, and malware/quarantine/scanning remain deferred to P11-009. P11-006 remains NOT ACCEPTED / NOT VERIFIED. No new migration or backend/legal-service change was made, and no commit or push was made.

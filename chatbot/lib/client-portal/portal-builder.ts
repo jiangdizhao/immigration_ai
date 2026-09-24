@@ -6,6 +6,7 @@ import type {
   listMatterDocumentsForPortal,
 } from "@/lib/db/queries";
 import type { SiteLocale } from "@/lib/site-locale";
+import { isMatterDocumentSchemaUnavailable } from "./document-schema";
 import { groupOwnedConversations, MAX_PORTAL_CONVERSATIONS } from "./grouping";
 import {
   projectLawyerRequests,
@@ -160,13 +161,24 @@ export async function buildClientPortalViewWithDependencies(
     }
   }
 
-  const [documentRows, lawyerRows, entitlement, subscription] =
-    await Promise.all([
+  const documentQuery = Promise.resolve()
+    .then(() =>
       dependencies.listDocuments({
         userId,
         chatIds: [...chatIds],
         limit: MAX_DOCUMENTS,
-      }),
+      })
+    )
+    .then((rows) => ({ available: true as const, rows }))
+    .catch((error: unknown) => {
+      if (!isMatterDocumentSchemaUnavailable(error)) {
+        throw error;
+      }
+      return { available: false as const, rows: [] };
+    });
+  const [documentResult, lawyerRows, entitlement, subscription] =
+    await Promise.all([
+      documentQuery,
       dependencies.listLawyerRequests({ userId }),
       dependencies.getEntitlement(userId),
       dependencies.getSubscription(userId),
@@ -175,7 +187,7 @@ export async function buildClientPortalViewWithDependencies(
     throw new ClientPortalRoleError();
   }
 
-  const documents = projectPortalDocuments(documentRows, {
+  const documents = projectPortalDocuments(documentResult.rows, {
     userId,
     chatIds,
     groupLegalMatterIdByChat,
@@ -254,9 +266,10 @@ export async function buildClientPortalViewWithDependencies(
         (sum, group) => sum + group.conversations.length,
         0
       ),
-      documentCount: documents.length,
+      documentCount: documentResult.available ? documents.length : null,
       lawyerRequestCount: lawyerRequests.length,
     },
+    documentsAvailable: documentResult.available,
     membership,
     matterGroups: groups,
     recentActivity: recentActivity(groups),
