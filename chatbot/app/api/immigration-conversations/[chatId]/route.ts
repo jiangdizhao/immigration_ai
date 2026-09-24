@@ -5,6 +5,7 @@ import {
   updateImmigrationConversation,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { persistedCustomerDocumentManifestForReload } from "@/lib/matter-documents/customer-document-provenance";
 
 type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
@@ -127,8 +128,12 @@ function extractMetadataFromParts(parts: unknown) {
         )
       : [],
     citations: Array.isArray(value.citations) ? value.citations : [],
+    customerDocumentEvidenceUsed: value.customerDocumentEvidenceUsed === true,
     customerDocumentSources: safeCustomerDocumentSources(
-      value.customerDocumentManifest
+      persistedCustomerDocumentManifestForReload(
+        value.customerDocumentManifest,
+        value.customerDocumentEvidenceUsed
+      )
     ),
     confidence: typeof value.confidence === "string" ? value.confidence : null,
     researchStatus:

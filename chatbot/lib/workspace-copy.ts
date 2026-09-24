@@ -86,6 +86,7 @@ export type WorkspaceCopy = {
     notStarted: string;
     select: string;
     selected: string;
+    notUsed: string;
     delete: string;
     download: string;
     retry: string;
@@ -243,6 +244,7 @@ const zh: WorkspaceCopy = {
     notStarted: "尚未处理",
     select: "用于下一个问题",
     selected: "已选择",
+    notUsed: "所选文件未纳入本次答复，请保留选择后重试。",
     delete: "删除",
     download: "下载",
     retry: "重试",
@@ -412,6 +414,8 @@ const en: WorkspaceCopy = {
     notStarted: "Not processed",
     select: "Use for next question",
     selected: "Selected",
+    notUsed:
+      "The selected files were not included in this answer. They remain selected so you can retry.",
     delete: "Delete",
     download: "Download",
     retry: "Retry",

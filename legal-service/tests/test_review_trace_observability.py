@@ -337,3 +337,22 @@ def test_review_trace_sanitizes_postgresql_forbidden_nul_recursively(monkeypatch
                 assert_no_nul(item)
 
     assert_no_nul(session.added.trace_json)
+
+
+def test_review_trace_removes_raw_customer_document_packet_from_request_snapshot(monkeypatch):
+    import app.services.review_trace_service as review_module
+    session = CapturingSession(existing_matter_ids={"matter-1"})
+    monkeypatch.setattr(review_module, "SessionLocal", lambda: session)
+    service = ReviewTraceService()
+    service.settings = SimpleNamespace(enable_lawyer_review_trace=True)
+    payload = QueryRequest(question="What does this say?", customer_document_evidence={"documents": [{
+        "documentId": "doc-1", "runId": "run-1", "originalFilename": "secret.txt", "mimeType": "text/plain",
+        "runStatus": "complete", "extractionMethod": "native", "truncated": False,
+        "includedUnitOrdinals": [1], "locators": [{"kind": "page", "page": 1}],
+        "units": [{"ordinal": 1, "locator": {"kind": "page", "page": 1}, "text": "private raw document text", "extractionMethod": "native"}],
+    }]})
+    service.safe_record_answer_trace(matter=SimpleNamespace(id="matter-1", session_id="session-1"), payload=payload, response=response(), state=None, extra_debug={"customer_document_evidence_used": False})
+    trace = session.added.trace_json
+    assert trace["request"]["customer_document_evidence"]["documents"] == []
+    assert trace["customer_document_evidence_summary"]["selected_document_count"] == 1
+    assert "private raw document text" not in str(trace["extra_debug"])

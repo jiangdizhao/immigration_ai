@@ -54,7 +54,7 @@ class ReviewTraceService:
         trace_id: str | None = None
         active_observability: dict[str, Any] | None = None
         archive_matter: Any = matter
-        archive_payload = payload
+        archive_payload = payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()}) if payload.customer_document_evidence.documents else payload
         archive_response = response
         try:
             state_dump = self._safe_json(state)
@@ -72,6 +72,7 @@ class ReviewTraceService:
                     "selected_unit_count": sum(len(document.units) for document in payload.customer_document_evidence.documents),
                     "packet_char_count": sum(len(unit.text) for document in payload.customer_document_evidence.documents for unit in document.units),
                     "packet_truncated": any(document.truncated for document in payload.customer_document_evidence.documents),
+                    "customer_document_evidence_used": bool(response.customer_document_evidence_used),
                 },
                 "response": response_dump,
                 "state": state_dump,

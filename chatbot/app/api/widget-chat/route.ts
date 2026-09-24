@@ -20,6 +20,7 @@ import {
   customerDocumentSources,
   SelectedMatterDocumentError,
 } from "@/lib/matter-documents/ai-evidence";
+import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
 import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
 import {
   blockedResponseForLocale,
@@ -85,6 +86,7 @@ type LegalCitation = {
 };
 
 type LegalServiceResponse = {
+  customer_document_evidence_used?: boolean;
   trace_id?: string | null;
   answer?: string;
   response_language?: string | null;
@@ -665,6 +667,7 @@ function emptyWidgetResponse(
 ) {
   return Response.json({
     text,
+    customerDocumentEvidenceUsed: false,
     responseLanguage,
     citations: [],
     compactSources: [],
@@ -922,6 +925,12 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     }
 
     const data = legalServiceResult.data;
+    const documentProvenance = acknowledgedCustomerDocumentProvenance(
+      customerDocumentManifest,
+      data.customer_document_evidence_used
+    );
+    const customerDocumentEvidenceUsed = documentProvenance.used;
+    const answeredCustomerDocumentManifest = documentProvenance.manifest;
     const finalResponseLanguage = normalizeResponseLanguage(
       data.response_language,
       responseLanguage
@@ -941,7 +950,10 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       type: "metadata",
       compactSources,
       citations: normalizedCitations,
-      customerDocumentManifest,
+      customerDocumentEvidenceUsed,
+      ...(customerDocumentEvidenceUsed
+        ? { customerDocumentManifest: answeredCustomerDocumentManifest }
+        : {}),
       confidence: data.confidence ?? null,
       researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
@@ -1028,8 +1040,9 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       assistantMessageId: persistedAssistantMessageId,
       responseLanguage: finalResponseLanguage,
       citations: normalizedCitations,
+      customerDocumentEvidenceUsed,
       customerDocumentSources: customerDocumentSources(
-        customerDocumentManifest
+        answeredCustomerDocumentManifest
       ),
       compactSources,
       userDisplayMode:
@@ -1060,6 +1073,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     return Response.json(
       {
         text: "Sorry, I could not generate a response right now.",
+        customerDocumentEvidenceUsed: false,
         responseLanguage: "en",
         citations: [],
         compactSources: [],

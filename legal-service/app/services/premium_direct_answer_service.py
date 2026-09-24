@@ -392,6 +392,11 @@ class PremiumDirectAnswerService:
         return QueryResponse(
             matter_id=matter_id,
             answer=answer_text,
+            customer_document_evidence_used=bool(
+                payload.customer_document_evidence.documents
+                and model_debug.get("completion_status") == "complete"
+                and bool(model_debug.get("serving_model"))
+            ),
             response_language="zh" if is_zh else "en",
             confidence="medium" if not high_risk else "low",
             user_display_mode="general_with_warning",

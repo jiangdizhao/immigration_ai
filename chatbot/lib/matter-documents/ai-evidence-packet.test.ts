@@ -163,3 +163,42 @@ test("only terminal runs with evidence units are eligible for AI", () => {
       error instanceof SelectedMatterDocumentError && error.kind === "not_ready"
   );
 });
+
+test("manifest records exact clipped characters and SHA-256 of supplied text", async () => {
+  const { createHash } = await import("node:crypto");
+  const result = buildBoundedMatterDocumentEvidence({
+    documents: [
+      fixture(1, {
+        units: [
+          {
+            ordinal: 1,
+            locator: { kind: "page", pageNumber: 1 },
+            extractedText: "a".repeat(7000),
+            extractionMethod: "native",
+          },
+          {
+            ordinal: 2,
+            locator: { kind: "page", pageNumber: 2 },
+            extractedText: "b".repeat(7000),
+            extractionMethod: "native",
+          },
+        ],
+      }),
+    ],
+  });
+  const supplied = result.evidence.documents[0].units;
+  const included = result.manifest[0].includedUnits;
+  assert.equal(supplied[0].text.length, 4000);
+  assert.equal(supplied[1].text.length, 4000);
+  assert.deepEqual(
+    included.map((unit) => unit.includedTextChars),
+    supplied.map((unit) => unit.text.length)
+  );
+  assert.deepEqual(
+    included.map((unit) => unit.textSha256),
+    supplied.map((unit) =>
+      createHash("sha256").update(unit.text, "utf8").digest("hex")
+    )
+  );
+  assert.equal("text" in included[0], false);
+});

@@ -112,6 +112,7 @@ class QueryRequest(BaseSchema):
 class QueryResponse(BaseSchema):
     matter_id: str | None = None
     answer: str
+    customer_document_evidence_used: bool = False
     response_language: Literal["en", "zh"] = "en"
     confidence: Literal["low", "medium", "high"]
     user_display_mode: Literal[

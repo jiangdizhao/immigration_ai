@@ -24,6 +24,7 @@ import {
   customerLawyerRequestSummary,
   customerLawyerRequestView,
 } from "@/lib/lawyer-requests/views";
+import { reconstructExactLawyerDocumentEvidence } from "@/lib/matter-documents/lawyer-evidence-reconstruction";
 import { requireRegisteredUser } from "@/lib/vip/access";
 import { premiumDeniedResponse } from "@/lib/vip/entitlement";
 
@@ -133,13 +134,34 @@ export async function POST(request: Request) {
           part.type === "metadata"
       ) as Record<string, unknown> | undefined)
     : undefined;
-  const manifest = Array.isArray(metadata?.customerDocumentManifest)
-    ? metadata.customerDocumentManifest
-    : [];
+  if (
+    metadata?.customerDocumentEvidenceUsed === true &&
+    !Array.isArray(metadata.customerDocumentManifest)
+  ) {
+    return Response.json(
+      { error: "The answer's customer document evidence manifest is missing." },
+      { status: 409 }
+    );
+  }
+  const manifest =
+    metadata?.customerDocumentEvidenceUsed === true
+      ? (metadata.customerDocumentManifest as unknown[])
+      : [];
+  if (manifest.length > 4) {
+    return Response.json(
+      { error: "The answer's customer document evidence manifest is invalid." },
+      { status: 409 }
+    );
+  }
   let excerptBudget = 12_000;
   for (const entry of manifest.slice(0, 4)) {
     if (!entry || typeof entry !== "object") {
-      continue;
+      return Response.json(
+        {
+          error: "The answer's customer document evidence manifest is invalid.",
+        },
+        { status: 409 }
+      );
     }
     const item = entry as Record<string, unknown>;
     if (
@@ -147,11 +169,27 @@ export async function POST(request: Request) {
       typeof item.runId !== "string" ||
       !Array.isArray(item.includedUnitOrdinals)
     ) {
-      continue;
+      return Response.json(
+        {
+          error: "The answer's customer document evidence manifest is invalid.",
+        },
+        { status: 409 }
+      );
     }
     const ordinals = item.includedUnitOrdinals.filter(
       (value): value is number => Number.isInteger(value)
     );
+    if (
+      ordinals.length !== item.includedUnitOrdinals.length ||
+      ordinals.length === 0
+    ) {
+      return Response.json(
+        {
+          error: "The answer's customer document evidence manifest is invalid.",
+        },
+        { status: 409 }
+      );
+    }
     const exact = await getMatterDocumentEvidenceForLawyerSnapshot({
       documentId: item.documentId,
       userId: access.userId,
@@ -168,23 +206,32 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    for (const unit of exact.units) {
-      if (excerptBudget <= 0) {
-        break;
-      }
-      const quote = unit.extractedText.slice(0, Math.min(500, excerptBudget));
-      excerptBudget -= quote.length;
+    const reconstructed = reconstructExactLawyerDocumentEvidence({
+      manifest: item,
+      exact,
+      excerptBudget,
+    });
+    if (!reconstructed) {
+      return Response.json(
+        {
+          error:
+            "The answer's customer document evidence cannot be reconstructed exactly for a lawyer snapshot.",
+        },
+        { status: 409 }
+      );
+    }
+    excerptBudget = reconstructed.excerptBudget;
+    for (const unit of reconstructed.items) {
       snapshot.evidenceSnapshot.push({
         kind: "customer_document",
         document_id: exact.document.id,
         run_id: exact.run.id,
         filename: exact.document.originalFilename,
         run_status: exact.run.status,
-        extraction_method: exact.run.extractionMethod ?? unit.extractionMethod,
+        extraction_method: unit.extractionMethod,
         locator: unit.locator,
-        quote,
-        truncated:
-          Boolean(item.truncated) || quote.length < unit.extractedText.length,
+        quote: unit.quote,
+        truncated: unit.truncated,
       });
     }
   }

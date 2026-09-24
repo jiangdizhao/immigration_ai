@@ -122,6 +122,7 @@ export interface WidgetAssistantMessage {
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
+  customerDocumentEvidenceUsed?: boolean;
   customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];
@@ -153,6 +154,7 @@ export interface WidgetRouteResponse {
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];
   compactSources?: string[];
+  customerDocumentEvidenceUsed?: boolean;
   customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];

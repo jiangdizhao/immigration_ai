@@ -159,6 +159,9 @@ class ExperienceArchiveService:
 
     def _build_persistence_payload(self, **kwargs: Any) -> ExperiencePersistencePayload:
         payload: QueryRequest = kwargs["payload"]
+        if payload.customer_document_evidence.documents:
+            payload = payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()})
+            kwargs = {**kwargs, "payload": payload}
         response: QueryResponse = kwargs["response"]
         matter = kwargs.get("matter")
         request_id = self._request_id(payload, kwargs.get("request_id"))

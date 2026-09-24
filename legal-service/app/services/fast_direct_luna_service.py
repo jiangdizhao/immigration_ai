@@ -260,6 +260,7 @@ class FastDirectLunaService:
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=answer,
+            customer_document_evidence_used=bool(payload.customer_document_evidence.documents),
             response_language=language,
             confidence="medium",
             user_display_mode="general_with_warning",
@@ -325,6 +326,7 @@ class FastDirectLunaService:
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=answer,
+            customer_document_evidence_used=False,
             response_language=language,
             confidence="low",
             user_display_mode="general_with_warning",

@@ -18,6 +18,7 @@ import {
 } from "@/lib/assistant-mode";
 import { ChatbotError } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
+import { shouldClearSelectedDocuments } from "@/lib/matter-documents/customer-document-provenance";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -343,6 +344,7 @@ type ImmigrationStoredMessage = {
   followUpQuestions?: string[];
   matterId?: string | null;
   retrievalDebug?: WidgetAssistantMessage["retrievalDebug"];
+  customerDocumentEvidenceUsed?: boolean;
   customerDocumentSources?: WidgetAssistantMessage["customerDocumentSources"];
 };
 
@@ -363,6 +365,7 @@ function assistantFromStoredMessage(
     researchStatus: message.researchStatus ?? null,
     citations: message.citations ?? [],
     compactSources: message.compactSources ?? [],
+    customerDocumentEvidenceUsed: message.customerDocumentEvidenceUsed === true,
     customerDocumentSources: message.customerDocumentSources ?? [],
     userDisplayMode: null,
     followUpQuestions: message.followUpQuestions ?? [],
@@ -706,6 +709,7 @@ export function ImmigrationAIWorkspace({
       researchStatus: data.researchStatus ?? null,
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
+      customerDocumentEvidenceUsed: data.customerDocumentEvidenceUsed === true,
       customerDocumentSources: data.customerDocumentSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
       followUpQuestions: data.followUpQuestions ?? [],
@@ -857,7 +861,16 @@ export function ImmigrationAIWorkspace({
         activeConversationId
       );
       await appendAssistantMessage(data, nextUserMessage.id);
-      setSelectedDocumentIds([]);
+      if (
+        shouldClearSelectedDocuments({
+          selectedCount: selectedDocumentIds.length,
+          customerDocumentEvidenceUsed: data.customerDocumentEvidenceUsed,
+        })
+      ) {
+        setSelectedDocumentIds([]);
+      } else {
+        toast.warning(copy.documents.notUsed);
+      }
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError

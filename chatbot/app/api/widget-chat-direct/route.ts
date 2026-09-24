@@ -18,6 +18,7 @@ import {
   customerDocumentSources,
   SelectedMatterDocumentError,
 } from "@/lib/matter-documents/ai-evidence";
+import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
 import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
 import {
   blockedResponseForLocale,
@@ -73,6 +74,7 @@ const widgetDirectRequestBodySchema = z.object({
 type ResponseLanguage = "en" | "zh";
 
 type LegalServiceResponse = {
+  customer_document_evidence_used?: boolean;
   trace_id?: string | null;
   answer?: string;
   response_language?: string | null;
@@ -216,6 +218,7 @@ function emptyWidgetResponse(
 ) {
   return Response.json({
     text,
+    customerDocumentEvidenceUsed: false,
     responseLanguage,
     citations: [],
     compactSources: [],
@@ -478,6 +481,12 @@ export async function POST(request: Request) {
     }
 
     const data = legalServiceResult.data;
+    const documentProvenance = acknowledgedCustomerDocumentProvenance(
+      customerDocumentManifest,
+      data.customer_document_evidence_used
+    );
+    const customerDocumentEvidenceUsed = documentProvenance.used;
+    const answeredCustomerDocumentManifest = documentProvenance.manifest;
     const finalResponseLanguage = normalizeResponseLanguage(
       data.response_language,
       responseLanguage
@@ -490,7 +499,10 @@ export async function POST(request: Request) {
       type: "metadata",
       compactSources,
       citations: normalizedCitations,
-      customerDocumentManifest,
+      customerDocumentEvidenceUsed,
+      ...(customerDocumentEvidenceUsed
+        ? { customerDocumentManifest: answeredCustomerDocumentManifest }
+        : {}),
       confidence: data.confidence ?? null,
       researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
@@ -579,8 +591,9 @@ export async function POST(request: Request) {
       responseLanguage: finalResponseLanguage,
       researchStatus: data.research_status ?? null,
       citations: normalizedCitations,
+      customerDocumentEvidenceUsed,
       customerDocumentSources: customerDocumentSources(
-        customerDocumentManifest
+        answeredCustomerDocumentManifest
       ),
       compactSources,
       userDisplayMode: data.user_display_mode ?? "general_with_warning",

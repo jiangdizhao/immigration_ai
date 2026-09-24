@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const MAX_SELECTED_DOCUMENTS = 4;
 export const MAX_EVIDENCE_UNITS_PER_DOCUMENT = 8;
 export const MAX_EVIDENCE_UNITS_TOTAL = 24;
@@ -12,6 +14,13 @@ export type CustomerDocumentUnit = {
   text: string;
   extractionMethod: string;
 };
+export type CustomerDocumentIncludedUnit = {
+  ordinal: number;
+  locator: CustomerDocumentLocator;
+  extractionMethod: string;
+  includedTextChars: number;
+  textSha256: string;
+};
 export type CustomerDocumentManifest = {
   documentId: string;
   runId: string;
@@ -22,11 +31,14 @@ export type CustomerDocumentManifest = {
   truncated: boolean;
   includedUnitOrdinals: number[];
   locators: CustomerDocumentLocator[];
+  includedUnits: CustomerDocumentIncludedUnit[];
 };
+export type CustomerDocumentEvidenceDocument = Omit<
+  CustomerDocumentManifest,
+  "includedUnits"
+> & { units: CustomerDocumentUnit[] };
 export type CustomerDocumentEvidence = {
-  documents: Array<
-    CustomerDocumentManifest & { units: CustomerDocumentUnit[] }
-  >;
+  documents: CustomerDocumentEvidenceDocument[];
 };
 export type MatterDocumentEvidenceInput = {
   documents: Array<{
@@ -99,6 +111,7 @@ export function buildBoundedMatterDocumentEvidence(
   manifest: CustomerDocumentManifest[];
 } {
   const evidence: CustomerDocumentEvidence = { documents: [] };
+  const manifest: CustomerDocumentManifest[] = [];
   const selectedCount = input.documents.length;
   const perDocumentUnitLimit = selectedCount
     ? Math.min(
@@ -158,7 +171,14 @@ export function buildBoundedMatterDocumentEvidence(
     if (!units.length) {
       throw new SelectedMatterDocumentError("not_ready");
     }
-    evidence.documents.push({
+    const includedUnits = units.map((unit) => ({
+      ordinal: unit.ordinal,
+      locator: unit.locator,
+      extractionMethod: unit.extractionMethod,
+      includedTextChars: unit.text.length,
+      textSha256: createHash("sha256").update(unit.text, "utf8").digest("hex"),
+    }));
+    const baseManifest = {
       documentId: item.document.id,
       runId: item.run.id,
       originalFilename: item.document.originalFilename,
@@ -168,13 +188,9 @@ export function buildBoundedMatterDocumentEvidence(
       truncated,
       includedUnitOrdinals: units.map((unit) => unit.ordinal),
       locators: units.map((unit) => unit.locator),
-      units,
-    });
+    };
+    evidence.documents.push({ ...baseManifest, units });
+    manifest.push({ ...baseManifest, includedUnits });
   }
-  return {
-    evidence,
-    manifest: evidence.documents.map(
-      ({ units: _units, ...manifest }) => manifest
-    ),
-  };
+  return { evidence, manifest };
 }

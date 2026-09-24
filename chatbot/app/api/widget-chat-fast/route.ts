@@ -20,6 +20,7 @@ import {
   customerDocumentSources,
   SelectedMatterDocumentError,
 } from "@/lib/matter-documents/ai-evidence";
+import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
 import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
 import {
   blockedResponseForLocale,
@@ -69,6 +70,7 @@ const requestSchema = z.object({
 
 type ResponseLanguage = "en" | "zh";
 type LegalServiceResponse = {
+  customer_document_evidence_used?: boolean;
   trace_id?: string | null;
   answer?: string;
   response_language?: string | null;
@@ -167,6 +169,7 @@ function emptyResponse(
 ) {
   return Response.json({
     text,
+    customerDocumentEvidenceUsed: false,
     responseLanguage,
     researchStatus: "incomplete",
     citations: [],
@@ -333,6 +336,12 @@ export async function POST(request: Request) {
     }
 
     const data = result.data as LegalServiceResponse;
+    const documentProvenance = acknowledgedCustomerDocumentProvenance(
+      customerDocumentManifest,
+      data.customer_document_evidence_used
+    );
+    const customerDocumentEvidenceUsed = documentProvenance.used;
+    const answeredCustomerDocumentManifest = documentProvenance.manifest;
     const finalLanguage = normalizeLanguage(
       data.response_language,
       responseLanguage
@@ -363,7 +372,10 @@ export async function POST(request: Request) {
       type: "metadata",
       compactSources,
       citations,
-      customerDocumentManifest,
+      customerDocumentEvidenceUsed,
+      ...(customerDocumentEvidenceUsed
+        ? { customerDocumentManifest: answeredCustomerDocumentManifest }
+        : {}),
       confidence: data.confidence ?? null,
       researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
@@ -434,8 +446,9 @@ export async function POST(request: Request) {
       responseLanguage: finalLanguage,
       researchStatus: data.research_status ?? "not_required",
       citations,
+      customerDocumentEvidenceUsed,
       customerDocumentSources: customerDocumentSources(
-        customerDocumentManifest
+        answeredCustomerDocumentManifest
       ),
       compactSources,
       userDisplayMode: data.user_display_mode ?? "general_with_warning",

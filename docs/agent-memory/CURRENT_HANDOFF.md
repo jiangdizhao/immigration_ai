@@ -660,3 +660,38 @@ Status: implemented locally for owner review. **Stage 3 is NOT ACCEPTED. P11-005
 - P11-006 is NOT STARTED. No appointment/calendar or booking implementation was added.
 
 NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-006 NOT STARTED. P11-005 NOT VERIFIED. NO COMMIT. NO PUSH.
+
+## P11-005 Stage 3 bounded post-push provenance correction
+
+Status:
+
+- Stage 3 provenance/security correction implemented on top of pushed HEAD `3d601080a4cd5c237594dd3756da036075922740`.
+- Stage 3 remains subject to direct GitHub source/security review; it is not accepted.
+- P11-005 is not verified. P11-006 has not started.
+
+Implemented:
+
+- The server-generated per-unit customer-document manifest records the exact clipped text length (`includedTextChars`) and SHA-256 (`textSha256`) for each AI-supplied unit, alongside ordinal, locator, and extraction method. It stores no document text, storage key, or URL; the digest metadata is not sent in the legal-service evidence packet.
+- Lawyer snapshots reload the exact owner/chat/document/run/unit, reconstruct only `extractedText.slice(0, includedTextChars)`, and validate identity, ordinal, locator, extraction method, clip length, and SHA-256 before quoting. Invalid, changed, mismatched, or legacy manifests without exact clip metadata fail closed with HTTP 409. The excerpt budget does not skip validation of later units.
+- Added `QueryResponse.customer_document_evidence_used` (default false). Fast, Premium, Default, and V2 set it only when a completed answer path consumed the bounded document context; provider/model and deterministic fallbacks report false.
+- All three widget routes persist and return `customerDocumentManifest` / `customerDocumentSources` only after an explicit legal-service `used=true` acknowledgement. Unused answers omit the manifest from assistant metadata. Conversation reload gates customer-document sources on the persisted acknowledgement.
+- Selected files clear after a successful answer only when there were no selected files or the service acknowledged usage. Otherwise the selection is retained and a bilingual warning says the files were not incorporated and can be retried.
+- V2 general answers receive the selected document context; selected-file greetings ask what the user wants reviewed and report unused. Document-selected V2 turns do not write contract-derived `known_facts` to durable `v2_known_facts`; explicit intake facts retain existing persistence behavior.
+- Document-selected V2 review traces retain only bounded document counts/length/truncation/usage metadata. The request evidence packet is removed, and raw contract/model output, contract facts, and document-derived legal trace are excluded. Experience Archive receives a QueryRequest with empty customer-document evidence.
+- Official citations and retrieval evidence remain separate from customer-document evidence. No schema migration was needed.
+
+Validation:
+
+- `chatbot/pnpm test:unit`: 258 passed, 0 failed, 0 skipped.
+- `chatbot/pnpm build`: passed, including production parser-worker bundling and Next.js TypeScript/build stages.
+- Changed-file Biome: passed for all 14 changed chatbot TypeScript/TSX files.
+- `chatbot/pnpm lint`: reports 21 repository diagnostics; none point to the changed chatbot files. Changed-file Biome passes.
+- `legal-service` full pytest: 1230 passed; 2 existing Pydantic deprecation warnings.
+- Focused legal-service provenance suites: 56 passed.
+- `git diff --check`: passed.
+- No OpenAI or AWS/S3 services were contacted. No migration was created or applied.
+
+Review boundary:
+
+- Stage 3 remains pending GitHub source/security review and is not marked accepted or verified.
+- No commit or push was made. P11-006 has not started.
