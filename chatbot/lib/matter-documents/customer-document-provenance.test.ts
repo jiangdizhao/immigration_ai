@@ -2,52 +2,84 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   acknowledgedCustomerDocumentProvenance,
+  customerDocumentSelectionAfterSubmission,
   persistedCustomerDocumentManifestForReload,
-  shouldClearSelectedDocuments,
 } from "./customer-document-provenance";
 
-test("only an explicit legal-service usage acknowledgement retains the manifest", () => {
-  const manifest = [{ documentId: "doc", runId: "run" }];
-  assert.deepEqual(acknowledgedCustomerDocumentProvenance(manifest, false), {
-    used: false,
-    manifest: [],
-  });
+const manifest = [{ documentId: "doc", runId: "run" }];
+
+test("ordinary submit with selected docs clears only after acknowledged use", () => {
   assert.deepEqual(
-    acknowledgedCustomerDocumentProvenance(manifest, undefined),
-    { used: false, manifest: [] }
+    customerDocumentSelectionAfterSubmission({
+      selectedCount: 1,
+      customerDocumentEvidenceUsed: true,
+      submissionKind: "message",
+    }),
+    { clearSelection: true, warnUnused: false }
   );
-  assert.deepEqual(acknowledgedCustomerDocumentProvenance(manifest, true), {
-    used: true,
-    manifest,
-  });
+  assert.deepEqual(
+    customerDocumentSelectionAfterSubmission({
+      selectedCount: 1,
+      customerDocumentEvidenceUsed: false,
+      submissionKind: "message",
+    }),
+    { clearSelection: false, warnUnused: true }
+  );
 });
 
-test("selection clears only with no selected files or acknowledged usage", () => {
-  assert.equal(
-    shouldClearSelectedDocuments({
-      selectedCount: 0,
-      customerDocumentEvidenceUsed: false,
-    }),
-    true
-  );
-  assert.equal(
-    shouldClearSelectedDocuments({
+test("guided-intake submit uses the same selected-document rule", () => {
+  assert.deepEqual(
+    customerDocumentSelectionAfterSubmission({
       selectedCount: 2,
       customerDocumentEvidenceUsed: true,
+      submissionKind: "guided_intake",
     }),
-    true
+    { clearSelection: true, warnUnused: false }
   );
-  assert.equal(
-    shouldClearSelectedDocuments({
+  assert.deepEqual(
+    customerDocumentSelectionAfterSubmission({
       selectedCount: 2,
       customerDocumentEvidenceUsed: false,
+      submissionKind: "guided_intake",
     }),
-    false
+    { clearSelection: false, warnUnused: true }
   );
 });
 
-test("conversation reload exposes only manifests persisted with a usage acknowledgement", () => {
-  const manifest = [{ documentId: "doc", runId: "run" }];
+test("political-gate blocks preserve selected docs without warning", () => {
+  assert.deepEqual(
+    customerDocumentSelectionAfterSubmission({
+      selectedCount: 2,
+      customerDocumentEvidenceUsed: true,
+      submissionKind: "political_block",
+    }),
+    { clearSelection: false, warnUnused: false }
+  );
+});
+
+test("manifest requires backend acknowledgement and preservation of its answer", () => {
+  assert.deepEqual(
+    acknowledgedCustomerDocumentProvenance(manifest, true, true),
+    { used: true, manifest }
+  );
+  // Forbidden-answer public replacement.
+  assert.deepEqual(
+    acknowledgedCustomerDocumentProvenance(manifest, true, false),
+    { used: false, manifest: [] }
+  );
+  // Empty-answer route fallback.
+  assert.deepEqual(
+    acknowledgedCustomerDocumentProvenance(manifest, true, false),
+    { used: false, manifest: [] }
+  );
+  // A backend false value always removes the manifest, even if its answer was preserved.
+  assert.deepEqual(
+    acknowledgedCustomerDocumentProvenance(manifest, false, true),
+    { used: false, manifest: [] }
+  );
+});
+
+test("conversation reload exposes only actually persisted used provenance", () => {
   assert.deepEqual(
     persistedCustomerDocumentManifestForReload(manifest, false),
     []

@@ -481,9 +481,11 @@ export async function POST(request: Request) {
     }
 
     const data = legalServiceResult.data;
+    const backendAnswerPreserved = Boolean(data.answer?.trim());
     const documentProvenance = acknowledgedCustomerDocumentProvenance(
       customerDocumentManifest,
-      data.customer_document_evidence_used
+      data.customer_document_evidence_used,
+      backendAnswerPreserved
     );
     const customerDocumentEvidenceUsed = documentProvenance.used;
     const answeredCustomerDocumentManifest = documentProvenance.manifest;

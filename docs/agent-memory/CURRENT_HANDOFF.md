@@ -695,3 +695,10 @@ Review boundary:
 
 - Stage 3 remains pending GitHub source/security review and is not marked accepted or verified.
 - No commit or push was made. P11-006 has not started.
+
+### P11-005 Stage 3 GitHub-review follow-up (2026-09-25)
+
+- Unified ordinary-message and guided-intake post-answer document selection handling. Both clear only when no file was selected or usage was acknowledged; otherwise they retain the submitted IDs and show the existing bilingual retry warning. Political-gate blocks preserve selection without warning. Conversation-switch clearing remains unchanged.
+- Default, Fast, and Premium widget routes now retain customer-document provenance only when the legal service acknowledged use and the backend answer was preserved. Default public-safety replacement and empty-answer fallbacks, plus Fast/Premium empty-answer fallbacks, omit the manifest and return `customerDocumentEvidenceUsed: false`.
+- Validation: `pnpm test:unit` 264 passed; `pnpm build` passed; changed-file Biome passed (8 files); `pnpm lint` reports 21 repository diagnostics with none in changed files; `git diff --check` passed.
+- No migration or external-service call. Stage 3 remains pending review; P11-005 is not verified and P11-006 has not started.

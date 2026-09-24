@@ -27,6 +27,7 @@ import {
   evaluateWidgetSubmission,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
+import { preservePublicAnswer } from "@/lib/public-answer-preservation";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
 
@@ -210,21 +211,6 @@ function fallbackText(
     : "Sorry, I could not generate a response right now.";
 }
 
-const FORBIDDEN_PUBLIC_ANSWER_PATTERNS = [
-  /retrieval_debug/i,
-  /proposal_first_verification_depth/i,
-  /CustomerAnswerPlan JSON/i,
-  /Original rich proposal JSON/i,
-  /Verification JSON:/i,
-  /raw_model_output/i,
-  /internal JSON/i,
-  /```json/i,
-];
-
-function hasForbiddenPublicAnswerText(text: string): boolean {
-  return FORBIDDEN_PUBLIC_ANSWER_PATTERNS.some((pattern) => pattern.test(text));
-}
-
 function firstRequestedFactPrompt(data: LegalServiceResponse): string | null {
   const prompt = data.interaction_plan?.requested_facts?.[0]?.prompt;
   return typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
@@ -265,11 +251,12 @@ One quick question: ${nextPrompt}`;
 function publicSafeText(
   data: LegalServiceResponse,
   responseLanguage: ResponseLanguage
-): string {
-  const text = fallbackText(data, responseLanguage);
-  return hasForbiddenPublicAnswerText(text)
-    ? publicFallbackAnswer(data, responseLanguage)
-    : text;
+): { text: string; preservedBackendAnswer: boolean } {
+  return preservePublicAnswer({
+    backendAnswer: data.answer,
+    emptyFallback: fallbackText(data, responseLanguage),
+    forbiddenFallback: publicFallbackAnswer(data, responseLanguage),
+  });
 }
 
 function normalizeNextAction(nextAction: string | null | undefined) {
@@ -925,17 +912,19 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     }
 
     const data = legalServiceResult.data;
-    const documentProvenance = acknowledgedCustomerDocumentProvenance(
-      customerDocumentManifest,
-      data.customer_document_evidence_used
-    );
-    const customerDocumentEvidenceUsed = documentProvenance.used;
-    const answeredCustomerDocumentManifest = documentProvenance.manifest;
     const finalResponseLanguage = normalizeResponseLanguage(
       data.response_language,
       responseLanguage
     );
-    const finalText = publicSafeText(data, finalResponseLanguage);
+    const publicAnswer = publicSafeText(data, finalResponseLanguage);
+    const documentProvenance = acknowledgedCustomerDocumentProvenance(
+      customerDocumentManifest,
+      data.customer_document_evidence_used,
+      publicAnswer.preservedBackendAnswer
+    );
+    const customerDocumentEvidenceUsed = documentProvenance.used;
+    const answeredCustomerDocumentManifest = documentProvenance.manifest;
+    const finalText = publicAnswer.text;
     const normalizedCitations = (data.citations ?? []).map((c) => ({
       source_id: c.source_id ?? null,
       title: c.title ?? "",

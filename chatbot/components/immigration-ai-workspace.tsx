@@ -18,7 +18,7 @@ import {
 } from "@/lib/assistant-mode";
 import { ChatbotError } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
-import { shouldClearSelectedDocuments } from "@/lib/matter-documents/customer-document-provenance";
+import { customerDocumentSelectionAfterSubmission } from "@/lib/matter-documents/customer-document-provenance";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -807,6 +807,24 @@ export function ImmigrationAIWorkspace({
     return (await response.json()) as WidgetRouteResponse;
   };
 
+  const handleDocumentSelectionAfterSubmission = (
+    submittedDocumentIds: string[],
+    customerDocumentEvidenceUsed: unknown,
+    submissionKind: "message" | "guided_intake" | "political_block"
+  ) => {
+    const result = customerDocumentSelectionAfterSubmission({
+      selectedCount: submittedDocumentIds.length,
+      customerDocumentEvidenceUsed,
+      submissionKind,
+    });
+    if (result.clearSelection) {
+      setSelectedDocumentIds([]);
+    } else if (result.warnUnused) {
+      setSelectedDocumentIds(submittedDocumentIds);
+      toast.warning(copy.documents.notUsed);
+    }
+  };
+
   const submitMessage = async (
     messageText: string,
     answerPreference: AnswerPreference = "answer_first"
@@ -816,6 +834,7 @@ export function ImmigrationAIWorkspace({
       return;
     }
 
+    const submittedDocumentIds = [...selectedDocumentIds];
     const nextUserMessage: WidgetMessage = {
       id: generateUUID(),
       role: "user",
@@ -832,6 +851,11 @@ export function ImmigrationAIWorkspace({
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
+      handleDocumentSelectionAfterSubmission(
+        [...selectedDocumentIds],
+        false,
+        "political_block"
+      );
       setStatus("ready");
       return;
     }
@@ -858,19 +882,15 @@ export function ImmigrationAIWorkspace({
         intakeFacts,
         {},
         answerPreference,
-        activeConversationId
+        activeConversationId,
+        submittedDocumentIds
       );
       await appendAssistantMessage(data, nextUserMessage.id);
-      if (
-        shouldClearSelectedDocuments({
-          selectedCount: selectedDocumentIds.length,
-          customerDocumentEvidenceUsed: data.customerDocumentEvidenceUsed,
-        })
-      ) {
-        setSelectedDocumentIds([]);
-      } else {
-        toast.warning(copy.documents.notUsed);
-      }
+      handleDocumentSelectionAfterSubmission(
+        submittedDocumentIds,
+        data.customerDocumentEvidenceUsed,
+        "message"
+      );
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -898,6 +918,7 @@ export function ImmigrationAIWorkspace({
       return;
     }
 
+    const submittedDocumentIds = [...selectedDocumentIds];
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
     const visibleText = buildGuidedIntakeDisplaySummary(
@@ -927,6 +948,11 @@ export function ImmigrationAIWorkspace({
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
+      handleDocumentSelectionAfterSubmission(
+        submittedDocumentIds,
+        false,
+        "political_block"
+      );
       setStatus("ready");
       return;
     }
@@ -954,10 +980,15 @@ export function ImmigrationAIWorkspace({
         mergedFacts,
         draftFacts,
         "answer_first",
-        activeConversationId
+        activeConversationId,
+        submittedDocumentIds
       );
       await appendAssistantMessage(data, visibleUserMessage.id);
-      setSelectedDocumentIds([]);
+      handleDocumentSelectionAfterSubmission(
+        submittedDocumentIds,
+        data.customerDocumentEvidenceUsed,
+        "guided_intake"
+      );
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
