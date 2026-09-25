@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | PLANNED |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — TASK PACKET FROZEN / STAGE 1 NEXT |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -381,3 +381,41 @@ No P11-007 runtime change, migration, Legal Service change, AWS/S3 operation, or
 D-040 remains in force: P11-005 is still **NOT VERIFIED** until P11-009 closes its deferred deployment/security gates.
 
 Next milestone: **P11-008 — Appointment / Consultation Workflow**. This documentation closure does not itself start P11-008 implementation.
+
+
+## P11-008 activation — 2026-09-25
+
+P11-007 is VERIFIED. P11-008 is now **ACTIVE** with authority document:
+
+`docs/agent-memory/tasks/P11-008.md`
+
+The appointment milestone will not simulate an external booking provider or expose invented availability. The accepted product model is:
+
+```text
+authenticated customer
+    ->
+consultation request + up to 3 preferred windows + timezone + method preference
+    ->
+admin triage / assignment to verified lawyer
+    ->
+assigned staff proposes one concrete slot + method/instructions
+    ->
+customer confirms OR requests rescheduling
+    ->
+confirmed consultation
+    ->
+staff completes or cancels
+```
+
+Authorization remains explicit:
+
+- customer: own consultation requests only;
+- admin: all consultation requests + assignment;
+- lawyer: only requests assigned to that lawyer;
+- appointment assignment does not grant matter-wide chat, MatterDocument, LawyerClarificationRequest, or Legal Service access.
+
+No VIP-only gate or consultation price is introduced in P11-008 because no approved commercial rule currently establishes one.
+
+No external calendar, payment, video, phone, office-location, or real-time-availability integration is assumed. A future provider adapter may be added only after a separate approved product/integration decision.
+
+Stage 1 may add an additive schema and the next generated migration artifact, but **must not apply any migration**. P11-005 migrations `0018`–`0021` also remain unapplied under D-040.

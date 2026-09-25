@@ -1002,3 +1002,102 @@ Carry-forward:
 - migrations `0018`–`0021` remain unapplied;
 - no AWS/S3, OpenAI, or Legal Service change was needed for this acceptance;
 - P11-008 is the next planned milestone and is **NOT STARTED** by this docs-only closure.
+
+
+## P11-008 planning activation — 2026-09-25
+
+**Status:** P11-008 ACTIVE / TASK PACKET FROZEN. Stage 1 is the next implementation unit.
+
+### Why P11-008 needs a new bounded domain
+
+At the P11-007 verified checkpoint `c507467444f4b5304150f71c9e8aa2354cdfd6e9`, appointment handling is still placeholder-level:
+
+- AI Workspace booking action only shows a toast and points toward the lawyer-review request;
+- Contact does not create a durable consultation request;
+- no appointment schema/API/history/staff scheduling workflow exists.
+
+P11-008 therefore introduces a separate consultation-scheduling domain rather than overloading `LawyerClarificationRequest`.
+
+### Frozen product model
+
+Use an internal request/proposal/confirmation workflow:
+
+- registered, verified, non-guest customer creates a consultation request;
+- customer supplies timezone, up to 3 preferred future windows, method preference, and an optional bounded note;
+- optional chat/lawyer-request linkage is derived and re-authorized server-side; client-supplied IDs never grant staff access;
+- admin can assign/unassign a verified lawyer;
+- assigned lawyer or admin can propose a concrete start/end time, method, and bounded meeting instructions;
+- customer can confirm the proposal, request rescheduling, or cancel;
+- assigned staff/admin can complete or cancel a confirmed request;
+- proposed/confirmed appointments for the same lawyer must not overlap; concurrency protection belongs in the server transaction layer.
+
+Baseline statuses:
+
+`requested -> proposed -> confirmed -> completed`
+
+With bounded side paths:
+
+- `proposed -> requested` for customer reschedule request;
+- `confirmed -> proposed` only when staff proposes a replacement slot requiring fresh customer confirmation;
+- `requested|proposed|confirmed -> cancelled`;
+- `completed|cancelled` terminal.
+
+### Security / continuity rules
+
+- appointment ownership is customer-scoped;
+- lawyer visibility is assignment-scoped;
+- appointment assignment never widens D-043 lawyer-request authority;
+- no full conversation, raw document, private object, or arbitrary Legal Service matter data is exposed through an appointment;
+- if linked to a chat, the server must prove ownership before storing the link and derive `legalMatterId` itself when available;
+- if linked to a lawyer request, the server must prove customer ownership; the link does not automatically make that request visible to an appointment-assigned lawyer;
+- meeting instructions are private to the customer and authorized staff, not public website content.
+
+### Commercial/provider boundary
+
+Do not invent:
+
+- consultation fee;
+- VIP requirement;
+- office hours;
+- available slots;
+- lawyer biographies/specialisations;
+- video provider;
+- meeting URL;
+- phone number;
+- office address.
+
+P11-008 may store staff-entered meeting instructions after a real proposal. It must not present those values as site-wide verified contact coordinates.
+
+### Internal stages
+
+**Stage 1 — Consultation domain foundation**
+- additive `ConsultationRequest` + `ConsultationEvent` schema;
+- generated next migration artifact only; do not apply;
+- pure state/access validators;
+- service transactions with optimistic state checks and immutable events;
+- same-lawyer overlap protection for proposed/confirmed slots;
+- customer/admin/assigned-lawyer typed APIs;
+- deterministic tests.
+
+**Stage 2 — Customer continuity**
+- `/consultations` customer history and `/consultations/[id]` detail;
+- bilingual create/request UI;
+- AI Workspace real booking entry replacing the placeholder toast;
+- Contact CTA and Client Portal continuity links;
+- confirm/reschedule/cancel;
+- mobile/desktop behavior.
+
+**Stage 3 — Staff scheduling + notification + acceptance**
+- admin scheduling queue/assignment;
+- assigned-lawyer appointment queue/detail;
+- propose/re-propose slot, method and instructions;
+- complete/cancel;
+- separate consultation notification adapter using existing email infrastructure, fail-neutral to the DB mutation;
+- end-to-end local acceptance in zh-CN/English and desktop/mobile.
+
+### Carry-forward
+
+- P11-005 remains NOT VERIFIED under D-040.
+- P11-009 remains responsible for AWS/staging and deferred P11-005 production gates.
+- No Legal Service change is expected for P11-008.
+- Do not apply migrations or deploy without explicit authorization.

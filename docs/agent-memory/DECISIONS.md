@@ -669,3 +669,36 @@ The accepted lawyer continuity package is the request itself plus its bounded im
 P11-007 may restructure and safely project that data for human usability, but must not silently widen the authorization model. Any future matter-wide staff workspace or generic document browsing requires a separate architecture/security decision.
 
 Official/legal evidence, AI analysis, customer-document evidence and lawyer advice must remain visibly separate in the lawyer UI.
+
+
+## D-044 — P11-008 uses a first-party request/proposal/confirmation workflow
+
+**Date:** 2026-09-25  
+**Status:** ACCEPTED
+
+P11-008 will implement a real appointment/consultation workflow without pretending that the repository already has an external calendar, real-time lawyer availability, verified office hours, consultation pricing, meeting-provider configuration, or public contact coordinates.
+
+The accepted model is:
+
+- a registered, verified, non-guest customer submits a consultation request with timezone, up to three preferred future windows, method preference, and an optional bounded note;
+- admin remains the assignment authority and may assign a verified lawyer;
+- the assigned lawyer or admin proposes a concrete slot and consultation method/instructions;
+- the customer explicitly confirms the proposal or requests rescheduling;
+- confirmed consultations can be completed or cancelled by authorized staff;
+- same-lawyer proposed/confirmed slot overlap must be rejected transactionally;
+- immutable consultation events record assignment and status/slot transitions.
+
+A new additive consultation schema is justified because `LawyerClarificationRequest` is an answer-review/handoff contract and does not model time-window negotiation or confirmed appointments. P11-008 must not overload that table.
+
+Authorization is independent and least-privilege:
+
+- customers see only their own consultation requests;
+- admins may manage all requests;
+- lawyers see only consultations assigned to them;
+- appointment assignment does not grant access to the customer's full chat history, MatterDocuments, unrelated lawyer requests, or arbitrary Legal Service matter data.
+
+Optional chat/lawyer-request continuity links must be ownership-checked and server-derived. They are references, not authorization capabilities.
+
+No consultation price, VIP-only entitlement, external calendar provider, video provider, office location, phone number, SLA, or real-time availability claim is introduced by this decision. Those require separate verified business/integration authority.
+
+Stage 1 may create the next additive migration artifact, but applying it to any database remains separately authorized.
