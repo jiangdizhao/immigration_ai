@@ -477,6 +477,20 @@ export async function getMatterDocumentProcessingEvidence(input: {
   return { document: access, run: latestAttempt, units };
 }
 
+export async function getConsultationUserIdentity(userId: string) {
+  const [identity] = await db
+    .select({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      emailVerifiedAt: user.emailVerifiedAt,
+    })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return identity ?? null;
+}
+
 export async function getUser(email: string): Promise<User[]> {
   try {
     return await db

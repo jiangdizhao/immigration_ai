@@ -565,6 +565,112 @@ export type ImmigrationConversation = InferSelectModel<
   typeof immigrationConversation
 >;
 
+export type ConsultationStatus =
+  | "requested"
+  | "proposed"
+  | "confirmed"
+  | "completed"
+  | "cancelled";
+
+export const consultationRequest = pgTable(
+  "ConsultationRequest",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    chatId: uuid("chatId").references(() => chat.id, { onDelete: "set null" }),
+    legalMatterId: varchar("legalMatterId", { length: 255 }),
+    lawyerClarificationRequestId: uuid(
+      "lawyerClarificationRequestId"
+    ).references(() => lawyerClarificationRequest.id, { onDelete: "set null" }),
+    status: varchar("status", {
+      enum: ["requested", "proposed", "confirmed", "completed", "cancelled"],
+    })
+      .notNull()
+      .default("requested"),
+    revision: integer("revision").notNull().default(1),
+    customerTimezone: varchar("customerTimezone", { length: 128 }).notNull(),
+    preferredWindows: json("preferredWindows").notNull(),
+    methodPreference: varchar("methodPreference", {
+      enum: ["video", "phone", "in_person", "no_preference"],
+    }).notNull(),
+    customerNote: varchar("customerNote", { length: 2000 }),
+    assignedLawyerUserId: uuid("assignedLawyerUserId").references(
+      () => user.id,
+      { onDelete: "set null" }
+    ),
+    assignedAt: timestamp("assignedAt"),
+    scheduledStartAt: timestamp("scheduledStartAt"),
+    scheduledEndAt: timestamp("scheduledEndAt"),
+    scheduledMethod: varchar("scheduledMethod", {
+      enum: ["video", "phone", "in_person", "other"],
+    }),
+    meetingInstructions: varchar("meetingInstructions", { length: 2000 }),
+    proposedAt: timestamp("proposedAt"),
+    confirmedAt: timestamp("confirmedAt"),
+    completedAt: timestamp("completedAt"),
+    cancelledAt: timestamp("cancelledAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    ownerStatusUpdatedIndex: index(
+      "ConsultationRequest_owner_status_updated_idx"
+    ).on(table.userId, table.status, table.updatedAt),
+    statusUpdatedIndex: index("ConsultationRequest_status_updated_idx").on(
+      table.status,
+      table.updatedAt
+    ),
+    lawyerStatusUpdatedIndex: index(
+      "ConsultationRequest_lawyer_status_updated_idx"
+    ).on(table.assignedLawyerUserId, table.status, table.updatedAt),
+    lawyerIntervalStatusIndex: index(
+      "ConsultationRequest_lawyer_interval_status_idx"
+    ).on(
+      table.assignedLawyerUserId,
+      table.scheduledStartAt,
+      table.scheduledEndAt,
+      table.status
+    ),
+  })
+);
+
+export type ConsultationRequest = InferSelectModel<typeof consultationRequest>;
+
+export const consultationEvent = pgTable(
+  "ConsultationEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    consultationRequestId: uuid("consultationRequestId")
+      .notNull()
+      .references(() => consultationRequest.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    actorRole: varchar("actorRole", {
+      enum: ["customer", "lawyer", "admin", "system"],
+    }).notNull(),
+    eventType: varchar("eventType", { length: 64 }).notNull(),
+    fromStatus: varchar("fromStatus", {
+      enum: ["requested", "proposed", "confirmed", "completed", "cancelled"],
+    }),
+    toStatus: varchar("toStatus", {
+      enum: ["requested", "proposed", "confirmed", "completed", "cancelled"],
+    }),
+    metadata: json("metadata").notNull().default({}),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    requestCreatedIndex: index("ConsultationEvent_request_created_idx").on(
+      table.consultationRequestId,
+      table.createdAt
+    ),
+  })
+);
+
+export type ConsultationEvent = InferSelectModel<typeof consultationEvent>;
+
 // Customer-provided matter files are private, untrusted evidence. Stage 1
 // stores only their original bytes and lifecycle metadata; it does not process
 // them or make them available to AI/lawyer workflows.

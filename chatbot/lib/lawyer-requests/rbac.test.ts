@@ -5,6 +5,7 @@ import {
   canLawyerAccessAssignedRequest,
   canManageLawyerAssignments,
   canManageLawyerRoles,
+  hasConsultationRequestTable,
 } from "./rbac";
 
 test("lawyer RBAC keeps staff access distinct from admin access", () => {
@@ -43,6 +44,11 @@ test("lawyer RBAC keeps staff access distinct from admin access", () => {
     }),
     true
   );
+});
+
+test("missing consultation table skips only consultation availability checks", () => {
+  assert.equal(hasConsultationRequestTable(null), false);
+  assert.equal(hasConsultationRequestTable('"ConsultationRequest"'), true);
 });
 
 test("customer replies are owner-bound and limited to requested information", () => {

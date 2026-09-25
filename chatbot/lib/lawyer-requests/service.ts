@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { guestRegex } from "@/lib/constants";
 import {
+  consultationRequest,
   immigrationAnswerTraceLink,
   lawyerClarificationEvent,
   lawyerClarificationLearningBridge,
@@ -14,7 +15,10 @@ import {
 } from "@/lib/db/schema";
 import type { StaffActor } from "./access";
 import { assignmentEventType } from "./admin-update";
-import { canLawyerAccessAssignedRequest } from "./rbac";
+import {
+  canLawyerAccessAssignedRequest,
+  hasConsultationRequestTable,
+} from "./rbac";
 import {
   type LawyerClarificationStatus,
   validateLawyerClarificationUpdate,
@@ -693,11 +697,13 @@ export function setManagedLawyerRole({
     throw new LawyerRequestDomainError("Administrator access required.", 403);
   }
   return db.transaction(async (tx) => {
+    // This shared User-row lock serializes demotion with consultation assignment.
     const [target] = await tx
       .select()
       .from(user)
       .where(eq(user.id, targetUserId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!target || target.role === "admin" || guestRegex.test(target.email)) {
       throw new LawyerRequestDomainError(
         "This account cannot be managed as a lawyer.",
@@ -724,9 +730,27 @@ export function setManagedLawyerRole({
           )
         )
         .limit(1);
-      if (activeAssignment) {
+      const [{ consultationRequestRelation }] = await tx.execute(
+        sql`SELECT to_regclass('public."ConsultationRequest"')::text AS "consultationRequestRelation"`
+      );
+      const [activeConsultation] = hasConsultationRequestTable(
+        consultationRequestRelation
+      )
+        ? await tx
+            .select({ id: consultationRequest.id })
+            .from(consultationRequest)
+            .where(
+              and(
+                eq(consultationRequest.assignedLawyerUserId, targetUserId),
+                ne(consultationRequest.status, "completed"),
+                ne(consultationRequest.status, "cancelled")
+              )
+            )
+            .limit(1)
+        : [];
+      if (activeAssignment || activeConsultation) {
         throw new LawyerRequestDomainError(
-          "Reassign or unassign active requests before demoting this lawyer.",
+          "Close or remove active assigned work before demoting this lawyer.",
           409
         );
       }

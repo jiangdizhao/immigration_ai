@@ -21,6 +21,12 @@ export function canManageLawyerRoles(role: string) {
   return role === "admin";
 }
 
+export function hasConsultationRequestTable(
+  relation: unknown
+): relation is string {
+  return typeof relation === "string" && relation.length > 0;
+}
+
 export function canCustomerReplyToLawyerRequest({
   ownerId,
   actorId,
