@@ -5,11 +5,13 @@ import { runLearningBridgeFailNeutral } from "@/lib/lawyer-requests/learning-bri
 import { notifyLawyerRequest } from "@/lib/lawyer-requests/notifications";
 import {
   getLawyerRequestNotificationTargets,
+  getLearningBridge,
   getStaffLawyerRequest,
   LawyerRequestDomainError,
   updateStaffRequest,
 } from "@/lib/lawyer-requests/service";
 import { isLawyerClarificationStatus } from "@/lib/lawyer-requests/status";
+import { projectLawyerDetailSource } from "@/lib/lawyer-workspace/projection";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
@@ -43,26 +45,35 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 404 }
     );
   }
-  if (
-    staff.role === "lawyer" &&
-    result.request.assignedLawyerUserId !== staff.id
-  ) {
+  if (staff.role !== "lawyer") {
+    return Response.json({ error: "Lawyer access required." }, { status: 403 });
+  }
+  if (result.request.assignedLawyerUserId !== staff.id) {
     return Response.json(
       { error: "This request is not assigned to you." },
       { status: 403 }
     );
   }
-  return Response.json({
-    ...result.request,
+  const bridge = await getLearningBridge(id);
+  const detail = projectLawyerDetailSource({
+    request: result.request,
     customerEmail: result.customerEmail,
     messages: result.messages,
+    learningBridge: bridge,
   });
+  if (!detail) {
+    return Response.json({ error: "Unable to load request." }, { status: 500 });
+  }
+  return Response.json({ ...detail, learningAvailable: Boolean(bridge) });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
   const staff = await requireLawyerStaff();
   if (staff instanceof Response) {
     return staff;
+  }
+  if (staff.role !== "lawyer") {
+    return Response.json({ error: "Lawyer access required." }, { status: 403 });
   }
   const id = (await context.params).id;
   if (!z.string().uuid().safeParse(id).success) {
@@ -123,10 +134,28 @@ export async function PATCH(request: Request, context: RouteContext) {
       });
     }
     const updated = await getStaffLawyerRequest(id);
+    if (!updated) {
+      return Response.json(
+        { error: "Lawyer request not found." },
+        { status: 404 }
+      );
+    }
+    const updatedBridge = await getLearningBridge(id);
+    const projected = projectLawyerDetailSource({
+      request: updated.request,
+      customerEmail: updated.customerEmail,
+      messages: updated.messages,
+      learningBridge: updatedBridge,
+    });
+    if (!projected) {
+      return Response.json(
+        { error: "Unable to load request." },
+        { status: 500 }
+      );
+    }
     return Response.json({
-      ...updated?.request,
-      customerEmail: updated?.customerEmail,
-      messages: updated?.messages ?? [],
+      ...projected,
+      learningAvailable: Boolean(updatedBridge),
     });
   } catch (error) {
     if (error instanceof LawyerRequestDomainError) {

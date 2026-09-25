@@ -1,10 +1,13 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
-import { LawyerPortalQueue } from "@/components/lawyer-portal-queue";
+import { LawyerWorkspaceQueue } from "@/components/lawyer-workspace-queue";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
+import { getLawyerWorkspacePageCopy } from "@/lib/lawyer-workspace/page-copy";
+import { getSiteLocaleFromCookie } from "@/lib/site-locale";
 
 export default function LawyerPortalPage() {
   return (
@@ -15,7 +18,17 @@ export default function LawyerPortalPage() {
 }
 
 async function LawyerPortalContent() {
+  const cookieStore = await cookies();
+  const copy = getLawyerWorkspacePageCopy(
+    getSiteLocaleFromCookie(
+      cookieStore
+        .getAll()
+        .map((item) => `${item.name}=${item.value}`)
+        .join("; ")
+    )
+  );
   const session = await auth();
+
   if (!session?.user || guestRegex.test(session.user.email ?? "")) {
     redirect("/login");
   }
@@ -30,19 +43,19 @@ async function LawyerPortalContent() {
           className="text-sm font-semibold text-sky-800 underline"
           href="/ai-workspace"
         >
-          Customer workspace
+          {copy.customerWorkspace}
         </Link>
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
           Staff service
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          Lawyer portal
+          {copy.workspaceTitle}
         </h1>
         <p className="mt-3 max-w-2xl text-slate-600">
-          Review only the customer requests assigned to you.
+          {copy.workspaceSubtitle}
         </p>
         <div className="mt-8">
-          <LawyerPortalQueue />
+          <LawyerWorkspaceQueue />
         </div>
       </main>
     </div>

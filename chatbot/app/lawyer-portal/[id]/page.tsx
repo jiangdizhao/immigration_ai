@@ -1,10 +1,13 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
-import { LawyerPortalDetail } from "@/components/lawyer-portal-detail";
+import { LawyerWorkspaceDetail } from "@/components/lawyer-workspace-detail";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
+import { getLawyerWorkspacePageCopy } from "@/lib/lawyer-workspace/page-copy";
+import { getSiteLocaleFromCookie } from "@/lib/site-locale";
 
 export default function LawyerPortalRequestPage({
   params,
@@ -23,7 +26,17 @@ async function LawyerPortalRequestContent({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const cookieStore = await cookies();
+  const copy = getLawyerWorkspacePageCopy(
+    getSiteLocaleFromCookie(
+      cookieStore
+        .getAll()
+        .map((item) => `${item.name}=${item.value}`)
+        .join("; ")
+    )
+  );
   const session = await auth();
+
   if (!session?.user || guestRegex.test(session.user.email ?? "")) {
     redirect("/login");
   }
@@ -38,12 +51,12 @@ async function LawyerPortalRequestContent({
           className="text-sm font-semibold text-sky-800 underline"
           href="/lawyer-portal"
         >
-          Back to lawyer portal
+          {copy.backToWorkspace}
         </Link>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight">
-          Assigned request
+          {copy.assignedRequest}
         </h1>
-        <LawyerPortalDetail id={(await params).id} />
+        <LawyerWorkspaceDetail id={(await params).id} />
       </main>
     </div>
   );

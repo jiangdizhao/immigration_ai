@@ -907,4 +907,31 @@ Frozen implementation direction:
 - responsive desktop/mobile and existing site locale;
 - no DB migration expected.
 
-P11-005 remains NOT VERIFIED. D-040 deferred production-readiness gates remain owned by P11-009 and must not be silently closed during P11-007.
+## P11-007 implementation — Lawyer Workspace Continuity — 2026-09-25
+
+**Status:** IMPLEMENTED / REVIEW_REQUIRED — uncommitted, unpushed
+**Branch:** `phase11-chinese-service-platform-ui-rebase`
+**HEAD:** `447b1240697888cef277c1320bc0d4492d1b5858`
+**Task packet:** `docs/agent-memory/tasks/P11-007.md`
+
+Implemented one major P11-007 work order without splitting it into sub-packets.
+
+Server-owned safe projections live under `chatbot/lib/lawyer-workspace/`: typed queue/detail shapes, 100-request queue bound, 180-character previews, explicit buckets/counts, bounded context/evidence/message projection, bilingual copy/page copy, and pure assigned-only access helpers.
+
+Presentation uses `lawyer-workspace-queue.tsx`, `lawyer-workspace-detail.tsx`, and `lawyer-workspace/detail-*.tsx`: assigned-only queue filters/counts, request header, customer question, AI answer under review, customer note, bounded handoff context, separated official/legal and customer-document evidence, chronological clarification thread, amber disposition rail, and secondary advanced learning feedback.
+
+API behavior: lawyer queue returns only the safe projection; detail requires lawyer plus assignment and returns the allowlisted view plus `learningAvailable`; PATCH preserves update/status/notification/learning semantics and returns safe projection. Learning input comes from the bridge row, not fabricated request fields.
+
+Security: unauthenticated/customer rejected; other-lawyer/unassigned rejected; admin remains on admin workflows; no chat/matter/document/trace/metadata expansion; no client-supplied authorization IDs.
+
+Projections expose only safe queue/detail fields. Raw snapshots never reach the browser. Context preserves role/order within 8 items. Evidence classes stay separate. Unknown snapshot kinds fail soft. Customer documents expose no storage keys/hashes/URLs/downloads.
+
+Thread remains chronological and bilingual with unchanged reply rules. Disposition exposes only status-valid actions while server validation remains authoritative. Learning feedback remains optional/secondary with no trace/artifact IDs.
+
+Raw JSON workflow removed. Legacy lawyer-portal components remain unused and unreferenced.
+
+Validation: `pnpm test:unit` **296 passed**; `pnpm build` **passed**; changed-file Biome **passed**; `git diff --check` **passed**; `pnpm lint` has no diagnostics in changed P11-007 files. No legal-service pytest, OpenAI, or AWS/S3 contact.
+
+**NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. NO LEGAL-SERVICE CHANGE. P11-005 PRODUCTION-READINESS GATES STILL DEFERRED TO P11-009. P11-005 NOT VERIFIED. P11-008 NOT STARTED. P11-009 NOT STARTED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-007 NOT ACCEPTED. P11-007 NOT VERIFIED. NO COMMIT. NO PUSH.**
+
+Immediate next action: owner/ChatGPT code review plus desktop/mobile zh-CN/English visual acceptance.
