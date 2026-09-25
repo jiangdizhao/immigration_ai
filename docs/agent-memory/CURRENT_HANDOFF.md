@@ -1221,3 +1221,93 @@ No:
 - MatterDocument authorization changes.
 
 P11-005 remains NOT VERIFIED under D-040. P11-009 retains the deferred P11-005 deployment/security gates.
+
+
+## P11-008 Stage 2 remote acceptance / Stage 3 activation — 2026-09-26
+
+**Authoritative P11-008 state:** ACTIVE. Stage 1 and Stage 2 source gates are accepted. Stage 3 staff scheduling + notifications is next. The migrated-DB/runtime gate remains deferred and migration 0022 remains unapplied.
+
+### Stage 2 remote checkpoint
+
+- branch: `phase11-chinese-service-platform-ui-rebase`;
+- accepted commit: `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`;
+- commit: `feat: add customer consultation continuity`;
+- parent: `c08260a0a398ca2685191e73d8a5f9ba7ea24ee7`;
+- direct GitHub comparison: one commit ahead, 28 files changed;
+- remote source review: PASS.
+
+The remote source preserves the reviewed R2 corrections: consultation history is hidden on load error; portal consultation access requires verified-customer eligibility without changing general Client Portal access; `schema_unavailable` and `verification_required` remain distinct; the new-request form is gated by authenticated consultation availability; matter booking CTA appears only when eligible/available; scheduled method and loading copy are complete; 409 refetch does not retry the mutation.
+
+Local validation recorded for the accepted Stage 2 implementation: 341 unit tests passed, build passed, changed-file Biome passed, `git diff --check` passed and `pnpm db:generate` reported no schema changes.
+
+### Stage 3 source scope
+
+Stage 3 now implements the staff half of the accepted first-party request/proposal/confirmation model.
+
+New UI routes should be:
+
+- `/admin-portal/consultations`
+- `/admin-portal/consultations/[id]`
+- `/lawyer-portal/consultations`
+- `/lawyer-portal/consultations/[id]`
+
+The existing `/lawyer-portal/[id]` route remains exclusively the P11-007 lawyer-review request detail route.
+
+Admin UI:
+
+- consultation queue/detail;
+- verified-lawyer assignment/unassignment only in `requested`;
+- slot/method/instructions proposal and re-proposal;
+- cancellation;
+- completion of confirmed consultations.
+
+Lawyer UI:
+
+- assigned-only queue/detail;
+- proposal/re-proposal;
+- cancellation;
+- completion of assigned confirmed consultations;
+- no assignment controls.
+
+Do not widen appointment assignment into matter-wide chat, document, lawyer-request or Legal Service access.
+
+### Stage 3 time-entry rule
+
+Staff proposal entry uses the staff browser/device timezone for `datetime-local` interpretation and sends an absolute ISO timestamp. The staff timezone must be shown explicitly. The resulting proposal must be displayed in the customer's persisted timezone; it may additionally be shown in the staff timezone.
+
+Do not implement fake availability, office hours or a free-slot calendar.
+
+### Stage 3 notifications
+
+Add a consultation-specific notification adapter and email template family over the existing SES infrastructure.
+
+Requirements:
+
+- separate types from lawyer-request notifications;
+- disabled by default behind a consultation-specific feature flag;
+- delivery failure is fail-neutral and cannot roll back a committed consultation transition;
+- notification calls happen after the database mutation succeeds;
+- email contains only generic event text and role-appropriate consultation link;
+- no note content, preferred-window details, chat/document evidence, legal facts, provider tokens or raw internal IDs beyond the request ID needed in the application path.
+
+A small bounded event set is enough: created->staff, assigned->lawyer, proposed->customer, customer confirm/reschedule/cancel->assigned lawyer or configured staff target as appropriate, staff cancel/complete->customer.
+
+### Stage 3 acceptance boundary
+
+Stage 3 source/UI acceptance may complete while 0022 remains unapplied. All staff pages must render a localized explicit unavailable state on the current database rather than claiming an empty queue.
+
+P11-008 overall cannot close until the separately authorized migrated-DB/runtime gate verifies:
+
+- migration 0022 execution in an approved disposable/migrated environment;
+- real customer creation;
+- admin assignment;
+- lawyer/admin proposal;
+- same-lawyer overlap conflict;
+- customer confirmation and reschedule;
+- cancellation/completion;
+- revision conflicts;
+- rollback/event atomicity;
+- notification failure does not roll back state;
+- desktop/mobile zh-CN/English customer/admin/lawyer visual workflow.
+
+Do not apply migrations to the authoritative local/staging/production database without explicit owner authorization.

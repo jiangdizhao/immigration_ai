@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGE 1 SOURCE ACCEPTED @ `8350615`; 0022 UNAPPLIED / DB GATE DEFERRED; STAGE 2 CUSTOMER CONTINUITY NEXT |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGE 1 SOURCE ACCEPTED @ `8350615`; STAGE 2 SOURCE ACCEPTED @ `2d91c17`; 0022 UNAPPLIED / DB GATE DEFERRED; STAGE 3 STAFF SCHEDULING + NOTIFICATIONS NEXT |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -478,3 +478,92 @@ Unrelated database failures must still surface; no broad database-error swallowi
 Stage 2 may reach **source/UI acceptance** while `0022` remains unapplied. Real create/confirm/reschedule/cancel E2E against PostgreSQL remains part of the deferred migrated-DB gate until a separately authorized disposable/migrated environment is available.
 
 Stage 3 remains separate and owns staff scheduling UI, consultation notifications and final customer/admin/lawyer E2E.
+
+
+## P11-008 Stage 2 source acceptance / Stage 3 plan — 2026-09-26
+
+Remote checkpoint `2d91c17a483c0fd30a434536f87b64bc7cf6fe94` is accepted for the P11-008 **Stage 2 source gate**.
+
+Stage 3 remains inside the same P11-008 task packet and has two internal gates:
+
+1. **Stage 3 source/UI gate** — admin/lawyer scheduling surfaces, consultation-specific notification adapter/templates, rollout compatibility and deterministic tests. No migration application.
+2. **P11-008 migrated-DB/runtime gate** — separately authorized disposable/migrated database execution of real assignment/proposal/confirmation/reschedule/cancel/complete flows, concurrency/rollback checks, notification fail-neutral smoke, and desktop/mobile zh-CN/English acceptance.
+
+### Stage 3 staff route direction
+
+Use distinct consultation routes so the existing P11-007 lawyer-review request URLs remain unambiguous:
+
+- admin queue: `/admin-portal/consultations`;
+- admin detail: `/admin-portal/consultations/[id]`;
+- lawyer queue: `/lawyer-portal/consultations`;
+- lawyer detail: `/lawyer-portal/consultations/[id]`.
+
+Do not repurpose `/lawyer-portal/[id]`, which remains the P11-007 LawyerClarificationRequest detail route.
+
+Admin capabilities must mirror the accepted Stage-1 state machine:
+
+- list/read all consultation requests;
+- assign/unassign a verified lawyer only while `requested`;
+- propose/re-propose a concrete future slot after assignment;
+- cancel non-terminal consultations;
+- complete only confirmed consultations.
+
+Lawyer capabilities remain assigned-only:
+
+- list/read only assigned consultations;
+- propose/re-propose an assigned request;
+- cancel an assigned non-terminal request;
+- complete an assigned confirmed request;
+- no self-assignment and no broader matter/document access.
+
+### Stage 3 scheduling UI
+
+Staff slot entry must not pretend to be live availability.
+
+Use a browser/device-timezone `datetime-local` input converted to an absolute ISO timestamp, with the staff device IANA timezone shown explicitly. Display the resulting proposal in the customer's stored timezone, and optionally the staff timezone, without inventing office hours or provider availability.
+
+Admin lawyer assignment should reuse existing verified lawyer-account authority. Existing `/api/admin/lawyers` may be reused and filtered to current `role=lawyer`; the consultation assignment API remains the final authority.
+
+All staff mutations send the current `expectedRevision`. On 409, do not retry automatically; refetch the latest consultation and show a localized conflict/review-latest message. A scheduling overlap may surface through the same bounded conflict UX.
+
+### Stage 3 rollout compatibility
+
+All new staff pages must remain usable before migration 0022 is applied:
+
+- authenticated admin/lawyer reaches the page;
+- consultation API 503 produces a localized schema-unavailable state;
+- no empty queue claim is shown for an unavailable schema;
+- existing P11-007 lawyer-review workspace and admin account/review features remain usable;
+- unrelated DB errors still surface.
+
+### Consultation notification boundary
+
+Create a consultation-specific notification contract. Do not overload `LawyerRequestNotification`.
+
+The notification layer must be **fail-neutral to the already committed database mutation**:
+
+```text
+DB transaction commits
+    ->
+notification attempt
+    ->
+delivery succeeds OR safely logs failure
+    ->
+API mutation result remains valid
+```
+
+Use the existing SES/auth-email infrastructure and a feature flag disabled by default. Do not include customer notes, preferred-window narratives, chat/document content, legal facts, private matter metadata, tokens or internal traces in email.
+
+A bounded event set is sufficient:
+
+- new consultation request -> optional configured staff triage mailbox;
+- admin assignment -> assigned lawyer;
+- staff proposal/re-proposal -> customer;
+- customer confirmation/reschedule/cancellation -> assigned lawyer when present, otherwise optional configured staff mailbox where appropriate;
+- staff cancellation/completion -> customer.
+
+Email should contain only generic event text and a role-appropriate application link.
+
+Stage 3 notifications do not imply a verified office email, phone, meeting provider or SLA. Configuration values remain deployment concerns.
+
+No external calendar, video provider, payment or pricing integration belongs in P11-008 Stage 3.

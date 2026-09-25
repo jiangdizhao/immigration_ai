@@ -131,7 +131,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
-- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stage 1 SOURCE ACCEPTED at `83506156546dcff2944b21edef16423a5b402d54`; migration `0022_first_slayback.sql` remains unapplied; migrated-DB transaction gate deferred; Stage 2 customer booking continuity is next.**
+- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stage 1 SOURCE ACCEPTED at `83506156546dcff2944b21edef16423a5b402d54`; Stage 2 CUSTOMER SOURCE ACCEPTED at `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`; migration `0022_first_slayback.sql` remains unapplied; migrated-DB transaction gate deferred; Stage 3 staff scheduling + notifications is next.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
@@ -316,3 +316,33 @@ P11-008 Stage 2 is now the next implementation unit: a customer-only Chinese-fir
 Stage 2 must remain rollout-compatible while `0022` is absent. Customer pages and existing portal surfaces must distinguish **consultation schema unavailable** from **zero consultations**; absence of the future table must not cause existing P11-006/P11-007 pages to 500 or falsely claim there are no consultation records.
 
 Stage 2 does not authorize migration application, staff scheduling UI, notifications, external calendar/video/phone integration, pricing, VIP-only booking, or Legal Service changes.
+
+
+### P11-008 Stage 2 source checkpoint / Stage 3 activation — 2026-09-26
+
+P11-008 Stage 2 **SOURCE GATE is ACCEPTED** at remote checkpoint `2d91c17a483c0fd30a434536f87b64bc7cf6fe94` (`feat: add customer consultation continuity`).
+
+Remote comparison against `c08260a0a398ca2685191e73d8a5f9ba7ea24ee7` is one clean commit with 28 Stage-2 files and no schema, migration or Legal Service drift.
+
+Accepted Stage 2 boundary:
+
+- Chinese-first bilingual customer routes `/consultations`, `/consultations/new`, and `/consultations/[id]`;
+- verified-customer page access and Stage-1 customer API authorization preserved;
+- exact `to_regclass('public."ConsultationRequest"')` rollout check after authentication/role authorization;
+- consistent HTTP 503 `consultation_schema_unavailable` contract across customer/admin/lawyer consultation APIs while 0022 is absent;
+- Client Portal distinguishes `available`, `schema_unavailable`, and `verification_required` without weakening existing P11-006 access;
+- consultation-unavailable state does not masquerade as an empty history;
+- AI Workspace and Client Portal continuity pass only an exact owned `chatId`; the browser never supplies trusted `legalMatterId`;
+- customer preferred-window input uses the browser-resolved IANA timezone with native `datetime-local` -> absolute ISO conversion;
+- customer status-valid confirm/reschedule/cancel actions use revision OCC; 409 refetches once and never retries the mutation;
+- customer surfaces never expose lawyer login identity;
+- Contact and ordinary-customer account navigation now reach the real consultation flow;
+- Stage 2 remained customer-only and did not start staff scheduling UI, notifications, provider integration, pricing, deployment, or Legal Service work.
+
+Recorded final local validation: **341 unit tests passed**, production build passed, changed-file Biome passed, `git diff --check` passed, and `pnpm db:generate` reported no schema changes.
+
+Migration `0022_first_slayback.sql` remains **NOT APPLIED**. Real customer create/confirm/reschedule/cancel execution and real PostgreSQL concurrency/rollback remain under the deferred **P11-008 migrated-DB transaction gate**.
+
+P11-008 Stage 3 is now the next source implementation unit: staff scheduling surfaces plus consultation-specific fail-neutral notification infrastructure. Stage 3 source/UI work may proceed without applying 0022, but all new staff surfaces must preserve the same explicit schema-unavailable behavior.
+
+P11-008 cannot be marked fully VERIFIED until a separately authorized migrated/disposable DB gate exercises the real transaction paths and the final customer/admin/lawyer workflow receives runtime/visual acceptance.

@@ -732,3 +732,28 @@ Continuity remains exact-reference and least-privilege. AI Workspace and Client 
 The initial time-entry UI uses browser-local `datetime-local` values with the browser-resolved IANA timezone displayed to the customer. It must not label browser-local times as a different arbitrary timezone. A future editable timezone selector requires a correct timezone-aware conversion layer.
 
 This decision does not authorize migration application, pricing, VIP-only booking, external calendar/video/phone providers, office hours, real-time availability claims, or Legal Service changes.
+
+
+## D-046 — P11-008 Stage 3 separates staff scheduling source work from the migrated-DB runtime gate
+
+**Date:** 2026-09-26  
+**Status:** ACCEPTED
+
+P11-008 Stage 2 source is accepted at `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`. Migration `0022_first_slayback.sql` remains intentionally unapplied.
+
+Stage 3 may proceed with staff scheduling UI and consultation-specific notification source work without applying 0022, provided rollout compatibility remains explicit.
+
+Staff consultation routes are distinct from P11-007 lawyer-review request routes:
+
+- `/admin-portal/consultations[/id]`;
+- `/lawyer-portal/consultations[/id]`.
+
+The existing `/lawyer-portal/[id]` remains a LawyerClarificationRequest detail route and must not become polymorphic.
+
+Admin authority follows the frozen Stage-1 state machine. Lawyer authority remains assigned-only. Appointment assignment never grants matter-wide conversation, MatterDocument, unrelated lawyer-request or Legal Service access.
+
+Staff proposal time entry uses the staff browser/device timezone and absolute ISO timestamps. UI must clearly distinguish customer preferred windows from staff-proposed times and must not represent preferences as live availability.
+
+Consultation notifications are a separate contract from lawyer-request notifications. They reuse the existing email transport but are disabled by default and fail-neutral after the database mutation commits. Email content is generic and contains no customer note, document/chat content, legal facts, private matter metadata, provider credentials or meeting-provider claims.
+
+Stage 3 source/UI acceptance is not the migrated-DB runtime acceptance. P11-008 overall verification requires a separately authorized disposable/migrated DB gate covering real transitions, concurrency/rollback and customer/admin/lawyer E2E.
