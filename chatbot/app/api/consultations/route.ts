@@ -1,4 +1,5 @@
 import { requireConsultationCustomer } from "@/lib/consultations/access";
+import { requireConsultationSchema } from "@/lib/consultations/schema-availability";
 import {
   ConsultationDomainError,
   createConsultation,
@@ -15,6 +16,10 @@ export async function GET() {
   if (actor instanceof Response) {
     return actor;
   }
+  const unavailable = await requireConsultationSchema();
+  if (unavailable) {
+    return unavailable;
+  }
   const records = await listCustomerConsultations(actor.id);
   return Response.json({
     consultations: await Promise.all(
@@ -27,6 +32,10 @@ export async function POST(request: Request) {
   const actor = await requireConsultationCustomer();
   if (actor instanceof Response) {
     return actor;
+  }
+  const unavailable = await requireConsultationSchema();
+  if (unavailable) {
+    return unavailable;
   }
   const parsed = createConsultationSchema.safeParse(
     await request.json().catch(() => null)

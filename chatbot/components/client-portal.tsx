@@ -22,6 +22,10 @@ import type {
   PortalMatterGroup,
   PortalTimestamp,
 } from "@/lib/client-portal/types";
+import {
+  consultationCreateHref,
+  consultationStatusLabel,
+} from "@/lib/consultations/customer-ui";
 
 function displayDate(value: PortalTimestamp, locale: string) {
   if (!value) {
@@ -66,13 +70,23 @@ function MatterDetails({
               {copy.lastActivity}: {displayDate(group.latestActivityAt, locale)}
             </p>
           </div>
-          <Link
-            className="inline-flex items-center gap-2 rounded-full bg-[#001736] px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-            href={aiWorkspaceHref(group.defaultContinuationChatId)}
-          >
-            {copy.continueWithAi}
-            <ArrowRight className="size-4" />
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {view.consultationState === "available" ? (
+              <Link
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-800 px-4 py-3 text-sm font-semibold text-cyan-950 hover:bg-cyan-50"
+                href={consultationCreateHref(group.defaultContinuationChatId)}
+              >
+                {copy.requestConsultation}
+              </Link>
+            ) : null}
+            <Link
+              className="inline-flex items-center gap-2 rounded-full bg-[#001736] px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              href={aiWorkspaceHref(group.defaultContinuationChatId)}
+            >
+              {copy.continueWithAi}
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
         </div>
         {group.matterSnapshotUnavailable ? (
           <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
@@ -447,6 +461,66 @@ export function ClientPortal() {
             </div>
           ))}
         </div>
+      ) : null}
+      {view ? (
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold text-[#001736]">
+              {copy.consultations}
+            </h2>
+            {view.consultationState === "available" ? (
+              <Link
+                className="text-sm font-semibold underline"
+                href="/consultations"
+              >
+                {copy.viewConsultations}
+              </Link>
+            ) : null}
+          </div>
+          {view.consultationState === "schema_unavailable" ? (
+            <output
+              aria-live="polite"
+              className="mt-3 block rounded-2xl bg-amber-50 p-4 text-sm text-amber-950"
+            >
+              {copy.consultationsUnavailable}
+            </output>
+          ) : view.consultationState === "verification_required" ? (
+            <output
+              aria-live="polite"
+              className="mt-3 block rounded-2xl bg-amber-50 p-4 text-sm text-amber-950"
+            >
+              {copy.consultationsVerificationRequired}
+            </output>
+          ) : view.consultations.length ? (
+            <ul className="mt-3 space-y-2">
+              {view.consultations.map((consultation) => (
+                <li
+                  className="flex flex-wrap justify-between gap-2 rounded-xl bg-slate-50 p-3 text-sm"
+                  key={consultation.consultationId}
+                >
+                  <span>
+                    {consultationStatusLabel(
+                      consultation.status,
+                      locale === "en" ? "en" : "zh-CN"
+                    )}{" "}
+                    ·{" "}
+                    {consultation.assigned ? copy.assignedYes : copy.assignedNo}
+                  </span>
+                  <span className="text-slate-600">
+                    {displayDate(
+                      consultation.scheduledStartAt ?? consultation.updatedAt,
+                      locale
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-slate-600">
+              {copy.noConsultations}
+            </p>
+          )}
+        </section>
       ) : null}
       {loading ? (
         <div

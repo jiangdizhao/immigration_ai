@@ -57,6 +57,12 @@ function portalDependencies(
       membershipTier: "vip",
       vipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
     }),
+    getConsultationCustomerIdentity: async () => ({
+      id: userId,
+      email: "person@example.test",
+      role: "user",
+      emailVerifiedAt: at(1),
+    }),
     getSubscription: async () => null,
     fetchMatter: async () => null,
     ...overrides,
@@ -861,4 +867,167 @@ test("only the expected document schema SQLSTATEs fail soft", async () => {
     );
     await assert.rejects(build, error);
   }
+});
+
+test("consultation-unavailable portal preserves other data and never reports zero", async () => {
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      getConsultationAvailability: async () => "unavailable",
+      listConsultations: () => {
+        return Promise.reject(new Error("must not query missing table"));
+      },
+    })
+  );
+  assert.equal(view.consultationState, "schema_unavailable");
+  assert.deepEqual(view.consultations, []);
+  assert.equal(view.summary.conversationCount, 1);
+  assert.equal(view.documentsAvailable, true);
+  assert.equal(view.membership.active, true);
+});
+
+test("Client Portal consultation summaries contain only safe fields", async () => {
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      getConsultationAvailability: async () => "available",
+      listConsultations: async () => [
+        {
+          consultationId: "request-id",
+          status: "proposed",
+          updatedAt: at(4),
+          scheduledStartAt: at(5),
+          scheduledEndAt: at(5),
+          assigned: true,
+        },
+      ],
+    })
+  );
+  assert.deepEqual(Object.keys(view.consultations[0]).sort(), [
+    "assigned",
+    "consultationId",
+    "scheduledEndAt",
+    "scheduledStartAt",
+    "status",
+    "updatedAt",
+  ]);
+  assert.equal(view.consultations[0].consultationId, "request-id");
+});
+
+test("verified customers may query consultation summaries when schema is available", async () => {
+  let identityReads = 0;
+  let availabilityReads = 0;
+  let consultationReads = 0;
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      getConsultationCustomerIdentity: () => {
+        identityReads += 1;
+        return Promise.resolve({
+          id: userId,
+          email: "person@example.test",
+          role: "user",
+          emailVerifiedAt: at(1),
+        });
+      },
+      getConsultationAvailability: () => {
+        availabilityReads += 1;
+        return Promise.resolve("available");
+      },
+      listConsultations: () => {
+        consultationReads += 1;
+        return Promise.resolve([]);
+      },
+    })
+  );
+  assert.equal(view.consultationState, "available");
+  assert.equal(identityReads, 1);
+  assert.equal(availabilityReads, 1);
+  assert.equal(consultationReads, 1);
+});
+
+test("unverified customers cannot trigger consultation availability or list reads while ordinary portal data remains", async () => {
+  let availabilityReads = 0;
+  let consultationReads = 0;
+  const document = {
+    id: "document-a",
+    userId,
+    chatId: "portal-chat",
+    legalMatterId: "portal-matter",
+    originalFilename: "identity.pdf",
+    mimeType: "application/pdf",
+    byteSize: 12,
+    processingStatus: "complete" as const,
+    securityStatus: "clean" as const,
+    createdAt: at(1),
+    updatedAt: at(2),
+  };
+  const request = {
+    id: "request-a",
+    userId,
+    chatId: "portal-chat",
+    legalMatterId: "portal-matter",
+    status: "pending",
+    assignedLawyerUserId: null,
+    customerLastViewedAt: null,
+    createdAt: at(1),
+    updatedAt: at(2),
+    reviewedAt: null,
+  };
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      getConsultationCustomerIdentity: async () => ({
+        id: userId,
+        email: "person@example.test",
+        role: "user",
+        emailVerifiedAt: null,
+      }),
+      getConsultationAvailability: () => {
+        availabilityReads += 1;
+        return Promise.resolve("available");
+      },
+      listConsultations: () => {
+        consultationReads += 1;
+        return Promise.resolve([]);
+      },
+      listDocuments: async () => [document] as never,
+      listLawyerRequests: async () => [request] as never,
+    })
+  );
+  assert.equal(view.consultationState, "verification_required");
+  assert.equal(view.consultations.length, 0);
+  assert.equal(availabilityReads, 0);
+  assert.equal(consultationReads, 0);
+  assert.equal(view.summary.conversationCount, 1);
+  assert.equal(view.summary.documentCount, 1);
+  assert.equal(view.summary.lawyerRequestCount, 1);
+  assert.equal(view.matterGroups[0].documents[0].documentId, "document-a");
+  assert.equal(view.matterGroups[0].lawyerRequests[0].requestId, "request-a");
+  assert.equal(view.membership.active, true);
+});
+
+test("verified customer schema unavailability is distinct from verification required", async () => {
+  const view = await buildClientPortalViewWithDependencies(
+    { userId, email: "person@example.test" },
+    "en",
+    portalDependencies({
+      getConsultationCustomerIdentity: () =>
+        Promise.resolve({
+          id: userId,
+          email: "person@example.test",
+          role: "user",
+          emailVerifiedAt: at(1),
+        }),
+      getConsultationAvailability: async () => "unavailable",
+      listConsultations: () =>
+        Promise.reject(new Error("must not query unavailable table")),
+    })
+  );
+  assert.equal(view.consultationState, "schema_unavailable");
+  assert.notEqual(view.consultationState, "verification_required");
 });

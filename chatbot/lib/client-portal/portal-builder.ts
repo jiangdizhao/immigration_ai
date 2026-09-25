@@ -1,4 +1,9 @@
+import {
+  type ConsultationUserIdentity,
+  customerAccessForIdentity,
+} from "@/lib/consultations/access-policy";
 import type {
+  getConsultationUserIdentity,
   getLiveVipSubscriptionForUser,
   getUserEntitlementById,
   listImmigrationConversations,
@@ -17,6 +22,7 @@ import {
 import type {
   ClientPortalView,
   PortalActivity,
+  PortalConsultationSummary,
   PortalMatterGroup,
 } from "./types";
 
@@ -70,6 +76,9 @@ export type ClientPortalDependencies = {
   getEntitlement: typeof getUserEntitlementById;
   getSubscription: typeof getLiveVipSubscriptionForUser;
   fetchMatter: (matterId: string) => Promise<unknown | null>;
+  getConsultationCustomerIdentity?: typeof getConsultationUserIdentity;
+  getConsultationAvailability?: () => Promise<"available" | "unavailable">;
+  listConsultations?: (userId: string) => Promise<PortalConsultationSummary[]>;
 };
 
 function attachRecordData(
@@ -187,6 +196,28 @@ export async function buildClientPortalViewWithDependencies(
     throw new ClientPortalRoleError();
   }
 
+  let consultationState: ClientPortalView["consultationState"] =
+    "verification_required";
+  let consultations: PortalConsultationSummary[] = [];
+  const consultationIdentity = dependencies.getConsultationCustomerIdentity
+    ? await dependencies.getConsultationCustomerIdentity(userId)
+    : null;
+  const consultationAccess = customerAccessForIdentity(
+    consultationIdentity as ConsultationUserIdentity | null
+  );
+  if (consultationAccess.allowed) {
+    const availability = dependencies.getConsultationAvailability
+      ? await dependencies.getConsultationAvailability()
+      : "unavailable";
+    if (availability === "available") {
+      consultationState = "available";
+      if (dependencies.listConsultations) {
+        consultations = await dependencies.listConsultations(userId);
+      }
+    } else {
+      consultationState = "schema_unavailable";
+    }
+  }
   const documents = projectPortalDocuments(documentResult.rows, {
     userId,
     chatIds,
@@ -270,6 +301,8 @@ export async function buildClientPortalViewWithDependencies(
       lawyerRequestCount: lawyerRequests.length,
     },
     documentsAvailable: documentResult.available,
+    consultationState,
+    consultations,
     membership,
     matterGroups: groups,
     recentActivity: recentActivity(groups),

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireConsultationStaff } from "@/lib/consultations/access";
+import { requireConsultationSchema } from "@/lib/consultations/schema-availability";
 import {
   ConsultationDomainError,
   cancelConsultation,
@@ -17,6 +18,10 @@ export async function GET(_request: Request, context: RouteContext) {
   const actor = await requireConsultationStaff(["lawyer"]);
   if (actor instanceof Response) {
     return actor;
+  }
+  const unavailable = await requireConsultationSchema();
+  if (unavailable) {
+    return unavailable;
   }
   const id = (await context.params).id;
   if (!uuid.safeParse(id).success) {
@@ -49,6 +54,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   const actor = await requireConsultationStaff(["lawyer"]);
   if (actor instanceof Response) {
     return actor;
+  }
+  const unavailable = await requireConsultationSchema();
+  if (unavailable) {
+    return unavailable;
   }
   const id = (await context.params).id;
   if (!uuid.safeParse(id).success) {

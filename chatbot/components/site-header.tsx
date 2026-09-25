@@ -50,6 +50,7 @@ function AccountMenu({
   email,
   isAdmin,
   isLawyer,
+  isCustomer,
   membershipTier,
   vipExpiresAt,
   activeVip,
@@ -61,6 +62,7 @@ function AccountMenu({
   email: string;
   isAdmin: boolean;
   isLawyer: boolean;
+  isCustomer: boolean;
   membershipTier: "free" | "vip";
   vipExpiresAt: string | null;
   activeVip: boolean;
@@ -120,6 +122,13 @@ function AccountMenu({
               href="/client-portal"
             >
               {copy.account.clientPortal}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        {isCustomer ? (
+          <DropdownMenuItem asChild>
+            <Link className="cursor-pointer" href="/consultations">
+              {copy.account.consultations}
             </Link>
           </DropdownMenuItem>
         ) : null}
@@ -188,6 +197,7 @@ export function SiteHeader() {
     status === "authenticated" && Boolean(sessionUser) && !isGuest;
   const isAdmin = isAuthenticated && sessionUser?.role === "admin";
   const isLawyer = isAuthenticated && sessionUser?.role === "lawyer";
+  const isCustomer = isAuthenticated && sessionUser?.role === "user";
   const email = sessionUser?.email ?? "";
   const [serverEntitlement, setServerEntitlement] = useState<{
     membershipTier: "free" | "vip";
@@ -287,6 +297,7 @@ export function SiteHeader() {
               email={email}
               expiredVip={expiredVip}
               isAdmin={isAdmin}
+              isCustomer={isCustomer}
               isLawyer={isLawyer}
               locale={locale}
               membershipTier={membershipTier}
@@ -369,6 +380,7 @@ export function SiteHeader() {
                 email={email}
                 expiredVip={expiredVip}
                 isAdmin={isAdmin}
+                isCustomer={isCustomer}
                 isLawyer={isLawyer}
                 locale={locale}
                 membershipTier={membershipTier}

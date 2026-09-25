@@ -9,6 +9,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
@@ -16,6 +17,7 @@ import {
   type AssistantMode,
   widgetRouteForAssistantMode,
 } from "@/lib/assistant-mode";
+import { consultationCreateHref } from "@/lib/consultations/customer-ui";
 import { ChatbotError } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import { customerDocumentSelectionAfterSubmission } from "@/lib/matter-documents/customer-document-provenance";
@@ -470,6 +472,7 @@ export function ImmigrationAIWorkspace({
   assistantMode?: AssistantMode;
 }) {
   const { locale } = useSiteLocale();
+  const router = useRouter();
   const copy = getWorkspaceCopy(locale);
   const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1003,12 +1006,8 @@ export function ImmigrationAIWorkspace({
       setSubmittedAt(null);
     }
   };
-  const handleBookConsultation = (responseLanguage?: string | null) => {
-    toast.info(
-      isZhLanguage(responseLanguage)
-        ? "如需进一步个案支持，请使用此答复下方的律师审阅请求。"
-        : "For case-specific support, use the lawyer review request shown with this answer."
-    );
+  const handleBookConsultation = (_responseLanguage?: string | null) => {
+    router.push(consultationCreateHref(conversationId));
   };
 
   const pendingElapsedMs = submittedAt === null ? 0 : progressNow - submittedAt;

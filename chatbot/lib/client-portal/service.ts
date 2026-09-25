@@ -1,5 +1,9 @@
 import "server-only";
+import { consultationSchemaAvailability } from "@/lib/consultations/schema-availability";
+import { listCustomerConsultations } from "@/lib/consultations/service";
+import { consultationRequestView } from "@/lib/consultations/views";
 import {
+  getConsultationUserIdentity,
   getLiveVipSubscriptionForUser,
   getUserEntitlementById,
   listImmigrationConversations,
@@ -30,6 +34,20 @@ const defaultDependencies: ClientPortalDependencies = {
   getEntitlement: getUserEntitlementById,
   getSubscription: getLiveVipSubscriptionForUser,
   fetchMatter: fetchOwnedMatterSnapshot,
+  getConsultationCustomerIdentity: getConsultationUserIdentity,
+  getConsultationAvailability: consultationSchemaAvailability,
+  listConsultations: async (userId) =>
+    (await listCustomerConsultations(userId)).map((record) => {
+      const item = consultationRequestView(record);
+      return {
+        consultationId: item.id,
+        status: item.status,
+        updatedAt: item.updatedAt,
+        scheduledStartAt: item.scheduledStartAt,
+        scheduledEndAt: item.scheduledEndAt,
+        assigned: item.assigned,
+      };
+    }),
 };
 
 export function buildClientPortalView(

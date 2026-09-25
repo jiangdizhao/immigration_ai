@@ -6,6 +6,7 @@ export const PUBLIC_ROUTES = {
   intelligence: "/intelligence",
   process: "/process",
   contact: "/contact",
+  consultationRequest: "/consultations/new",
 } as const;
 
 export const PUBLIC_SERVICE_IDS = [
@@ -547,15 +548,14 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       eyebrow: "咨询入口",
       title: "准备下一步咨询",
       description:
-        "您可以先使用 AI 工作台整理初步信息；如事项需要进一步专业判断，可从现有工作流程中提交律师查看请求。",
+        "您可以先使用 AI 工作台整理初步信息，也可以提交包含偏好时间的咨询请求，后续安排将另行确认。",
       aiCardTitle: "开始 AI 初步咨询",
       aiCardDescription:
         "适合先说明问题、整理背景，并逐步准备后续咨询所需的信息。",
       aiCta: "进入 AI 工作台",
-      lawyerCardTitle: "提交律师咨询需求",
-      lawyerCardDescription:
-        "从 AI 工作台开始；对于具体文件、风险或重要日期，可在现有流程中申请律师查看。",
-      lawyerCta: "开始提交需求",
+      lawyerCardTitle: "提交咨询请求",
+      lawyerCardDescription: "提交您偏好的时间段。最终安排将在后续确认。",
+      lawyerCta: "提交咨询请求",
       readinessEyebrow: "咨询准备",
       readinessTitle: "可以先准备这些信息",
       readinessDescription:
@@ -776,15 +776,15 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       eyebrow: "Consultation entry point",
       title: "Prepare for the next consultation step",
       description:
-        "Start in the AI workspace to organise initial information. If the matter needs professional judgement, the existing workflow can continue to a lawyer review request.",
+        "Start in the AI workspace to organise initial information. You can also submit a consultation request with preferred times for later confirmation.",
       aiCardTitle: "Start an AI initial consultation",
       aiCardDescription:
         "Explain your question, organise the background, and progressively prepare information for a later consultation.",
       aiCta: "Open AI workspace",
       lawyerCardTitle: "Submit a lawyer consultation request",
       lawyerCardDescription:
-        "Start in the AI workspace; for specific documents, risks, or important dates, request lawyer review through the existing workflow.",
-      lawyerCta: "Start a request",
+        "Submit your preferred times. The final arrangement will be confirmed later.",
+      lawyerCta: "Submit a consultation request",
       readinessEyebrow: "Consultation preparation",
       readinessTitle: "Information you can prepare first",
       readinessDescription:

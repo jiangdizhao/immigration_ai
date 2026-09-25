@@ -91,6 +91,15 @@ export type PortalMembership = {
   premiumAllowed: boolean;
 };
 
+export type PortalConsultationSummary = {
+  consultationId: string;
+  status: string;
+  updatedAt: PortalTimestamp;
+  scheduledStartAt: PortalTimestamp;
+  scheduledEndAt: PortalTimestamp;
+  assigned: boolean;
+};
+
 export type ClientPortalView = {
   account: { email: string };
   summary: {
@@ -100,6 +109,11 @@ export type ClientPortalView = {
     lawyerRequestCount: number;
   };
   documentsAvailable: boolean;
+  consultationState:
+    | "available"
+    | "schema_unavailable"
+    | "verification_required";
+  consultations: PortalConsultationSummary[];
   membership: PortalMembership;
   matterGroups: PortalMatterGroup[];
   recentActivity: PortalActivity[];

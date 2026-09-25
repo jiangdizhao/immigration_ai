@@ -105,7 +105,7 @@ export default function ContactPage() {
                     asChild
                     className="mt-6 h-11 rounded-full bg-[#9a6500] px-5 text-white shadow-lg shadow-amber-900/15 hover:bg-[#7a4f00]"
                   >
-                    <Link href={PUBLIC_ROUTES.aiWorkspace}>
+                    <Link href={PUBLIC_ROUTES.consultationRequest}>
                       {content.contact.lawyerCta}
                       <ArrowRight className="size-4" />
                     </Link>
