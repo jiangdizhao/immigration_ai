@@ -1,6 +1,9 @@
 "use client";
 
-import { getLawyerWorkspaceRoleLabel } from "@/lib/lawyer-workspace/copy";
+import {
+  formatLawyerWorkspaceDate,
+  getLawyerWorkspaceRoleLabel,
+} from "@/lib/lawyer-workspace/copy";
 import type { LawyerWorkspaceDetail } from "@/lib/lawyer-workspace/types";
 
 type Props = {
@@ -29,7 +32,8 @@ export function DetailThread({ detail, locale }: Props) {
           detail.messages.map((message) => (
             <div className="rounded-xl bg-slate-50 p-3" key={message.id}>
               <p className="text-xs font-semibold text-slate-500">
-                {getLawyerWorkspaceRoleLabel(message.authorRole, locale)}
+                {getLawyerWorkspaceRoleLabel(message.authorRole, locale)} ·{" "}
+                {formatLawyerWorkspaceDate(message.createdAt, locale)}
               </p>
               <p className="mt-1 break-words text-sm">{message.body}</p>
             </div>

@@ -10,7 +10,24 @@ import {
   getLawyerWorkspaceRoleLabel,
   getLawyerWorkspaceStatusLabel,
 } from "./copy";
-import { availableLawyerActions } from "./types";
+import {
+  availableLawyerActions,
+  canProvideLawyerLearningFeedback,
+} from "./types";
+
+test("assistant mode never exposes unknown internal strings", () => {
+  assert.equal(
+    getLawyerWorkspaceAssistantLabel("default", "zh-CN"),
+    "标准法律核查"
+  );
+  assert.equal(getLawyerWorkspaceAssistantLabel("premium", "en"), "Premium");
+  assert.equal(getLawyerWorkspaceAssistantLabel("vip", "zh-CN"), "暂不可用");
+  assert.equal(getLawyerWorkspaceAssistantLabel(null, "en"), "Unavailable");
+  assert.equal(
+    getLawyerWorkspaceAssistantLabel("internal-mode", "en"),
+    "Unavailable"
+  );
+});
 
 test("status, bucket, assistant, and role copy has no raw enum fallback", () => {
   assert.equal(getLawyerWorkspaceStatusLabel("pending", "zh-CN"), "待处理");
@@ -41,6 +58,18 @@ test("status, bucket, assistant, and role copy has no raw enum fallback", () => 
   );
 });
 
+test("learning feedback is available before the first confirm or correct", () => {
+  assert.equal(canProvideLawyerLearningFeedback("pending"), true);
+  assert.equal(canProvideLawyerLearningFeedback("in_review"), true);
+  assert.equal(
+    canProvideLawyerLearningFeedback("needs_more_information"),
+    false
+  );
+  assert.equal(canProvideLawyerLearningFeedback("confirmed"), false);
+  assert.equal(canProvideLawyerLearningFeedback("corrected"), false);
+  assert.equal(canProvideLawyerLearningFeedback("closed"), false);
+});
+
 test("status workflow keeps server-validated disposition boundaries", () => {
   assert.equal(canTransitionLawyerClarification("pending", "in_review"), true);
   assert.equal(canTransitionLawyerClarification("confirmed", "closed"), true);
@@ -54,6 +83,17 @@ test("status workflow keeps server-validated disposition boundaries", () => {
     "closed",
   ]);
   assert.deepEqual(availableLawyerActions("closed"), []);
+});
+
+test("clarification timestamps format without raw values", () => {
+  assert.equal(formatLawyerWorkspaceDate(null, "zh-CN"), "—");
+  assert.equal(formatLawyerWorkspaceDate("not-a-date", "en"), "—");
+  assert.ok(
+    formatLawyerWorkspaceDate("2026-09-02T00:00:00.000Z", "en").length > 4
+  );
+  assert.ok(
+    formatLawyerWorkspaceDate("2026-09-02T00:00:00.000Z", "zh-CN").length > 4
+  );
 });
 
 test("date, URL, email, and locator values format without raw JSON", () => {

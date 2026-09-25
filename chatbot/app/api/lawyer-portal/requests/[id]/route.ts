@@ -11,7 +11,13 @@ import {
   updateStaffRequest,
 } from "@/lib/lawyer-requests/service";
 import { isLawyerClarificationStatus } from "@/lib/lawyer-requests/status";
+import {
+  type LawyerWorkspaceActor,
+  lawyerDetailAccessForActor,
+  lawyerQueueAccessForActor,
+} from "@/lib/lawyer-workspace/access";
 import { projectLawyerDetailSource } from "@/lib/lawyer-workspace/projection";
+import { canProvideLawyerLearningFeedback } from "@/lib/lawyer-workspace/types";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
@@ -34,6 +40,18 @@ export async function GET(_request: Request, context: RouteContext) {
   if (staff instanceof Response) {
     return staff;
   }
+  const queueActor: LawyerWorkspaceActor = {
+    authenticated: true,
+    role: staff.role,
+    id: staff.id,
+  };
+  const queueAccess = lawyerQueueAccessForActor(queueActor);
+  if (!queueAccess.allowed) {
+    return Response.json(
+      { error: queueAccess.error },
+      { status: queueAccess.status }
+    );
+  }
   const id = (await context.params).id;
   if (!z.string().uuid().safeParse(id).success) {
     return Response.json({ error: "Invalid request ID." }, { status: 400 });
@@ -45,13 +63,19 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 404 }
     );
   }
-  if (staff.role !== "lawyer") {
-    return Response.json({ error: "Lawyer access required." }, { status: 403 });
-  }
-  if (result.request.assignedLawyerUserId !== staff.id) {
+  const detailActor: LawyerWorkspaceActor = {
+    authenticated: true,
+    role: staff.role,
+    id: staff.id,
+  };
+  const detailAccess = lawyerDetailAccessForActor(
+    detailActor,
+    result.request.assignedLawyerUserId
+  );
+  if (!detailAccess.allowed) {
     return Response.json(
-      { error: "This request is not assigned to you." },
-      { status: 403 }
+      { error: detailAccess.error },
+      { status: detailAccess.status }
     );
   }
   const bridge = await getLearningBridge(id);
@@ -64,7 +88,10 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!detail) {
     return Response.json({ error: "Unable to load request." }, { status: 500 });
   }
-  return Response.json({ ...detail, learningAvailable: Boolean(bridge) });
+  return Response.json({
+    ...detail,
+    learningAvailable: canProvideLawyerLearningFeedback(detail.request.status),
+  });
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -72,8 +99,17 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (staff instanceof Response) {
     return staff;
   }
-  if (staff.role !== "lawyer") {
-    return Response.json({ error: "Lawyer access required." }, { status: 403 });
+  const queueActor: LawyerWorkspaceActor = {
+    authenticated: true,
+    role: staff.role,
+    id: staff.id,
+  };
+  const queueAccess = lawyerQueueAccessForActor(queueActor);
+  if (!queueAccess.allowed) {
+    return Response.json(
+      { error: queueAccess.error },
+      { status: queueAccess.status }
+    );
   }
   const id = (await context.params).id;
   if (!z.string().uuid().safeParse(id).success) {
@@ -140,6 +176,21 @@ export async function PATCH(request: Request, context: RouteContext) {
         { status: 404 }
       );
     }
+    const updatedDetailActor: LawyerWorkspaceActor = {
+      authenticated: true,
+      role: staff.role,
+      id: staff.id,
+    };
+    const updatedDetailAccess = lawyerDetailAccessForActor(
+      updatedDetailActor,
+      updated.request.assignedLawyerUserId
+    );
+    if (!updatedDetailAccess.allowed) {
+      return Response.json(
+        { error: updatedDetailAccess.error },
+        { status: updatedDetailAccess.status }
+      );
+    }
     const updatedBridge = await getLearningBridge(id);
     const projected = projectLawyerDetailSource({
       request: updated.request,
@@ -155,7 +206,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     return Response.json({
       ...projected,
-      learningAvailable: Boolean(updatedBridge),
+      learningAvailable: canProvideLawyerLearningFeedback(
+        projected.request.status
+      ),
     });
   } catch (error) {
     if (error instanceof LawyerRequestDomainError) {

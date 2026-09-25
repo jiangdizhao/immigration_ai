@@ -51,6 +51,11 @@ export function availableLawyerActions(
   return [];
 }
 
+export function canProvideLawyerLearningFeedback(status: string): boolean {
+  const actions = availableLawyerActions(status);
+  return actions.includes("confirmed") || actions.includes("corrected");
+}
+
 export type LawyerWorkspaceMessage = {
   id: string;
   authorRole: "customer" | "lawyer" | "admin" | "unsupported";

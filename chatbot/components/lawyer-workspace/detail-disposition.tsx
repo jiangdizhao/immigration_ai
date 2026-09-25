@@ -21,6 +21,8 @@ type Props = {
 
 export function DetailDisposition(props: Props) {
   const chinese = props.locale !== "en";
+  const storedApproach = props.approach.trim();
+  const hasStoredFeedback = storedApproach.length > 0 || props.createCandidate;
   return (
     <section className="rounded-2xl border border-amber-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-950">
@@ -76,9 +78,32 @@ export function DetailDisposition(props: Props) {
                 : "Create a reasoning lesson candidate"}
             </label>
           </>
+        ) : hasStoredFeedback ? (
+          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+            <p className="break-words">
+              {chinese ? "已保存的策略备注" : "Saved strategy note"} ·{" "}
+              {storedApproach || "—"}
+            </p>
+            <p className="mt-1">
+              {props.createCandidate
+                ? chinese
+                  ? "已创建推理课程候选"
+                  : "Reasoning lesson candidate requested"
+                : chinese
+                  ? "未创建推理课程候选"
+                  : "No reasoning lesson candidate"}
+            </p>
+            <p className="mt-1 text-slate-500">
+              {chinese
+                ? "当前状态不可再创建新的学习反馈。"
+                : "Learning feedback cannot be created again in this state."}
+            </p>
+          </div>
         ) : (
           <p className="mt-2 text-xs text-slate-500">
-            {chinese ? "暂无学习反馈。" : "Learning feedback unavailable."}
+            {chinese
+              ? "当前状态不可创建学习反馈。"
+              : "Learning feedback is unavailable in this state."}
           </p>
         )}
       </div>

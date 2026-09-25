@@ -935,3 +935,21 @@ Validation: `pnpm test:unit` **296 passed**; `pnpm build` **passed**; changed-fi
 **NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. NO LEGAL-SERVICE CHANGE. P11-005 PRODUCTION-READINESS GATES STILL DEFERRED TO P11-009. P11-005 NOT VERIFIED. P11-008 NOT STARTED. P11-009 NOT STARTED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-007 NOT ACCEPTED. P11-007 NOT VERIFIED. NO COMMIT. NO PUSH.**
 
 Immediate next action: owner/ChatGPT code review plus desktop/mobile zh-CN/English visual acceptance.
+
+## P11-007 bounded post-push correction — 2026-09-25
+
+**HEAD verified:** `d7f4cca2b589a1e0d19411ac2cab59a1c9cacd71`
+**Worktree at start:** clean
+**Status now:** uncommitted, unpushed correction only
+
+- Fixed inverted learning availability. `learningAvailable` now derives from request status through `canProvideLawyerLearningFeedback()`: pending/in_review allow feedback before the first confirm/correct; needs_more_information/confirmed/corrected/closed do not imply a new bridge can be created. Bridge creation semantics unchanged.
+- Existing bridge values still project safely when present. Before creation the UI starts from empty defaults and submits the existing PATCH fields unchanged.
+- Finalized statuses show either a read-only saved-feedback summary or an unavailable-state message. No bridge-update API added.
+- Lawyer queue/detail routes now share `lawyerQueueAccessForActor()` / `lawyerDetailAccessForActor()`. Lawyer queue returns assigned-only results; unauthenticated gets 401; customer and admin get 403. Admin remains on the existing admin workflow.
+- Clarification thread renders bilingual role, bounded body, and bounded localized timestamp for every message. Invalid timestamps show `—`.
+- Detail header now includes customer email, status, assistant mode, linked matter, created, updated, reviewed, and closed timestamps where available. Unknown assistant modes show Unavailable / 暂不可用.
+- Status machine unchanged. Snapshot remains continuity authority. No matter/chat/document/trace/artifact expansion.
+
+**Validation:** unit 301 passed; build passed; repository lint has 21 baseline errors with none in changed P11-007 files; changed-file Biome passed; diff check passed. No legal-service pytest, OpenAI, or AWS/S3 contact.
+
+**NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. NO LEGAL-SERVICE CHANGE. P11-005 NOT VERIFIED. P11-008 NOT STARTED. P11-009 NOT STARTED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-007 NOT ACCEPTED. P11-007 NOT VERIFIED. NO COMMIT. NO PUSH.**

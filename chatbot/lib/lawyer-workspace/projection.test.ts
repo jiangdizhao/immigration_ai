@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  formatLawyerWorkspaceDate,
+  getLawyerWorkspaceAssistantLabel,
+} from "./copy";
+import {
   projectLawyerContextItems,
   projectLawyerDetailSource,
   projectLawyerEvidence,
@@ -96,6 +100,58 @@ test("evidence classes remain separate and private fields do not leak", () => {
 });
 
 test("learning feedback remains secondary and hides internal artifact IDs", () => {
+  const pendingWithoutBridge = projectLawyerDetailSource({
+    request: {
+      id: "request-pending",
+      status: "pending",
+      assistantMode: "default",
+      legalMatterId: null,
+      questionSnapshot: "Question?",
+      answerSnapshot: "Answer.",
+      contextSnapshot: [],
+      evidenceSnapshot: [],
+      customerNote: null,
+      lawyerResponse: null,
+      correctedAnswer: null,
+    },
+    customerEmail: "customer@example.test",
+    messages: [],
+  });
+  assert.ok(pendingWithoutBridge);
+  assert.equal(
+    pendingWithoutBridge?.lawyerDisposition
+      .preferredReasoningOrResearchApproach,
+    null
+  );
+  assert.equal(
+    pendingWithoutBridge?.lawyerDisposition.createReasoningLessonCandidate,
+    false
+  );
+
+  const inReviewWithoutBridge = projectLawyerDetailSource({
+    request: {
+      id: "request-review",
+      status: "in_review",
+      assistantMode: "premium",
+      legalMatterId: null,
+      questionSnapshot: "Question?",
+      answerSnapshot: "Answer.",
+      contextSnapshot: [],
+      evidenceSnapshot: [],
+      customerNote: null,
+      lawyerResponse: null,
+      correctedAnswer: null,
+    },
+    customerEmail: "customer@example.test",
+    messages: [],
+  });
+  assert.ok(inReviewWithoutBridge);
+  assert.equal(
+    inReviewWithoutBridge?.lawyerDisposition
+      .preferredReasoningOrResearchApproach,
+    null
+  );
+
   const withBridge = projectLawyerDetailSource({
     request: {
       id: "request-1",
@@ -160,6 +216,20 @@ test("learning feedback remains secondary and hides internal artifact IDs", () =
   );
 });
 
+test("confirm PATCH still carries the existing learning contract", () => {
+  const payload = {
+    status: "corrected",
+    lawyerResponse: "Checked and corrected.",
+    correctedAnswer: "Corrected legal answer.",
+    preferredReasoningOrResearchApproach: "Keep procedure notes.",
+    createReasoningLessonCandidate: true,
+  };
+  const serialized = JSON.stringify(payload);
+  assert.ok(serialized.includes("preferredReasoningOrResearchApproach"));
+  assert.ok(serialized.includes("createReasoningLessonCandidate"));
+  assert.equal(payload.status, "corrected");
+});
+
 test("long locators and quotes stay bounded and safe", () => {
   const projected = projectLawyerEvidence([
     {
@@ -188,6 +258,61 @@ test("long locators and quotes stay bounded and safe", () => {
   assert.ok(projected.customerDocuments[0].quote.length <= 2000);
   const serialized = JSON.stringify(projected);
   assert.equal(serialized.includes("deep"), false);
+});
+
+test("unknown assistant modes use the safe unavailable marker", () => {
+  const unknownMode = projectLawyerDetailSource({
+    request: {
+      id: "request-unknown-mode",
+      status: "pending",
+      assistantMode: "internal-mode",
+      legalMatterId: null,
+      questionSnapshot: "Question?",
+      answerSnapshot: "Answer.",
+      contextSnapshot: [],
+      evidenceSnapshot: [],
+      customerNote: null,
+      lawyerResponse: null,
+      correctedAnswer: null,
+    },
+    customerEmail: "customer@example.test",
+    messages: [],
+  });
+  assert.equal(unknownMode?.request.assistantMode, "internal-mode");
+  assert.equal(
+    getLawyerWorkspaceAssistantLabel(
+      unknownMode?.request.assistantMode ?? null,
+      "zh-CN"
+    ),
+    "暂不可用"
+  );
+
+  const missingHeaderDates = projectLawyerDetailSource({
+    request: {
+      id: "request-bad-dates",
+      status: "pending",
+      assistantMode: "default",
+      legalMatterId: null,
+      questionSnapshot: "Question?",
+      answerSnapshot: "Answer.",
+      contextSnapshot: [],
+      evidenceSnapshot: [],
+      customerNote: null,
+      lawyerResponse: null,
+      correctedAnswer: null,
+      createdAt: "not-a-date",
+      reviewedAt: 123,
+    },
+    customerEmail: "customer@example.test",
+    messages: [],
+  });
+  assert.equal(
+    formatLawyerWorkspaceDate(
+      missingHeaderDates?.request.reviewedAt ?? null,
+      "zh-CN"
+    ),
+    "—"
+  );
 });
 
 test("messages remain chronological and detail hides raw snapshots", () => {
@@ -219,12 +344,22 @@ test("messages remain chronological and detail hides raw snapshots", () => {
         body: "First question",
         createdAt: "2026-09-01T00:00:00.000Z",
       },
+      {
+        id: "message-3",
+        authorRole: "lawyer",
+        body: "Message with bad timestamp",
+        createdAt: "not-a-date",
+      },
     ],
   });
   assert.ok(detail);
   assert.deepEqual(
     detail?.messages.map((message) => message.id),
-    ["message-1", "message-2"]
+    ["message-1", "message-2", "message-3"]
+  );
+  assert.equal(
+    formatLawyerWorkspaceDate(detail?.messages[2].createdAt ?? null, "en"),
+    "—"
   );
   const detailJson = JSON.stringify(detail);
   assert.equal(detailJson.includes("contextSnapshot"), false);
