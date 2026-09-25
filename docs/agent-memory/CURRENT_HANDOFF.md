@@ -1101,3 +1101,123 @@ P11-008 may store staff-entered meeting instructions after a real proposal. It m
 - P11-009 remains responsible for AWS/staging and deferred P11-005 production gates.
 - No Legal Service change is expected for P11-008.
 - Do not apply migrations or deploy without explicit authorization.
+
+
+## P11-008 Stage 1 source acceptance / Stage 2 activation — 2026-09-26
+
+**Authoritative P11-008 status:** ACTIVE. Stage 1 source gate accepted; Stage 2 customer continuity is next.
+
+### Accepted Stage 1 checkpoint
+
+- branch: `phase11-chinese-service-platform-ui-rebase`;
+- remote checkpoint: `83506156546dcff2944b21edef16423a5b402d54`;
+- commit: `feat: add consultation domain foundation`;
+- GitHub comparison against `aede8fc974096f7d2accf61ed69ab922c7a4e8ef`: one commit ahead, 28 files changed;
+- remote source review: PASS.
+
+Accepted source behavior includes the consultation schema/event model, revision OCC, customer/admin/assigned-lawyer authorization, immutable audit events, verified-lawyer assignment, shared User-row serialization against lawyer demotion, per-lawyer advisory-lock overlap protection, separate customer/staff DTOs, exact owned continuity links, and pre-migration lawyer-role-management compatibility.
+
+Recorded validation from the final R3 implementation: `pnpm test:unit` **326 passed / 0 failed / 0 skipped**; build passed; changed-file Biome passed; `git diff --check` passed; `pnpm db:generate` reported no schema changes.
+
+### Important verification boundary
+
+Migration `0022_first_slayback.sql` is still **NOT APPLIED**.
+
+Do not describe Stage 1 as migrated-DB verified. The following remain deferred under the **P11-008 migrated-DB transaction gate**:
+
+- actual PostgreSQL advisory-lock concurrency;
+- simultaneous same-lawyer overlap races;
+- transaction rollback atomicity;
+- full customer/admin/lawyer API execution against the migrated schema.
+
+Do not apply migrations `0018`–`0022` to the authoritative local/staging/production database without explicit owner authorization.
+
+### Stage 2 frozen customer journey
+
+```text
+registered verified customer
+    ->
+/consultations/new
+    ->
+1–3 preferred future windows + detected IANA timezone
++ consultation-method preference + optional note
++ optional server-re-authorized chat/lawyer-request continuity
+    ->
+requested consultation
+    ->
+/consultations history + /consultations/[id] detail
+    ->
+staff proposal appears later
+    ->
+customer confirms OR requests rescheduling OR cancels
+```
+
+Stage 2 is customer-only. It does not add admin/lawyer scheduling surfaces.
+
+### Stage 2 entry points
+
+1. **AI Workspace**
+   - replace the current booking toast with navigation to `/consultations/new`;
+   - if there is an active conversation, pass only `chatId` in the URL;
+   - never pass/trust `legalMatterId`; Stage 1 server logic derives it.
+
+2. **Contact**
+   - the lawyer-consultation CTA becomes a real link to `/consultations/new`;
+   - existing public content boundaries remain: no phone/address/email/fees/office hours are invented.
+
+3. **Client Portal**
+   - expose a safe consultation summary/history section;
+   - expose an explicit availability state when 0022 is absent;
+   - from a selected exact matter group, “request consultation” may pass that group's `defaultContinuationChatId` only;
+   - do not infer consultation linkage from titles or semantic similarity.
+
+4. **Account discoverability**
+   - customer account menu may link to `/consultations`;
+   - admin/lawyer account navigation remains role-specific.
+
+### Stage 2 time-input rule
+
+Do not silently perform arbitrary timezone conversion.
+
+For the initial customer form:
+
+- detect `Intl.DateTimeFormat().resolvedOptions().timeZone`;
+- show that timezone visibly;
+- interpret `datetime-local` inputs in the browser/system timezone;
+- send absolute ISO timestamps plus the detected IANA timezone;
+- if a valid IANA timezone cannot be resolved, fail safely and ask the customer to correct their device/browser timezone rather than sending ambiguous times.
+
+A future explicit timezone selector requires a correct timezone-aware conversion implementation; it is not required in Stage 2.
+
+### Stage 2 rollout compatibility
+
+Because 0022 is intentionally unapplied, a new explicit consultation-schema availability helper must guard consultation data access.
+
+Use an exact catalog/`to_regclass` check. Missing consultation schema is an expected rollout state; unrelated DB failures are not.
+
+The UI must distinguish:
+
+```text
+schema unavailable
+!=
+available schema with zero consultations
+```
+
+Client Portal and existing customer workflows must remain usable when consultation schema is unavailable.
+
+### Stage 2 non-goals
+
+No:
+
+- migration application or new migration;
+- staff scheduling UI;
+- consultation email notifications;
+- external calendar/Calendly/Google/Microsoft integration;
+- Zoom/Teams/phone provider integration;
+- consultation pricing/payment;
+- VIP-only booking rule;
+- office hours or real-time slot availability;
+- Legal Service changes;
+- MatterDocument authorization changes.
+
+P11-005 remains NOT VERIFIED under D-040. P11-009 retains the deferred P11-005 deployment/security gates.

@@ -702,3 +702,33 @@ Optional chat/lawyer-request continuity links must be ownership-checked and serv
 No consultation price, VIP-only entitlement, external calendar provider, video provider, office location, phone number, SLA, or real-time availability claim is introduced by this decision. Those require separate verified business/integration authority.
 
 Stage 1 may create the next additive migration artifact, but applying it to any database remains separately authorized.
+
+
+## D-045 — P11-008 Stage 2 is customer-only and availability-aware before migration 0022
+
+**Date:** 2026-09-26  
+**Status:** ACCEPTED
+
+P11-008 Stage 1 source is accepted at `83506156546dcff2944b21edef16423a5b402d54`, but migration `0022_first_slayback.sql` remains intentionally unapplied.
+
+Stage 2 may proceed as a customer-facing source/UI implementation without applying 0022, provided the rollout boundary is explicit:
+
+- consultation schema availability is checked server-side through an exact catalog/`to_regclass` test;
+- absence of `ConsultationRequest` is represented as **unavailable**, never as an authoritative empty consultation history;
+- existing Client Portal, lawyer-request and account workflows must continue when 0022 is absent;
+- unrelated database errors must not be swallowed;
+- real migrated-DB create/confirm/reschedule/cancel E2E remains deferred until a separately authorized migrated/disposable environment exists.
+
+Stage 2 is customer-only:
+
+- `/consultations`, `/consultations/new`, and `/consultations/[id]`;
+- customer status-valid actions only;
+- AI Workspace / Contact / Client Portal entry points;
+- no admin or lawyer scheduling UI;
+- no notification implementation.
+
+Continuity remains exact-reference and least-privilege. AI Workspace and Client Portal may pass an owned `chatId` as a hint; the server re-authorizes ownership and derives any matter identity. Client code must never supply a trusted `legalMatterId`.
+
+The initial time-entry UI uses browser-local `datetime-local` values with the browser-resolved IANA timezone displayed to the customer. It must not label browser-local times as a different arbitrary timezone. A future editable timezone selector requires a correct timezone-aware conversion layer.
+
+This decision does not authorize migration application, pricing, VIP-only booking, external calendar/video/phone providers, office hours, real-time availability claims, or Legal Service changes.

@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — TASK PACKET FROZEN / STAGE 1 NEXT |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGE 1 SOURCE ACCEPTED @ `8350615`; 0022 UNAPPLIED / DB GATE DEFERRED; STAGE 2 CUSTOMER CONTINUITY NEXT |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -419,3 +419,62 @@ No VIP-only gate or consultation price is introduced in P11-008 because no appro
 No external calendar, payment, video, phone, office-location, or real-time-availability integration is assumed. A future provider adapter may be added only after a separate approved product/integration decision.
 
 Stage 1 may add an additive schema and the next generated migration artifact, but **must not apply any migration**. P11-005 migrations `0018`–`0021` also remain unapplied under D-040.
+
+
+## P11-008 Stage 1 source acceptance / Stage 2 plan — 2026-09-26
+
+Remote source checkpoint `83506156546dcff2944b21edef16423a5b402d54` is accepted for **P11-008 Stage 1 source scope**.
+
+What is closed:
+
+- schema/domain/API source review;
+- revision-based optimistic concurrency;
+- customer/admin/assigned-lawyer RBAC;
+- assignment/demotion serialization;
+- transaction/event design;
+- same-lawyer overlap serialization design;
+- continuity ownership and least-privilege projections;
+- pre-0022 lawyer-role-management rollout compatibility.
+
+What remains deliberately open:
+
+- migration `0022_first_slayback.sql` is tracked but **NOT APPLIED**;
+- real migrated-DB concurrency/rollback/API integration is deferred under the named P11-008 migrated-DB transaction gate;
+- Stage 1 is therefore source-accepted, not fully DB-verified.
+
+### Stage 2 — customer booking continuity
+
+Stage 2 is a customer-only product layer. It should add:
+
+- `/consultations` — registered-customer consultation history;
+- `/consultations/new` — bilingual request form;
+- `/consultations/[id]` — customer detail + status-valid confirm/reschedule/cancel actions;
+- AI Workspace booking entry using only the current owned `chatId` as optional continuity;
+- Contact-page consultation CTA to the real customer request flow;
+- Client Portal consultation summary/history plus a matter-scoped “request consultation” link that passes only an owned chat identifier for server re-authorization;
+- optional customer account-menu discoverability for consultation history.
+
+Stage 2 UI must use the persisted site locale (`zh-CN` default / English switch); assistant response language remains independent.
+
+Time-entry rule for Stage 2: use browser-local `datetime-local` values together with the browser-resolved IANA timezone. Convert to absolute ISO timestamps using the browser local timezone and visibly show the detected timezone. Do not implement an arbitrary timezone selector unless a correct timezone-aware conversion layer is added; never relabel a browser-local timestamp as another timezone.
+
+Stage 2 must not show fake available slots. Preferred windows remain customer preferences only; the final slot is proposed by authorized staff in Stage 3.
+
+### Rollout compatibility
+
+Because `0022` remains unapplied, Stage 2 must add an explicit consultation-schema availability boundary based on a catalog/`to_regclass` check.
+
+When the consultation table is absent:
+
+- consultation APIs return an explicit bounded unavailable result rather than an uncontrolled 500;
+- customer UI renders a localized unavailable state rather than an authoritative empty history;
+- Client Portal marks consultation data unavailable rather than zero;
+- existing conversation, lawyer-request, document and membership functionality continues normally.
+
+Unrelated database failures must still surface; no broad database-error swallowing is allowed.
+
+### Stage 2 acceptance split
+
+Stage 2 may reach **source/UI acceptance** while `0022` remains unapplied. Real create/confirm/reschedule/cancel E2E against PostgreSQL remains part of the deferred migrated-DB gate until a separately authorized disposable/migrated environment is available.
+
+Stage 3 remains separate and owns staff scheduling UI, consultation notifications and final customer/admin/lawyer E2E.
