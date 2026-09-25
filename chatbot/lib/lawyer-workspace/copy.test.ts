@@ -10,10 +10,34 @@ import {
   getLawyerWorkspaceRoleLabel,
   getLawyerWorkspaceStatusLabel,
 } from "./copy";
+import { getLawyerWorkspacePageCopy } from "./page-copy";
 import {
   availableLawyerActions,
   canProvideLawyerLearningFeedback,
 } from "./types";
+
+test("lawyer page shell reacts through locale copy without raw enums", () => {
+  const chinese = getLawyerWorkspacePageCopy("zh-CN");
+  assert.equal(chinese.staffService, "律师服务");
+  assert.equal(chinese.workspaceTitle, "律师工作台");
+  assert.equal(chinese.backToWorkspace, "返回律师工作台");
+  assert.equal(chinese.assignedRequest, "已分配请求");
+
+  const english = getLawyerWorkspacePageCopy("en");
+  assert.equal(english.staffService, "Staff service");
+  assert.equal(english.workspaceTitle, "Lawyer workspace");
+  assert.equal(english.backToWorkspace, "Back to lawyer workspace");
+  assert.equal(english.assignedRequest, "Assigned request");
+
+  assert.equal(getLawyerWorkspacePageCopy("mystery").staffService, "律师服务");
+  assert.equal(
+    getLawyerWorkspacePageCopy(undefined).workspaceTitle,
+    "律师工作台"
+  );
+  const serialized = JSON.stringify({ chinese, english });
+  assert.equal(serialized.includes("Customer workspace"), false);
+  assert.equal(serialized.includes("客户工作台"), false);
+});
 
 test("assistant mode never exposes unknown internal strings", () => {
   assert.equal(

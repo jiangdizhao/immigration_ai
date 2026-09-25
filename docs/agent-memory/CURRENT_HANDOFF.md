@@ -953,3 +953,15 @@ Immediate next action: owner/ChatGPT code review plus desktop/mobile zh-CN/Engli
 **Validation:** unit 301 passed; build passed; repository lint has 21 baseline errors with none in changed P11-007 files; changed-file Biome passed; diff check passed. No legal-service pytest, OpenAI, or AWS/S3 contact.
 
 **NO NEW MIGRATION CREATED. MIGRATIONS NOT APPLIED. NO LEGAL-SERVICE CHANGE. P11-005 NOT VERIFIED. P11-008 NOT STARTED. P11-009 NOT STARTED. OPENAI NOT CONTACTED. AWS/S3 NOT CONTACTED. P11-007 NOT ACCEPTED. P11-007 NOT VERIFIED. NO COMMIT. NO PUSH.**
+
+## P11-007 reactive locale shell correction — 2026-09-25
+
+- Fixed zh-CN/English toggle defect: server-cookie-rendered lawyer page shell stayed Chinese while header/queue switched.
+- Moved locale-sensitive lawyer workspace header copy into client `lawyer-workspace/page-shell.tsx` using existing `useSiteLocale()`.
+- Server pages retain only auth/role redirects and shell layout.
+- Added bilingual `律师服务 / Staff service`; all workspace/back/assigned labels now react immediately without reload.
+- Removed misleading `客户工作台 / Customer workspace -> /ai-workspace` link from lawyer shell. Lawyer copy no longer implies customer MatterDocument browsing.
+- MatterDocument authorization untouched: `createMatterDocumentHandlers()` remains customer-only (`regular` + `role=user`); lawyer/admin 403 is intentional. P11-007 lawyers use immutable snapshot evidence only.
+- Tests cover zh-CN/English shell labels, unknown-locale normalization, and absence of customer-workspace wording.
+- Validation: unit 302 passed; build passed; repository lint retains 21 baseline errors with none in changed P11-007 files; changed-file Biome passed; diff check passed.
+- No migration, legal-service, MatterDocument auth, OpenAI, AWS/S3, commit, or push changes.
