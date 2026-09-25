@@ -965,3 +965,40 @@ Immediate next action: owner/ChatGPT code review plus desktop/mobile zh-CN/Engli
 - Tests cover zh-CN/English shell labels, unknown-locale normalization, and absence of customer-workspace wording.
 - Validation: unit 302 passed; build passed; repository lint retains 21 baseline errors with none in changed P11-007 files; changed-file Biome passed; diff check passed.
 - No migration, legal-service, MatterDocument auth, OpenAI, AWS/S3, commit, or push changes.
+
+
+## P11-007 final assigned-request acceptance — 2026-09-25
+
+**Latest authoritative P11-007 state: ACCEPTED / VERIFIED.** This section supersedes earlier P11-007 `NOT ACCEPTED / NOT VERIFIED` status notes above, which are retained as historical execution records.
+
+Source checkpoint:
+
+- branch: `phase11-chinese-service-platform-ui-rebase`;
+- reviewed runtime/source checkpoint: `9f352310ae6aa6392607296310c6d1caa943e0b9`;
+- direct GitHub source review: PASS.
+
+Final runtime/visual evidence:
+
+- a pending request owned by a customer test account was assigned by admin to a separate verified lawyer account;
+- the assigned request appeared in the lawyer-only queue with the expected pending/needs-action bucket;
+- desktop zh-CN and English queue/detail views passed;
+- mobile zh-CN and English queue/detail views passed; owner confirmed the remaining scrolled mobile detail content matched the desktop semantics and had no blocking layout/formatting issue;
+- bilingual shell switching remained reactive without a full reload;
+- request header, immutable question/AI answer, bounded captured handoff context, official/legal evidence, customer-document evidence, clarification thread, lawyer disposition, and advanced AI-improvement feedback rendered as distinct operational sections;
+- no raw context/evidence JSON, storage keys, private object URLs, hashes, arbitrary Legal Service matter metadata, or internal trace IDs were visible;
+- official/legal evidence, AI analysis, customer-document evidence, and lawyer disposition remained distinct;
+- only status-valid actions were presented for the pending request, and advanced feedback remained available before the first confirm/correct;
+- legacy `Unknown mode / 未知模式` on the synthetic request was accepted as a safe fallback, not a release blocker.
+
+Security boundaries remain unchanged:
+
+- D-043 request-scoped lawyer authority remains in force;
+- MatterDocument access remains customer-only; lawyer/admin 403 on customer document APIs is intentional;
+- no lawyer self-assignment, matter-wide chat browsing, raw document browsing/download, or arbitrary Legal Service matter fetch was added.
+
+Carry-forward:
+
+- P11-005 remains **NOT VERIFIED** under D-040;
+- migrations `0018`–`0021` remain unapplied;
+- no AWS/S3, OpenAI, or Legal Service change was needed for this acceptance;
+- P11-008 is the next planned milestone and is **NOT STARTED** by this docs-only closure.

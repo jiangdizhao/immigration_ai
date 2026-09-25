@@ -40,7 +40,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-004 | AI Workspace presentation rebase preserving current behavior | VERIFIED |
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
-| P11-007 | Lawyer Workspace continuity | ACTIVE — TASK PACKET FROZEN / READY TO IMPLEMENT |
+| P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | PLANNED |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
@@ -354,3 +354,30 @@ customer request detail + existing notification/learning bridge
 ```
 
 The lawyer workspace does not gain arbitrary conversation, MatterDocument, or Legal Service matter browsing merely because an assigned request contains a chat ID or legalMatterId.
+
+
+## P11-007 closure — 2026-09-25
+
+P11-007 is **ACCEPTED / VERIFIED**.
+
+Source authority:
+
+- remote source checkpoint: `9f352310ae6aa6392607296310c6d1caa943e0b9`;
+- source review passed before visual acceptance;
+- the final locale-shell correction preserved lawyer-only redirects, request-scoped projection, and customer-only MatterDocument authorization.
+
+Assigned-request runtime acceptance:
+
+- admin assignment -> distinct lawyer account -> `/lawyer-portal` queue -> `/lawyer-portal/[id]` detail completed locally;
+- desktop zh-CN queue/detail: PASS;
+- desktop English queue/detail: PASS;
+- mobile zh-CN queue/detail: PASS;
+- mobile English queue/detail: PASS;
+- provenance/security sanity: PASS;
+- status/action workflow sanity: PASS.
+
+No P11-007 runtime change, migration, Legal Service change, AWS/S3 operation, or OpenAI call was required to close this milestone.
+
+D-040 remains in force: P11-005 is still **NOT VERIFIED** until P11-009 closes its deferred deployment/security gates.
+
+Next milestone: **P11-008 — Appointment / Consultation Workflow**. This documentation closure does not itself start P11-008 implementation.

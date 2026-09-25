@@ -130,7 +130,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - Stage 2 migration `0021_sudden_warbird.sql` remains **NOT APPLIED**. Stage 3 is accepted at `b29816c56255762998d8fa55b56df64436a0b3c3`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
-- **P11-007 — Lawyer Workspace Continuity: ACTIVE / READY TO IMPLEMENT.**
+- **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
 - **P11-008 — Appointment / Consultation Workflow: PLANNED.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
@@ -245,3 +245,22 @@ Frozen continuity boundary:
 - no new schema/migration is expected.
 
 P11-007 is one major Task Packet under D-033. P11-008 booking and P11-009 staging/deferred P11-005 production gates remain separate.
+
+
+### P11-007 verified boundary — 2026-09-25
+
+P11-007 is **ACCEPTED / VERIFIED** after direct remote source review at `9f352310ae6aa6392607296310c6d1caa943e0b9` plus owner/ChatGPT assigned-request runtime visual acceptance.
+
+Verified result:
+
+- a real local pending `LawyerClarificationRequest` owned by a customer account was assigned by admin to a distinct verified lawyer account and appeared in the assigned-only lawyer queue;
+- desktop zh-CN and English queue/detail views passed, including reactive shell copy;
+- mobile zh-CN and English queue/detail presentation was accepted with no blocking horizontal-overflow, hierarchy, wrapping, or control-usage defect;
+- request header, immutable customer question, AI answer under review, captured bounded handoff context, official/legal evidence, customer-document evidence, clarification thread, lawyer disposition, and advanced feedback were operationally legible;
+- official/legal evidence, AI analysis, customer-document evidence, and lawyer disposition remained visually and semantically distinct;
+- no raw snapshot JSON, storage keys, private object URLs, hashes, raw Legal Service matter metadata, or internal trace IDs were exposed in the normal lawyer workflow;
+- D-043 remained intact: assignment authorizes the request only and does not grant matter-wide conversation/document browsing;
+- the legacy/synthetic request's `Unknown mode / 未知模式` fallback was accepted as safe and non-blocking because it does not expose an internal enum;
+- no runtime code change was required during final acceptance.
+
+P11-005 remains **NOT VERIFIED** under D-040. No migration, AWS/S3, OpenAI, or Legal Service change is implied by P11-007 verification. P11-008 remains the next planned milestone.
