@@ -590,6 +590,36 @@ export function proposeConsultation(
   });
 }
 
+export async function getConsultationNotificationTargets(id: string) {
+  const [request] = await db
+    .select({
+      userId: consultationRequest.userId,
+      assignedLawyerUserId: consultationRequest.assignedLawyerUserId,
+    })
+    .from(consultationRequest)
+    .where(eq(consultationRequest.id, id))
+    .limit(1);
+  if (!request) {
+    return null;
+  }
+  const [customer] = await db
+    .select({ email: user.email })
+    .from(user)
+    .where(eq(user.id, request.userId))
+    .limit(1);
+  const [lawyer] = request.assignedLawyerUserId
+    ? await db
+        .select({ email: user.email })
+        .from(user)
+        .where(eq(user.id, request.assignedLawyerUserId))
+        .limit(1)
+    : [];
+  return {
+    customerEmail: customer?.email ?? null,
+    assignedLawyerEmail: lawyer?.email ?? null,
+  };
+}
+
 export async function getConsultationStaffProjection(
   record: ConsultationRequest
 ) {

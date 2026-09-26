@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getSafeEmailErrorMetadata } from "./email-errors";
 import {
+  buildConsultationNotificationEmail,
   buildPasswordChangedEmail,
   buildPasswordResetEmail,
   buildSesEmailRequest,
@@ -29,6 +30,44 @@ test("verification and reset templates use the correct purpose and link", () => 
   assert.match(reset.subject, /Reset/);
   assert.match(reset.text, /\/reset-password\?token=reset-token/);
   assert.doesNotMatch(reset.text, /verify-email/);
+});
+
+test("consultation email uses a generic event and the role-specific application route", () => {
+  const customer = buildConsultationNotificationEmail({
+    email: "customer@example.test",
+    consultationId: "123e4567-e89b-12d3-a456-426614174000",
+    recipient: "customer",
+    kind: "proposal_ready",
+  });
+  const lawyer = buildConsultationNotificationEmail({
+    email: "lawyer@example.test",
+    consultationId: "123e4567-e89b-12d3-a456-426614174000",
+    recipient: "lawyer",
+    kind: "request_assigned",
+  });
+  const staff = buildConsultationNotificationEmail({
+    email: "staff@example.test",
+    consultationId: "123e4567-e89b-12d3-a456-426614174000",
+    recipient: "staff",
+    kind: "request_created",
+  });
+
+  assert.match(customer.text, /updated time proposal/);
+  assert.match(customer.text, /https:\/\/app\.example\.test\/consultations\//);
+  assert.match(
+    lawyer.text,
+    /https:\/\/app\.example\.test\/lawyer-portal\/consultations\//
+  );
+  assert.match(
+    staff.text,
+    /https:\/\/app\.example\.test\/admin-portal\/consultations\//
+  );
+  for (const email of [customer, lawyer, staff]) {
+    assert.doesNotMatch(
+      `${email.subject} ${email.text} ${email.html}`,
+      /customer note|preferred window|chat text|document text|legal matter|provider token|meeting provider/i
+    );
+  }
 });
 
 test("SES request construction is local and does not send", () => {

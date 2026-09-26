@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireConsultationStaff } from "@/lib/consultations/access";
+import { notifyConsultation } from "@/lib/consultations/notifications";
 import { requireConsultationSchema } from "@/lib/consultations/schema-availability";
 import {
   assignConsultation,
@@ -96,6 +97,19 @@ export async function PATCH(request: Request, context: RouteContext) {
           : parsed.data.action === "cancel"
             ? await cancelConsultation(actor, id, expected)
             : await completeConsultation(actor, id, expected);
+    const notificationKind =
+      parsed.data.action === "assign"
+        ? parsed.data.assignedLawyerUserId
+          ? "request_assigned"
+          : null
+        : parsed.data.action === "propose"
+          ? "proposal_ready"
+          : parsed.data.action === "cancel"
+            ? "staff_cancelled"
+            : "completed";
+    if (notificationKind) {
+      await notifyConsultation(result.id, notificationKind);
+    }
     const full = await getAdminConsultation(result.id);
     if (!full) {
       return Response.json(

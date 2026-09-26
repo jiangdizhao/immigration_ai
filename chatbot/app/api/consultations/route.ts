@@ -1,4 +1,5 @@
 import { requireConsultationCustomer } from "@/lib/consultations/access";
+import { notifyConsultation } from "@/lib/consultations/notifications";
 import { requireConsultationSchema } from "@/lib/consultations/schema-availability";
 import {
   ConsultationDomainError,
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
   }
   try {
     const record = await createConsultation(actor, validation.data);
+    await notifyConsultation(record.id, "request_created");
     return Response.json(consultationRequestView(record), { status: 201 });
   } catch (error) {
     if (error instanceof ConsultationDomainError) {

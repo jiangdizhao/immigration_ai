@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConsultationStaffNavigation } from "@/components/consultation-staff-navigation";
 import { useSiteLocale } from "@/components/site-locale-provider";
 import { getLawyerWorkspacePageCopy } from "@/lib/lawyer-workspace/page-copy";
 
@@ -16,6 +17,7 @@ export function LawyerWorkspaceQueueShell() {
         {copy.workspaceTitle}
       </h1>
       <p className="mt-3 max-w-2xl text-slate-600">{copy.workspaceSubtitle}</p>
+      <ConsultationStaffNavigation actorRole="lawyer" variant="inline" />
     </>
   );
 }

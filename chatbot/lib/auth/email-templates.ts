@@ -1,4 +1,8 @@
 import type { SendEmailCommandInput } from "@aws-sdk/client-sesv2";
+import type {
+  ConsultationNotificationKind,
+  ConsultationNotificationRecipient,
+} from "@/lib/consultations/notification-policy";
 
 export type EmailMessage = {
   to: string;
@@ -122,6 +126,50 @@ export function buildPasswordChangedEmail({ email }: { email: string }) {
     subject: "Your Au Lawyers password was changed",
     text: "Your Au Lawyers password was successfully changed. If you did not make this change, contact support immediately.",
     html: "<p>Your Au Lawyers password was successfully changed.</p><p>If you did not make this change, contact support immediately.</p>",
+  } satisfies EmailMessage;
+}
+
+export function buildConsultationNotificationEmail({
+  email,
+  consultationId,
+  recipient,
+  kind,
+}: {
+  email: string;
+  consultationId: string;
+  recipient: ConsultationNotificationRecipient;
+  kind: ConsultationNotificationKind;
+}) {
+  const path =
+    recipient === "customer"
+      ? `/consultations/${encodeURIComponent(consultationId)}`
+      : recipient === "lawyer"
+        ? `/lawyer-portal/consultations/${encodeURIComponent(consultationId)}`
+        : `/admin-portal/consultations/${encodeURIComponent(consultationId)}`;
+  const labels: Record<ConsultationNotificationKind, string> = {
+    request_created: "A consultation request is ready for staff review.",
+    request_assigned: "A consultation request has been assigned to you.",
+    proposal_ready: "A consultation request has an updated time proposal.",
+    customer_confirmed: "A customer has confirmed a consultation proposal.",
+    reschedule_requested:
+      "A customer has requested a new consultation proposal.",
+    customer_cancelled: "A customer has cancelled a consultation request.",
+    staff_cancelled: "A consultation request has been cancelled.",
+    completed: "A consultation request has been marked complete.",
+  };
+  const actionLabels = {
+    customer: "Open consultation request",
+    lawyer: "Open assigned consultation",
+    staff: "Open consultation for staff review",
+  };
+  const link = new URL(path, `${getAppBaseUrl()}/`).toString();
+  const intro = labels[kind];
+  const action = actionLabels[recipient];
+  return {
+    to: email,
+    subject: "Consultation request update",
+    text: `${intro}\n\n${action}: ${link}`,
+    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(link)}">${escapeHtml(action)}</a></p>`,
   } satisfies EmailMessage;
 }
 

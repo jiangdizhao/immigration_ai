@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/app/(auth)/auth";
 import { AdminVipPricing } from "@/components/admin-vip-pricing";
+import { ConsultationStaffNavigation } from "@/components/consultation-staff-navigation";
 import { LawyerAccountManagement } from "@/components/lawyer-account-management";
 import { SiteHeader } from "@/components/site-header";
 import { guestRegex } from "@/lib/constants";
@@ -71,6 +72,7 @@ async function AdminPortalPageContent() {
                 <ArrowRight className="size-4 transition group-hover:translate-x-1" />
               </span>
             </Link>
+            <ConsultationStaffNavigation actorRole="admin" variant="card" />
           </div>
           <LawyerAccountManagement />
           <AdminVipPricing />

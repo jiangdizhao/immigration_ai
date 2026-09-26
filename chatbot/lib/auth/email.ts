@@ -4,6 +4,7 @@ import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
 import { getSafeEmailErrorMetadata } from "./email-errors";
 import {
+  buildConsultationNotificationEmail,
   buildLawyerRequestNotificationEmail,
   buildPasswordChangedEmail,
   buildPasswordResetEmail,
@@ -17,7 +18,8 @@ type AuthEmailPurpose =
   | "verification"
   | "password-reset"
   | "password-changed"
-  | "lawyer-request";
+  | "lawyer-request"
+  | "consultation";
 
 async function sendEmail(
   message: Parameters<typeof buildSesEmailRequest>[0],
@@ -62,6 +64,23 @@ export async function sendPasswordResetEmail(args: {
 
 export async function sendPasswordChangedEmail(args: { email: string }) {
   await sendEmail(buildPasswordChangedEmail(args), "password-changed");
+}
+
+export async function sendConsultationNotificationEmail(args: {
+  email: string;
+  consultationId: string;
+  recipient: "customer" | "lawyer" | "staff";
+  kind:
+    | "request_created"
+    | "request_assigned"
+    | "proposal_ready"
+    | "customer_confirmed"
+    | "reschedule_requested"
+    | "customer_cancelled"
+    | "staff_cancelled"
+    | "completed";
+}) {
+  await sendEmail(buildConsultationNotificationEmail(args), "consultation");
 }
 
 export async function sendLawyerRequestNotificationEmail(args: {

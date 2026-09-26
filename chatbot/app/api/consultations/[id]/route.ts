@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireConsultationCustomer } from "@/lib/consultations/access";
+import { notifyConsultation } from "@/lib/consultations/notifications";
 import { requireConsultationSchema } from "@/lib/consultations/schema-availability";
 import {
   ConsultationDomainError,
@@ -67,6 +68,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       parsed.data.expectedRevision,
       parsed.data.action
     );
+    const notificationKind = {
+      confirm: "customer_confirmed",
+      request_reschedule: "reschedule_requested",
+      cancel: "customer_cancelled",
+    } as const;
+    await notifyConsultation(updated.id, notificationKind[parsed.data.action]);
     return Response.json(consultationRequestView(updated));
   } catch (error) {
     if (error instanceof ConsultationDomainError) {
