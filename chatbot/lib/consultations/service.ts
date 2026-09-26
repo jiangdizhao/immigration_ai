@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { guestRegex } from "@/lib/constants";
@@ -525,10 +525,10 @@ export function proposeConsultation(
       .where(
         and(
           eq(consultationRequest.assignedLawyerUserId, lawyerId),
-          sql`${consultationRequest.status} IN ('proposed', 'confirmed')`,
+          inArray(consultationRequest.status, ["proposed", "confirmed"]),
           ne(consultationRequest.id, id),
-          sql`${consultationRequest.scheduledStartAt} < ${proposal.endAt}`,
-          sql`${consultationRequest.scheduledEndAt} > ${proposal.startAt}`
+          lt(consultationRequest.scheduledStartAt, proposal.endAt),
+          gt(consultationRequest.scheduledEndAt, proposal.startAt)
         )
       )
       .limit(1);
