@@ -131,8 +131,8 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
-- **P11-008 — Appointment / Consultation Workflow: ACTIVE / NOT VERIFIED; Stages 1–3 source accepted; runtime A PASS, B PASS, C PASS, D PASS, E-Core PASS / ACCEPTED; E-Locale NOT RUN / NEXT; E-Visual NOT RUN / PENDING. The disposable DB is retained through 0022; the normal local chatbot DB remains at `0017_wooden_silver_sable` with consultation tables absent.**
-- **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
+- **P11-008 — Appointment / Consultation Workflow: VERIFIED; P11-008 Final UI Acceptance PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED.**
+- **P11-009 — NEXT PHASE 11 TASK; retains deferred P11-005 production-readiness items. Its detailed implementation plan is not set in this checkpoint.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -416,12 +416,14 @@ Gate-D evidence artifacts were externally inspected: the harness executes mutati
 
 **Next: Gate E — dedicated real Next.js browser/runtime E2E on the retained disposable DB.** Gate E must start its own isolated local Next.js server on a unique port with shell-scoped disposable `POSTGRES_URL`, notifications disabled and telemetry disabled. It must use real credential login/session flow for fresh verified synthetic customer/admin/lawyer accounts, exercise the consultation UI/API workflow end-to-end, prove visible stale-409 refetch/no-retry behavior, and produce bilingual desktop/mobile screenshot evidence for external visual review. It must not invoke AI answers, Legal Service, email delivery, S3, Stripe or other external providers.
 
-P11-008 remains **NOT VERIFIED** until Gate E visual/runtime evidence and final evidence/cleanup review are accepted.
+At this 2026-09-26 checkpoint, P11-008 was awaiting Gate E visual/runtime and final evidence review; the accepted final status is recorded below.
 
-## P11-008 runtime checkpoint — 2026-09-27
+## P11-008 final acceptance — 2026-09-27
 
-Current status: **ACTIVE / NOT VERIFIED**. Runtime gates are **A PASS, B PASS, C PASS, D PASS, E-Core PASS / ACCEPTED, E-Locale NOT RUN / NEXT, E-Visual NOT RUN / PENDING**. Do not describe Gate E overall as PASS or P11-008 as VERIFIED.
+**P11-008 Final UI Acceptance: PASS. P11-008 is VERIFIED.** Gates A+B, C, D, and E-Core remain **PASS / ACCEPTED**. Final UI acceptance passed actual `zh-CN` ↔ English switching and persistence after reload in both directions; customer consultation history/new/detail; admin queue/detail; lawyer assigned queue/detail; desktop and mobile responsive presentation; and no blocking visual/layout defect. Owner manually reviewed representative UI evidence. The correct fresh synthetic lawyer assignment was verified through lawyer queue/detail.
 
-E-Core acceptance freezes E1–E4 functional results and customer/admin/lawyer RBAC closure. The next gate is E-Locale, which must verify actual `zh-CN` ↔ English switching and persistence. E-Visual follows with the seven consultation surfaces at desktop 1440×1000 and mobile 390×844 in both locales (28 planned screenshots); manual visual acceptance remains pending external/owner review.
+PostgreSQL temporarily reached `max_connections` during manual acceptance as disposable-DB postgres.js connections accumulated. Idle connections were terminated and acceptance resumed successfully. This was an acceptance-environment/runtime-harness issue, not a demonstrated product defect.
 
-Retain disposable DB `chatbot_p11_008_gate_20260926_20c435`, migrated through 0022; no 0023 exists. The normal `chatbot` database remains unchanged at `0017_wooden_silver_sable` and has no `ConsultationRequest` or `ConsultationEvent`. Disposable migrations do not close P11-005 D-040; P11-005 remains NOT VERIFIED.
+The retained disposable DB `chatbot_p11_008_gate_20260926_20c435` is migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable` with `ConsultationRequest` and `ConsultationEvent` absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
+
+P11-009 is now the next Phase 11 task. No detailed P11-009 implementation plan is recorded here.

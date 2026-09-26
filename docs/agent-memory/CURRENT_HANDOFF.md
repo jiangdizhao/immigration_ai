@@ -1433,30 +1433,28 @@ Notifications remain disabled throughout Gate E. Do not invoke AI query paths.
 
 If any browser mutation, RBAC, stale-conflict behavior or visual/runtime assertion fails, stop and preserve artifacts. Do not patch source automatically.
 
-P11-008 remains ACTIVE / NOT VERIFIED until Gate E evidence is externally accepted and the retained disposable DB receives explicit cleanup approval.
+At this 2026-09-26 handoff checkpoint, P11-008 was still awaiting Gate E acceptance; the final acceptance is recorded below.
 
-## P11-008 Gate E-Core accepted / E-Locale handoff — 2026-09-27
+## P11-008 final acceptance — 2026-09-27
 
-**P11-008 remains ACTIVE / NOT VERIFIED.** Stages 1–3 source gates and runtime Gates A–D are accepted. Gate E is split: **E-Core PASS / ACCEPTED**, **E-Locale NOT RUN / NEXT**, and **E-Visual NOT RUN / PENDING**. Do not record “Gate E = PASS” or “P11-008 = VERIFIED.”
+**P11-008 Final UI Acceptance: PASS. P11-008: VERIFIED.** Frozen prior gates remain **PASS / ACCEPTED**: Gates A+B, Gate C, Gate D, and Gate E-Core.
 
-### Frozen E-Core evidence
+### Final UI acceptance
 
-- **E1 PASS:** real customer create; admin assignment and proposal; assigned-lawyer visibility; customer confirmation; lawyer completion; final completed state and expected immutable events.
-- **E2 PASS:** create, assign/propose, customer reschedule request; returns to requested, active proposal fields clear, reschedule event recorded.
-- **E3 PASS:** real two-stage customer cancellation; cancelled state, exactly one cancellation event, terminal customer controls removed.
-- **E4 PASS:** two pages loaded a stale revision; first cancellation succeeded; stale page sent exactly one PATCH and received 409; one refetch, zero automatic mutation retries, localized stale message, latest cancelled state, and DB revision/event state verified.
-- **RBAC closure PASS:** customers cannot use admin/lawyer consultation authority; lawyer queues are assigned-only; unassigned consultations are excluded; lawyer detail has no assignment controls; admin requested-consultation assignment controls work; customer detail has no staff-only controls; lawyer consultation routes remain distinct from P11-007 lawyer-request routes.
-- Real credential login/session was used. After harness calibration, session checks used BrowserContext-associated `context.request`; no forged auth cookies were used.
+- Real `zh-CN` → English switching: PASS; English persisted after reload: PASS.
+- English → `zh-CN` switching: PASS; Chinese persisted after reload: PASS.
+- Customer consultation history, new, and detail: PASS.
+- Admin consultation queue and detail: PASS.
+- Lawyer assigned queue and detail: PASS. The correct fresh synthetic lawyer assignment was verified through lawyer queue/detail.
+- Desktop responsive presentation: PASS; mobile responsive presentation: PASS; no blocking visual/layout defect.
+- Owner manually reviewed representative UI evidence.
 
-### Durable harness calibrations
+### Acceptance-environment note
 
-- A generic `role=alert` assertion in Attempt 6 was a harness false positive; a bounded bootstrap diagnostic later confirmed a valid customer session, `/api/consultations` 200, `/consultations/new` 200, a healthy create form, and no consultation-client error.
-- Page-bound, one-shot session observation was unreliable during login `router.replace` / `router.refresh`; use `context.request` for stable session validation.
-- Attempt 4's admin-control failure was `ATTEMPT4_ASYNC_HARNESS_FALSE_NEGATIVE`: the detail page, assignment heading, and Save button were present; the selector appeared after `/api/admin/lawyers` completed (200, 34 verified lawyers, including the assigned lawyer). No product/RBAC defect was established.
-- The final customer negative-control closure passed with each staff-only control absent individually. Harness-only startup/static-audit failures were not product defects.
+During manual acceptance, PostgreSQL temporarily reached `max_connections` as disposable-DB postgres.js connections accumulated. Idle connections were terminated and acceptance resumed successfully. This was an acceptance-environment/runtime-harness issue; no P11-008 product defect was demonstrated.
 
-### Database and next gates
+### Database and next task
 
-Keep `chatbot_p11_008_gate_20260926_20c435` retained; cleanup is not authorized. The disposable DB remains migrated through 0022, with no 0023. The normal local `chatbot` DB remains unchanged at `0017_wooden_silver_sable` and has no `ConsultationRequest` or `ConsultationEvent`. Notifications were disabled during Gate-E browser work; no real external provider was required. Applying 0018–0022 to the disposable clone does not close P11-005 D-040; **P11-005 remains NOT VERIFIED**.
+Retain disposable DB `chatbot_p11_008_gate_20260926_20c435`, migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable`, with `ConsultationRequest` and `ConsultationEvent` absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
 
-**Immediate next action: Gate E-Locale.** Independently verify actual `zh-CN` ↔ English switching and persistence. Then run Gate E-Visual for the seven consultation surfaces in both locales at desktop 1440×1000 and mobile 390×844 (28 planned screenshots). Manual screenshot acceptance remains external/owner review. Only after E-Locale, E-Visual, and final evidence review may Gate E overall be accepted and P11-008 marked VERIFIED.
+**P11-009 is now the next Phase 11 task.** Its detailed implementation plan is not established in this checkpoint.

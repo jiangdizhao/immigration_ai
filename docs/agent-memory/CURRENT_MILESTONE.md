@@ -41,8 +41,8 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE / NOT VERIFIED — Stages 1–3 source accepted; Gates A–D ACCEPTED; Gate E-Core ACCEPTED; E-Locale NEXT; E-Visual PENDING; normal local DB remains at 0017 with consultation tables absent |
-| P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
+| P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
+| P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | NEXT PHASE 11 TASK; detailed implementation plan not yet set |
 
 ## P11-004 closure / next task state
 
@@ -848,18 +848,14 @@ Gate E must not:
 
 Retain the disposable DB and all Gate-E temporary evidence for external review.
 
-## P11-008 runtime status supersession — 2026-09-27
+## P11-008 final acceptance — 2026-09-27
 
-This newer checkpoint supersedes earlier “Gate E next” wording for the full functional flow. P11-008 remains **ACTIVE / NOT VERIFIED**.
+**P11-008 Final UI Acceptance: PASS. P11-008 is VERIFIED.** Frozen prior gates remain **PASS / ACCEPTED**: Gates A+B, C, D, and E-Core.
 
-| Runtime subgate | Status |
-|---|---|
-| Gate A | PASS / ACCEPTED |
-| Gate B | PASS / ACCEPTED |
-| Gate C | PASS / ACCEPTED |
-| Gate D | PASS / ACCEPTED |
-| Gate E-Core | PASS / ACCEPTED |
-| Gate E-Locale | NOT RUN / NEXT |
-| Gate E-Visual | NOT RUN / PENDING |
+Final UI acceptance passed real `zh-CN` → English and English → `zh-CN` switching, with each locale persisting after reload. Customer history/new/detail, admin queue/detail, and lawyer assigned queue/detail passed. The fresh synthetic lawyer assignment was verified in the lawyer queue/detail. Desktop and mobile responsive presentation passed with no blocking visual/layout defect; the owner manually reviewed representative UI evidence.
 
-E-Core freezes E1–E4 functional evidence and the customer/admin/lawyer RBAC closure. Gate E overall is not accepted. The next execution is E-Locale real `zh-CN` ↔ English switching/persistence; E-Visual follows with the 28-screenshot seven-surface bilingual desktop/mobile matrix and external manual review. Retain disposable DB `chatbot_p11_008_gate_20260926_20c435`; do not authorize cleanup. The normal `chatbot` DB remains at `0017_wooden_silver_sable`, without consultation tables. P11-005 remains NOT VERIFIED under D-040.
+During manual acceptance, disposable-DB postgres.js connections accumulated and PostgreSQL temporarily reached `max_connections`. Idle connections were terminated and acceptance resumed successfully. This was an acceptance-environment/runtime-harness issue, not a demonstrated P11-008 product defect.
+
+The disposable DB `chatbot_p11_008_gate_20260926_20c435` remains migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable` with consultation tables absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
+
+P11-009 is the next Phase 11 task. This checkpoint does not define its detailed implementation plan.
