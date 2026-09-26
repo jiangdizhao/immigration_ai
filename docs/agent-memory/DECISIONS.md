@@ -757,3 +757,29 @@ Staff proposal time entry uses the staff browser/device timezone and absolute IS
 Consultation notifications are a separate contract from lawyer-request notifications. They reuse the existing email transport but are disabled by default and fail-neutral after the database mutation commits. Email content is generic and contains no customer note, document/chat content, legal facts, private matter metadata, provider credentials or meeting-provider claims.
 
 Stage 3 source/UI acceptance is not the migrated-DB runtime acceptance. P11-008 overall verification requires a separately authorized disposable/migrated DB gate covering real transitions, concurrency/rollback and customer/admin/lawyer E2E.
+
+
+## D-047 — P11-008 runtime acceptance uses a disposable cloned chatbot database
+
+**Date:** 2026-09-26  
+**Status:** ACCEPTED
+
+P11-008 Stage 3 source is accepted at `5304742196f08894d249138c30b2245977a52e9b`. The next gate is real migrated PostgreSQL/runtime acceptance.
+
+The normal local chatbot database, staging and production are not authorized migration targets for this gate.
+
+A fresh disposable clone of the chatbot database must be created. The repository migration runner may apply the clone's missing migrations through `0022_first_slayback.sql`, including 0018–0021 when absent.
+
+`chatbot/.env.local` must not be edited. Gate commands and the local runtime must receive the clone through a shell-scoped `POSTGRES_URL`. Credentials must not be printed, pasted, committed or written into handoff artifacts.
+
+The clone must be retained until external review completes.
+
+The gate must verify real transaction semantics: request/event atomicity, optimistic revision conflict handling, same-lawyer advisory-lock overlap serialization, half-open interval behavior, assignment/demotion safety and the full customer/admin/lawyer state machine.
+
+Rollback atomicity may use a temporary fault-injection trigger or constraint only inside the disposable clone. Such a fault must never enter repository migration files and must be removed before continuing.
+
+Notification fail-neutral runtime acceptance must avoid real delivery. A deliberately unsupported local email provider and dummy `.test` target may be used so the notification path fails before SES/network activity while the already-committed mutation remains successful.
+
+Applying 0018–0021 to the disposable clone is compatibility testing only. It does not close D-040, does not verify P11-005 production readiness and does not authorize deployment.
+
+If a source defect is discovered, stop the runtime gate and return to the normal local patch -> external review -> commit/push workflow. Do not mutate data manually to hide a failing invariant.

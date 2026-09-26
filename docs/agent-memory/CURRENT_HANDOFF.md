@@ -1311,3 +1311,32 @@ P11-008 overall cannot close until the separately authorized migrated-DB/runtime
 - desktop/mobile zh-CN/English customer/admin/lawyer visual workflow.
 
 Do not apply migrations to the authoritative local/staging/production database without explicit owner authorization.
+
+
+## P11-008 Stage 3 remote acceptance / runtime-gate handoff — 2026-09-26
+
+Remote source checkpoint `5304742196f08894d249138c30b2245977a52e9b` is accepted for the P11-008 Stage 3 source gate.
+
+Remote compare against `cc42b4f59277bd2bd58bc36e99cf4f673f228db7` is exactly one commit: 24 files changed, 12 added, 12 modified, +2027/-2. The final remote source includes the accepted R1 correction that synchronizes re-proposal `scheduledMethod` and `meetingInstructions` from the latest server consultation after initial load, successful mutation, and 409 refetch.
+
+**P11-008 is not yet VERIFIED.** Migration 0022 remains intentionally unapplied on the normal local chatbot database.
+
+### Immediate next action
+
+Do not add more Stage-3 product features.
+
+Create a fresh disposable clone of the chatbot PostgreSQL database and execute the P11-008 migrated-DB/runtime gate from `docs/agent-memory/tasks/P11-008.md`.
+
+Hard safety rules:
+
+- normal `chatbot/.env.local` remains unchanged;
+- normal local chatbot DB is read-only for this gate;
+- all write/migration/runtime activity targets the disposable clone via shell-scoped `POSTGRES_URL`;
+- no staging/production DB;
+- no real SES/AWS/OpenAI/Stripe/S3 call;
+- no commit/push unless a source defect is found and separately reviewed;
+- do not drop the disposable DB until external review finishes.
+
+The first runtime session should stop after clone creation + migration verification if any database identity, migration journal or credential-handling assumption is unclear.
+
+The runtime gate is not a P11-005 production-readiness migration. Applying 0018–0021 on the disposable clone leaves D-040 fully open.

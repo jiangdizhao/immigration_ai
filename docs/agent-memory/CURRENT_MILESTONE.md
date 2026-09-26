@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGE 1 SOURCE ACCEPTED @ `8350615`; STAGE 2 SOURCE ACCEPTED @ `2d91c17`; 0022 UNAPPLIED / DB GATE DEFERRED; STAGE 3 STAFF SCHEDULING + NOTIFICATIONS NEXT |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED (`8350615`, `2d91c17`, `5304742`); 0022 remains unapplied on normal local DB; DISPOSABLE MIGRATED-DB/RUNTIME GATE ACTIVE |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -567,3 +567,120 @@ Email should contain only generic event text and a role-appropriate application 
 Stage 3 notifications do not imply a verified office email, phone, meeting provider or SLA. Configuration values remain deployment concerns.
 
 No external calendar, video provider, payment or pricing integration belongs in P11-008 Stage 3.
+
+
+## P11-008 migrated-DB/runtime acceptance gate — activated 2026-09-26
+
+**Starting source checkpoint:** `5304742196f08894d249138c30b2245977a52e9b`  
+**Source state:** Stages 1–3 accepted  
+**Normal local chatbot DB:** do not migrate  
+**Gate DB:** fresh disposable clone only
+
+### Gate A — Environment and clone preflight
+
+1. Verify branch/HEAD and a clean worktree.
+2. Read the normal chatbot `.env.local` only through the application's existing environment loader; never print, paste or log credentials.
+3. Record the normal chatbot DB migration journal read-only.
+4. Create a uniquely named disposable clone of the normal chatbot database.
+5. Keep `chatbot/.env.local` unchanged.
+6. All migration/app/runtime commands for this gate must receive the disposable DB through a shell-scoped `POSTGRES_URL`.
+7. Do not contact OpenAI, AWS, S3, Stripe or real SES.
+
+If a safe clone cannot be created without exposing credentials or mutating the source DB, STOP.
+
+### Gate B — Migration execution on disposable clone
+
+Use the repository migration runner against the disposable clone:
+
+`pnpm db:migrate`
+
+The runner may apply every migration missing from the clone, including the deferred MatterDocument migrations 0018–0021 and consultation migration 0022.
+
+Acceptance requires:
+
+- migration command exits successfully;
+- Drizzle journal reaches 0022 exactly once;
+- `ConsultationRequest` and `ConsultationEvent` exist;
+- expected FKs and indexes exist;
+- no 0023 exists;
+- no source migration file is edited;
+- normal local chatbot DB journal remains unchanged.
+
+Applying 0018–0021 here is only compatibility coverage on a disposable clone and does not close D-040.
+
+### Gate C — Real PostgreSQL service/transaction acceptance
+
+Run deterministic DB-backed acceptance against the disposable clone.
+
+Required checks:
+
+- customer consultation creation writes one request plus immutable `created` event;
+- admin assignment accepts a verified lawyer and writes the assignment event;
+- stale `expectedRevision` is rejected and does not create a new event;
+- same-lawyer concurrent overlapping proposals serialize so at most one conflicting interval is accepted;
+- half-open intervals permit an adjacent boundary where one consultation ends exactly when another begins;
+- proposal/re-proposal persists the expected absolute time, method and instructions;
+- confirmation uses the current revision;
+- re-proposal from confirmed returns to proposed and requires customer confirmation again;
+- customer reschedule request clears the active proposal and returns to requested;
+- cancellation and completion obey the frozen state machine;
+- assigned-lawyer reads/actions remain assigned-only;
+- assignment vs lawyer-demotion concurrency cannot leave active assigned work on a demoted account;
+- request-row mutation and immutable event insert are atomic.
+
+For rollback atomicity, a temporary fault-injection trigger/constraint may be installed **only on the disposable DB** to force a `ConsultationEvent` insert failure after the request mutation is attempted. Verify the request-row mutation rolls back, then remove the temporary fault before continuing. Never place this trigger in repository migrations.
+
+### Gate D — Notification fail-neutral runtime smoke with zero real delivery
+
+The default runtime E2E should keep consultation notifications disabled.
+
+Separately, exercise one notification-enabled mutation against the disposable DB with a deliberately unsupported local email provider value and a dummy `.test` recipient, so failure occurs before any SES client send/network delivery.
+
+Acceptance requires:
+
+- DB mutation commits successfully;
+- notification attempt fails locally;
+- API/service result remains successful;
+- request state and event persist;
+- no AWS/SES network call occurs;
+- logs contain only safe notification metadata.
+
+Do not use real email addresses.
+
+### Gate E — Customer/admin/lawyer runtime + visual acceptance
+
+Run the Next.js chatbot against the disposable DB only.
+
+Use distinct verified test identities for customer, admin and lawyer.
+
+Exercise:
+
+1. customer creates consultation from the real customer flow;
+2. admin sees it, assigns lawyer and proposes a slot;
+3. lawyer sees only assigned consultation work;
+4. customer sees proposal and confirms it;
+5. exercise a separate reschedule cycle;
+6. exercise cancellation;
+7. exercise a separate confirmed consultation through staff completion;
+8. verify a 409 refresh/no-retry interaction;
+9. verify schema-backed history/detail no longer show rollout-unavailable state.
+
+Visual acceptance must cover desktop and mobile, zh-CN and English, for customer history/new/detail plus admin/lawyer queue/detail.
+
+### Gate F — Evidence and cleanup
+
+Before any cleanup, capture:
+
+- disposable DB name only, never credentials;
+- pre/post migration journal tags;
+- exact commands with secrets omitted;
+- runtime test pass/fail evidence;
+- concurrency results;
+- rollback fault-injection result and proof the temporary fault was removed;
+- notification fail-neutral result;
+- desktop/mobile bilingual visual observations;
+- confirmation normal local chatbot DB was not migrated.
+
+Retain the disposable DB until external review is complete. Drop it only after owner approval.
+
+Any product/source defect found during this gate returns to the normal bounded patch-review workflow. Do not patch production state or manually edit migrated data to make a failing gate pass.

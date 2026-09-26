@@ -131,7 +131,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
-- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stage 1 SOURCE ACCEPTED at `83506156546dcff2944b21edef16423a5b402d54`; Stage 2 CUSTOMER SOURCE ACCEPTED at `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`; migration `0022_first_slayback.sql` remains unapplied; migrated-DB transaction gate deferred; Stage 3 staff scheduling + notifications is next.**
+- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stage 1 SOURCE ACCEPTED at `83506156546dcff2944b21edef16423a5b402d54`; Stage 2 CUSTOMER SOURCE ACCEPTED at `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`; Stage 3 STAFF SOURCE ACCEPTED at `5304742196f08894d249138c30b2245977a52e9b`; migration `0022_first_slayback.sql` remains unapplied on the normal local environment; the P11-008 migrated-DB/runtime acceptance gate is now ACTIVE and must use a disposable cloned chatbot database.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
@@ -346,3 +346,28 @@ Migration `0022_first_slayback.sql` remains **NOT APPLIED**. Real customer creat
 P11-008 Stage 3 is now the next source implementation unit: staff scheduling surfaces plus consultation-specific fail-neutral notification infrastructure. Stage 3 source/UI work may proceed without applying 0022, but all new staff surfaces must preserve the same explicit schema-unavailable behavior.
 
 P11-008 cannot be marked fully VERIFIED until a separately authorized migrated/disposable DB gate exercises the real transaction paths and the final customer/admin/lawyer workflow receives runtime/visual acceptance.
+
+
+### P11-008 Stage 3 remote acceptance / migrated-DB runtime gate activation — 2026-09-26
+
+P11-008 Stage 3 **SOURCE GATE is ACCEPTED** at remote checkpoint `5304742196f08894d249138c30b2245977a52e9b` (`feat: add consultation staff scheduling`).
+
+Direct GitHub comparison against `cc42b4f59277bd2bd58bc36e99cf4f673f228db7` is one clean commit with 24 files changed, 12 added, 12 modified, 2027 insertions and 2 deletions. The accepted source preserves:
+
+- distinct admin and lawyer consultation route namespaces without repurposing P11-007 `/lawyer-portal/[id]`;
+- verified staff page/API authorization and assigned-lawyer-only access;
+- Stage-1 status/transition authority and revision OCC;
+- browser-IANA staff proposal conversion plus customer-timezone display;
+- re-proposal preservation of existing scheduled method and meeting instructions;
+- explicit schema-unavailable rollout behavior while 0022 is absent;
+- consultation-specific, feature-gated, post-commit, fail-neutral notifications;
+- bounded notification target lookup and generic privacy-safe email content;
+- no schema, migration or Legal Service drift.
+
+Recorded final Stage-3 local validation: **355 unit tests passed**, production build passed, changed-file Biome passed, `git diff --check` passed, and `pnpm db:generate` reported no schema changes.
+
+P11-008 now moves to its **migrated-DB/runtime acceptance gate**. This gate must not mutate the normal local chatbot database, staging or production. It must run on a disposable clone of the chatbot database with shell-scoped `POSTGRES_URL`; `chatbot/.env.local` must remain unchanged.
+
+The runtime gate must exercise actual migrations through 0022 plus real PostgreSQL transaction behavior, including revision conflicts, same-lawyer overlap serialization, half-open interval semantics, event/state rollback atomicity, assignment/lawyer-role safety, and end-to-end customer/admin/lawyer scheduling. Consultation notification failure must be exercised without contacting real SES/AWS.
+
+Applying 0018–0022 to a disposable clone does **not** close D-040 or make P11-005 production-ready. P11-005 production gates remain deferred to P11-009.
