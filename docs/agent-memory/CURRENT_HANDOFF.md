@@ -1389,3 +1389,48 @@ Gate D deliberately does **not** prove HTTP/session/browser behavior; Gate E own
 If Gate D exposes a source defect, stop and return to bounded local source patch -> external review -> commit/push. Do not proceed to Gate E.
 
 Do not drop `chatbot_p11_008_gate_20260926_20c435` until the remaining P11-008 runtime gates receive external review and owner approval.
+
+## P11-008 Gate D accepted / Gate E handoff — 2026-09-26
+
+Gate D is externally accepted.
+
+Runtime evidence:
+
+- disposable DB: `chatbot_p11_008_gate_20260926_20c435`;
+- repository checkpoint during Gate D: `4dfc1426a6d2cfc148d64a9161df563d3b07f01b`;
+- mutation committed before notification;
+- `requested -> cancelled`, revision `1 -> 2`, event delta `+1`;
+- `notifyConsultation(..., "staff_cancelled") -> false`, no throw;
+- unsupported provider and delivery-wrapper paths observed;
+- zero real SES delivery by provider guard ordering;
+- log privacy checks passed;
+- disposable DB/schema unchanged;
+- normal DB unchanged at 0017 with consultation tables absent;
+- repo remained clean and no external service was contacted.
+
+### Immediate next action — Gate E only
+
+Run a dedicated Next.js browser/runtime E2E against the retained disposable DB.
+
+Use a unique local port and start the server yourself with the disposable `POSTGRES_URL`; do not use/reuse an arbitrary existing dev server.
+
+Seed only fresh verified synthetic `@example.test` customer/admin/lawyer accounts. Generate a runtime-only password and authenticate all three through the real login page. Never persist the password in evidence.
+
+Required real UI scenarios:
+
+- customer create/history/detail;
+- admin queue/detail assignment and proposal;
+- lawyer assigned queue/detail with no assignment authority;
+- customer confirmation;
+- lawyer completion;
+- a separate proposal -> customer reschedule cycle;
+- customer cancellation;
+- a two-page stale-revision cancellation proving visible 409 refetch/no automatic retry.
+
+Then capture customer/admin/lawyer consultation surfaces across desktop/mobile and zh-CN/English for external visual review.
+
+Notifications remain disabled throughout Gate E. Do not invoke AI query paths.
+
+If any browser mutation, RBAC, stale-conflict behavior or visual/runtime assertion fails, stop and preserve artifacts. Do not patch source automatically.
+
+P11-008 remains ACTIVE / NOT VERIFIED until Gate E evidence is externally accepted and the retained disposable DB receives explicit cleanup approval.

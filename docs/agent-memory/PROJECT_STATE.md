@@ -131,7 +131,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
-- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stages 1–3 source are accepted (`8350615`, `2d91c17`, `5304742`); runtime Date-binding hotfix is accepted at `62947e779b8a5a39df58038deab7c135e452569f`; disposable runtime Gates A–C are ACCEPTED; Gate D notification fail-neutral smoke is NEXT; migration `0022_first_slayback.sql` remains unapplied on the normal local chatbot database.**
+- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stages 1–3 source are accepted (`8350615`, `2d91c17`, `5304742`); runtime Date-binding hotfix is accepted at `62947e779b8a5a39df58038deab7c135e452569f`; disposable runtime Gates A–D are ACCEPTED; Gate E real Next.js customer/admin/lawyer E2E + bilingual/responsive evidence is NEXT; migration `0022_first_slayback.sql` remains unapplied on the normal local chatbot database.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
@@ -391,3 +391,29 @@ The retained disposable database must remain available for the remaining P11-008
 **Next: Gate D — notification fail-neutral runtime smoke.** Gate D is intentionally narrow: one isolated notification-enabled post-commit mutation on the disposable DB, a synthetic `.test` recipient, and a deliberately unsupported local `EMAIL_PROVIDER` value that fails before SES client/network delivery. The mutation and immutable event must remain committed, `notifyConsultation()` must return fail-neutral false rather than throw, logs must contain only bounded safe metadata, and no AWS/SES network call may occur.
 
 Gate D does not perform browser/API auth E2E; that remains Gate E. P11-008 is still **NOT VERIFIED** until Gate D plus the remaining real-app bilingual/responsive E2E/evidence gates are accepted. D-040 remains fully open for P11-005 production readiness.
+
+### P11-008 Gate D accepted / Gate E active — 2026-09-26
+
+Gate D notification fail-neutral runtime acceptance is **PASS / ACCEPTED** on the retained disposable DB `chatbot_p11_008_gate_20260926_20c435`.
+
+Accepted evidence:
+
+- one fresh verified synthetic customer and one synthetic admin were created on the disposable DB;
+- a real `cancelConsultation()` mutation committed first: `requested -> cancelled`, revision `1 -> 2`, `cancelledAt` set and one immutable `cancelled` event added;
+- only after the mutation returned successfully, `notifyConsultation(id, "staff_cancelled")` ran;
+- `EMAIL_PROVIDER=p11_gate_d_unsupported` deterministically failed in the shared auth-email layer before SES client construction/send;
+- the auth-email log path reported only safe metadata (`purpose=consultation`, `provider=unsupported`);
+- the consultation wrapper reported only safe metadata (`recipient=customer`, `kind=staff_cancelled`);
+- `notifyConsultation()` returned `false` and did not throw;
+- the committed cancellation state/revision/event count remained unchanged after notification failure;
+- captured logs contained no synthetic email, private-note marker, preferred-window values, database URL/password, AWS credentials or real customer content;
+- process environment and `console.error` were restored;
+- disposable schema/migration checkpoint remained unchanged;
+- normal chatbot DB remained read-only at `0017_wooden_silver_sable` with consultation tables absent;
+- repository remained clean with no schema/migration/source change, no 0023, no commit/push from the runtime gate and no external service call.
+
+Gate-D evidence artifacts were externally inspected: the harness executes mutation-before-notification in that order, and the machine-readable result reports all Gate-D assertions true.
+
+**Next: Gate E — dedicated real Next.js browser/runtime E2E on the retained disposable DB.** Gate E must start its own isolated local Next.js server on a unique port with shell-scoped disposable `POSTGRES_URL`, notifications disabled and telemetry disabled. It must use real credential login/session flow for fresh verified synthetic customer/admin/lawyer accounts, exercise the consultation UI/API workflow end-to-end, prove visible stale-409 refetch/no-retry behavior, and produce bilingual desktop/mobile screenshot evidence for external visual review. It must not invoke AI answers, Legal Service, email delivery, S3, Stripe or other external providers.
+
+P11-008 remains **NOT VERIFIED** until Gate E visual/runtime evidence and final evidence/cleanup review are accepted.

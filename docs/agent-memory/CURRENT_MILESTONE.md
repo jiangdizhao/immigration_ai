@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED; runtime hotfix `62947e7` accepted; Gates A–C PASS on disposable DB; Gate D notification fail-neutral smoke NEXT; normal local DB remains at 0017 with 0022 unapplied |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED; runtime hotfix `62947e7` accepted; Gates A–D PASS on disposable DB; Gate E real Next.js browser/runtime E2E + bilingual/responsive evidence NEXT; normal local DB remains at 0017 with 0022 unapplied |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -742,3 +742,108 @@ The final Gate-C evidence covered real PostgreSQL concurrency and rollback rathe
 The real Date-binding defect discovered during Gate C was corrected and remotely verified at `62947e7`. No schema/migration change accompanied that correction.
 
 **Immediate next runtime gate: Gate D**, using the refined zero-delivery fail-neutral contract above. Do not repeat Gate C unless a later source change touches consultation transaction/scheduling semantics.
+
+## P11-008 Gate D closure / Gate E execution plan — 2026-09-26
+
+Gate D is **ACCEPTED**. External artifact review confirmed the harness and result match the frozen fail-neutral contract.
+
+### Gate E objective
+
+Gate E proves the **real web application boundary**, not just service functions:
+
+```text
+browser credential login
+    ->
+Next.js authenticated page/API
+    ->
+real consultation UI
+    ->
+real disposable PostgreSQL state
+```
+
+The server must be a dedicated local process on a unique port. Do not reuse any already-running dev server because it may be connected to the normal chatbot DB.
+
+### Gate E server safety
+
+Launch the chatbot with process-scoped:
+
+- retained disposable `POSTGRES_URL`;
+- `CONSULTATION_NOTIFICATIONS_ENABLED=false`;
+- `NEXT_TELEMETRY_DISABLED=1`;
+- a unique local port;
+- existing local auth secret/configuration without printing it.
+
+Do not edit `.env.local`.
+
+Browser automation must reject/record any request whose host is not the dedicated localhost server. Do not submit AI queries or open flows that require Legal Service/OpenAI.
+
+### Synthetic authenticated actors
+
+Create fresh disposable-only verified accounts:
+
+- one customer: role=user;
+- one admin: role=admin;
+- one lawyer: role=lawyer.
+
+Use `@example.test` addresses and a runtime-generated password that is never written to result artifacts or logs.
+
+Authentication must go through the real `/login` credential form / NextAuth session. Directly forging browser auth cookies is not accepted.
+
+### Functional workflow
+
+Use the real browser UI and authenticated API behind it.
+
+At minimum:
+
+1. customer opens `/consultations/new`, creates consultation A and reaches its real detail URL;
+2. customer history/detail show schema-backed data, not rollout-unavailable state;
+3. admin queue sees A, opens detail, assigns the synthetic lawyer, then proposes a concrete future slot/method/instructions;
+4. lawyer queue sees assigned A and lawyer detail exposes no assignment control;
+5. customer sees A proposed and confirms it;
+6. lawyer reloads A and completes the confirmed consultation;
+7. consultation B: create -> admin assign/propose -> customer requests rescheduling; verify status returns to requested and active proposal is cleared;
+8. consultation C: customer cancels a requested consultation through the real UI;
+9. consultation D: load the same requested detail in two customer pages; cancel in page 1; attempt the stale cancellation in page 2; require visible stale/conflict UX, refetch to the latest cancelled state, and no automatic retry/second cancellation event.
+
+Direct DB reads may be used only as post-condition evidence, not to simulate these browser mutations.
+
+### Bilingual/responsive evidence
+
+After the functional flow, preserve synthetic data and capture screenshots for:
+
+- customer history;
+- customer new;
+- customer detail;
+- admin queue;
+- admin detail;
+- lawyer queue;
+- lawyer detail.
+
+Capture each surface in:
+
+- desktop zh-CN;
+- desktop English;
+- mobile zh-CN;
+- mobile English.
+
+Use a deterministic desktop viewport such as 1440x1000 and a mobile viewport such as 390x844. Use the real `site-locale` mechanism. Programmatic cookie setting is acceptable for screenshot calibration because locale is not an authorization capability; functional locale switching should still be spot-checked through the real switcher.
+
+Automated visual assertions must at least detect document/body horizontal overflow, inaccessible hidden action controls, failed route loads, untranslated rollout-unavailable state and obvious long synthetic-email/note/instruction wrapping failures. Final visual acceptance remains external/owner review of the screenshots.
+
+Package screenshots into a temporary archive plus a manifest with route, actor, locale, viewport and overflow/assertion result.
+
+### Gate E stop boundary
+
+Gate E must not:
+
+- modify tracked source;
+- add permanent Playwright tests;
+- call AI/Legal Service;
+- send email;
+- contact AWS/S3/Stripe;
+- migrate or drop any DB;
+- run staging/production;
+- commit/push;
+- proceed to disposable DB cleanup.
+
+Retain the disposable DB and all Gate-E temporary evidence for external review.
