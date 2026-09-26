@@ -131,7 +131,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **Deferred P11-005 production-readiness gates (NOT waived):** deployment-compatible `@napi-rs/canvas` packaging, controlled application of migrations `0018`–`0021` plus DB-backed smoke, private S3/IAM/Block Public Access verification, retention/purge and stale-storage-intent operations, and malware/quarantine/scanning strategy. These are now explicit acceptance items for P11-009 AWS/staging work.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
-- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stage 1 SOURCE ACCEPTED at `83506156546dcff2944b21edef16423a5b402d54`; Stage 2 CUSTOMER SOURCE ACCEPTED at `2d91c17a483c0fd30a434536f87b64bc7cf6fe94`; Stage 3 STAFF SOURCE ACCEPTED at `5304742196f08894d249138c30b2245977a52e9b`; migration `0022_first_slayback.sql` remains unapplied on the normal local environment; the P11-008 migrated-DB/runtime acceptance gate is now ACTIVE and must use a disposable cloned chatbot database.**
+- **P11-008 — Appointment / Consultation Workflow: ACTIVE; Stages 1–3 source are accepted (`8350615`, `2d91c17`, `5304742`); runtime Date-binding hotfix is accepted at `62947e779b8a5a39df58038deab7c135e452569f`; disposable runtime Gates A–C are ACCEPTED; Gate D notification fail-neutral smoke is NEXT; migration `0022_first_slayback.sql` remains unapplied on the normal local chatbot database.**
 - **P11-009 — Final bilingual/responsive/accessibility/E2E + AWS/staging acceptance: PLANNED; must close the deferred P11-005 production-readiness gates before production readiness can be claimed.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
@@ -371,3 +371,23 @@ P11-008 now moves to its **migrated-DB/runtime acceptance gate**. This gate must
 The runtime gate must exercise actual migrations through 0022 plus real PostgreSQL transaction behavior, including revision conflicts, same-lawyer overlap serialization, half-open interval semantics, event/state rollback atomicity, assignment/lawyer-role safety, and end-to-end customer/admin/lawyer scheduling. Consultation notification failure must be exercised without contacting real SES/AWS.
 
 Applying 0018–0022 to a disposable clone does **not** close D-040 or make P11-005 production-ready. P11-005 production gates remain deferred to P11-009.
+
+### P11-008 runtime Gates A–C accepted / Gate D active — 2026-09-26
+
+P11-008 runtime acceptance is now operating from product-source checkpoint `62947e779b8a5a39df58038deab7c135e452569f` after the bounded Drizzle timestamp-binding correction discovered by the real PostgreSQL gate.
+
+Accepted runtime evidence:
+
+- **Gate A — disposable isolation: PASS.** Normal chatbot DB remained read-only and unchanged; disposable DB is `chatbot_p11_008_gate_20260926_20c435`.
+- **Gate B — migrated clone: PASS.** The disposable clone migrated from `0017_wooden_silver_sable` through `0022_first_slayback`; the consultation tables, expected FKs and indexes were verified; no 0023 was created.
+- **Gate C — real PostgreSQL service/transaction acceptance: PASS, 11/11 with 0 failed and 0 skipped.** This includes create/event atomicity, assignment, stale OCC, same-lawyer concurrent overlap serialization, half-open adjacency, confirm/re-propose, reschedule, cancel/complete, assigned-lawyer isolation, assignment/demotion concurrency and injected-event rollback atomicity.
+- Gate C initially exposed a real source defect: raw SQL interpolation passed JavaScript `Date` values to postgres-js without the timestamp-column encoder. Commit `62947e7` replaced those predicates with typed Drizzle `lt()/gt()/inArray()` comparisons while preserving strict half-open overlap semantics.
+- A later C6 false negative was confirmed to be test-harness representation drift for PostgreSQL `timestamp without time zone`: raw postgres-js `Date` epochs differed by the Sydney offset while the production Drizzle return/read and database textual timestamp agreed. No second production persistence defect existed.
+- Canonical accepted Gate-C harness SHA-256: `e04f5655868d0e9cd450aa505a3ed9fcb15063fc28fa69020d6fa7585509d8d7`.
+- The normal chatbot DB still ends at `0017_wooden_silver_sable` and still has no `ConsultationRequest` or `ConsultationEvent` tables.
+
+The retained disposable database must remain available for the remaining P11-008 runtime gates.
+
+**Next: Gate D — notification fail-neutral runtime smoke.** Gate D is intentionally narrow: one isolated notification-enabled post-commit mutation on the disposable DB, a synthetic `.test` recipient, and a deliberately unsupported local `EMAIL_PROVIDER` value that fails before SES client/network delivery. The mutation and immutable event must remain committed, `notifyConsultation()` must return fail-neutral false rather than throw, logs must contain only bounded safe metadata, and no AWS/SES network call may occur.
+
+Gate D does not perform browser/API auth E2E; that remains Gate E. P11-008 is still **NOT VERIFIED** until Gate D plus the remaining real-app bilingual/responsive E2E/evidence gates are accepted. D-040 remains fully open for P11-005 production readiness.

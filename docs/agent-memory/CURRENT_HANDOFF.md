@@ -1340,3 +1340,52 @@ Hard safety rules:
 The first runtime session should stop after clone creation + migration verification if any database identity, migration journal or credential-handling assumption is unclear.
 
 The runtime gate is not a P11-005 production-readiness migration. Applying 0018–0021 on the disposable clone leaves D-040 fully open.
+
+## P11-008 Gates A–C accepted / Gate D handoff — 2026-09-26
+
+**Authoritative current P11-008 state:** ACTIVE, not yet VERIFIED.
+
+Product source is accepted through runtime hotfix:
+
+`62947e779b8a5a39df58038deab7c135e452569f` — `fix: bind consultation proposal timestamps safely`
+
+Runtime acceptance completed so far:
+
+- Gate A disposable isolation: PASS;
+- Gate B migrations through 0022 on `chatbot_p11_008_gate_20260926_20c435`: PASS;
+- Gate C real PostgreSQL service/transaction acceptance: PASS, exactly 11/11 with no failure or skip;
+- normal chatbot DB remains at `0017_wooden_silver_sable` with no consultation tables;
+- canonical Gate-C harness SHA-256: `e04f5655868d0e9cd450aa505a3ed9fcb15063fc28fa69020d6fa7585509d8d7`.
+
+Gate C found and closed one real source defect. Raw SQL overlap predicates were binding JavaScript `Date` objects without Drizzle's timestamp encoder. The accepted `62947e7` correction uses column-aware `lt()/gt()` comparisons and preserves the strict half-open overlap rule.
+
+A subsequent C6 failure was diagnostic-only: raw postgres-js representation of a PostgreSQL `timestamp without time zone` differed by the local Sydney offset, while production Drizzle return/read and database text agreed. The harness was corrected; production persistence was not changed again.
+
+### Immediate next action — Gate D only
+
+Use the same retained disposable database. Do **not** remigrate it and do not run browser E2E yet.
+
+Gate D proves one thing: a consultation notification delivery failure after a committed domain mutation is fail-neutral.
+
+Required smoke:
+
+1. create fresh synthetic `.test` customer/admin fixture on the disposable DB with notifications disabled;
+2. record request revision/state/event count;
+3. inside one isolated child/test process, enable `CONSULTATION_NOTIFICATIONS_ENABLED=true`;
+4. set `EMAIL_PROVIDER=p11_gate_d_unsupported` and blank AWS region values so the sender cannot reach SES;
+5. perform a valid admin cancellation through the real consultation service;
+6. after that transaction returns successfully, call `notifyConsultation(id, "staff_cancelled")`;
+7. require notification result `false`, not an exception;
+8. verify the already-committed cancellation, revision increment and one new immutable `cancelled` event remain persisted;
+9. capture console-error metadata only long enough to prove the unsupported-provider + consultation-delivery failure path was reached, then restore the console hook;
+10. assert those captured logs contain no customer email, private note marker, preferred-window content, DB URL/password or AWS credential material;
+11. restore all process-scoped notification/email environment values in `finally`;
+12. recheck disposable DB identity, normal DB unchanged state, clean repo, no external call.
+
+This gate may create temporary `/tmp` harness/result artifacts but must not modify tracked repository source.
+
+Gate D deliberately does **not** prove HTTP/session/browser behavior; Gate E owns the real Next.js customer/admin/lawyer route/auth E2E and bilingual/responsive workflow.
+
+If Gate D exposes a source defect, stop and return to bounded local source patch -> external review -> commit/push. Do not proceed to Gate E.
+
+Do not drop `chatbot_p11_008_gate_20260926_20c435` until the remaining P11-008 runtime gates receive external review and owner approval.

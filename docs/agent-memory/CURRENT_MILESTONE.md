@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED (`8350615`, `2d91c17`, `5304742`); 0022 remains unapplied on normal local DB; DISPOSABLE MIGRATED-DB/RUNTIME GATE ACTIVE |
+| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED; runtime hotfix `62947e7` accepted; Gates A–C PASS on disposable DB; Gate D notification fail-neutral smoke NEXT; normal local DB remains at 0017 with 0022 unapplied |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -632,20 +632,60 @@ For rollback atomicity, a temporary fault-injection trigger/constraint may be in
 
 ### Gate D — Notification fail-neutral runtime smoke with zero real delivery
 
-The default runtime E2E should keep consultation notifications disabled.
+Gate D is the **next active P11-008 runtime gate** after Gate C acceptance.
 
-Separately, exercise one notification-enabled mutation against the disposable DB with a deliberately unsupported local email provider value and a dummy `.test` recipient, so failure occurs before any SES client send/network delivery.
+Use the retained disposable DB only:
 
-Acceptance requires:
+`chatbot_p11_008_gate_20260926_20c435`
 
-- DB mutation commits successfully;
-- notification attempt fails locally;
-- API/service result remains successful;
-- request state and event persist;
+The ordinary fixture/setup path keeps consultation notifications disabled. For exactly one isolated smoke, exercise the production post-commit notification boundary with:
+
+- a fresh synthetic verified customer using an `@example.test` address;
+- a fresh synthetic admin actor;
+- one real consultation created through the accepted consultation service;
+- a valid admin cancellation as the state-changing mutation;
+- notification kind `staff_cancelled`, which targets the synthetic customer;
+- `CONSULTATION_NOTIFICATIONS_ENABLED=true` only inside the child/test process;
+- `EMAIL_PROVIDER=p11_gate_d_unsupported` so `sendEmail()` throws before SES client construction or network send;
+- empty/disabled AWS region values in the child process as a second network-safety guard;
+- restoration of environment and console hooks in `finally`.
+
+The runtime sequence mirrors the accepted route boundary without turning Gate D into browser/auth E2E:
+
+```text
+real consultation mutation commits
+    ->
+immutable consultation event commits
+    ->
+notifyConsultation(id, "staff_cancelled")
+    ->
+target lookup + template/sender path is reached
+    ->
+unsupported provider fails locally before SES
+    ->
+deliverConsultationNotification catches failure
+    ->
+notifyConsultation returns false
+    ->
+committed consultation state/event remain intact
+```
+
+Acceptance requires all of the following:
+
+- disposable DB identity is verified before and after;
+- the cancellation mutation succeeds and advances revision exactly once;
+- exactly one new `cancelled` event persists;
+- `notifyConsultation(..., "staff_cancelled")` returns `false` and does not throw;
+- captured error metadata proves the consultation email path reached the unsupported-provider failure and the notification delivery wrapper absorbed it;
+- captured logs contain no synthetic customer email, private-note marker, preferred-window content, `POSTGRES_URL`, password, AWS credentials or other secret/customer payload;
 - no AWS/SES network call occurs;
-- logs contain only safe notification metadata.
+- child-process notification/email environment is restored before exit;
+- normal local chatbot DB remains at `0017_wooden_silver_sable` with consultation tables absent;
+- repository remains clean and no source/schema/migration file changes are made.
 
-Do not use real email addresses.
+Gate D is **not** HTTP/session/browser E2E and must not claim that scope. Full route/auth/customer/admin/lawyer behavior remains Gate E.
+
+Do not use real email addresses. Do not run Gate E/F in the Gate-D task.
 
 ### Gate E — Customer/admin/lawyer runtime + visual acceptance
 
@@ -684,3 +724,21 @@ Before any cleanup, capture:
 Retain the disposable DB until external review is complete. Drop it only after owner approval.
 
 Any product/source defect found during this gate returns to the normal bounded patch-review workflow. Do not patch production state or manually edit migrated data to make a failing gate pass.
+
+## P11-008 runtime Gates A–C acceptance checkpoint — 2026-09-26
+
+**Current product-source checkpoint:** `62947e779b8a5a39df58038deab7c135e452569f`  
+**Retained disposable DB:** `chatbot_p11_008_gate_20260926_20c435`  
+**Normal chatbot DB:** unchanged at `0017_wooden_silver_sable`; consultation tables absent
+
+Accepted sequence:
+
+- Gate A: PASS — credential-safe disposable clone isolation.
+- Gate B: PASS — disposable migrations through 0022, expected consultation schema/FKs/indexes verified.
+- Gate C: PASS — final canonical run produced exactly **11 PASS / 0 FAIL / 0 SKIP**.
+
+The final Gate-C evidence covered real PostgreSQL concurrency and rollback rather than only deterministic unit logic. Same-lawyer overlapping proposals produced one success plus one domain 409 with no double booking; exactly adjacent half-open intervals both succeeded; assignment vs lawyer demotion preserved the active-assignment invariant; and a disposable-only `P0001` event-insert fault rolled back the request mutation before a clean retry succeeded.
+
+The real Date-binding defect discovered during Gate C was corrected and remotely verified at `62947e7`. No schema/migration change accompanied that correction.
+
+**Immediate next runtime gate: Gate D**, using the refined zero-delivery fail-neutral contract above. Do not repeat Gate C unless a later source change touches consultation transaction/scheduling semantics.
