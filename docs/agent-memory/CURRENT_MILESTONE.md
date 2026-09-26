@@ -41,7 +41,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-005 | Secure Matter Documents & AI File Intake | IMPLEMENTATION COMPLETE — STAGES 1–3 ACCEPTED; PRODUCTION-READINESS DEFERRED TO P11-009; NOT VERIFIED |
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
-| P11-008 | Real appointment/consultation workflow | ACTIVE — STAGES 1–3 SOURCE ACCEPTED; runtime hotfix `62947e7` accepted; Gates A–D PASS on disposable DB; Gate E real Next.js browser/runtime E2E + bilingual/responsive evidence NEXT; normal local DB remains at 0017 with 0022 unapplied |
+| P11-008 | Real appointment/consultation workflow | ACTIVE / NOT VERIFIED — Stages 1–3 source accepted; Gates A–D ACCEPTED; Gate E-Core ACCEPTED; E-Locale NEXT; E-Visual PENDING; normal local DB remains at 0017 with consultation tables absent |
 | P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | PLANNED |
 
 ## P11-004 closure / next task state
@@ -847,3 +847,19 @@ Gate E must not:
 - proceed to disposable DB cleanup.
 
 Retain the disposable DB and all Gate-E temporary evidence for external review.
+
+## P11-008 runtime status supersession — 2026-09-27
+
+This newer checkpoint supersedes earlier “Gate E next” wording for the full functional flow. P11-008 remains **ACTIVE / NOT VERIFIED**.
+
+| Runtime subgate | Status |
+|---|---|
+| Gate A | PASS / ACCEPTED |
+| Gate B | PASS / ACCEPTED |
+| Gate C | PASS / ACCEPTED |
+| Gate D | PASS / ACCEPTED |
+| Gate E-Core | PASS / ACCEPTED |
+| Gate E-Locale | NOT RUN / NEXT |
+| Gate E-Visual | NOT RUN / PENDING |
+
+E-Core freezes E1–E4 functional evidence and the customer/admin/lawyer RBAC closure. Gate E overall is not accepted. The next execution is E-Locale real `zh-CN` ↔ English switching/persistence; E-Visual follows with the 28-screenshot seven-surface bilingual desktop/mobile matrix and external manual review. Retain disposable DB `chatbot_p11_008_gate_20260926_20c435`; do not authorize cleanup. The normal `chatbot` DB remains at `0017_wooden_silver_sable`, without consultation tables. P11-005 remains NOT VERIFIED under D-040.
