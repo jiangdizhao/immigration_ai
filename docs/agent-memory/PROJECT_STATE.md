@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-09-27
+**Updated:** 2026-09-30
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -132,7 +132,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
 - **P11-008 — Appointment / Consultation Workflow: VERIFIED; P11-008 Final UI Acceptance PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED.**
-- **P11-009 — NEXT PHASE 11 TASK; retains deferred P11-005 production-readiness items. Its detailed implementation plan is not set in this checkpoint.**
+- **P11-009 — ACTIVE: Live Policy Intelligence + Phase 11 production readiness / AWS staging acceptance. Stage 1 (live Policy Intelligence backend) is the current implementation unit; deferred P11-005 production-readiness items remain mandatory for later P11-009 stages.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -426,4 +426,27 @@ PostgreSQL temporarily reached `max_connections` during manual acceptance as dis
 
 The retained disposable DB `chatbot_p11_008_gate_20260926_20c435` is migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable` with `ConsultationRequest` and `ConsultationEvent` absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
 
-P11-009 is now the next Phase 11 task. No detailed P11-009 implementation plan is recorded here.
+P11-009 is now **ACTIVE**. The owner expanded it on 2026-09-30 so that the previously dormant Policy Intelligence module becomes a live, automatically maintained official-source-grounded product rather than waiting for a lawyer to manually author every entry. The detailed Stage-1 contract is `docs/agent-memory/tasks/P11-009.md`.
+
+## P11-009 activation — Live Policy Intelligence + production closure — 2026-09-30
+
+The current public Policy Intelligence routes, typed `PolicyEntry` contract, server-only publication boundary and official-source discovery infrastructure remain valuable foundations, but production content is still empty because `MANUAL_POLICY_ENTRIES` contains no published records and P11-003 required manual human promotion.
+
+The owner has now accepted a controlled architecture change under D-048/D-049:
+
+- lawyer pre-authoring is no longer a mandatory publication bottleneck for AI-generated policy explanation;
+- only allowlisted official sources may establish policy/legal facts;
+- official source material, AI interpretation and optional real lawyer commentary remain separate provenance layers;
+- source snapshots and analysis revisions are immutable/versioned so later official-source changes create new revisions rather than silently rewriting history;
+- automatic publication is fail-closed and requires a successful evidence-verification gate; uncertain legal status/effective-date/applicability or unsupported decisive claims must hold the item rather than publish it;
+- AI-generated content must be labelled as AI analysis and must never be rendered as lawyer advice;
+- the existing manual registry remains a compatibility/editorial fallback during migration, not the target canonical live store.
+
+P11-009 is organized into four large stages:
+
+1. **Stage 1 — Live Policy Intelligence backend (ACTIVE):** durable policy/source/revision/sync state, safe official-source acquisition, structured bilingual AI analysis, claim/evidence verification, fail-closed auto-publication semantics, and an operator sync command. No public UI redesign or AWS scheduler yet.
+2. **Stage 2 — Policy Intelligence product activation:** production list/detail/home experience, richer Sovereign Nexus-inspired intelligence presentation, policy-history/diff/importance behavior and Policy Intelligence -> AI Workspace continuity.
+3. **Stage 3 — Whole-platform production hardening:** close D-040/P11-005 deployment-security gates and perform bilingual/responsive/accessibility/E2E regression.
+4. **Stage 4 — AWS staging rollout and acceptance:** migrate to the repository's then-current latest migration, deploy exact images, configure/verify scheduled policy sync, and run final staging acceptance.
+
+Activation source baseline is `phase11-chinese-service-platform-ui-rebase@1e3a2edb3ed20682e7c87b0f1f9f05724a22b2ed` (`add UI template`), which adds the lawyer-provided Sovereign Nexus review artifact under `chatbot/UI_template/`. Coding agents must verify the live branch tip before editing because this documentation checkpoint advances HEAD.

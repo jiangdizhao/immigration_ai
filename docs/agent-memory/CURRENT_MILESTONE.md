@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-09-25
+**Updated:** 2026-09-30
 
 ## Objective
 
@@ -42,7 +42,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
-| P11-009 | Bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | NEXT PHASE 11 TASK; detailed implementation plan not yet set |
+| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGE 1: LIVE POLICY INTELLIGENCE BACKEND |
 
 ## P11-004 closure / next task state
 
@@ -858,4 +858,41 @@ During manual acceptance, disposable-DB postgres.js connections accumulated and 
 
 The disposable DB `chatbot_p11_008_gate_20260926_20c435` remains migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable` with consultation tables absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
 
-P11-009 is the next Phase 11 task. This checkpoint does not define its detailed implementation plan.
+P11-009 is **ACTIVE**. Its scope was expanded by owner decision on 2026-09-30; Stage 1 is the current implementation unit and is specified in `docs/agent-memory/tasks/P11-009.md`.
+
+## P11-009 activation — 2026-09-30
+
+### Revised objective
+
+Complete Phase 11 by first turning Policy Intelligence into a live official-source-grounded service and then closing production-readiness/staging acceptance. The lawyer-provided Sovereign Nexus artifact in `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html` is a product/visual reference only; production source, auth, provenance and safety contracts remain authoritative.
+
+### Four-stage execution model
+
+1. **Stage 1 — Live Policy Intelligence backend — ACTIVE**
+   - introduce durable/versioned policy item, official-source snapshot, AI analysis revision and sync-run persistence;
+   - reuse/harden the existing allowlisted discovery boundary and add safe official-source snapshot acquisition;
+   - generate bilingual structured policy analysis from backend-controlled authoritative evidence;
+   - verify material AI claims against snapshot evidence before publication;
+   - fail closed to held/review-required state when status/effect/applicability/evidence is uncertain;
+   - expose server-side read services for the latest verified/published revisions and an operator `policy:sync` path;
+   - do not redesign the public Policy Intelligence UI or schedule AWS jobs in Stage 1.
+
+2. **Stage 2 — Policy Intelligence product activation**
+   - replace the empty production experience with live published revisions;
+   - implement the richer list/detail/history/impact presentation inspired by the approved Sovereign Nexus template;
+   - preserve Official Source != AI Analysis != Lawyer Commentary;
+   - connect policy records into AI Workspace through an exact server-derived policy reference.
+
+3. **Stage 3 — Phase 11 production hardening**
+   - close all D-040/P11-005 production-readiness gates;
+   - whole-platform bilingual/responsive/accessibility/E2E regression;
+   - no reopening of frozen P11-008 gates unless later code materially invalidates them.
+
+4. **Stage 4 — AWS staging rollout and acceptance**
+   - inspect live topology/migration state first;
+   - migrate to the repository's then-current latest migration rather than a hard-coded 0021/0022 target;
+   - deploy exact images, verify scheduler/sync infrastructure and run final staging acceptance.
+
+### Stage 1 non-goals
+
+Stage 1 must not deploy AWS resources, apply migrations to normal local/staging/production databases, redesign customer-answer architecture, alter Phase 6/ReasoningBank, synthesize lawyer commentary, add arbitrary-web crawling, or implement the final Policy Intelligence UI.

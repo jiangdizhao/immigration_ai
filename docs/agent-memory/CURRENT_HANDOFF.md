@@ -1,6 +1,6 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-09-24
+**Updated:** 2026-09-30
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -1457,4 +1457,41 @@ During manual acceptance, PostgreSQL temporarily reached `max_connections` as di
 
 Retain disposable DB `chatbot_p11_008_gate_20260926_20c435`, migrated through 0022. The normal `chatbot` DB remains unchanged at `0017_wooden_silver_sable`, with `ConsultationRequest` and `ConsultationEvent` absent. P11-005 deferred production-readiness items remain **NOT VERIFIED** and are not closed by P11-008.
 
-**P11-009 is now the next Phase 11 task.** Its detailed implementation plan is not established in this checkpoint.
+**P11-009 is ACTIVE.** Owner-approved scope was expanded on 2026-09-30. Stage 1 is the immediate implementation unit; see `docs/agent-memory/tasks/P11-009.md`.
+
+## P11-009 activation handoff — 2026-09-30
+
+### Activation baseline
+
+- Branch: `phase11-chinese-service-platform-ui-rebase`.
+- Activation source baseline before this documentation update: `1e3a2edb3ed20682e7c87b0f1f9f05724a22b2ed` — `add UI template`.
+- That commit is one clean descendant of the P11-008 final docs checkpoint and adds only `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html`, `README.txt`, and the review ZIP.
+- P11-008 remains VERIFIED/CLOSED. Do not rerun its frozen Gates merely for reassurance.
+- P11-005 remains NOT VERIFIED under D-040; its deployment/security gates are carried to P11-009 Stage 3/4.
+
+### Why P11-009 changed
+
+The existing Policy Intelligence UI and discovery foundation are implemented but production remains empty because the server-only `MANUAL_POLICY_ENTRIES` registry has no published records and the P11-003 workflow required manual human promotion. The owner and lawyer stakeholder now require current policy interpretation to be generated and maintained by the system rather than waiting for manual lawyer authoring.
+
+D-048/D-049 therefore supersede only the mandatory-manual-publication aspect of P11-003. Provenance and safety remain strict:
+
+- official-source facts must come from backend-held allowlisted authoritative sources;
+- AI analysis is a separate labelled layer and is never official source text;
+- optional lawyer commentary may appear only when a real lawyer actually supplies/reviews it;
+- automatic publication requires evidence verification and fails closed when decisive support or legal-status/currentness semantics are uncertain;
+- source snapshots and analysis revisions are versioned/immutable.
+
+### Immediate next action — Stage 1 only
+
+The coding model should execute `docs/agent-memory/tasks/P11-009.md` and stop after the Stage-1 implementation/validation boundary. It must leave the implementation **uncommitted and unpushed** for external review.
+
+Do not start Stage 2 UI work, Stage 3 P11-005 production hardening, Stage 4 AWS deployment/scheduler work, or live paid-provider acceptance in the same task.
+
+Expected end-of-task evidence:
+
+- exact changed files;
+- schema/migration artifact status, with migrations NOT APPLIED;
+- deterministic offline/fixture tests for acquisition, versioning, analysis schema, verification and publication gate;
+- unit/build/Biome/`git diff --check` results;
+- explicit confirmation that AWS/S3/SES/Stripe were not contacted and no normal/staging/production DB was migrated;
+- `CURRENT_HANDOFF.md` updated with implementation findings, risks and next review action.

@@ -783,3 +783,58 @@ Notification fail-neutral runtime acceptance must avoid real delivery. A deliber
 Applying 0018–0021 to the disposable clone is compatibility testing only. It does not close D-040, does not verify P11-005 production readiness and does not authorize deployment.
 
 If a source defect is discovered, stop the runtime gate and return to the normal local patch -> external review -> commit/push workflow. Do not mutate data manually to hide a failing invariant.
+
+
+## D-048 — Live Policy Intelligence may auto-publish verified AI analysis from authoritative sources
+
+**Date:** 2026-09-30  
+**Status:** ACCEPTED
+
+The previous P11-003 Policy Intelligence publication workflow required a human to manually promote every discovery candidate into a typed `PolicyEntry` before anything could be public. That manual workflow was intentionally conservative while the discovery and provenance boundaries were being established, but it is no longer the target production operating model.
+
+The accepted production direction is an automated, evidence-grounded Policy Intelligence pipeline:
+
+```text
+allowlisted official-source discovery
+    -> backend-controlled official-source acquisition
+    -> immutable/versioned source snapshot
+    -> structured bilingual AI analysis
+    -> claim/evidence verification
+    -> fail-closed publication gate
+    -> published Policy Intelligence revision
+```
+
+Mandatory invariants:
+
+- Official/legal facts must be established only from backend-held, allowlisted authoritative sources. The model must not invent an authority, source date, effective date, legal status, commencement rule or source text.
+- Provider-native/open-ended web search is not a publication authority path. Any related source used to support publication must first enter through the backend-controlled allowlisted acquisition boundary and become a source snapshot.
+- Official source text, AI analysis and lawyer commentary are separate provenance classes in storage, APIs and UI.
+- AI-generated analysis may be published without mandatory lawyer pre-review only after the evidence-verification gate passes.
+- AI analysis must be explicitly labelled as AI-generated interpretation and must never be presented as lawyer advice or as verbatim official law.
+- Lawyer commentary is optional and may be populated only from actual lawyer-authored/reviewed content; the AI pipeline must not fabricate it.
+- Automatic publication is fail-closed. Uncertain legal/source status, ambiguous effective/commencement semantics, unresolved applicability, malformed source metadata, unsupported decisive claims, verifier failure, provider failure or incomplete evidence must hold the revision for review rather than publish it.
+- Source snapshots and analysis revisions are immutable/versioned. A changed official-source content hash creates a new snapshot/revision; history is not silently overwritten.
+- The existing `MANUAL_POLICY_ENTRIES` registry may remain temporarily as compatibility/editorial fallback during migration, but it is not the target canonical store for live automatically maintained policy intelligence.
+- Public presentation may summarize official material and link to the official source, but must preserve the provenance distinction and must not mislabel AI text as an official excerpt.
+
+This decision supersedes only the mandatory manual-promotion/publication requirement of the earlier P11-003 workflow. The existing allowlist, SSRF/network-safety, source/legal-status separation, public-safe projection and no-fabricated-law invariants remain authoritative.
+
+## D-049 — P11-009 expands to Live Policy Intelligence plus Phase 11 production closure
+
+**Date:** 2026-09-30  
+**Status:** ACCEPTED
+
+P11-009 is no longer only a final bilingual/responsive/accessibility/E2E and AWS/staging acceptance task. The owner explicitly expanded the milestone because live, current Policy Intelligence is now a launch-critical product requirement.
+
+P11-009 is one large milestone with four sequential stages:
+
+1. **Stage 1 — Live Policy Intelligence backend:** durable policy/source/revision/sync state, official-source acquisition, structured bilingual AI analysis, evidence verification, fail-closed auto-publication semantics and an operator sync path.
+2. **Stage 2 — Policy Intelligence product activation:** production list/detail/home experience, richer Sovereign Nexus-inspired intelligence presentation, history/diff/importance behavior and Policy Intelligence -> AI Workspace continuity.
+3. **Stage 3 — Whole-platform production hardening:** close D-040/P11-005 deployment/security gates and run bilingual/responsive/accessibility/E2E regression.
+4. **Stage 4 — AWS staging rollout and acceptance:** inspect actual topology/migration state, migrate to the then-current latest repository migration, deploy exact images, configure/verify scheduled policy sync and complete staging acceptance.
+
+Stage 1 is the active implementation unit. Later stages must not be started implicitly by the Stage-1 coding task.
+
+The lawyer-provided `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html` is a product/visual reference, not functional or legal authority. Mock names, credentials, statistics, lawyer claims, office details, availability claims and prototype behavior from that artifact must not be copied as production facts.
+
+D-040 remains fully in force. Expanding P11-009 does not waive any deferred P11-005 production-readiness gate.
