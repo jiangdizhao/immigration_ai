@@ -2284,3 +2284,41 @@ The app had no external network route, and the browser guard allowed only the lo
 The app and PostgreSQL containers and their internal Docker network were removed. The temporary HTTPS proxy was stopped. Synthetic fixture/password files, storage states, certificate/key, and temporary runner/seeder scripts were removed. The rebuilt image remains local as non-sensitive evidence of the tested artifact. No normal chatbot, P11-008, Stage-1, staging, or production database was contacted or modified.
 
 **Gate I final targeted rerun: FAIL — stopped at the missing “Delete all consultations” control. Recommendation: STOP FOR OWNER REVIEW. P11-009 Stage 3 is not accepted. P11-005 remains NOT VERIFIED; D-040 is NOT fully closed; Stage 4 has NOT STARTED.** Keep all work uncommitted and unpushed.
+
+
+## P11-009 Stage 3 accepted / Stage 4 activated — 2026-09-30
+
+**Stage 3 accepted checkpoint:** `e3b42c2004054da1eb3a6fd81c9f21dccdeb6b75` (`feat: complete P11-009 stage 3 production hardening`).
+
+Direct GitHub review confirmed that the pushed checkpoint contains the reviewed Stage-3 hardening mechanisms and the bounded Gate-I accessibility correction. The branch tip and remote ref both matched `e3b42c2004054da1eb3a6fd81c9f21dccdeb6b75`; the commit had no attached GitHub status checks.
+
+Acceptance is based on the combined evidence accumulated during Stage 3:
+
+- Gates A–H passed: production image build, in-container native canvas/PDF.js verifier, stock migration/preflight tooling on fresh disposable PostgreSQL, clean-only MatterDocument DB-backed security matrix, migration safety negatives, migration-free production startup, focused Phase1B ordering assertions, and injected/fake S3 security preflight.
+- The first authenticated Gate-I run used real Credentials-provider sessions and established customer/admin/lawyer RBAC, session persistence, cross-customer ownership denial, cross-lawyer assignment denial, locale switching/persistence, representative desktop/mobile no-overflow behavior, and outbound-network blocking. Its remaining blocker was the bounded accessibility defect set.
+- The accessibility correction at the accepted checkpoint removes the nested AI-Workspace `main`, adds accessible names to the two icon-only sidebar controls, labels the AI-Workspace textarea, and labels the lawyer reasoning/research-feedback textarea. Unit tests remained **443/443**, production build passed, focused Biome/Ultracite passed, and `git diff --check` passed before commit.
+- The final automated targeted rerun stopped because its temporary harness did not find the visible “Delete all consultations” control. That run did not establish a product regression. Owner browser verification on the current local checkpoint subsequently confirmed `/ai-workspace` has exactly one `main`; “Delete all consultations” and “Start a new consultation” are visible with the expected accessible names; the AI-Workspace textarea is visible with a localized accessible name; and, under a real lawyer-role session, the target reasoning/research-feedback textarea is visible with the localized accessible name. Source review also confirms the other visible lawyer-response/corrected-answer textareas are implicitly labelled by their enclosing `<label>` elements.
+- The temporary Playwright harness therefore remains somewhat brittle around page/sidebar settlement, but no unresolved Stage-3 product defect is established by that false-negative. Do not start another micro-fix loop for this harness unless a future staging run reproduces a real product failure.
+
+**P11-009 Stage 3: ACCEPTED.**
+
+This acceptance does **not** close D-040 and does **not** mark P11-005 VERIFIED. Environment-specific proof still belongs to Stage 4: actual staging migration to the then-current migration head, actual ECS/Fargate architecture and exact-image native verification, real private-S3/IAM/BPA/encryption evidence, concrete malware-scanner configuration/reconciliation, exact deployed-image/rollback evidence, and staging live Policy Intelligence scheduling/sync acceptance.
+
+### Stage 4 next gate — read-only staging reconnaissance
+
+Stage 4 is now active, but the next execution unit is deliberately **read-only**. Before any AWS mutation, migration, deployment, scheduler change, or scanner configuration, inspect the authoritative staging topology and produce an exact mutation/rollback plan.
+
+The read-only gate must identify, without inferring from local Compose:
+
+- AWS account/region and staging ECS/Fargate cluster, services, task definitions, CPU architecture and currently deployed image digests;
+- staging ECR repositories/images relevant to chatbot/legal-service;
+- staging database service/endpoint identity and current migration state when it can be inspected safely read-only;
+- MatterDocument S3 bucket region, encryption, Block Public Access, bucket-policy/public posture, and effective application task role/policies;
+- any existing malware-scanning integration/configuration;
+- any existing EventBridge/EventBridge Scheduler/other schedule for Policy Intelligence sync;
+- staging ALB/domain/routing topology needed for exact acceptance;
+- current rollback anchors.
+
+This gate authorizes **no mutation**: no service update, task-definition registration, image push, database migration, S3/IAM/policy change, scheduler creation/update, scanner enablement, DNS/routing change, or deployment. If credentials/topology are unavailable, stop and report rather than guessing.
+
+After read-only reconnaissance, return for owner review before Stage-4 mutation/deployment.

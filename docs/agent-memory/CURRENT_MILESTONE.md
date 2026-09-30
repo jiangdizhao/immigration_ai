@@ -42,7 +42,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
-| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGES 1–2 ACCEPTED; STAGE 3: WHOLE-PLATFORM PRODUCTION HARDENING |
+| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGES 1–3 ACCEPTED; STAGE 4 READ-ONLY STAGING PREFLIGHT NEXT |
 
 
 ## P11-009 Stage 1 accepted / Stage 2 activated — 2026-09-30
@@ -914,3 +914,16 @@ Stage 2 is **ACCEPTED** at remote checkpoint `0afa4cb7921e74ee6a2263b66743a875c5
 Stage 3 is now the active implementation unit. It hardens the production artifact and operational boundaries without performing AWS/staging mutation in the initial coding pass. The required source work covers production container/runtime separation, native parser/canvas self-checking, migration preflight separation, MatterDocument retention/recovery operations, fail-closed malware/quarantine gating and scanner abstraction, private-S3 preflight tooling, and a concentrated whole-platform bilingual/responsive/accessibility/E2E regression harness.
 
 D-040 remains mandatory. Stage-3 source acceptance alone does not mark P11-005 VERIFIED. Environment-specific proofs—actual staging migration, real ECS/Fargate native binding, real S3/IAM/BPA and concrete scanner configuration—remain controlled Stage-4 acceptance actions after explicit owner authorization.
+
+
+## P11-009 Stage 3 accepted / Stage 4 activated — 2026-09-30
+
+Stage 3 is **ACCEPTED** at `e3b42c2004054da1eb3a6fd81c9f21dccdeb6b75`.
+
+Accepted evidence includes the production-image/native-runtime gate; explicit stock migration/preflight tooling; disposable-PostgreSQL migration/runtime security matrix; migration-free service startup; MatterDocument stale-intent/retention/security mechanisms; injected S3-preflight logic; authenticated customer/admin/lawyer RBAC and object-scope checks; bilingual/desktop/mobile runtime coverage; and the bounded accessibility correction confirmed by source review plus owner browser verification on the current checkpoint.
+
+The final automated targeted Playwright rerun produced a sidebar/control false-negative before completing the bounded rerun. The current source and owner browser verification contradict a product failure: the corrected AI Workspace and lawyer feedback controls are present and accessible. Treat the harness settlement issue as non-blocking unless staging reproduces a real product defect; do not reopen Stage 3 through repeated micro-gates.
+
+Stage 4 is now active. Its first gate is **read-only AWS/staging reconnaissance only**. No AWS mutation, migration, deployment, image push, task-definition update, S3/IAM change, scanner configuration, scheduler change or DNS/routing change is authorized by this activation.
+
+D-040 remains open and P11-005 remains **NOT VERIFIED** until Stage 4 supplies the required real environment evidence.

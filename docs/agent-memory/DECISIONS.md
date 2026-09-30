@@ -894,3 +894,28 @@ Environment-specific proof remains Stage 4 / separately authorized acceptance:
 
 Accordingly, Stage-3 source acceptance alone does not mark D-040 closed and does not mark P11-005 VERIFIED. Those statuses require the mandatory environment evidence to be recorded later.
 
+
+
+## D-052 — P11-009 Stage 3 is accepted; Stage 4 begins with read-only authoritative reconnaissance
+
+**Date:** 2026-09-30  
+**Status:** ACCEPTED
+
+P11-009 Stage 3 is accepted at `e3b42c2004054da1eb3a6fd81c9f21dccdeb6b75`.
+
+The acceptance basis is cumulative rather than one brittle Playwright assertion:
+
+- reviewed Stage-3 production-hardening source at the pushed checkpoint;
+- passed production-image/native-runtime, stock migration/preflight, disposable-PostgreSQL security, migration-safety, startup-separation and S3-preflight gates;
+- authenticated customer/admin/lawyer RBAC, ownership and assignment evidence;
+- bilingual and representative desktop/mobile runtime evidence;
+- deterministic unit/build/lint/diff validation;
+- bounded accessibility corrections confirmed in source and by owner browser verification on the current checkpoint.
+
+The final automated targeted Gate-I rerun stopped when its temporary harness failed to observe a sidebar control. Subsequent owner browser verification on the current checkpoint confirmed the control is visible with the expected accessible name, together with the other bounded accessibility corrections. This is not treated as a demonstrated product regression. The harness settlement issue may be revisited only if staging reproduces a real failure; it must not trigger an indefinite local micro-fix loop.
+
+Stage-3 acceptance does not close D-040 and does not mark P11-005 VERIFIED.
+
+Stage 4 therefore starts with a **read-only authoritative staging reconnaissance gate**. Historical notes and local Compose must not be used to infer live AWS topology. Before any staging mutation, the project must inspect the actual ECS/Fargate, image, database, S3/IAM/BPA/encryption, malware-scanning, scheduler and routing state and produce an exact rollout/rollback plan.
+
+Stage-4 reconnaissance itself does not authorize deployment, migration, image push, ECS/task-definition updates, S3/IAM changes, scanner configuration, scheduler changes or DNS/routing changes. Those require a separate explicit owner authorization after the reconnaissance report.

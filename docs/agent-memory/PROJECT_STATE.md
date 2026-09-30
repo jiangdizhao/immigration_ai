@@ -470,3 +470,17 @@ Stage 3 is the repository/source hardening layer before AWS staging mutation. Th
 No normal/retained/staging/production database migration and no AWS/S3 mutation is authorized by the initial Stage-3 coding task. If a new schema migration appears necessary, the coding model must stop and report rather than generate/apply it automatically.
 
 D-040 is not waived and P11-005 remains NOT VERIFIED. Real ECS/Fargate native binding, real staging migration to the then-current repository head, real S3/IAM/BPA and concrete malware-scanning configuration are environment-specific evidence items for later explicitly authorized acceptance, primarily Stage 4.
+
+
+## Current P11-009 closure state — 2026-09-30
+
+- P11-009 Stage 1 — **ACCEPTED** at `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1`.
+- P11-009 Stage 2 — **ACCEPTED** at `0afa4cb7921e74ee6a2263b66743a875c5cf3e07`.
+- P11-009 Stage 3 — **ACCEPTED** at `e3b42c2004054da1eb3a6fd81c9f21dccdeb6b75`.
+- P11-009 Stage 4 — **ACTIVE, READ-ONLY PREFLIGHT NEXT**.
+
+Stage-3 acceptance combines direct source review, local production-image/native-runtime evidence, disposable-PostgreSQL migration/security gates, authenticated role/ownership runtime evidence, locale/responsive evidence, deterministic source validation, and owner browser confirmation of the bounded accessibility corrections. No new Stage-3 source correction is active.
+
+The production deployment state is still not inferred from Git. The last recorded production-style ECS state remains historical until Stage 4 inspects authoritative AWS topology. D-040 remains open and P11-005 remains **NOT VERIFIED** pending actual staging migration, exact ECS/Fargate image/architecture verification, real S3/IAM/BPA/encryption evidence, concrete malware-scanner configuration/reconciliation, and deployment/rollback acceptance.
+
+The next execution unit must be read-only AWS/staging reconnaissance. Do not mutate AWS or staging until the reconnaissance result is reviewed and a separate owner authorization names the exact mutation/deployment plan.
