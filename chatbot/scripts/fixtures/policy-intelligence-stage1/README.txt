@@ -1,0 +1,1 @@
+Fictional offline fixture content only. It is not Australian law, policy guidance, or legal advice. The operator --fixture path uses synthetic index/detail responses and deterministic analyzer/verifier fakes; it must never be served as production content.

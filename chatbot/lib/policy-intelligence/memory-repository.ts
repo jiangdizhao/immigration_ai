@@ -1,0 +1,221 @@
+import type {
+  PolicyIntelligenceRepository,
+  PolicyItemRecord,
+  PolicyRevisionRecord,
+  PolicyRevisionWriteResult,
+  PolicyRunRecord,
+  PolicySnapshotRecord,
+} from "./pipeline";
+
+export function createInMemoryPolicyIntelligenceRepository() {
+  const items = new Map<string, PolicyItemRecord>();
+  const snapshots = new Map<string, PolicySnapshotRecord>();
+  const revisions = new Map<string, PolicyRevisionRecord>();
+  const runs = new Map<string, PolicyRunRecord>();
+  let sequence = 0;
+  const nextId = () => `fixture-${++sequence}`;
+  const assertPointerIntegrity = (item: PolicyItemRecord) => {
+    if (item.latestSnapshotId) {
+      const snapshot = snapshots.get(item.latestSnapshotId);
+      if (!snapshot || snapshot.itemId !== item.id) {
+        throw new Error("latest_snapshot_pointer_mismatch");
+      }
+    }
+    if (item.latestPublishedRevisionId) {
+      const revision = revisions.get(item.latestPublishedRevisionId);
+      if (
+        !revision ||
+        revision.itemId !== item.id ||
+        revision.editorialStatus !== "published"
+      ) {
+        throw new Error("latest_published_revision_pointer_mismatch");
+      }
+    }
+  };
+
+  const repository: PolicyIntelligenceRepository = {
+    startRun(run) {
+      runs.set(run.id, {
+        ...run,
+        completedAt: null,
+        discoveredCount: 0,
+        snapshottedCount: 0,
+        unchangedCount: 0,
+        analyzedCount: 0,
+        publishedCount: 0,
+        heldCount: 0,
+        failureCount: 0,
+        safeErrorCode: null,
+      });
+    },
+    finishRun(run) {
+      runs.set(run.id, structuredClone(run));
+    },
+    getOrCreateItem(input) {
+      const existing = [...items.values()].find(
+        (item) =>
+          item.sourceConfigId === input.sourceConfigId &&
+          item.sourceId === input.sourceId &&
+          item.canonicalOfficialUrl === input.canonicalOfficialUrl
+      );
+      if (existing) {
+        return existing;
+      }
+      const conflictingIdentity = [...items.values()].some(
+        (item) =>
+          (item.sourceConfigId === input.sourceConfigId &&
+            item.sourceId === input.sourceId) ||
+          item.canonicalOfficialUrl === input.canonicalOfficialUrl
+      );
+      if (conflictingIdentity) {
+        throw new Error("policy_item_identity_conflict");
+      }
+      return repository.createItem(input);
+    },
+    createItem(input) {
+      const item: PolicyItemRecord = {
+        ...input,
+        id: nextId(),
+        latestSnapshotId: null,
+        latestPublishedRevisionId: null,
+      };
+      items.set(item.id, item);
+      return item;
+    },
+    hasRevisionForAnalysis(snapshotId, analysisFingerprint) {
+      return [...revisions.values()].some(
+        (revision) =>
+          revision.snapshotId === snapshotId &&
+          revision.analysisFingerprint === analysisFingerprint
+      );
+    },
+    acquireSnapshot(input) {
+      const item = items.get(input.itemId);
+      if (!item) {
+        throw new Error("policy_item_missing");
+      }
+      assertPointerIntegrity(item);
+      const previous = item.latestSnapshotId
+        ? snapshots.get(item.latestSnapshotId)
+        : undefined;
+      if (item.latestSnapshotId && (!previous || previous.itemId !== item.id)) {
+        throw new Error("latest_snapshot_pointer_mismatch");
+      }
+      if (previous?.contentHash === input.contentHash) {
+        return { snapshot: previous, created: false };
+      }
+      if (
+        previous &&
+        new Date(input.retrievedAt).getTime() <
+          new Date(previous.retrievedAt).getTime()
+      ) {
+        return { snapshot: previous, created: false, staleAcquisition: true };
+      }
+      const snapshot: PolicySnapshotRecord = {
+        ...structuredClone(input),
+        id: nextId(),
+        previousSnapshotId: previous?.id ?? null,
+      };
+      snapshots.set(snapshot.id, snapshot);
+      item.latestSnapshotId = snapshot.id;
+      return { snapshot, created: true };
+    },
+    saveHeldRevision(input): PolicyRevisionWriteResult {
+      const existing = [...revisions.values()].find(
+        (revision) =>
+          revision.snapshotId === input.snapshotId &&
+          revision.analysisFingerprint === input.analysisFingerprint
+      );
+      if (existing) {
+        return { revision: existing, created: false };
+      }
+      const item = items.get(input.itemId);
+      const snapshot = snapshots.get(input.snapshotId);
+      if (!item) {
+        throw new Error("policy_item_missing");
+      }
+      if (!snapshot || snapshot.itemId !== item.id) {
+        throw new Error("revision_snapshot_item_mismatch");
+      }
+      assertPointerIntegrity(item);
+      const revisionNumber =
+        Math.max(
+          0,
+          ...[...revisions.values()]
+            .filter((revision) => revision.itemId === item.id)
+            .map((revision) => revision.revisionNumber)
+        ) + 1;
+      const revision: PolicyRevisionRecord = {
+        ...structuredClone(input),
+        id: nextId(),
+        revisionNumber,
+        publishedAt: null,
+        supersededAt: null,
+      };
+      revisions.set(revision.id, revision);
+      if (item.latestSnapshotId === input.snapshotId) {
+        item.editorialStatus = "review_required";
+      }
+      return { revision, created: true };
+    },
+    publishRevision(input): PolicyRevisionWriteResult {
+      const existing = [...revisions.values()].find(
+        (revision) =>
+          revision.snapshotId === input.snapshotId &&
+          revision.analysisFingerprint === input.analysisFingerprint
+      );
+      if (existing) {
+        return { revision: existing, created: false };
+      }
+      const item = items.get(input.itemId);
+      const snapshot = snapshots.get(input.snapshotId);
+      if (!item) {
+        throw new Error("policy_item_missing");
+      }
+      if (!snapshot || snapshot.itemId !== item.id) {
+        throw new Error("revision_snapshot_item_mismatch");
+      }
+      assertPointerIntegrity(item);
+      if (item.latestSnapshotId !== input.snapshotId) {
+        throw new Error("revision_snapshot_not_latest");
+      }
+      const current = item.latestPublishedRevisionId
+        ? revisions.get(item.latestPublishedRevisionId)
+        : undefined;
+      if (
+        item.latestPublishedRevisionId &&
+        (!current ||
+          current.itemId !== item.id ||
+          current.editorialStatus !== "published")
+      ) {
+        throw new Error("latest_published_revision_pointer_mismatch");
+      }
+      const revisionNumber =
+        Math.max(
+          0,
+          ...[...revisions.values()]
+            .filter((revision) => revision.itemId === item.id)
+            .map((revision) => revision.revisionNumber)
+        ) + 1;
+      const now = input.generatedAt;
+      if (current) {
+        current.editorialStatus = "superseded";
+        current.supersededAt = now;
+      }
+      const revision: PolicyRevisionRecord = {
+        ...structuredClone(input),
+        id: nextId(),
+        revisionNumber,
+        editorialStatus: "published",
+        publishedAt: now,
+        supersededAt: null,
+      };
+      revisions.set(revision.id, revision);
+      item.sourceStatus = revision.analysis.sourceStatus.value;
+      item.editorialStatus = "published";
+      item.latestPublishedRevisionId = revision.id;
+      return { revision, created: true };
+    },
+  };
+  return { repository, items, snapshots, revisions, runs };
+}

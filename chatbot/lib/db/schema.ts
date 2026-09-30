@@ -931,3 +931,159 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// P11-009 Stage 1: durable, source-grounded Policy Intelligence revisions.
+// Snapshot evidence and analysis payloads are append-only; only publication
+// lifecycle pointers/status fields advance as newer verified revisions publish.
+export const policyIntelligenceItem = pgTable(
+  "PolicyIntelligenceItem",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    slug: varchar("slug", { length: 180 }).notNull(),
+    primarySourceConfigId: varchar("primarySourceConfigId", {
+      length: 100,
+    }).notNull(),
+    primarySourceId: varchar("primarySourceId", { length: 255 }).notNull(),
+    canonicalOfficialUrl: text("canonicalOfficialUrl").notNull(),
+    sourceStatus: varchar("sourceStatus", {
+      enum: ["in_force", "announced", "proposed", "consultation", "superseded"],
+    })
+      .notNull()
+      .default("announced"),
+    editorialStatus: varchar("editorialStatus", {
+      enum: ["draft", "review_required", "published", "archived"],
+    })
+      .notNull()
+      .default("draft"),
+    latestSnapshotId: uuid("latestSnapshotId"),
+    latestPublishedRevisionId: uuid("latestPublishedRevisionId"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    slugUnique: uniqueIndex("PolicyIntelligenceItem_slug_unique").on(
+      table.slug
+    ),
+    sourceIdentityUnique: uniqueIndex(
+      "PolicyIntelligenceItem_source_identity_unique"
+    ).on(
+      table.primarySourceConfigId,
+      table.primarySourceId,
+      table.canonicalOfficialUrl
+    ),
+    statusIndex: index("PolicyIntelligenceItem_publication_status_idx").on(
+      table.editorialStatus,
+      table.updatedAt
+    ),
+  })
+);
+
+export const policyIntelligenceSourceSnapshot = pgTable(
+  "PolicyIntelligenceSourceSnapshot",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    itemId: uuid("itemId")
+      .notNull()
+      .references(() => policyIntelligenceItem.id, { onDelete: "restrict" }),
+    sourceConfigId: varchar("sourceConfigId", { length: 100 }).notNull(),
+    sourceId: varchar("sourceId", { length: 255 }).notNull(),
+    authority: varchar("authority", { length: 255 }).notNull(),
+    canonicalUrl: text("canonicalUrl").notNull(),
+    officialTitle: text("officialTitle").notNull(),
+    retrievedAt: timestamp("retrievedAt").notNull(),
+    contentType: varchar("contentType", { length: 100 }).notNull(),
+    httpStatus: integer("httpStatus").notNull(),
+    sourceDate: varchar("sourceDate", { length: 10 }),
+    effectiveDate: varchar("effectiveDate", { length: 10 }),
+    normalizedEvidence: text("normalizedEvidence").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    evidenceTruncated: boolean("evidenceTruncated").notNull().default(false),
+    sourceMetadata: json("sourceMetadata").notNull(),
+    previousSnapshotId: uuid("previousSnapshotId"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    itemHashIndex: index("PolicyIntelligenceSourceSnapshot_item_hash_idx").on(
+      table.itemId,
+      table.contentHash
+    ),
+    itemRetrievedIndex: index(
+      "PolicyIntelligenceSourceSnapshot_item_retrieved_idx"
+    ).on(table.itemId, table.retrievedAt),
+  })
+);
+
+export const policyIntelligenceAnalysisRevision = pgTable(
+  "PolicyIntelligenceAnalysisRevision",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    itemId: uuid("itemId")
+      .notNull()
+      .references(() => policyIntelligenceItem.id, { onDelete: "restrict" }),
+    snapshotId: uuid("snapshotId")
+      .notNull()
+      .references(() => policyIntelligenceSourceSnapshot.id, {
+        onDelete: "restrict",
+      }),
+    analysisFingerprint: varchar("analysisFingerprint", {
+      length: 64,
+    }).notNull(),
+    revisionNumber: integer("revisionNumber").notNull(),
+    schemaVersion: varchar("schemaVersion", { length: 100 }).notNull(),
+    analysis: json("analysis").notNull(),
+    verification: json("verification").notNull(),
+    modelMetadata: json("modelMetadata").notNull(),
+    editorialStatus: varchar("editorialStatus", {
+      enum: ["draft", "review_required", "published", "superseded", "archived"],
+    }).notNull(),
+    generatedAt: timestamp("generatedAt").notNull(),
+    publishedAt: timestamp("publishedAt"),
+    supersededAt: timestamp("supersededAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    itemRevisionUnique: uniqueIndex(
+      "PolicyIntelligenceAnalysisRevision_item_revision_unique"
+    ).on(table.itemId, table.revisionNumber),
+    snapshotIndex: index("PolicyIntelligenceAnalysisRevision_snapshot_idx").on(
+      table.snapshotId
+    ),
+    snapshotAnalysisFingerprintUnique: uniqueIndex(
+      "PolicyIntelligenceAnalysisRevision_snapshot_analysis_fingerprint_unique"
+    ).on(table.snapshotId, table.analysisFingerprint),
+    publicationIndex: index(
+      "PolicyIntelligenceAnalysisRevision_publication_idx"
+    ).on(table.editorialStatus, table.publishedAt),
+  })
+);
+
+export const policyIntelligenceSyncRun = pgTable(
+  "PolicyIntelligenceSyncRun",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    sourceConfigId: varchar("sourceConfigId", { length: 100 }).notNull(),
+    mode: varchar("mode", { enum: ["live", "fixture"] }).notNull(),
+    status: varchar("status", {
+      enum: ["running", "complete", "partial", "failed"],
+    }).notNull(),
+    startedAt: timestamp("startedAt").notNull(),
+    completedAt: timestamp("completedAt"),
+    discoveredCount: integer("discoveredCount").notNull().default(0),
+    snapshottedCount: integer("snapshottedCount").notNull().default(0),
+    unchangedCount: integer("unchangedCount").notNull().default(0),
+    analyzedCount: integer("analyzedCount").notNull().default(0),
+    publishedCount: integer("publishedCount").notNull().default(0),
+    heldCount: integer("heldCount").notNull().default(0),
+    failureCount: integer("failureCount").notNull().default(0),
+    safeErrorCode: varchar("safeErrorCode", { length: 100 }),
+    metadata: json("metadata").notNull().default({}),
+  },
+  (table) => ({
+    sourceStartedIndex: index(
+      "PolicyIntelligenceSyncRun_source_started_idx"
+    ).on(table.sourceConfigId, table.startedAt),
+    statusStartedIndex: index(
+      "PolicyIntelligenceSyncRun_status_started_idx"
+    ).on(table.status, table.startedAt),
+  })
+);

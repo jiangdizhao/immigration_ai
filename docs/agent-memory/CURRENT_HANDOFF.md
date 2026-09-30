@@ -1495,3 +1495,259 @@ Expected end-of-task evidence:
 - unit/build/Biome/`git diff --check` results;
 - explicit confirmation that AWS/S3/SES/Stripe were not contacted and no normal/staging/production DB was migrated;
 - `CURRENT_HANDOFF.md` updated with implementation findings, risks and next review action.
+
+## P11-009 Stage 1 implementation handoff — 2026-09-30
+
+**Status:** Stage 1 implementation is complete locally and awaits owner/external source and security review. Changes are intentionally **uncommitted and unpushed**. Stage 2 has not started.
+
+### Implementation delivered
+
+- Added durable Policy Intelligence item, source snapshot, analysis revision, and sync-run schemas with additive migration `0023_chief_famine.sql` and matching Drizzle snapshot/journal entry. **Migration NOT APPLIED** to any database.
+- Added strict bilingual analysis and verification contracts, including stable claim IDs, claim/evidence links for every customer-visible narrative section, bilingual uncertainty, source-status support requirements, and a deterministic fail-closed publication gate.
+- Added provider adapters with configurable analyzer/verifier model metadata, bounded timeout/output, no tool access/retries, and separate analysis/verification prompts.
+- Added an injectable sync pipeline and in-memory fixture repository covering idempotent hashes, immutable snapshot/revision history, superseding publication, held review, retry against the same snapshot, and bounded safe telemetry.
+- Added server-only Drizzle persistence and published/read/history services. Snapshot/revision persistence and publication transitions use transactions; a held candidate does not replace the previous published revision.
+- Added official-source acquisition that reuses the existing P11-003C URL/DNS/redirect allowlist protections, normalizes bounded source evidence without executing HTML, and preserves source metadata and content hashes.
+- Added `pnpm policy:sync` with configured Home Affairs, Federal Register and ART source IDs, plus offline fictional fixture mode. No public UI activation or manual registry changes were made.
+
+### Exact changed files
+
+- `chatbot/lib/db/schema.ts`
+- `chatbot/lib/db/migrations/0023_chief_famine.sql`
+- `chatbot/lib/db/migrations/meta/0023_snapshot.json`
+- `chatbot/lib/db/migrations/meta/_journal.json`
+- `chatbot/lib/policy-intelligence/acquisition.test.ts`
+- `chatbot/lib/policy-intelligence/contracts.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/provider.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `chatbot/lib/policy-intelligence/repository.ts`
+- `chatbot/lib/policy-intelligence/server-db.ts`
+- `chatbot/scripts/fixtures/policy-intelligence-stage1/README.txt`
+- `chatbot/scripts/policy-intelligence-acquisition.ts`
+- `chatbot/scripts/policy-sync.ts`
+- `chatbot/package.json`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Validation evidence
+
+- Focused acquisition/pipeline tests: **18 passed, 0 failed, 0 skipped**.
+- Full `pnpm test:unit`: **373 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including the Next.js production build and TypeScript phase. The build printed the repository's existing stale `baseline-browser-mapping` data warning.
+- Offline fixture sync, each with one publication and `idempotence=pass`: `home-affairs-guidance`, `federal-register-legislation`, `art-immigration-review`.
+- Changed-file Biome check: **12 files checked, no diagnostics**.
+- `git diff --check`: **passed**.
+- `pnpm db:generate`: generated migration `0023_chief_famine.sql`; a repeat reported no schema changes. The command emitted a Drizzle `Failed to find Response internal state key` warning but completed. No migration command was run.
+- Repository-wide `pnpm lint`: **failed** with 15,137 reported errors across 511 checked files. The changed implementation TypeScript files pass focused Biome; this repository-wide lint result is not treated as a Stage 1 pass.
+
+### External contact, database and remaining risks
+
+- No live model/provider call, live source acquisition, AWS, S3, SES, Stripe, or other external service was contacted. Fixture syncs used only local synthetic source/model implementations.
+- No normal, staging, disposable, or production database was connected to or migrated. Migration `0023` and prior deferred migrations remain unapplied here.
+- Live provider response behavior, real-source currentness/acquisition, and database-backed transaction behavior still need review/validation in an explicitly approved environment. The production registry remains empty until an operator runs the approved live sync workflow; no customer-facing route was activated.
+
+### Recommended next action
+
+Have the owner/ChatGPT review this uncommitted diff and the generated migration for source provenance, publication-gate semantics, schema compatibility, and transaction behavior. If source review accepts it, the owner should authorize any isolated database-backed validation and a bounded live-provider/source pilot separately. Keep Stage 2, migration application, commit/push, deployment, scheduling, and paid/live acceptance stopped until that review and authorization are complete.
+
+## P11-009 Stage 1 R1 external-review correction — 2026-09-30
+
+**Status:** R1 source corrections implemented and locally validated; left **UNCOMMITTED and UNPUSHED** for external review. Stage 2 and the disposable PostgreSQL runtime gate have not started.
+
+### Review findings and corrections
+
+- **R1-1 — Publication relevance:** analysis schema v2 requires an evidence-linked `publicationEligibility` classification with stable unit ID `policy-relevance`. The independent verifier assesses it. The publication gate permits only a fully supported `policy_relevant` result; `operational_notice`, `navigation_content`, `unrelated`, `uncertain`, or unsupported results are held. Importance scores do not affect this gate.
+- **R1-2 — Full narrative verification:** verifier schema v2 requires an independent assessment for every material claim and every public narrative unit, including title, summary, changes, affected groups, impacts, actions, transition details and uncertainties. Narrative IDs are unique and evidence refs must belong to that exact unit. Unsupported narrative text blocks publication even when a linked material claim is supported. Partial support requires a practical interpretation, an explicit bilingual qualification and a matching `partial` / `qualified_support` verifier result. Source-fact partials are rejected. Verdict/reason contradictions fail validation.
+- **R1-3 — Truncated evidence:** acquisition now records `evidenceTruncated`, retains at most 100,000 normalized characters, and hashes the complete normalized content so changes beyond the retained prefix remain detectable. The flag persists into the snapshot row and evidence packet; the gate holds any truncated evidence. No evidence limit was increased.
+- **R1-4 — Snapshot/revision concurrency:** snapshot acquisition now locks the policy item, re-reads its actual latest-snapshot pointer, reuses the snapshot when the current hash matches, or inserts a snapshot linked to the actual previous snapshot. This preserves A -> B -> A history without a unique `(itemId, contentHash)` constraint. Held/published revision writes also lock the item and allocate the next revision number inside that boundary. Publication of a no-longer-latest snapshot is rejected. In-memory tests cover same-current-content reuse and revision allocation; PostgreSQL locking behavior still requires the separate authorized runtime gate.
+- **R1-5 — Persistence/read consistency:** snapshot reconstruction preserves `effectiveDate`, ETag, Last-Modified and truncation metadata. Revision writes reject snapshots owned by another item. Published reads now require both the item and joined revision to be published and require the revision to belong to that item.
+- **R1-6 — Pointer integrity:** repository write transactions validate latest snapshot and latest published revision pointers against the locked item. Snapshot predecessor links come from the validated current pointer, and revision-to-snapshot ownership is checked before persistence/publication. No cyclic foreign keys were added.
+- **R1-7 — Lint baseline investigation:** ran the authoritative `pnpm lint` from `/home/rico/immigration_ai/chatbot`. It invokes `ultracite check` v7.0.11, checked 513 files and reported **15,136 errors** (15,116 diagnostics hidden by its display cap). The result is reproducible from the requested directory; it does not match the previously reported ~21-diagnostic baseline. The displayed examples are existing unrelated files such as `app/globals.css`, `components/assistant-rich-markdown.tsx`, `lib/consultations/service.ts` and old migration metadata. A focused `pnpm exec ultracite check` over 13 changed Stage-1 TypeScript files reported no diagnostics; changed-file Biome also passed. No unrelated mass cleanup was attempted.
+
+### Exact final changed files
+
+- `chatbot/lib/db/schema.ts`
+- `chatbot/lib/db/migrations/0023_chief_famine.sql`
+- `chatbot/lib/db/migrations/meta/0023_snapshot.json`
+- `chatbot/lib/db/migrations/meta/_journal.json`
+- `chatbot/lib/policy-intelligence/acquisition.test.ts`
+- `chatbot/lib/policy-intelligence/contracts.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/provider.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `chatbot/lib/policy-intelligence/repository.ts`
+- `chatbot/lib/policy-intelligence/server-db.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.test.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.ts`
+- `chatbot/scripts/fixtures/policy-intelligence-stage1/README.txt`
+- `chatbot/scripts/policy-intelligence-acquisition.ts`
+- `chatbot/scripts/policy-sync.ts`
+- `chatbot/package.json`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Final validation
+
+- Focused Stage-1 acquisition/pipeline/audit tests: **29 passed, 0 failed, 0 skipped**.
+- Full `pnpm test:unit`: **384 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including TypeScript and production build. Existing stale `baseline-browser-mapping` warnings were printed.
+- Offline fixture syncs for Home Affairs, Federal Register and ART: each produced one fixture publication with `idempotence=pass`; no live source or provider calls.
+- Focused Ultracite on changed Stage-1 TypeScript: **13 files checked, no diagnostics**.
+- Focused Biome on changed implementation/test/schema/package files: **15 files checked, no diagnostics**.
+- `git diff --check`: **passed**.
+- `pnpm db:generate`: generated the updated additive schema artifact as migration `0023_chief_famine.sql`; a subsequent generation reported `No schema changes, nothing to migrate`. No `0024` exists. Drizzle printed its existing `Failed to find Response internal state key` warning but completed.
+- **MIGRATION NOT APPLIED.** No database was connected to or migrated.
+- No live OpenAI/provider, official-source network, AWS, S3, SES, Stripe or other external service was contacted.
+
+### Remaining runtime boundary and next action
+
+The source-level locking contract and deterministic in-memory concurrency tests are complete, but actual PostgreSQL row-lock behavior and transaction invariants are not runtime-verified. The next action is owner/ChatGPT review of this uncommitted diff and migration. Only after that review, obtain separate authorization for the isolated disposable-PostgreSQL runtime gate. Do not start that gate, apply migration 0023, begin Stage 2, or commit/push as part of this correction.
+
+## P11-009 Stage 1 R2 source-correction handoff — 2026-09-30
+
+**Status:** Bounded R2 corrections are implemented on the current uncommitted R1 worktree. Changes remain **UNCOMMITTED and UNPUSHED**. Stage 2, migration application, and the PostgreSQL runtime gate have not started.
+
+### R2 findings and corrections
+
+- **R2-1 — Independent source-status semantics:** added the stable `source-status` verifier unit, including the complete `value`, `certain`, and `evidenceRefs` object. The verifier prompt requires direct support of the exact status; a supported related claim cannot substitute. Publication now requires that unit's `supported` / `direct_support` assessment, while uncertain status remains held. Tests cover announced support, an announced claim paired with `in_force`, unsupported status, uncertainty, and verdict/reason consistency.
+- **R2-2 — Automated revision idempotency:** added a SHA-256 analysis fingerprint over snapshot identity, both contract versions, analyzer/verifier versions, provider/model, reasoning effort, timeout, and output-token configuration. Revisions persist this identity and PostgreSQL enforces uniqueness on `(snapshotId, analysisFingerprint)`. Repository writes serialize on the item row, return an existing equivalent revision without superseding it, and do not hold locks across model calls. The in-memory repository mirrors the contract. Tests cover overlapping syncs, re-analysis under changed configuration, A -> B -> A snapshot history, and provider-failure retry.
+- **R2-3 — Final canonical source identity:** the pipeline now acquires and validates the official source before deriving source identity and getting/creating the item. It keys the item from `acquisition.canonicalUrl`, preserving safe redirect convergence; tests cover redirect-to-final identity, later direct discovery reuse, and failure before item creation for an unsafe redirect.
+- **R2-4 — Optional analysis lists:** `uncertainties` and `recommendedActions` may now be empty while retaining their existing upper bounds. Present units still receive the same complete independent verification. An empty-list publication case is covered.
+- **R2-5 — Audit version alignment:** analyzer and verifier metadata now derive from the central analysis/verification contract constants (`policy-intelligence.analysis.v2` and `policy-intelligence.verification.v2`); selected model configuration is unchanged. A focused test checks both version values and model preservation.
+- **R2-6 — First-item race:** added repository `getOrCreateItem` semantics. PostgreSQL uses `INSERT ... ON CONFLICT DO NOTHING` against the stable source-identity constraint and returns the exact existing identity after a concurrent insert without overwriting it. Inconsistent identity conflicts remain errors. The in-memory test covers concurrent convergence and non-overwrite behavior.
+
+### Exact changed files in the uncommitted Stage 1 worktree
+
+- `chatbot/lib/db/schema.ts`
+- `chatbot/lib/db/migrations/0023_chief_famine.sql`
+- `chatbot/lib/db/migrations/meta/0023_snapshot.json`
+- `chatbot/lib/db/migrations/meta/_journal.json`
+- `chatbot/lib/policy-intelligence/acquisition.test.ts`
+- `chatbot/lib/policy-intelligence/contracts.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/provider.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `chatbot/lib/policy-intelligence/repository.ts`
+- `chatbot/lib/policy-intelligence/server-db.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.test.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.ts`
+- `chatbot/scripts/fixtures/policy-intelligence-stage1/README.txt`
+- `chatbot/scripts/policy-intelligence-acquisition.ts`
+- `chatbot/scripts/policy-sync.ts`
+- `chatbot/package.json`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Validation and environment boundary
+
+- Full `pnpm test:unit`: **394 passed, 0 failed, 0 skipped**. The final focused pipeline test rerun after formatting: **33 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including TypeScript and Next.js production build. The existing stale `baseline-browser-mapping` warning was printed. Its generated `next-env.d.ts` change was restored.
+- Focused Ultracite: **14 changed Stage 1 TypeScript files checked, no diagnostics**. Focused Biome: **14 files checked, no diagnostics**.
+- Root `git diff --check`: **passed**.
+- Drizzle generation regenerated the existing `0023_chief_famine.sql`, snapshot, and journal entry. A second `pnpm db:generate` reported **“No schema changes, nothing to migrate”**. Migration `0023` remains the only new migration artifact; no `0024` exists. **Migration NOT APPLIED.**
+- No database connection was attempted. No live OpenAI/provider, official-source, AWS, S3, SES, Stripe, or other external call was made.
+- The separately authorized PostgreSQL runtime acceptance remains outstanding. It must validate actual concurrent item upsert and equivalent revision write behavior against migration 0023 in the approved disposable environment. No database-backed or Stage 2 work was started here.
+
+### Next action
+
+Stop for owner/external review of the uncommitted source and generated migration. Keep Stage 2, the disposable PostgreSQL gate, migration application, commit, and push stopped until separately authorized.
+
+## P11-009 Stage 1 R3 currentness correction — 2026-09-30
+
+**Status:** Final bounded R3 source corrections are implemented on the uncommitted R2 worktree. Changes remain **UNCOMMITTED and UNPUSHED**. Stage 2, database access, and the disposable PostgreSQL runtime acceptance have not started.
+
+### R3 findings and corrections
+
+- **R3-1 — Held latest analysis must not remain publicly current:** when a newly created held revision targets `item.latestSnapshotId`, both repositories now set the item editorial state to `review_required` while retaining `latestPublishedRevisionId` and the old immutable published revision row. A held result for a stale/non-latest snapshot does not downgrade the item. A later verified publication for the latest snapshot supersedes the prior published revision and restores the item's published state. The published read query now requires the joined revision snapshot to equal `item.latestSnapshotId` and the joined snapshot to belong to the item; a pure defense-in-depth predicate checks the same identity and state conditions.
+- **R3-2 — Out-of-order acquisition must not move current snapshot backward:** after locking the item and loading its actual latest snapshot, both repositories reuse the latest snapshot for equal hashes and reject a differing incoming snapshot whose `retrievedAt` is older. The bounded result returns the authoritative latest snapshot with `staleAcquisition: true`; the pipeline therefore analyzes that returned snapshot rather than the stale acquisition body. Genuinely later A -> B -> A observations still append three immutable snapshots.
+- **R3-3 — Implementation versions are independent of JSON schemas:** analysis and verification schemas remain `policy-intelligence.analysis.v2` and `policy-intelligence.verification.v2`. Analyzer and verifier audit versions are now independent constants `policy-intelligence.analyzer.v2.1` and `policy-intelligence.verifier.v2.1`; both implementation versions and both schema versions remain in the analysis fingerprint. Tests prove that changing either implementation version changes the fingerprint for the same snapshot and schema.
+- **R3-4 — R2 guarantees retained:** the final acquired canonical URL identity, item get-or-create, row locking, item ownership checks, `(snapshotId, analysisFingerprint)` uniqueness, revision deduplication, independent source-status verification, full narrative verification, truncation/relevance gates, optional empty lists and provider-failure retry remain in place.
+
+### Exact changed files in the uncommitted Stage 1 worktree
+
+- `chatbot/lib/db/schema.ts`
+- `chatbot/lib/db/migrations/0023_chief_famine.sql`
+- `chatbot/lib/db/migrations/meta/0023_snapshot.json`
+- `chatbot/lib/db/migrations/meta/_journal.json`
+- `chatbot/lib/policy-intelligence/acquisition.test.ts`
+- `chatbot/lib/policy-intelligence/contracts.ts`
+- `chatbot/lib/policy-intelligence/currentness.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/provider.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `chatbot/lib/policy-intelligence/repository.ts`
+- `chatbot/lib/policy-intelligence/server-db.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.test.ts`
+- `chatbot/lib/policy-intelligence/snapshot-metadata.ts`
+- `chatbot/scripts/fixtures/policy-intelligence-stage1/README.txt`
+- `chatbot/scripts/policy-intelligence-acquisition.ts`
+- `chatbot/scripts/policy-sync.ts`
+- `chatbot/package.json`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Validation and environment boundary
+
+- Full `pnpm test:unit`: **399 passed, 0 failed, 0 skipped**.
+- Focused Stage 1 pipeline tests: **38 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including TypeScript and the Next.js production build. The repository's existing stale `baseline-browser-mapping` warning was printed. The generated `next-env.d.ts` change was restored.
+- Focused Ultracite: **15 changed Stage 1 source/test/schema files checked, no diagnostics**. Focused Biome: **15 files checked, no diagnostics**.
+- Root `git diff --check`: **passed**.
+- `pnpm db:generate`: **“No schema changes, nothing to migrate.”** R3 required no schema change. The existing uncommitted migration remains `0023_chief_famine.sql`, including the R2 fingerprint uniqueness guard; no 0024 exists. **At this R3 checkpoint, migration had not been applied.** The subsequent disposable-only application is recorded below.
+- At this R3 checkpoint no database connection had been made. No live source, OpenAI/provider, AWS, S3, SES, Stripe or other external call was made.
+
+### Exact next boundary
+
+At the time this R3 handoff was recorded, the next authorized boundary was the **disposable PostgreSQL runtime acceptance gate** for real PostgreSQL item-upsert, row-lock, snapshot-ordering and revision-idempotency behavior against migration 0023. That separately authorized gate has since completed; see the acceptance record below. Stage 2, commit and push remain stopped.
+
+## P11-009 Stage 1 PostgreSQL runtime acceptance — 2026-09-30
+
+**Status:** The separately authorized Stage 1 disposable PostgreSQL runtime gate **PASSED**. The source worktree remains uncommitted and unpushed. Stage 2, commit, push, deployment, and any production/staging operation were not performed.
+
+### Target and migration record
+
+- Disposable target: `chatbot_p11_009_stage1_gate_20260930_71c3ad`, created from `template0` on PostgreSQL at `127.0.0.1:5432`. Runtime/migration role: `postgres`.
+- Before database creation and each migration/harness write group, the safe server identity, latest repository migration journal entry (`0023_0023_chief_famine`), and target database were recorded. No credential value was displayed or written.
+- Target migration ledger started absent and ended with 24 rows, through journal entry `0023_0023_chief_famine`. The normal `pnpm db:migrate` command was rerun against the target and completed idempotently; the ledger remained at 24 rows with latest `created_at=1790732822725`.
+- Schema inspection found all four Stage 1 tables (`PolicyIntelligenceItem`, `PolicyIntelligenceSourceSnapshot`, `PolicyIntelligenceAnalysisRevision`, `PolicyIntelligenceSyncRun`), all declared non-primary-key indexes, and all three foreign keys. PostgreSQL applied its normal 63-byte identifier truncation to long generated index/constraint names; each corresponding index/constraint is present. Temporary rollback fault-injection triggers/functions were removed (zero non-internal test triggers remain).
+- Normal `chatbot` protected-ledger baseline is unchanged: 18 rows, latest `created_at=1788555690264`, hash prefix `5ab3705c4552`. Retained `chatbot_p11_008_gate_20260926_20c435` baseline is unchanged: 23 rows, latest `created_at=1790358881920`, hash prefix `7851df78e5a5`. Neither database was used as a template or written to.
+
+### Runtime acceptance cases
+
+The harness lived under `/tmp` and invoked the real Stage 1 Drizzle repository and published read service with deterministic fixture inputs. All 12 cases passed against the disposable target:
+
+1. Concurrent first-item creation converges on one row.
+2. Concurrent equal-hash acquisitions create one snapshot.
+3. Later A → B → A source history creates three immutable snapshots.
+4. An older out-of-order acquisition is rejected without moving the latest pointer backward.
+5. Concurrent equivalent revisions create one revision.
+6. Deliberate reanalysis creates a new revision and supersedes the prior one.
+7. A held revision for the latest snapshot preserves prior publication history and is excluded from the published read service.
+8. A stale held revision does not downgrade a later current publication.
+9. Later current publication restores visibility and revision history remains correct.
+10. Cross-item snapshot/revision association is rejected without partial rows.
+11. Injected failures after intermediate writes prove revision supersession and snapshot insertion roll back atomically; injection objects were removed.
+12. The real published read service returns only the current publication for the current snapshot.
+
+The recorded successful harness run reported 18 target items, 22 snapshots, 14 revisions, and zero sync runs. An initial invocation used a runner that did not surface its output in the execution window; its fixture namespace was left intact. A second run used a distinct fixture namespace, surfaced all 12 PASS results, and is the recorded acceptance result. No repository source was changed during the runtime gate.
+
+### Scope and next boundary
+
+- Migration 0023 was applied only to the newly created disposable target. That target is intentionally retained for review and must not be dropped as part of this gate.
+- No write or migration was made to normal `chatbot` or retained P11-008. No live OpenAI/provider, source website, AWS, S3, SES, Stripe, or other external call was made. No `.env.local` edit was made.
+- **Stop here.** The authorized Stage 1 PostgreSQL runtime acceptance work is complete. Stage 2 requires its own authorization and is not started.
+
+## P11-009 Stage 1 acceptance — 2026-09-30
+
+P11-009 Stage 1 is **ACCEPTED** after external/source review through R1/R2/R3; 399/399 unit tests; 38/38 focused pipeline tests; production build; focused Ultracite/Biome; `git diff --check`; successful disposable PostgreSQL migration through 0023; and all 12 PostgreSQL runtime acceptance cases passing.
+
+- Retained disposable database: `chatbot_p11_009_stage1_gate_20260930_71c3ad`.
+- The normal `chatbot` database and retained P11-008 disposable database remained unchanged. No staging or production database was touched.
+- During the runtime gate, no live OpenAI/provider, official-source website, AWS, S3, SES, Stripe, or other external service was contacted.
+- Stage 1 acceptance does **not** imply overall P11-009 verification.
+- Stage 2 is the next implementation stage and has **not started**. Live provider/source work and AWS scheduling/deployment remain outside Stage 1.
