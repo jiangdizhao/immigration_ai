@@ -27,7 +27,7 @@ const manifest = {
   ],
 };
 const exact = {
-  document: { id: "doc-1" },
+  document: { id: "doc-1", securityStatus: "clean" },
   run: { id: "run-1" },
   units: [
     { ordinal: 1, locator, extractionMethod: "native", extractedText: raw },
@@ -136,4 +136,17 @@ test("all manifest units are validated after excerpt budget is exhausted", () =>
     }),
     null
   );
+});
+
+test("non-clean documents cannot enter lawyer evidence reconstruction", () => {
+  for (const securityStatus of ["pending", "rejected", "failed"]) {
+    assert.equal(
+      reconstructExactLawyerDocumentEvidence({
+        manifest,
+        exact: { ...exact, document: { id: "doc-1", securityStatus } },
+        excerptBudget: 1000,
+      }),
+      null
+    );
+  }
 });

@@ -88,6 +88,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        aria-label="Delete all consultations"
                         className="h-8 p-1 md:h-fit md:p-2"
                         onClick={() => setShowDeleteAllDialog(true)}
                         type="button"
@@ -104,6 +105,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
+                      aria-label="Start a new consultation"
                       className="h-8 p-1 md:h-fit md:p-2"
                       onClick={() => {
                         setOpenMobile(false);

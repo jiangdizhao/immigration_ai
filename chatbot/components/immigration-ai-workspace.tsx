@@ -1441,6 +1441,7 @@ export function ImmigrationAIWorkspace({
           <div className="border-t border-slate-100 bg-white p-3 sm:p-4">
             <div className="rounded-2xl bg-slate-100/80 p-3">
               <Textarea
+                aria-label={copy.consultation.placeholder}
                 className="min-h-[76px] max-h-40 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
                 data-testid="workspace-input"
                 disabled={status !== "ready"}

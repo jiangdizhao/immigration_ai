@@ -61,6 +61,11 @@ export function DetailDisposition(props: Props) {
         {props.learningAvailable ? (
           <>
             <textarea
+              aria-label={
+                chinese
+                  ? "推理与研究方法反馈"
+                  : "Reasoning and research approach feedback"
+              }
               className="mt-2 min-h-24 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm font-normal"
               onChange={(event) => props.onApproach(event.target.value)}
               value={props.approach}

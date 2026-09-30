@@ -117,6 +117,7 @@ test("server authorization rejects foreign, cross-chat, deleted, or unstored doc
     userId: "owner-a",
     chatId: "chat-a",
     storageStatus: "stored",
+    securityStatus: "clean",
     deletedAt: null,
   };
   assert.doesNotThrow(() =>
@@ -131,6 +132,9 @@ test("server authorization rejects foreign, cross-chat, deleted, or unstored doc
     { ...allowed, chatId: "chat-b" },
     { ...allowed, deletedAt: new Date() },
     { ...allowed, storageStatus: "pending" },
+    { ...allowed, securityStatus: "pending" },
+    { ...allowed, securityStatus: "rejected" },
+    { ...allowed, securityStatus: "failed" },
   ]) {
     assert.throws(
       () =>

@@ -2,6 +2,7 @@ import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   cacheComponents: true,
   serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
   outputFileTracingIncludes: {

@@ -118,7 +118,7 @@ function documentRecord(
     byteSize: bytes.length,
     sha256: createHash("sha256").update(bytes).digest("hex"),
     processingStatus: "not_started",
-    securityStatus: "pending",
+    securityStatus: "clean",
     storageStatus: "stored",
     deletedAt: null,
     createdAt: new Date(0),
@@ -178,7 +178,11 @@ function processingHarness(input: {
       staleBefore: Date;
       startedAt: Date;
     }) {
-      if (record.storageStatus !== "stored" || record.deletedAt !== null) {
+      if (
+        record.storageStatus !== "stored" ||
+        record.deletedAt !== null ||
+        record.securityStatus !== "clean"
+      ) {
         return null;
       }
       if (claim.recoverStaleProcessing) {
@@ -581,7 +585,7 @@ test("processing verifies SHA, enforces concurrency, preserves security state, a
     (saved[0] as { sourceClass: string }).sourceClass,
     "customer_document"
   );
-  assert.equal(record.securityStatus, "pending");
+  assert.equal(record.securityStatus, "clean");
 
   const badRepo = {
     ...repository,
@@ -619,6 +623,9 @@ test("processing verifies SHA, enforces concurrency, preserves security state, a
   for (const hiddenRecord of [
     { ...record, storageStatus: "uploading" as const },
     { ...record, deletedAt: new Date() },
+    { ...record, securityStatus: "pending" as const },
+    { ...record, securityStatus: "rejected" as const },
+    { ...record, securityStatus: "failed" as const },
   ]) {
     const denied = createMatterDocumentProcessingService({
       repository: {
@@ -1386,7 +1393,7 @@ test("dedicated vision configuration is disabled by default and requires its own
   );
 });
 
-test("successful vision transcription remains customer_document evidence and leaves security pending", async () => {
+test("successful vision transcription remains customer_document evidence and preserves the clean verdict", async () => {
   const bytes = imagePng();
   const record = documentRecord(bytes, {
     originalFilename: "passport.png",
@@ -1441,5 +1448,5 @@ test("successful vision transcription remains customer_document evidence and lea
   assert.equal(result.status, "complete");
   assert.equal(savedUnits[0]?.sourceClass, "customer_document");
   assert.equal(savedUnits[0]?.extractionMethod, "vision_fallback");
-  assert.equal(finalizedSecurityStatus, "pending");
+  assert.equal(finalizedSecurityStatus, "clean");
 });

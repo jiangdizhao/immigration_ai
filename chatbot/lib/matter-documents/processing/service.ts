@@ -135,7 +135,11 @@ export function createMatterDocumentProcessingService(deps: {
         throw new ProcessingConflictError();
       }
       const existing = await deps.repository.getForOwner(input);
-      if (existing?.storageStatus !== "stored" || existing.deletedAt !== null) {
+      if (
+        existing?.storageStatus !== "stored" ||
+        existing.deletedAt !== null ||
+        existing.securityStatus !== "clean"
+      ) {
         throw new ProcessingNotFoundError();
       }
       if (existing.processingStatus === "complete") {

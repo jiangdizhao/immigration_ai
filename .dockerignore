@@ -15,8 +15,7 @@
 **/.venv
 **/venv
 
-**/.env
-**/.env.local
+**/.env*
 .env.phase1b.*.local
 *.zip
 phase0_*_patch/

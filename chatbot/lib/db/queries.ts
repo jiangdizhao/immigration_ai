@@ -11,11 +11,10 @@ import {
   inArray,
   isNull,
   lt,
+  ne,
   type SQL,
   sql,
 } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
@@ -27,6 +26,7 @@ import {
 import { createS3MatterDocumentStorage } from "../matter-documents/storage";
 import { generateUUID } from "../utils";
 import { calculateVipWindow } from "../vip/entitlement";
+import { getLazyDatabase } from "./runtime-client";
 import {
   type Chat,
   chat,
@@ -63,14 +63,7 @@ import { generateHashedPassword } from "./utils";
 // use the Drizzle adapter for Auth.js / NextAuth
 // https://authjs.dev/reference/adapter/drizzle
 
-// The schema's timestamps are intentionally `timestamp` (without time zone).
-// Pin every application session to UTC so Date values round-trip consistently
-// even when the local PostgreSQL role uses a regional timezone.
-// biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!, {
-  connection: { TimeZone: "UTC" },
-});
-const db = drizzle(client);
+const db = getLazyDatabase();
 function rawPgTimestamp(date: Date): string {
   return date.toISOString();
 }
@@ -92,6 +85,7 @@ export function beginMatterDocumentProcessing(input: {
       eq(matterDocument.id, input.documentId),
       eq(matterDocument.userId, input.userId),
       eq(matterDocument.storageStatus, "stored"),
+      eq(matterDocument.securityStatus, "clean"),
       isNull(matterDocument.deletedAt),
       sql`exists (select 1 from "Chat" where "Chat"."id" = ${matterDocument.chatId} and "Chat"."userId" = ${input.userId})`
     );
@@ -229,6 +223,7 @@ export async function getLatestMatterDocumentProcessing(input: {
         eq(matterDocument.userId, input.userId),
         eq(chat.userId, input.userId),
         eq(matterDocument.storageStatus, "stored"),
+        eq(matterDocument.securityStatus, "clean"),
         isNull(matterDocument.deletedAt),
         inArray(matterDocumentProcessingRun.status, [
           "complete",
@@ -267,6 +262,7 @@ export function finalizeMatterDocumentProcessing(input: {
       .where(
         and(
           eq(matterDocument.id, input.documentId),
+          eq(matterDocument.securityStatus, "clean"),
           eq(matterDocument.processingStatus, "processing")
         )
       )
@@ -386,7 +382,11 @@ export async function getMatterDocumentEvidenceForLawyerSnapshot(input: {
     userId: input.userId,
     includeDeleted: true,
   });
-  if (!record || record.chatId !== input.chatId) {
+  if (
+    !record ||
+    record.chatId !== input.chatId ||
+    record.securityStatus !== "clean"
+  ) {
     return null;
   }
   const [run] = await db
@@ -3022,4 +3022,96 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
       "Failed to get stream ids by chat id"
     );
   }
+}
+
+export async function listStaleMatterDocumentMaintenanceCandidates(input: {
+  cutoff: Date;
+  limit: number;
+}) {
+  return await db
+    .select({
+      id: matterDocument.id,
+      storageKey: matterDocument.storageKey,
+      storageStatus: matterDocument.storageStatus,
+      processingStatus: matterDocument.processingStatus,
+      deletedAt: matterDocument.deletedAt,
+      updatedAt: matterDocument.updatedAt,
+    })
+    .from(matterDocument)
+    .where(
+      and(
+        lt(matterDocument.updatedAt, input.cutoff),
+        inArray(matterDocument.storageStatus, ["uploading", "cleanup_pending"])
+      )
+    )
+    .orderBy(asc(matterDocument.updatedAt), asc(matterDocument.id))
+    .limit(Math.max(1, Math.min(input.limit, 500)));
+}
+
+export async function listSoftDeletedMatterDocumentPurgeCandidates(input: {
+  cutoff: Date;
+  limit: number;
+}) {
+  return await db
+    .select({
+      id: matterDocument.id,
+      storageKey: matterDocument.storageKey,
+      storageStatus: matterDocument.storageStatus,
+      processingStatus: matterDocument.processingStatus,
+      deletedAt: matterDocument.deletedAt,
+      updatedAt: matterDocument.updatedAt,
+    })
+    .from(matterDocument)
+    .where(
+      and(
+        lt(matterDocument.deletedAt, input.cutoff),
+        ne(matterDocument.processingStatus, "processing")
+      )
+    )
+    .orderBy(asc(matterDocument.deletedAt), asc(matterDocument.id))
+    .limit(Math.max(1, Math.min(input.limit, 500)));
+}
+
+export async function hardDeleteSoftDeletedMatterDocument(input: {
+  documentId: string;
+  cutoff: Date;
+}) {
+  const [deleted] = await db
+    .delete(matterDocument)
+    .where(
+      and(
+        eq(matterDocument.id, input.documentId),
+        lt(matterDocument.deletedAt, input.cutoff),
+        ne(matterDocument.processingStatus, "processing")
+      )
+    )
+    .returning({ id: matterDocument.id });
+  return Boolean(deleted);
+}
+
+export async function getMatterDocumentSecurityStatus(documentId: string) {
+  const [record] = await db
+    .select({ securityStatus: matterDocument.securityStatus })
+    .from(matterDocument)
+    .where(eq(matterDocument.id, documentId))
+    .limit(1);
+  return record?.securityStatus ?? null;
+}
+
+export async function transitionMatterDocumentSecurityStatus(input: {
+  documentId: string;
+  expected: "pending";
+  next: "clean" | "rejected" | "failed";
+}) {
+  const [record] = await db
+    .update(matterDocument)
+    .set({ securityStatus: input.next, updatedAt: new Date() })
+    .where(
+      and(
+        eq(matterDocument.id, input.documentId),
+        eq(matterDocument.securityStatus, input.expected)
+      )
+    )
+    .returning({ id: matterDocument.id });
+  return Boolean(record);
 }

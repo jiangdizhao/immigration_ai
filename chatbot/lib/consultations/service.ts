@@ -1,9 +1,8 @@
 import "server-only";
 
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 import { guestRegex } from "@/lib/constants";
+import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
   type ConsultationRequest,
   chat,
@@ -35,12 +34,7 @@ import type {
 } from "./types";
 import { validateProposalInterval } from "./validation";
 
-const postgresUrl = process.env.POSTGRES_URL;
-if (!postgresUrl) {
-  throw new Error("POSTGRES_URL is not configured");
-}
-const client = postgres(postgresUrl, { connection: { TimeZone: "UTC" } });
-const db = drizzle(client);
+const db = getLazyDatabase();
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export class ConsultationDomainError extends Error {
@@ -119,8 +113,7 @@ export function createConsultation(
       .where(eq(user.id, actor.id))
       .limit(1);
     if (
-      !owner ||
-      owner.role !== "user" ||
+      owner?.role !== "user" ||
       !owner.emailVerifiedAt ||
       guestRegex.test(owner.email)
     ) {

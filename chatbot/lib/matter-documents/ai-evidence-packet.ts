@@ -76,6 +76,7 @@ export function assertSelectedMatterDocumentAccess(
     userId: string;
     chatId: string;
     storageStatus: string;
+    securityStatus: string;
     deletedAt: Date | null;
   } | null,
   expected: { userId: string; chatId: string }
@@ -85,6 +86,7 @@ export function assertSelectedMatterDocumentAccess(
     document.userId !== expected.userId ||
     document.chatId !== expected.chatId ||
     document.storageStatus !== "stored" ||
+    document.securityStatus !== "clean" ||
     document.deletedAt
   ) {
     throw new SelectedMatterDocumentError("not_found");

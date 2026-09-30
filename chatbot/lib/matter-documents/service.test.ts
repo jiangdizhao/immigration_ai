@@ -202,9 +202,14 @@ function uploadRequest(
 
 test("authenticated owner uploads PDF and only safe metadata is returned", async () => {
   const h = makeHarness({ authenticatedUser: userA() });
-  const response = await h.handlers.upload(
-    uploadRequest(CHAT_A, "../../passport.pdf", "application/pdf", PDF)
+  const maliciousStatusRequest = uploadRequest(
+    CHAT_A,
+    "../../passport.pdf",
+    "application/pdf",
+    PDF
   );
+  maliciousStatusRequest.headers.set("x-security-status", "clean");
+  const response = await h.handlers.upload(maliciousStatusRequest);
   assert.equal(response.status, 201);
   const body = (await response.json()) as { document: Record<string, unknown> };
   assert.equal(body.document.chatId, CHAT_A);

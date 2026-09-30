@@ -16,4 +16,4 @@ RUN pnpm build
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm db:migrate && npx tsx scripts/apply-phase0-chatbot-schema.ts && npx next start -H 0.0.0.0 -p 3000"]
+CMD ["pnpm", "start"]

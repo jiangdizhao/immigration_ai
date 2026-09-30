@@ -26,9 +26,9 @@ export default async function AIWorkspacePage({
   return (
     <div className="min-h-dvh bg-[#f3f5f7] text-slate-900">
       <SiteHeader />
-      <main className="min-h-[calc(100dvh-8rem)] pb-8">
+      <div className="min-h-[calc(100dvh-8rem)] pb-8">
         <PremiumAnswerModeWorkspace policyReference={policyReference} />
-      </main>
+      </div>
       <SiteFooter />
     </div>
   );

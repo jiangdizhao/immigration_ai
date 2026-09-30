@@ -1952,3 +1952,335 @@ Actual staging/AWS attestations remain Stage 4: current staging migration applic
 
 Do not mark P11-005 VERIFIED merely because Stage-3 source code exists. D-040 is closed only when the required environment-specific evidence is subsequently recorded.
 
+
+## P11-009 Stage 3 implementation — whole-platform production hardening
+
+Stage 3 source/tooling work is prepared on `phase11-chinese-service-platform-ui-rebase` and remains uncommitted/unpushed. Stage 4 has not started. No schema, migration, lockfile, or dependency change was made; migration head remains 0023.
+
+### Changed files
+
+- `.dockerignore`
+- `chatbot/.env.production.local.example`
+- `chatbot/Dockerfile.local`
+- `chatbot/Dockerfile.production`
+- `chatbot/next.config.ts`
+- `chatbot/package.json`
+- `chatbot/app/(chat)/intelligence/page.tsx`
+- `chatbot/app/(chat)/intelligence/[id]/page.tsx`
+- `chatbot/lib/db/runtime-client.ts`
+- `chatbot/lib/db/migrate.ts`
+- `chatbot/lib/db/queries.ts`
+- `chatbot/lib/consultations/service.ts`
+- `chatbot/lib/lawyer-requests/service.ts`
+- `chatbot/lib/matter-documents/ai-evidence-packet.ts`
+- `chatbot/lib/matter-documents/ai-evidence-packet.test.ts`
+- `chatbot/lib/matter-documents/lawyer-evidence-reconstruction.ts`
+- `chatbot/lib/matter-documents/lawyer-evidence-reconstruction.test.ts`
+- `chatbot/lib/matter-documents/processing/service.ts`
+- `chatbot/lib/matter-documents/processing.test.ts`
+- `chatbot/lib/matter-documents/service.test.ts`
+- `chatbot/lib/matter-documents/maintenance.ts`
+- `chatbot/lib/matter-documents/security-reconciliation.ts`
+- `chatbot/lib/production/migration-preflight.ts`
+- `chatbot/lib/production/native-runtime-verifier.mjs`
+- `chatbot/lib/production/s3-security-preflight.ts`
+- `chatbot/lib/production/stage3-hardening.test.ts`
+- `chatbot/scripts/db-migration-operator.ts`
+- `chatbot/scripts/matter-document-maintenance.ts`
+- `chatbot/scripts/s3-security-preflight.ts`
+- `chatbot/scripts/verify-native-runtime.mjs`
+- `chatbot/playwright.stage3.config.ts`
+- `chatbot/tests/e2e/phase11-accessibility.test.ts`
+- `scripts/run-local-production-frontend.sh`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Implementation and validation
+
+- Production startup no longer applies migrations. Build, start, read-only migration preflight, and acknowledged one-off migration execution have separate commands. The production image uses Next standalone output, preserves parser-worker assets, excludes `.env*` files from Docker context, and makes no CPU architecture assumption. DB-backed modules now defer client initialization until a query; Policy Intelligence DB reads are deferred until requests.
+- Host native verifier: **PASS** on Node `v24.14.0`, Linux `x64`; `@napi-rs/canvas` `1.0.9`, parser worker/pdfjs `6.3.289`. This is host evidence only, not the Stage-4 container/target architecture result.
+- Full `pnpm test:unit`: **435/435 passed**, zero failed/skipped. Focused Stage-3 tests cover redacted migration target reporting, verifier success/failure, clean-only processing/evidence, scanner CAS/idempotency, stale cutoff/order/batch, purge exclusion/order/recoverability, S3 posture failures, and migration-free startup.
+- Focused Biome: **25 files passed**. Focused Ultracite: **23 source/script/test files passed**; its CLI reports an internal path-resolution diagnostic for the two route files containing `(chat)`/`[id]`, which were checked by Biome. A standalone `tsc --noEmit` is not a clean repository gate: it reports existing unrelated model/billing test type errors and two pre-existing `processing.test.ts` diagnostics; no Stage-3 production-source diagnostics remained after filtering.
+- Host `pnpm build` passed before the final lazy-DB-import adjustment. Next reported that it loaded `.env.local`; I did not open or print that file. Since the earlier build preceded the request-boundary change for Policy Intelligence, **zero database connections cannot be certified from that run**. The DB-backed route modules were subsequently verified to import successfully with `POSTGRES_URL` unset.
+- Docker is available. The first image build failed during route collection on import-time `POSTGRES_URL` validation. Automatic review rejected a proposed build-only placeholder URL because it might trigger a DB attempt; that retry was not run. After the lazy-DB change, a network-isolated Docker build stopped before app compilation because Corepack could not download pnpm with networking disabled. No production image was produced and the in-image verifier was not run. Do not treat the host verifier as replacing that gate.
+- Playwright was not run: there was no explicitly selected safe test server, no reviewed Intelligence detail fixture, and no real customer/admin/lawyer auth states. The concentrated suite requires explicit target configuration and does not add an auth bypass.
+- Root `git diff --check`: **PASS** after this handoff was appended.
+
+### Lifecycle/security contracts and remaining gates
+
+Stale cleanup and purge are operator-only, bounded, explicit-cutoff, and dry-run by default. Cleanup reuses the current CAS lifecycle. Purge only considers old soft-deleted, non-processing records; it deletes private storage before hard-deleting metadata and leaves recoverable metadata on either failure. No retention duration was invented.
+
+Uploads remain `securityStatus: pending`. Processing, AI evidence, and lawyer evidence reconstruction require `clean`; parser success cannot change the verdict. The provider-neutral scanner adapter returns a validated `clean | rejected | failed` verdict and reconciles only `pending` via CAS. Stage-4 adapter requirements: obtain the exact private stored object/version and compare its recorded digest; return an authenticated verdict with stable scanner and scan identifiers; make retries/replays idempotent; fail closed on unavailable, malformed, or mismatched results; keep provider credentials and scanner details server-side; never expose a client verdict setter or allow parser output to override the scan. No real scanner was selected.
+
+The injectable S3 preflight checks bucket existence, expected region, AES256/KMS encryption, all four Block Public Access flags, non-public policy status, and that product authorization does not use public object URLs. It does not prove effective IAM access. No AWS call was made.
+
+No migration was generated/applied, no database command or probe was run, and no AWS/S3/IAM/OpenAI/policy-source/SES/Stripe service was intentionally contacted. Because the earlier host build loaded `.env.local`, report the no-database condition as **unverified**, not as a clean zero-connection attestation. Do not mark P11-005 VERIFIED or D-040 closed from this work.
+
+**Next external-review action:** request an independent Stage-3 source review of this uncommitted diff against P11-009 S3-1 through S3-8 and D-040. Include the unverified host-build DB-contact caveat, the missing in-image native result, migration/purge/scanner boundaries, and the outstanding real-auth Playwright fixture matrix. Only after that review and owner-authorized environment evidence should Stage 3 be accepted and Stage 4 considered.
+
+
+## P11-009 Stage 3 R1 production-hardening correction
+
+Stage 3 R1 corrections are implemented on `phase11-chinese-service-platform-ui-rebase` and remain uncommitted/unpushed. Stage 4 has not started.
+
+### Corrections
+
+- Migration preflight now inspects Drizzle’s default `drizzle.__drizzle_migrations` ledger. It checks `to_regclass` before reading; only a confirmed absent ledger is treated as empty. Unknown timestamps fail closed. Deterministic tests cover missing, behind, current, unknown, and exact-target mismatch cases.
+- Migration execution requires both `--acknowledge-migrations` and `--expect-database=<exact-name>`. The configured target is checked before connecting, and `current_database()` is checked before the migrator runs. Output contains only safe database/server identity, never credentials.
+- Phase1B now has an explicit `phase1b-chatbot-prepare` one-off job that runs the acknowledged migration against the exact `chatbot` database and the Phase 0 compatibility preparation. The normal `phase1b-chatbot` startup remains migration-free and waits for successful job completion.
+- Stale recovery now selects only `uploading` and `cleanup_pending` states in both the SQL query and service filter. Terminal cleaned `storage_failed` rows are not retried; regression tests verify repeated runs do not call cleanup for them.
+- Playwright authentication uses separate owner-provided customer, admin, and lawyer storage states. The suite encodes role-specific allowed and denied routes, including `/lawyer-portal` and `/lawyer-portal/[id]`, with semantic page assertions and explicit redirect/status/denial checks. Cases needing absent owner fixtures skip with a reason. No application auth bypass was added. Runtime RBAC was not exercised because no role sessions/fixture IDs were supplied.
+- S3 preflight reports only cloud-observable posture. The hardcoded public-URL authorization attestation was removed; source/unit checks cover owner-scoped private document access and absence of public/presigned URLs. Encryption acceptance is AES256 only, matching the current adapter.
+- The isolated no-env build exposed a remaining import-time Policy Intelligence DB guard. That module now reuses the shared lazy DB client, and the database-backed home preview is request-bound, removing build-time DB access without changing runtime query behavior.
+
+### R1 changed files
+
+- `chatbot/lib/production/migration-preflight.ts`
+- `chatbot/scripts/db-migration-operator.ts`
+- `docker-compose.phase1b.yml`
+- `chatbot/lib/db/queries.ts`
+- `chatbot/lib/matter-documents/maintenance.ts`
+- `chatbot/lib/production/stage3-hardening.test.ts`
+- `chatbot/lib/production/s3-security-preflight.ts`
+- `chatbot/scripts/s3-security-preflight.ts`
+- `chatbot/playwright.stage3.config.ts`
+- `chatbot/tests/e2e/phase11-accessibility.test.ts`
+- `chatbot/lib/policy-intelligence/server-db.ts`
+- `chatbot/app/(chat)/page.tsx`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Final R1 validation and boundaries
+
+- Focused Stage-3 hardening tests: **16/16 passed**.
+- `pnpm test:unit`: **442/442 passed**, zero failed/skipped.
+- Focused Biome: **11 files passed**. Focused Ultracite: **10 files passed**; its CLI reports an internal path-resolution diagnostic for `app/(chat)/page.tsx`, which passed Biome.
+- Final `pnpm build`: **PASS** on the exact R1 source in an isolated copy with all `.env*` files excluded and `POSTGRES_URL` unset. TypeScript passed and Next generated all 66 pages. An initial isolated attempt was stopped by Turbopack rejecting a dependency symlink outside its root; retry with local dependencies copied inside the temporary root passed. The build did not load `.env.local`.
+- Docker/image validation was not attempted after the R1 correction; no in-image native verifier result is claimed. Playwright runtime RBAC was not run because no safe server or owner-provided role fixtures were available.
+- No migration was applied and no database was connected. No AWS/S3, OpenAI/provider, official source, SES, Stripe, or other protected runtime service was contacted. No environment file was read or edited.
+- Stage 3 R1 source/tooling validation does not complete the later runtime acceptance gates: disposable DB migration/runtime checks, production image and target native verifier, real S3/IAM posture and object access, concrete scanner integration, and authenticated role-matrix execution remain outstanding. Stage 4 has not started.
+
+
+
+## P11-009 Stage 3 bounded runtime acceptance
+
+Runtime acceptance started on `phase11-chinese-service-platform-ui-rebase`, HEAD `c72f5ed997ab8055cd5dc5fa3ae8c3e067ebc0e8`, with the existing Stage-3 source work uncommitted. Execution stopped at Gate B after demonstrating a production-image verifier/runtime packaging defect. No source correction was made. Stage 4 has not started.
+
+### Gate A — production image: PASS
+
+- Command: `docker build -f chatbot/Dockerfile.production -t immigration-ai-chatbot:p11-009-stage3-gate-20260930 .`
+- `.dockerignore` excludes `**/.env*`; the transferred build context was 2.71 MB. No `.env` file, `POSTGRES_URL`, AWS credential, provider key, SES/Stripe secret, or other protected runtime value was supplied.
+- Build completed successfully using the daemon default target platform. Image: `immigration-ai-chatbot:p11-009-stage3-gate-20260930`; image ID `sha256:d25652d34e1fb59e6189ac529f0bd3584f2f0dcdfe989734b3553b7ee567baac`; platform `linux/amd64` (`process.arch` `x64`). Public package-registry downloads were allowed for this build.
+
+### Gate B — in-container native verifier: FAIL; source/runtime correction required
+
+Exact verifier command:
+
+`docker run --rm --network none --entrypoint node immigration-ai-chatbot:p11-009-stage3-gate-20260930 scripts/verify-native-runtime.mjs`
+
+Verifier output:
+
+`{"node":"v22.23.3","platform":"linux","arch":"x64","status":"FAIL"}`
+
+Network-disabled diagnostics isolated the failure:
+
+- `@napi-rs/canvas` loaded and rendered a pixel; alpha was `255`.
+- Parser-worker artifact existed and imported successfully.
+- The verifier’s `packageVersion("pdfjs-dist")` lookup failed because `require.resolve("pdfjs-dist")` returns `Cannot find module "pdfjs-dist"` in the standalone runtime image. The worker artifact itself loads, but the verifier cannot obtain its version through this package-root lookup.
+
+This is a demonstrated verifier/runtime packaging contract defect. Per the stop condition, no automatic patch was made and no later gate was executed.
+
+### Gate results and stop boundary
+
+| Gate | Result | Evidence / reason |
+|---|---|---|
+| A — Production image | **PASS** | Image built; ID/platform above. |
+| B — In-container native verifier | **FAIL** | `pdfjs-dist` package-version lookup fails in standalone runtime; canvas and parser-worker import succeeded. |
+| C — Fresh disposable PostgreSQL migration | **BLOCKED / NOT EXECUTED** | Stopped at Gate B. No database was connected and no disposable DB was created. |
+| D — MatterDocument DB runtime | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; no DB or storage service used. |
+| E — Migration safety negatives | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; migration operator was not invoked. |
+| F — Production startup separation | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; production container service was not started. Static CMD remains `node server.js`. |
+| G — Phase1B prepare/start ordering | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; Compose stack was not run. |
+| H — S3 fake-preflight runtime | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; no AWS/S3 call was made. Existing source/unit preflight checks are not runtime-gate evidence. |
+| I — Authenticated Playwright/RBAC | **BLOCKED / NOT EXECUTED** | Stopped at Gate B; no server or role session was used. |
+
+No normal chatbot, retained P11-008, retained P11-009 Stage-1, staging, or production database was touched. No migration was applied and no disposable database was created. AWS/S3, OpenAI or other live provider, official sources, SES and Stripe were not contacted. No application source was changed. The Docker build used public registry network access only. AWS and staging were not touched.
+
+**Recommendation: Stage 3 correction required.** Correct the verifier/runtime version-discovery contract, then request another bounded runtime acceptance pass. Do not accept Stage 3 or begin Stage 4 from this run. Leave all Stage-3 source changes uncommitted and unpushed.
+
+
+## P11-009 Stage 3 Runtime Gate-B verifier correction — 2026-09-30
+
+Gate B’s failure was isolated to the verifier calling `require.resolve("pdfjs-dist")` for a package root that is absent in the standalone image. The application parser worker and canvas had already loaded successfully. The correction verifies the parser-worker artifact and imports the actual `pdfjs-dist/legacy/build/pdf.mjs` runtime, checking `getDocument` and the runtime’s exported PDF.js version. **Dockerfile.production was not changed.** The corrected verifier does not relax failures.
+
+Rebuilt image: `immigration-ai-chatbot:p11-009-stage3-gate-20260930-b2`; ID `sha256:4805acf1ccc3849f7ddb88d0949724c23a2cd915d5bd85ab2765d8ebb28e72dc`; platform `linux/amd64`.
+
+Exact `docker run --rm --network none --entrypoint node immigration-ai-chatbot:p11-009-stage3-gate-20260930-b2 scripts/verify-native-runtime.mjs` output:
+
+`{"node":"v22.23.3","platform":"linux","arch":"x64","canvasVersion":"1.0.9","parserWorker":"loaded","pdfJsVersion":"6.3.289","pdfJsApi":"getDocument","status":"PASS"}`
+
+**Gate B: PASS.** No further application-source patch was made after Gate B passed.
+
+### Remaining runtime gates
+
+| Gate | Result | Evidence |
+|---|---|---|
+| C — fresh disposable PostgreSQL migration | **PASS, with local runner caveat** | Created only `chatbot_p11_009_stage3_gate_20260930_4a1d7c` in a fresh loopback-only `pgvector/pgvector:pg17` container. Preflight identified `127.0.0.1:55440`, the exact target database, missing ledger, and repository head `0023_chief_famine`. Migrations completed through `0023_chief_famine`; acknowledged rerun reported the ledger `current`. The stock `pnpm db:preflight` wrapper failed before connecting under host Node 24 because `tsx` treated the top-level-await script as CommonJS; the unchanged operator logic was run from an ephemeral `.mts` copy with a CommonJS interop import adjustment. Temporary files were removed. The disposable container was stopped and removed after checks. |
+| D — MatterDocument DB runtime | **PASS** | Synthetic disposable-only fixture exercised upload persistence with in-memory fake storage, owner-scoped list/get/download, foreign-owner denial, injected fake scanner pending-only/idempotent reconciliation, soft-delete visibility, purge dry-run, and storage-before-metadata purge. Synthetic owner/chat/document rows were removed; final counts were zero. Initial owner cleanup hit the intentional Chat→User FK restriction; dependent conversation/chat rows were then removed before the users. |
+| E — migration safety negatives | **PASS** | Missing acknowledgement and intentionally wrong expected database each exited 2 before connection/migration. Focused safety tests also passed for current-database identity and missing/behind/current/unknown ledger resolution; no unknown ledger row was inserted. |
+| F — production startup separation | **PASS** | Rebuilt image started Ready with `--network none`, no `POSTGRES_URL`, and no secrets; it remained running until the 10-second timeout. No migration database was reachable. |
+| G — Phase1B prepare/start ordering | **PASS (focused assertions)** | Three focused tests passed for the explicit prepare migration job, completed-successfully startup dependency, and migration-free production start. The Phase1B Compose stack was not started, so its existing services/databases were untouched. |
+| H — injected/fake S3 preflight | **PASS** | Injected healthy posture passed; missing/unknown posture failed closed with all expected reasons. The harness reported zero AWS calls. |
+| I — authenticated Playwright/RBAC | **BLOCKED — owner fixtures absent** | Presence-only check found no customer/admin/lawyer storage states or required consultation/request fixture IDs. No role fixtures were invented and no authenticated E2E session was run. |
+
+The host `127.0.0.1:5432` maintenance-database authentication attempt supplied no password and failed before a database session or SQL query. No normal chatbot, retained P11-008, or retained Stage-1 database was modified. No staging/production database was contacted or modified. No AWS/S3, OpenAI/provider, official-source website, SES, Stripe, or other external runtime service was contacted. Public package registries were used for the production image build. No Phase1B Compose services were started.
+
+**Recommendation:** Gate B is corrected and Gates C–H passed within the documented limits. Keep Stage 3 unaccepted pending valid owner-provided role fixtures for Gate I and the required review/owner checkpoint. Stage 4 has not started. Leave all work uncommitted and unpushed.
+
+## P11-009 Stage 3 runtime closure — stock migration CLI + DB security matrix — 2026-09-30
+
+### Stock migration CLI correction and Gate C
+
+The original operator used top-level `await` in a package without ESM module metadata. Under host Node 24 + `tsx`, that entry was transpiled as CommonJS and failed before database access. Refactored the executable into `async main()` with explicit caught errors and `process.exitCode`; retained acknowledgement, exact configured-target and `current_database()` checks, Drizzle-schema migration ledger lookup, unknown-ledger refusal, and credential-safe errors. The package-wide module system is unchanged. A focused execution regression invokes the stock `pnpm db:preflight` entry with no URL and proves it reaches the expected refusal rather than a transform error.
+
+No ephemeral executable copy or CLI rewrite was used in this closure. The migration and preflight evidence below came from stock repository commands.
+
+Fresh disposable database: `chatbot_p11_009_stage3_cli_gate_20260930_a7d32e`, in a new `--rm` PostgreSQL 17 container bound only to `127.0.0.1:55443`.
+
+- Stock `pnpm db:preflight`: **PASS**. Reported exact target, server `127.0.0.1:55443`, `ledgerLatest:null`, `ledgerStatus:"missing"`, repository head `0023_chief_famine`.
+- Stock acknowledged `pnpm db:migrate -- --acknowledge-migrations --expect-database=<exact target>`: **PASS**, completed through `0023_chief_famine`.
+- Same stock migration command repeated: **PASS**, idempotent; ledger reported current.
+- Final stock preflight: **PASS**, `ledgerLatest:"0023_chief_famine"`, `ledgerStatus:"current"`, repository head `0023_chief_famine`.
+- Missing acknowledgement and wrong expected database: each refused with exit 2 before migration. Actual-database mismatch: a localhost-only proxy routed the disposable-target connection to that same disposable container’s `postgres` maintenance database; `current_database()` was confirmed as `postgres`, and the stock migration command refused with exit 1 before ledger/migration work. Unknown-ledger refusal remains covered by deterministic resolver and operator-branch tests; no unknown ledger row was inserted.
+- Migration output contained no credential or full connection URL.
+
+### Gate D — clean-only DB-backed security matrix
+
+A temporary synthetic harness used real PostgreSQL persistence, processing claims, AI evidence queries, and lawyer exact-evidence loading/reconstruction. Object storage, scanner, and processor were fakes; no OCR/vision/provider was called. Every fixture was removed, and final document/user/chat counts were zero.
+
+| Case | Result |
+|---|---|
+| 1. New upload starts `pending` | **PASS** |
+| 2. Pending document cannot start via processing service or DB claim | **PASS** |
+| 3. Injected scanner CAS transition `pending → clean` | **PASS** |
+| 4. Clean document claims processing; fake processor persists complete run/evidence | **PASS** |
+| 5. Rejected document cannot start via service or DB claim | **PASS** |
+| 6. Failed document cannot start via service or DB claim | **PASS** |
+| 7a–c. Pending, rejected, and failed documents denied by AI evidence selection | **PASS each** |
+| 8a–c. Pending, rejected, and failed documents denied by lawyer exact-evidence loader | **PASS each** |
+| 9. Clean persisted run/evidence enters bounded AI packet with manifest | **PASS** |
+| 10. Clean persisted exact run reconstructs lawyer evidence from matching manifest | **PASS** |
+
+### Optional Phase1B runtime and validation
+
+Gate G remains **PASS — focused/static acceptance**: the prepare migration job, `service_completed_successfully` dependency, and migration-free chatbot startup assertions pass. Compose was not started because its existing local services bind shared ports/read local environment configuration; I left existing Phase1B resources untouched.
+
+- `pnpm test:unit`: **443/443 passed, 0 failed, 0 skipped**.
+- Focused Stage-3 hardening tests: **17/17 passed**.
+- Focused Biome: **PASS**; focused Ultracite: **PASS**.
+- `NEXT_TELEMETRY_DISABLED=1 pnpm build`: **PASS** (production build and TypeScript completed).
+- Final `git diff --check`: **PASS**.
+
+### Updated runtime gate status
+
+| Gate | Status |
+|---|---|
+| A — production image | **PASS** (prior evidence retained) |
+| B — native runtime verifier | **PASS** (prior corrected image evidence retained) |
+| C — stock CLI disposable migration | **PASS** |
+| D — clean-only DB-backed matrix | **PASS** |
+| E — migration safety negatives | **PASS** |
+| F — migration-free production startup | **PASS** (prior evidence retained) |
+| G — Phase1B ordering | **PASS, focused/static; Compose not run** |
+| H — injected fake S3 preflight | **PASS** (prior evidence retained) |
+| I — authenticated Playwright/RBAC | **BLOCKED pending owner-provided role sessions and fixture IDs** |
+
+Normal chatbot, retained P11-008, retained P11-009 Stage-1, staging, and production databases were not contacted or modified. Only the newly created disposable PostgreSQL container was used for migration/runtime DB checks; it was stopped and removed after verification. No AWS/S3, OpenAI/OCR/vision/provider, official-source website, SES, Stripe, or other external runtime service was contacted. No Stage 4 work began.
+
+**Recommendation:** Stock migration tooling and the Gate-D clean-only persistence/evidence matrix now pass. Proceed to the separate owner-fixture Gate-I acceptance task. Keep this worktree uncommitted and unpushed; Stage 4 remains not started.
+
+## P11-009 Stage 3 Gate-I authenticated RBAC/E2E acceptance — 2026-09-30
+
+Gate I was executed against the exact current production image using only a fresh disposable PostgreSQL 17/pgvector environment and synthetic fixtures. No application source, tests, schema, migrations, package files, or checked-in runtime harnesses were changed for this acceptance. Temporary acceptance scripts/configuration were removed.
+
+- Disposable DB: `chatbot_p11_009_stage3_gate_i_20260930_c2e51a`; container `chatbot-p11-009-gate-i-20260930-c2e51a`; initially published on `127.0.0.1:55445`, then attached only to the internal Docker network `chatbot-p11-009-gate-i-20260930-c2e51a` (`172.21.0.2:5432`) for app runtime.
+- Production image: `immigration-ai-chatbot:p11-009-stage3-gate-i-20260930`, ID `sha256:06e83e3d2ba11803ad868ffd4729b770c80e52db59a03a96fb5b292efc79a468`.
+- Synthetic identities: Customer A, Customer B, Admin, Lawyer A, Lawyer B; all were local `example.test` fixtures with verified status. A shared synthetic password was held only in the temporary fixture.
+- Customer A, Admin, and Lawyer A authenticated through `/login` using the real Credentials provider. Each reached its role redirect, had its role confirmed from `/api/auth/session`, and retained the session after reload. Temporary storage states were `/tmp/p11_009_stage3_gate_i_20260930_c2e51a/{customer,admin,lawyer}.json`; all were deleted after acceptance.
+- Customer: workspace, client portal, consultation list, and owned consultation detail rendered. Admin/lawyer routes redirected away. Customer B consultation detail returned API 404 and exposed none of the synthetic protected detail text.
+- Admin: admin workspace, consultation queue, and Customer A consultation detail rendered. Lawyer routes redirected to the admin portal; customer-only consultation routes settled back to the admin portal.
+- Lawyer A: lawyer workspace, assigned request, consultation queue, and assigned consultation rendered. Admin routes did not grant admin access; customer-only consultation routes settled back to the lawyer portal. Lawyer B request returned API 403 and consultation returned API 404; no protected synthetic detail text was exposed.
+- Locale switching and reload persistence passed on the customer client portal, admin consultation detail, and lawyer request detail.
+- Desktop `1440×900` and mobile `390×844` checks passed without horizontal overflow on the customer consultation detail, admin consultation detail, and lawyer assigned-request detail. Six bounded screenshots are retained under `/tmp/p11_009_stage3_gate_i_20260930_c2e51a/screenshots/`.
+- Accessibility smoke passed on customer consultation detail and admin consultation detail. It failed on the customer AI workspace (2 nested `main` landmarks, 2 visible unnamed interactive controls, and 1 visible unlabeled textarea) and lawyer assigned-request detail (1 visible unlabeled textarea). These are concrete UI accessibility findings; no source patch was made.
+- Existing Stage-3 Playwright suite, with the temporary localhost-certificate trust configuration, reported **19 passed, 9 failed**. Failures included accessibility/landmark assertions and route-transition assertions. Follow-up settled-route/API checks confirmed the customer ownership and lawyer assignment denial outcomes above.
+- Browser request interception blocked one attempted request to `cdn.jsdelivr.net`; the request was not sent. The tested pages still rendered. The app container had no external network route. No OpenAI/provider, official-source website, AWS/S3, SES, Stripe, staging, production, normal chatbot DB, retained P11-008 DB, or retained P11-009 Stage-1 DB was contacted or modified.
+
+**Gate I: FAIL — accessibility acceptance did not pass. P11-009 Stage 3 is not accepted by this run.** Stop for a separately authorized, bounded accessibility correction/review before claiming Stage 3 acceptance. **P11-005 remains NOT VERIFIED; D-040 is NOT fully closed; Stage 4 has NOT STARTED.**
+
+The app and disposable DB containers were stopped and removed, the temporary Docker network and loopback proxies were removed/stopped, and storage states, fixture/password file, private key, test logs, traces, and temporary scripts were deleted. Only the six bounded screenshots remain under `/tmp`. The Stage-3 worktree remains uncommitted and unpushed.
+
+## P11-009 Stage 3 final Gate-I accessibility closure — 2026-09-30
+
+The four previously observed accessibility defect categories have been corrected in this uncommitted/unpushed worktree:
+
+- Customer AI Workspace nested `main`: `chatbot/app/(chat)/ai-workspace/page.tsx` now uses a non-landmark `div` around its workspace content. The enclosing `ChatRouteShell`/`SidebarInset` remains the single page-level `main`.
+- Two icon-only AI Workspace controls: `chatbot/components/app-sidebar.tsx` gives the trash action the accessible name “Delete all consultations” and the plus action “Start a new consultation”.
+- AI Workspace question textarea: `chatbot/components/immigration-ai-workspace.tsx` now uses the existing localized consultation placeholder copy as its accessible name; form behavior and submitted values are unchanged.
+- Lawyer assigned-request feedback textarea: `chatbot/components/lawyer-workspace/detail-disposition.tsx` now has a localized accessible name (“Reasoning and research approach feedback” / “推理与研究方法反馈”); form behavior and submitted values are unchanged.
+
+`chatbot/tests/e2e/phase11-accessibility.test.ts` adds targeted assertions for the two pages, named controls, textarea names, focus, and one `main`. Its denial helper now waits for route settlement, checks the final redirect/status, then checks the protected GET API returns 403 without protected data. `/ai-workspace` was added to the accepted settled redirect destinations for the admin-only consultation route. The denial assertion was not weakened.
+
+### Deterministic validation
+
+- `pnpm test:unit`: **443/443 passed, 0 failed, 0 skipped**.
+- `NEXT_TELEMETRY_DISABLED=1 pnpm build`: **PASS**.
+- Focused Biome on all five changed source/test files: **PASS**, no fixes required.
+- Focused Ultracite on the four directly addressable files plus the AI Workspace page via a temporary symlink: **PASS**; symlink removed.
+- `git diff --check`: **PASS** after this entry was appended.
+
+### Targeted runtime status and screenshot reconciliation
+
+The required targeted authenticated runtime rerun was **not performed**. The prior Gate-I disposable runtime, auth states, and database are gone. `docker ps -a` showed no retained P11-009 Gate-I container or network. Creating a fresh authenticated runtime would require applying migrations; this task explicitly says not to rerun migrations. I did not create a database, apply migrations, use real identities, or introduce an auth bypass. As a result, the two-page accessibility assertions, false-negative route-transition assertions, and desktop/mobile overflow smoke have no new runtime result from this final correction cycle. No new unrelated runtime issue was observed because that rerun could not be performed.
+
+The screenshot path `/tmp/p11_009_stage3_gate_i_20260930_c2e51a/screenshots/` is **absent**; the parent directory exists but contains no screenshots. No screenshots were recreated. The earlier handoff statement that six screenshots remained was inaccurate at this check.
+
+No external service was contacted in this correction cycle. The prior Gate-I run recorded that its attempted `cdn.jsdelivr.net` request was intercepted before sending and that the app runtime was isolated from external networking; that prior result is unchanged. No migration, normal chatbot DB, retained P11-008 DB, Stage-1 disposable DB, staging/production DB, AWS/S3, OpenAI/provider, official-source site, SES, or Stripe was contacted by this correction cycle.
+
+**Recommendation: STOP FOR OWNER REVIEW. Stage 3 is not accepted by this final correction cycle because the required targeted runtime accessibility, route-transition, and desktop/mobile checks could not be rerun under the explicit no-migrations boundary. P11-005 remains NOT VERIFIED; D-040 is NOT fully closed; Stage 4 has NOT STARTED.** Keep all work uncommitted and unpushed.
+
+## P11-009 Stage 3 final targeted Gate-I runtime acceptance — 2026-09-30
+
+### Disposable runtime setup
+
+This acceptance used the explicitly authorized fresh disposable environment only:
+
+- PostgreSQL container: `chatbot-p11-009-gate-i-final-90acb8`.
+- Database: `chatbot_p11_009_stage3_gate_i_final_90acb8`, initially exposed only on `127.0.0.1:55447` and then reached by the host through its private internal-Docker address `172.21.0.2:5432` because Docker internal networking did not expose the published loopback port.
+- Stock `pnpm db:preflight`: **PASS**, exact target, initially missing ledger, repository head `0023_chief_famine`.
+- Stock acknowledged migration through current head: **PASS**. Final stock preflight: **PASS**, ledger `0023_chief_famine`, status `current`.
+- Rebuilt exact-worktree production image: `immigration-ai-chatbot:p11-009-stage3-gate-i-final-20260930-90acb8`, image ID `sha256:deb0fcb26e13d678d5dc4da947a7192b2f5f0b2be8cb886bc15414eb78e12c41`.
+- The app container was attached only to the internal Docker network. Browser traffic was routed through a temporary localhost HTTPS proxy, with Playwright configured to abort every browser request outside `https://localhost:3006`.
+
+Five synthetic `@example.test` identities were created with repository-compatible bcrypt hashes and verified timestamps: Customer A, Customer B, Admin, Lawyer A, and Lawyer B. Minimal disposable rows comprised one Customer A chat, two assigned lawyer requests, and one Customer B consultation assigned to Lawyer B. No real data or legal content was used.
+
+Customer A and Lawyer A both completed the real `/login` Credentials-provider flow. Their `/api/auth/session` roles and IDs matched the synthetic accounts, and both sessions remained valid after reload. No cookies or tokens were forged. Temporary credentials, fixtures, storage states, proxy certificate, and harness scripts were held under `/tmp` or temporary untracked files and deleted during cleanup.
+
+### Targeted result and stop boundary
+
+The first Customer A `/ai-workspace` check confirmed exactly one visible `main`. The next assertion failed: the temporary Playwright harness expected the visible button named **“Delete all consultations”**, but `getByRole('button', { name: 'Delete all consultations' })` found no matching element and timed out at `toBeVisible()`. Customer A was authenticated, the role/session had been verified after reload, and the page main was visible. No further page, route-transition, lawyer-detail, or viewport checks were run after this known-correction failure, as required by the anti-loop rule. No source or checked-in test was changed in this acceptance task.
+
+This is an apparent product-surface acceptance failure: the authenticated target page rendered, but the expected control was absent from its accessible DOM. The run stopped before establishing whether a page composition/fixture precondition explains the absence, so that distinction requires owner review. It is not evidence that the control was present with a wrong accessible name.
+
+- AI Workspace textarea and the second icon control: **NOT REACHED**.
+- Lawyer assigned-request detail accessibility: **NOT RUN**.
+- Previously false-negative ownership/assignment/role route assertions: **NOT RUN**.
+- Desktop/mobile overflow smoke on either page: **NOT RUN**.
+- No new unrelated issue was assessed; the run stopped at the first known correction failure.
+- No screenshots were captured.
+
+### Network and cleanup
+
+The app had no external network route, and the browser guard allowed only the localhost origin; protected external services were not contacted. The Playwright script stopped before reporting the count of any blocked browser host attempts, so no blocked-host count is claimed. No AI question was sent and no lawyer feedback was submitted.
+
+The app and PostgreSQL containers and their internal Docker network were removed. The temporary HTTPS proxy was stopped. Synthetic fixture/password files, storage states, certificate/key, and temporary runner/seeder scripts were removed. The rebuilt image remains local as non-sensitive evidence of the tested artifact. No normal chatbot, P11-008, Stage-1, staging, or production database was contacted or modified.
+
+**Gate I final targeted rerun: FAIL — stopped at the missing “Delete all consultations” control. Recommendation: STOP FOR OWNER REVIEW. P11-009 Stage 3 is not accepted. P11-005 remains NOT VERIFIED; D-040 is NOT fully closed; Stage 4 has NOT STARTED.** Keep all work uncommitted and unpushed.

@@ -43,6 +43,24 @@ services:
     ports:
       - "8000:8000"
 
+  phase1b-chatbot-prepare:
+    build:
+      context: .
+      dockerfile: chatbot/Dockerfile.local
+    container_name: immigration-phase1b-chatbot-prepare
+    env_file:
+      - ./.env.phase1b.chatbot.local
+    depends_on:
+      phase1b-postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -lc
+      - >-
+        pnpm db:migrate -- --acknowledge-migrations --expect-database=chatbot
+        && pnpm exec tsx scripts/apply-phase0-chatbot-schema.ts
+    restart: "no"
+
   phase1b-chatbot:
     build:
       context: .
@@ -53,6 +71,8 @@ services:
     depends_on:
       phase1b-postgres:
         condition: service_healthy
+      phase1b-chatbot-prepare:
+        condition: service_completed_successfully
       phase1b-valkey:
         condition: service_healthy
       phase1b-legal-service:

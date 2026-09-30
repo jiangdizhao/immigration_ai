@@ -62,7 +62,7 @@ function isIncludedUnit(value: unknown): value is PersistedIncludedUnit {
 
 export function reconstructExactLawyerDocumentEvidence(input: {
   manifest: unknown;
-  exact: ExactRunEvidence;
+  exact: ExactRunEvidence & { document: { securityStatus?: string } };
   excerptBudget: number;
 }): {
   items: Array<{
@@ -75,6 +75,7 @@ export function reconstructExactLawyerDocumentEvidence(input: {
   excerptBudget: number;
 } | null {
   if (
+    input.exact.document.securityStatus !== "clean" ||
     !input.manifest ||
     typeof input.manifest !== "object" ||
     !Number.isInteger(input.excerptBudget) ||

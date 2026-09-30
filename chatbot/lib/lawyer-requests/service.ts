@@ -1,9 +1,8 @@
 import "server-only";
 
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 import { guestRegex } from "@/lib/constants";
+import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
   consultationRequest,
   immigrationAnswerTraceLink,
@@ -24,12 +23,7 @@ import {
   validateLawyerClarificationUpdate,
 } from "./status";
 
-const postgresUrl = process.env.POSTGRES_URL;
-if (!postgresUrl) {
-  throw new Error("POSTGRES_URL is not configured");
-}
-const client = postgres(postgresUrl);
-const db = drizzle(client);
+const db = getLazyDatabase();
 
 export class LawyerRequestDomainError extends Error {
   readonly status: 400 | 403 | 404 | 409;
