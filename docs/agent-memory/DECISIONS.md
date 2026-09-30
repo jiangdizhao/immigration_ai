@@ -865,3 +865,32 @@ Accepted Stage-2 rules:
 Stage 2 creates no schema migration and does not authorize applying 0023, running live paid-provider/source sync, scheduling, deployment, AWS changes, P11-005 production-readiness closure, or Legal Service reasoning/model-routing changes.
 
 The Sovereign Nexus template remains visual/product reference only; its mock facts, people, credentials and prototype behavior are not production authority.
+
+
+## D-051 — Stage 3 hardens production mechanisms; Stage 4 supplies environment-specific AWS/staging attestations
+
+**Date:** 2026-09-30  
+**Status:** ACCEPTED
+
+P11-009 Stage 2 is accepted at `0afa4cb7921e74ee6a2263b66743a875c5cf3e07`.
+
+Stage 3 is the whole-platform production-hardening stage. It must implement and source-validate the production artifact, explicit migration/start separation, native document-parser self-checking, MatterDocument retention/stale-storage recovery, malware/quarantine fail-closed enforcement and scanner boundary, private-S3 preflight tooling, and concentrated bilingual/responsive/accessibility/E2E regression.
+
+This decision clarifies the D-040/D-049 boundary without waiving any gate:
+
+- Stage 3 owns the repository mechanisms and local/deterministic hardening needed to make the deferred P11-005 gates executable and auditable.
+- Stage 3 normal service startup must not run shared-database migrations implicitly.
+- MatterDocuments remain untrusted and must not enter processing, AI evidence or lawyer handoff until `securityStatus` is explicitly `clean`.
+- Retention/purge has no invented legal default; destructive purge is operator-controlled, bounded and dry-run by default.
+- Stage 3 may define provider-neutral malware/S3 verification contracts but must not fabricate a clean verdict or cloud state.
+
+Environment-specific proof remains Stage 4 / separately authorized acceptance:
+
+- actual staging migration to the then-current repository migration head;
+- actual ECS/Fargate task architecture and production-image `@napi-rs/canvas` native load;
+- actual private S3 bucket/IAM/encryption/Block Public Access verification;
+- concrete malware-scanning service/configuration and real reconciliation;
+- exact deployed-image and rollback/staging E2E evidence.
+
+Accordingly, Stage-3 source acceptance alone does not mark D-040 closed and does not mark P11-005 VERIFIED. Those statuses require the mandatory environment evidence to be recorded later.
+

@@ -132,7 +132,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
 - **P11-008 — Appointment / Consultation Workflow: VERIFIED; P11-008 Final UI Acceptance PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED.**
-- **P11-009 — ACTIVE: Live Policy Intelligence + Phase 11 production readiness / AWS staging acceptance. Stage 1 is ACCEPTED at `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1` after source review and a 12/12 disposable-PostgreSQL runtime gate. Stage 2 (Policy Intelligence product activation) is the current implementation unit; deferred P11-005 production-readiness items remain mandatory for later P11-009 stages.**
+- **P11-009 — ACTIVE: Live Policy Intelligence + Phase 11 production readiness / AWS staging acceptance. Stage 1 is ACCEPTED at `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1`; Stage 2 is ACCEPTED at `0afa4cb7921e74ee6a2263b66743a875c5cf3e07`. Stage 3 (whole-platform production hardening) is the current implementation unit; D-040/P11-005 production-readiness gates remain mandatory and environment-specific proofs remain for controlled Stage-4 acceptance.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -461,3 +461,12 @@ Public Stage-2 projections must remain deliberately smaller than backend revisio
 Policy Intelligence -> AI Workspace continuity is reference-only: the client carries a stable slug, the server resolves the current published record, and Policy Intelligence analysis does not become official legal evidence or a durable known fact in the answer pipeline. No Legal Service reasoning/model change is authorized by Stage 2.
 
 Stage 2 is source/UI work only: no new migration, no migration application, no live provider/source sync, no AWS/scheduler work and no Stage-3 production-hardening work.
+
+
+### P11-009 Stage 3 active boundary — 2026-09-30
+
+Stage 3 is the repository/source hardening layer before AWS staging mutation. The active source task must separate production service startup from one-off migrations, create a production-image/native-parser self-check, add safe migration target preflight, implement bounded MatterDocument retention/stale-storage recovery operations, make document processing/AI/lawyer use fail closed on malware security state, add a provider-neutral scanner/reconciliation boundary, add private-S3 security preflight tooling and establish a concentrated Phase-11 bilingual/responsive/accessibility/E2E regression harness.
+
+No normal/retained/staging/production database migration and no AWS/S3 mutation is authorized by the initial Stage-3 coding task. If a new schema migration appears necessary, the coding model must stop and report rather than generate/apply it automatically.
+
+D-040 is not waived and P11-005 remains NOT VERIFIED. Real ECS/Fargate native binding, real staging migration to the then-current repository head, real S3/IAM/BPA and concrete malware-scanning configuration are environment-specific evidence items for later explicitly authorized acceptance, primarily Stage 4.

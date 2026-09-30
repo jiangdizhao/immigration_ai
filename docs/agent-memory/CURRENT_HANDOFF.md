@@ -1902,3 +1902,53 @@ The visual gate used deterministic isolated fixtures; it does not claim live
 staging/PostgreSQL request-path acceptance.
 
 Stage 3 is the next authorized planning boundary and has not started.
+
+
+## P11-009 Stage 3 activation — Whole-platform production hardening — 2026-09-30
+
+**Status:** Stage 2 is **ACCEPTED** at remote checkpoint `0afa4cb7921e74ee6a2263b66743a875c5cf3e07` (`feat: activate policy intelligence product`). Stage 3 is now **ACTIVE / READY TO IMPLEMENT**. Stage 4 remains not started.
+
+### Stage 2 closure evidence
+
+Stage 2 closed after the R1 public-projection correction and bounded fixture-driven visual acceptance:
+
+- full unit suite: 425/425;
+- focused product suite: 26/26;
+- production build: PASS;
+- focused Biome/Ultracite and `git diff --check`: PASS;
+- source review: PASS;
+- bounded desktop/mobile zh-CN/en visual acceptance: PASS;
+- Home/list/detail/history/diff/AI Workspace policy-reference continuity: PASS;
+- no migration/database/external-service contact during Stage 2 implementation or visual acceptance.
+
+The visual gate used deterministic isolated fixtures; it did not claim live staging/PostgreSQL request-path acceptance.
+
+### Repository findings that shape Stage 3
+
+- P11-005 implementation Stages 1–3 are accepted, but D-040 production-readiness gates remain open: deployment-compatible `@napi-rs/canvas`, controlled migration + DB-backed document smoke, private S3/IAM/Block Public Access verification, retention/purge + stale storage-intent recovery, and malware/quarantine/scanning strategy.
+- The current `chatbot/Dockerfile.local` installs/builds the app and runs `pnpm db:migrate` in its service startup command. That is acceptable only as historical/local simulation behavior; the Stage-3 production artifact must separate service startup from one-off migration execution.
+- `@napi-rs/canvas` is a direct chatbot dependency, but repository evidence does not yet prove that the exact native binding required by the eventual ECS/Fargate task architecture is present and loadable in the production image.
+- MatterDocument upload remains private-S3 based and starts with `securityStatus: pending`. The current production-readiness gap is operational: explicit malware/quarantine policy, fail-closed clean-status gating, retention/purge operations, stale upload/cleanup recovery and environment verification.
+- Stage-1 Policy Intelligence introduced migration 0023 after the earlier P11-005/P11-008 migrations. Any later staging migration must therefore inspect and migrate to the then-current repository head rather than applying only the historically named 0018–0021 subset.
+- Stage 4, not the initial Stage-3 coding task, owns actual AWS/staging mutation: topology inspection, authorized staging migration, exact image deployment, AWS resource verification and scheduled Policy Intelligence sync.
+
+### Frozen Stage 3 implementation direction
+
+Stage 3 is one concentrated production-hardening stage. The first coding pass is **source/tooling only** and must stop uncommitted/unpushed for review.
+
+1. **Production image/runtime separation.** Add a production-oriented chatbot container/runtime path with no implicit database migration on normal service startup. Add a deterministic native-runtime self-check for document parser dependencies, especially `@napi-rs/canvas`, and preserve parser-worker output-file tracing.
+2. **Migration readiness, not migration application.** Make build/start/migrate responsibilities explicit and add bounded target-identity/preflight tooling suitable for a later one-off migration job. The source task must not connect to or mutate the normal, retained disposable, staging or production databases.
+3. **MatterDocument operational lifecycle.** Add bounded operator-only maintenance for stale storage intents and retention purge. Dry-run must be the default; destructive action requires explicit CLI intent/cutoff/batch bounds. S3 deletion must succeed before hard metadata/evidence purge, and failures must retain recoverable DB state.
+4. **Malware/quarantine fail-closed boundary.** A document must not enter processing, AI evidence or lawyer handoff unless its security state is explicitly clean. Add a provider-neutral scanner/reconciliation boundary and deterministic test adapter; do not silently mark uploads clean. The concrete AWS scanning service/topology remains a Stage-4 environment choice and acceptance item.
+5. **Private-S3 security preflight tooling.** Add an injectable/read-only preflight boundary capable of verifying the production expectations for region/bucket identity, encryption, Block Public Access and non-public policy posture. No AWS call is authorized in the source task. Effective write/delete permission and real object smoke are later environment gates.
+6. **Whole-platform regression harness.** Add/extend a bounded Phase-11 Playwright/accessibility regression covering representative public, AI Workspace, Client Portal, lawyer workspace, consultation and Policy Intelligence surfaces across zh-CN/en and desktop/mobile. Use deterministic fixtures/test identities; do not add a production auth bypass.
+7. **Production configuration hygiene.** Preserve secret boundaries, keep widget debug off by default, document required production variables without real values and avoid exposing storage keys/document bodies/internal Policy Intelligence data in logs.
+
+### Stage 3 acceptance split
+
+Stage-3 **source acceptance** does not by itself mark D-040 closed. After source review, later owner-authorized operational gates may exercise a fresh disposable PostgreSQL database/container image and local deterministic maintenance/scanner fixtures.
+
+Actual staging/AWS attestations remain Stage 4: current staging migration application, exact ECS/Fargate image/native binding verification, private S3/IAM/BPA verification against the real bucket/role, concrete malware-scanner integration/configuration, and scheduled Policy Intelligence sync.
+
+Do not mark P11-005 VERIFIED merely because Stage-3 source code exists. D-040 is closed only when the required environment-specific evidence is subsequently recorded.
+

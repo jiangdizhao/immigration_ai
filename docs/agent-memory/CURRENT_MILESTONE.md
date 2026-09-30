@@ -42,7 +42,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
-| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGE 1 ACCEPTED; STAGE 2: POLICY INTELLIGENCE PRODUCT ACTIVATION |
+| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGES 1–2 ACCEPTED; STAGE 3: WHOLE-PLATFORM PRODUCTION HARDENING |
 
 
 ## P11-009 Stage 1 accepted / Stage 2 activated — 2026-09-30
@@ -905,3 +905,12 @@ Complete Phase 11 by first turning Policy Intelligence into a live official-sour
 ### Stage 1 non-goals
 
 Stage 1 must not deploy AWS resources, apply migrations to normal local/staging/production databases, redesign customer-answer architecture, alter Phase 6/ReasoningBank, synthesize lawyer commentary, add arbitrary-web crawling, or implement the final Policy Intelligence UI.
+
+
+## P11-009 Stage 2 accepted / Stage 3 activated — 2026-09-30
+
+Stage 2 is **ACCEPTED** at remote checkpoint `0afa4cb7921e74ee6a2263b66743a875c5cf3e07` after source review, the bounded R1 public-projection correction and fixture-driven desktop/mobile zh-CN/en visual acceptance.
+
+Stage 3 is now the active implementation unit. It hardens the production artifact and operational boundaries without performing AWS/staging mutation in the initial coding pass. The required source work covers production container/runtime separation, native parser/canvas self-checking, migration preflight separation, MatterDocument retention/recovery operations, fail-closed malware/quarantine gating and scanner abstraction, private-S3 preflight tooling, and a concentrated whole-platform bilingual/responsive/accessibility/E2E regression harness.
+
+D-040 remains mandatory. Stage-3 source acceptance alone does not mark P11-005 VERIFIED. Environment-specific proofs—actual staging migration, real ECS/Fargate native binding, real S3/IAM/BPA and concrete scanner configuration—remain controlled Stage-4 acceptance actions after explicit owner authorization.
