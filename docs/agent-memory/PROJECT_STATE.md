@@ -132,7 +132,7 @@ See `docs/architecture/SERVICE_PLATFORM_UI_REBASE_V1.md`.
 - **P11-006 — Matter-centered Client Portal: VERIFIED at `b3b5fe285779cd351c831d9793f3c62dc1ef4c0c`.**
 - **P11-007 — Lawyer Workspace Continuity: VERIFIED after assigned-request desktop/mobile zh-CN/English visual acceptance; source checkpoint `9f352310ae6aa6392607296310c6d1caa943e0b9`.**
 - **P11-008 — Appointment / Consultation Workflow: VERIFIED; P11-008 Final UI Acceptance PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED.**
-- **P11-009 — ACTIVE: Live Policy Intelligence + Phase 11 production readiness / AWS staging acceptance. Stage 1 (live Policy Intelligence backend) is the current implementation unit; deferred P11-005 production-readiness items remain mandatory for later P11-009 stages.**
+- **P11-009 — ACTIVE: Live Policy Intelligence + Phase 11 production readiness / AWS staging acceptance. Stage 1 is ACCEPTED at `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1` after source review and a 12/12 disposable-PostgreSQL runtime gate. Stage 2 (Policy Intelligence product activation) is the current implementation unit; deferred P11-005 production-readiness items remain mandatory for later P11-009 stages.**
 
 Public-content governance is defined in `docs/product/CONTENT_POLICY.md`.
 
@@ -450,3 +450,14 @@ P11-009 is organized into four large stages:
 4. **Stage 4 — AWS staging rollout and acceptance:** migrate to the repository's then-current latest migration, deploy exact images, configure/verify scheduled policy sync, and run final staging acceptance.
 
 Activation source baseline is `phase11-chinese-service-platform-ui-rebase@1e3a2edb3ed20682e7c87b0f1f9f05724a22b2ed` (`add UI template`), which adds the lawyer-provided Sovereign Nexus review artifact under `chatbot/UI_template/`. Coding agents must verify the live branch tip before editing because this documentation checkpoint advances HEAD.
+
+
+### P11-009 Stage 2 active boundary — 2026-09-30
+
+Stage 2 activates the Stage-1 Policy Intelligence backend in the existing public Home/list/detail experience. The live PostgreSQL store is canonical only when migration 0023 is available; exact schema-availability detection must keep the current pre-0023 normal database rollout-safe and must distinguish unavailable schema from an available store with zero publications. Manual published entries remain compatibility/editorial fallback only.
+
+Public Stage-2 projections must remain deliberately smaller than backend revisions: no raw source evidence, verifier assessments, model metadata, fingerprints, held/draft revisions or internal sync diagnostics. The public product may show verified bilingual structured analysis, current source identity/status, bounded importance dimensions, published revision history/deterministic diff, and actual lawyer commentary when it exists.
+
+Policy Intelligence -> AI Workspace continuity is reference-only: the client carries a stable slug, the server resolves the current published record, and Policy Intelligence analysis does not become official legal evidence or a durable known fact in the answer pipeline. No Legal Service reasoning/model change is authorized by Stage 2.
+
+Stage 2 is source/UI work only: no new migration, no migration application, no live provider/source sync, no AWS/scheduler work and no Stage-3 production-hardening work.

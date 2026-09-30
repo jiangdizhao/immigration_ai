@@ -838,3 +838,30 @@ Stage 1 is the active implementation unit. Later stages must not be started impl
 The lawyer-provided `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html` is a product/visual reference, not functional or legal authority. Mock names, credentials, statistics, lawyer claims, office details, availability claims and prototype behavior from that artifact must not be copied as production facts.
 
 D-040 remains fully in force. Expanding P11-009 does not waive any deferred P11-005 production-readiness gate.
+
+
+## D-050 — P11-009 Stage 2 activates live Policy Intelligence through a rollout-safe public projection
+
+**Date:** 2026-09-30  
+**Status:** ACCEPTED
+
+Stage 1 is accepted at `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1` after external source review and a 12/12 disposable-PostgreSQL runtime gate.
+
+Stage 2 activates that backend in the public product without weakening provenance or requiring migration 0023 to be present in the current normal database.
+
+Accepted Stage-2 rules:
+
+- when the Stage-1 schema is available, the current published PostgreSQL revision is canonical;
+- schema unavailable is an explicit rollout state and is not equivalent to an available store with zero publications;
+- existing published `MANUAL_POLICY_ENTRIES` may serve only as compatibility/editorial fallback when the live schema is unavailable;
+- unexpected database errors are not silently converted into manual data;
+- automated public projections expose only presentation-safe structured analysis/source/revision fields and never raw source evidence, verifier internals, model metadata, fingerprints, held/draft revisions or sync failure telemetry;
+- official source, AI interpretation and actual lawyer commentary remain separate provenance classes in data and UI;
+- public revision history contains only revisions that were actually public, and public diff is deterministic from structured published revisions rather than model-generated;
+- importance ordering is deterministic from bounded Stage-1 dimensions and is not presented as a 0–100 confidence/probability score;
+- Policy Intelligence -> AI Workspace continuity carries only a stable slug/reference and is resolved server-side; Policy Intelligence analysis does not become official legal evidence, durable known facts or a hidden authority bypass for the answer pipeline;
+- public Policy Intelligence reads must use a dynamic/no-store freshness boundary appropriate for an operator-maintained live feed.
+
+Stage 2 creates no schema migration and does not authorize applying 0023, running live paid-provider/source sync, scheduling, deployment, AWS changes, P11-005 production-readiness closure, or Legal Service reasoning/model-routing changes.
+
+The Sovereign Nexus template remains visual/product reference only; its mock facts, people, credentials and prototype behavior are not production authority.

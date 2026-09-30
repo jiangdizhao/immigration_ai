@@ -1751,3 +1751,36 @@ P11-009 Stage 1 is **ACCEPTED** after external/source review through R1/R2/R3; 3
 - During the runtime gate, no live OpenAI/provider, official-source website, AWS, S3, SES, Stripe, or other external service was contacted.
 - Stage 1 acceptance does **not** imply overall P11-009 verification.
 - Stage 2 is the next implementation stage and has **not started**. Live provider/source work and AWS scheduling/deployment remain outside Stage 1.
+
+
+## P11-009 Stage 2 activation — Policy Intelligence product activation — 2026-09-30
+
+**Status:** Stage 1 is **ACCEPTED** at remote source checkpoint `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1` (`feat: add live policy intelligence backend`). Stage 2 is now **ACTIVE / READY TO IMPLEMENT**. Stage 3 and Stage 4 remain not started.
+
+### Repository review before activation
+
+- Branch `phase11-chinese-service-platform-ui-rebase` points to `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1`, one clean commit after the Stage-1 planning/docs checkpoint `b422c68e7ccf956490bb8554042d500c19a9cf2b`.
+- The Stage-1 commit contains the accepted durable Policy Intelligence schema/migration, official-source acquisition, analyzer/verifier contracts, fail-closed publication pipeline, read service, operator sync path, tests and handoff only; public `/intelligence`, detail and Home loaders still use the earlier manual-registry projection path.
+- `chatbot/lib/policy-intelligence/read-service.ts` already exposes server-only current published rows, one item by slug, revision metadata and latest sync metadata. The existing public UI does not consume that DB-backed service yet.
+- The existing public list/detail UI already preserves the Official Source / AI Analysis / Lawyer Commentary separation, but it is shaped around the earlier `PolicyEntry` model and does not yet expose Stage-1 structured sections, public-safe revision history/diff or deterministic importance behavior.
+- The Sovereign Nexus template contains useful visual ideas for richer policy metadata, insights, history and continuity actions, but remains a reference only. Mock claims, lawyer identities, statistics, office details and prototype behavior are not production authority.
+
+### Frozen Stage 2 product direction
+
+Stage 2 activates the accepted Stage-1 backend in the public product without changing legal reasoning, applying migrations, scheduling live syncs or starting AWS work.
+
+1. **Availability-aware server activation.** Add a server-only product loader that treats the Stage-1 PostgreSQL store as canonical when migration 0023 is present. Use an exact catalog/`to_regclass` availability check so the current normal database, which may not yet contain 0023, does not crash Home or Policy Intelligence. Schema unavailable must remain distinguishable from a genuinely available store with zero published items. Existing published `MANUAL_POLICY_ENTRIES` may remain a compatibility/editorial fallback only when the live schema is unavailable; unexpected DB failures must not be broadly swallowed.
+2. **Public-safe projection v2.** Map only current published Stage-1 data into explicit public DTOs. Public output may include source identity/status/date, published revision metadata, bilingual title/summary, key changes, affected groups, practical impacts, recommended actions, transition information, uncertainties and bounded importance dimensions. It must exclude raw normalized evidence, verification internals, model metadata, analysis fingerprints, sync errors, held/draft revisions and other backend-only fields.
+3. **Provenance stays explicit.** Official source metadata/link, AI-generated interpretation and actual lawyer commentary remain separate visual/data layers. Automated AI copy must never populate `officialExcerpt` or lawyer commentary. If no lawyer commentary exists, show an explicit neutral absence state rather than inventing one.
+4. **List + Home activation.** Convert Home and `/intelligence` to async server-backed reads with a repository-consistent no-store/dynamic freshness boundary so successful future syncs are not frozen at build time. Preserve bilingual search/filter behavior. Never expose raw `sourceConfigId` as a customer category. Use human-readable source-family/authority labels.
+5. **Deterministic importance behavior.** Do not expose a 0–100 AI confidence/importance score. Support a deterministic impact sort using the validated bounded Stage-1 dimensions, preferably a documented lexicographic tuple over service relevance, immediacy, procedural impact, affected population and a fixed legal-force rank, with publication recency/slug only as stable tie-breakers. Keep “Latest” as an explicit alternative sort.
+6. **Detail experience.** Expand the detail page into a richer evidence-aware policy brief: official source identity and dates, clear AI-generated label, key changes, affected groups, practical impacts, actions, transition information and uncertainties. Source/effective dates are nullable and must render as not stated rather than being invented.
+7. **Public revision history and deterministic diff.** Expose only revisions that were actually public (`published` or historical `superseded`); never leak draft/review-required/held analyses. Compute current-vs-previous published change summaries deterministically from structured stable unit IDs/content rather than asking another model to describe the diff. Historical records remain immutable.
+8. **Policy -> AI Workspace continuity.** Add an “Ask AI about this policy/update” action that carries only a stable policy slug/reference from the public page. The receiving workspace must resolve current published policy identity server-side; client-supplied policy title/text must not become trusted context. Stage 2 may prefill/show a bounded topic card, but Policy Intelligence analysis must not be promoted into official legal evidence, durable known facts, or hidden authority for the answer. Normal AI answer/research behavior remains authoritative.
+9. **Rollout compatibility.** Stage 2 creates no schema migration and does not apply 0023 to the normal local, retained disposable, staging or production database. The retained Stage-1 disposable DB remains review evidence, not a default development target.
+
+### Stage 2 acceptance boundary
+
+Required deterministic coverage includes live-schema available/unavailable/zero-content semantics, manual fallback, public projection leakage checks, nullable source dates, deterministic importance ordering, public-history filtering, deterministic diff behavior, provenance labels, Home/list/detail locale behavior and slug-only AI Workspace continuity. Run full unit tests, production build, focused Ultracite/Biome and `git diff --check`.
+
+Stop Stage 2 **uncommitted and unpushed** for owner/ChatGPT source review. Do not start Stage 3, apply migration 0023, run a live provider/source sync, contact AWS, add scheduling, or change Legal Service reasoning/model routes in the same task.

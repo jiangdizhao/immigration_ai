@@ -42,7 +42,16 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
-| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGE 1: LIVE POLICY INTELLIGENCE BACKEND |
+| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGE 1 ACCEPTED; STAGE 2: POLICY INTELLIGENCE PRODUCT ACTIVATION |
+
+
+## P11-009 Stage 1 accepted / Stage 2 activated — 2026-09-30
+
+Stage 1 is **ACCEPTED** at remote checkpoint `0dae9e7ea46712c18357e3a9c009157c8cf0c8a1` after R1/R2/R3 external source review plus the separately authorized disposable PostgreSQL runtime gate. The runtime gate migrated only `chatbot_p11_009_stage1_gate_20260930_71c3ad` through 0023 and passed all 12 real-repository/read-service transaction/concurrency/currentness cases. The normal `chatbot` database and retained P11-008 disposable database remained unchanged.
+
+Stage 2 is now the active implementation unit. It activates the accepted backend in the existing Home and Policy Intelligence product surfaces, adds public-safe structured analysis/history/diff/importance behavior, and adds slug-only Policy Intelligence -> AI Workspace continuity. It must remain rollout-compatible while 0023 is absent from the normal database, must not apply migrations, and must preserve `Official Source != AI Analysis != Lawyer Commentary`.
+
+Stage 3 whole-platform production hardening and Stage 4 AWS staging/scheduler rollout remain not started. D-040/P11-005 production-readiness gates remain mandatory for those later stages.
 
 ## P11-004 closure / next task state
 
