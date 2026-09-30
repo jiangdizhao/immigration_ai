@@ -1,6 +1,7 @@
-import { PolicyIntelligencePage } from "@/components/policy-intelligence-page";
-import { getPublishedPolicyProjections } from "@/lib/policy-intelligence-server";
+import { PolicyIntelligenceProductPage } from "@/components/policy-intelligence-product-page";
+import { getPolicyIntelligenceProductState } from "@/lib/policy-intelligence-server";
 
-export default function Page() {
-  return <PolicyIntelligencePage policies={getPublishedPolicyProjections()} />;
+export default async function Page() {
+  const state = await getPolicyIntelligenceProductState();
+  return <PolicyIntelligenceProductPage state={state} />;
 }

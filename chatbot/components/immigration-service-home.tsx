@@ -13,14 +13,16 @@ import Link from "next/link";
 import {
   formatPolicyDate,
   getPolicySourceStatusLabel,
-  type PublicPolicyPreview,
 } from "@/lib/policy-intelligence";
+import type { PolicyProductPreviewState } from "@/lib/policy-intelligence-product";
+import { getPolicyProductCopy } from "@/lib/policy-intelligence-product-copy";
 import {
   getPublicPageContent,
   getPublicServiceCatalog,
   getPublicTeamPlaceholders,
   PUBLIC_ROUTES,
 } from "@/lib/public-content";
+import { PolicyIntelligenceAvailabilityNotice } from "./policy-intelligence-availability-notice";
 import {
   PublicActionLink,
   PublicEyebrow,
@@ -34,15 +36,16 @@ import { useSiteLocale } from "./site-locale-provider";
 import { Button } from "./ui/button";
 
 export function ImmigrationServiceHome({
-  publishedPolicyPreviews,
+  policyState,
 }: {
-  publishedPolicyPreviews: PublicPolicyPreview[];
+  policyState: PolicyProductPreviewState;
 }) {
   const { locale } = useSiteLocale();
   const content = getPublicPageContent(locale);
   const services = getPublicServiceCatalog(locale);
   const team = getPublicTeamPlaceholders(locale);
-  const policies = publishedPolicyPreviews;
+  const policyCopy = getPolicyProductCopy(locale);
+  const policies = policyState.policies.slice(0, 3);
 
   return (
     <PublicPageFrame>
@@ -199,8 +202,11 @@ export function ImmigrationServiceHome({
               </p>
             </div>
 
+            <div className="mt-8">
+              <PolicyIntelligenceAvailabilityNotice state={policyState} />
+            </div>
             {policies.length > 0 ? (
-              <div className="mt-12 grid gap-5 lg:grid-cols-3">
+              <div className="mt-8 grid gap-5 lg:grid-cols-3">
                 {policies.slice(0, 3).map((policy) => {
                   const copy = policy.copy[locale];
                   return (
@@ -217,10 +223,17 @@ export function ImmigrationServiceHome({
                           )}
                         </span>
                         <span className="text-slate-500">
-                          {formatPolicyDate(policy.source.sourceDate, locale)}
+                          {policy.source.sourceDate
+                            ? formatPolicyDate(policy.source.sourceDate, locale)
+                            : policyCopy.notStated}
                         </span>
                       </div>
-                      <h3 className="mt-5 break-words text-xl font-semibold leading-tight tracking-tight text-slate-950">
+                      <span className="mt-3 text-xs text-slate-500">
+                        {policy.origin === "automated"
+                          ? policyCopy.liveOrigin
+                          : policyCopy.manualOrigin}
+                      </span>
+                      <h3 className="mt-2 break-words text-xl font-semibold leading-tight tracking-tight text-slate-950">
                         {copy.title}
                       </h3>
                       <p className="mt-3 line-clamp-4 text-sm leading-6 text-slate-600">

@@ -1,18 +1,22 @@
 import "server-only";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   policyIntelligenceAnalysisRevision,
   policyIntelligenceItem,
   policyIntelligenceSourceSnapshot,
   policyIntelligenceSyncRun,
 } from "@/lib/db/schema";
+import type { LivePolicyRecord } from "../policy-intelligence-product";
+import { currentPublicHistoryRows } from "../policy-intelligence-product";
 import { policyAnalysisSchema } from "./contracts";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
 import { db } from "./server-db";
 
 /** Server-only read model for published Stage 1 policy revisions. */
-export async function getPublishedPolicyIntelligenceList() {
+export async function getPublishedPolicyIntelligenceList(): Promise<
+  LivePolicyRecord[]
+> {
   const rows = await db
     .select({
       item: policyIntelligenceItem,
@@ -84,8 +88,10 @@ export async function getPublishedPolicyIntelligenceList() {
         revision: {
           id: revision.id,
           number: revision.revisionNumber,
-          generatedAt: revision.generatedAt.toISOString(),
-          publishedAt: revision.publishedAt?.toISOString() ?? null,
+          generatedAt: new Date(revision.generatedAt).toISOString(),
+          publishedAt: revision.publishedAt
+            ? new Date(revision.publishedAt).toISOString()
+            : null,
           generatedByAI: true,
           lawyerCommentary: null,
         },
@@ -135,8 +141,10 @@ export async function getPolicyIntelligenceRevisionHistory(slug: string) {
     editorialStatus: item.editorialStatus,
     revisions: revisions.map((revision) => ({
       ...revision,
-      generatedAt: revision.generatedAt.toISOString(),
-      publishedAt: revision.publishedAt?.toISOString() ?? null,
+      generatedAt: new Date(revision.generatedAt).toISOString(),
+      publishedAt: revision.publishedAt
+        ? new Date(revision.publishedAt).toISOString()
+        : null,
       supersededAt: revision.supersededAt?.toISOString() ?? null,
     })),
   };
@@ -168,4 +176,85 @@ export async function getLatestSuccessfulPolicySync(sourceConfigId?: string) {
         failureCount: run.failureCount,
       }
     : null;
+}
+
+/**
+ * Public history is available only while the item's current published revision
+ * still matches its latest authoritative snapshot. Older rows are returned
+ * only when they were previously published and then superseded.
+ */
+export async function getPublishedPolicyIntelligenceHistory(slug: string) {
+  const rows = await db
+    .select({
+      item: policyIntelligenceItem,
+      revision: policyIntelligenceAnalysisRevision,
+      snapshot: policyIntelligenceSourceSnapshot,
+    })
+    .from(policyIntelligenceItem)
+    .innerJoin(
+      policyIntelligenceAnalysisRevision,
+      eq(policyIntelligenceAnalysisRevision.itemId, policyIntelligenceItem.id)
+    )
+    .innerJoin(
+      policyIntelligenceSourceSnapshot,
+      eq(
+        policyIntelligenceSourceSnapshot.id,
+        policyIntelligenceAnalysisRevision.snapshotId
+      )
+    )
+    .where(
+      and(
+        eq(policyIntelligenceItem.slug, slug),
+        eq(policyIntelligenceItem.editorialStatus, "published"),
+        inArray(policyIntelligenceAnalysisRevision.editorialStatus, [
+          "published",
+          "superseded",
+        ]),
+        isNotNull(policyIntelligenceAnalysisRevision.publishedAt),
+        eq(policyIntelligenceSourceSnapshot.itemId, policyIntelligenceItem.id)
+      )
+    )
+    .orderBy(desc(policyIntelligenceAnalysisRevision.revisionNumber))
+    .limit(20);
+
+  const publicRows = currentPublicHistoryRows(rows);
+  if (!publicRows) {
+    return null;
+  }
+  const current = publicRows.find(({ item, revision, snapshot }) =>
+    isCurrentPublishedPolicyRevision({ item, revision, snapshot })
+  );
+  if (!current) {
+    return null;
+  }
+
+  return {
+    id: current.item.id,
+    slug: current.item.slug,
+    revisions: publicRows.map(({ item, revision, snapshot }) => {
+      const analysis = policyAnalysisSchema.parse(revision.analysis);
+      return {
+        editorialStatus: revision.editorialStatus as "published" | "superseded",
+        sourceStatus: analysis.sourceStatus.value,
+        source: {
+          authority: snapshot.authority,
+          officialTitle: snapshot.officialTitle,
+          officialUrl: snapshot.canonicalUrl,
+          sourceDate: snapshot.sourceDate,
+          effectiveDate: snapshot.effectiveDate,
+          jurisdiction: "Australia",
+          category: item.primarySourceConfigId,
+        },
+        analysis,
+        revision: {
+          id: revision.id,
+          number: revision.revisionNumber,
+          generatedAt: new Date(revision.generatedAt).toISOString(),
+          publishedAt: revision.publishedAt
+            ? new Date(revision.publishedAt).toISOString()
+            : null,
+        },
+      };
+    }),
+  };
 }

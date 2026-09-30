@@ -1784,3 +1784,121 @@ Stage 2 activates the accepted Stage-1 backend in the public product without cha
 Required deterministic coverage includes live-schema available/unavailable/zero-content semantics, manual fallback, public projection leakage checks, nullable source dates, deterministic importance ordering, public-history filtering, deterministic diff behavior, provenance labels, Home/list/detail locale behavior and slug-only AI Workspace continuity. Run full unit tests, production build, focused Ultracite/Biome and `git diff --check`.
 
 Stop Stage 2 **uncommitted and unpushed** for owner/ChatGPT source review. Do not start Stage 3, apply migration 0023, run a live provider/source sync, contact AWS, add scheduling, or change Legal Service reasoning/model routes in the same task.
+
+## P11-009 Stage 2 implementation — Policy Intelligence product activation — 2026-09-30
+
+**Status:** Stage 2 implementation is complete and stopped for owner/ChatGPT review. All changes remain uncommitted and unpushed on `phase11-chinese-service-platform-ui-rebase` at starting HEAD `28d81454f19d1510535ba6d923199c6dbc56f9ec`. Stage 3 and Stage 4 have not started.
+
+### Changed files
+
+- `chatbot/app/(chat)/page.tsx`
+- `chatbot/app/(chat)/intelligence/page.tsx`
+- `chatbot/app/(chat)/intelligence/[id]/page.tsx`
+- `chatbot/app/(chat)/ai-workspace/page.tsx`
+- `chatbot/components/immigration-service-home.tsx`
+- `chatbot/components/premium-answer-mode-workspace.tsx`
+- `chatbot/components/policy-intelligence-availability-notice.tsx`
+- `chatbot/components/policy-intelligence-product-page.tsx`
+- `chatbot/lib/policy-intelligence-server.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `chatbot/lib/policy-intelligence-product.ts`
+- `chatbot/lib/policy-intelligence-product-copy.ts`
+- `chatbot/lib/policy-intelligence/schema-availability-policy.ts`
+- `chatbot/lib/policy-intelligence/schema-availability.ts`
+- `chatbot/lib/policy-intelligence-product.test.ts`
+- `chatbot/package.json` (registers the focused product tests in `test:unit`)
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Implementation record
+
+- Added an exact four-relation `to_regclass` schema availability check using a dedicated UTC PostgreSQL client. All relations absent enables only published manual fallback; partial schema and unexpected errors propagate. Available schema is canonical, including a genuine zero-publication state.
+- Added explicit bilingual public DTOs. Automated projections include source identity and dates, public category labels, published revision metadata, structured analysis and bounded importance dimensions. They omit normalized/raw source evidence, verification certainty/assessments, model/provider/fingerprint/source IDs, sync internals, AI-created excerpts and invented lawyer commentary. Actual manual excerpts/commentary remain limited to their reviewed records.
+- Activated Home with the bounded latest three items and localized availability state; `/intelligence` now has bilingual search, category/status filters and Latest/Impact sorting; detail renders source, AI interpretation, actual/absent lawyer commentary, nullable dates, bounded dimensions, published history and structured diff. Routes use the repository's Cache Components behavior; unsupported `dynamic = "force-dynamic"` route flags were removed after the build identified the conflict.
+- Impact ordering uses service relevance, immediacy, procedural impact, affected population, fixed legal-force rank, publication time and slug. No synthetic composite score is displayed.
+- Public history is limited to the current public revision and previously published superseded revisions, bounded to 20; it validates item/revision/snapshot identity and refuses to revive old history when the current snapshot is held. The bounded deterministic diff uses stable IDs and public bilingual values only.
+- AI Workspace continuity transports only a validated slug. The server resolves it against the current public loader; unknown/held references fail soft. The resulting card is presentation-only topic continuity and does not populate facts, evidence, citations or prompt context. Legal Service and answer routing were not changed.
+
+### Validation and limits
+
+- `pnpm test:unit`: **422 passed, 0 failed, 0 skipped**. Focused product suite: **23 passed, 0 failed**.
+- `pnpm build`: **passed**, including TypeScript and Next production build. Next reported Home, `/intelligence`, detail and AI Workspace as partially prerendered with request-time server streaming. Existing stale `baseline-browser-mapping` notices were printed. Build-generated `next-env.d.ts` was restored.
+- Focused Biome: all **15 changed TypeScript/TSX/test files passed** with no diagnostics. Focused Ultracite: **11 changed files passed**; Ultracite mishandles route filenames/directories containing parentheses, so the four route files were linted from exact temporary copies (all passed; temporary files removed). A broader `app` Ultracite scan found one pre-existing `app/globals.css:295` descending-specificity warning; that file is unchanged.
+- Root `git diff --check`: **passed** before this handoff append; rerun after the append.
+- No schema change or migration was created. Stage 2 did not apply migration 0023 to any database; the normal database and retained disposable databases were not accessed or changed. No `.env.local` edit, live OpenAI/provider or official-source call, AWS/S3/SES/Stripe call, scheduler, or deployment occurred.
+- A real live-schema request-path integration and browser visual smoke were not run: migration/database access was out of scope and no fixture-driven browser smoke was available. Deterministic coverage exercises schema states, projection, ordering, history/diff and slug continuity.
+
+### Exact next step
+
+Owner/ChatGPT should perform an independent source review of this uncommitted Stage 2 diff against S2-1 through S2-10 and the accepted Stage-1 contracts. Keep the worktree uncommitted/unpushed during review. Do not apply migration 0023, start Stage 3, run a live sync, or change Legal Service behavior in that review step.
+
+## P11-009 Stage 2 R1 projection/product correction
+
+**Status:** Bounded R1 corrections are implemented on the existing uncommitted Stage 2 worktree and stopped for independent source review. No Stage 3 work has started. Changes remain uncommitted and unpushed.
+
+### Corrections
+
+- Fixed the runtime narrative projection leak. Live inputs now use the accepted Stage-1 `PolicyAnalysis` contract. Every narrative and `transitionInfo` is positively projected as only `id` plus bilingual `text` strings; no spread from Stage-1 localized text remains. The read-service list return is typed, and the unsafe `as LivePolicyRecord[]` and history record cast were removed.
+- Added `PublicPolicyProductPreview`/`PolicyProductPreviewState`; Home receives only ID, slug, origin/status, nullable source date, localized public category and bilingual title/summary. Added explicit `PublicPolicyHistoryEntry`; detail history contains only revision number, publication time, editorial status and bilingual title. Full previous analysis stays server-side for deterministic diff computation.
+- Added distinct bilingual human-readable labels for the configured Home Affairs, Federal Register of Legislation and Administrative Review Tribunal source families. Unknown IDs map to a generic label.
+- Latest ordering uses published time, falls back to source date where publication time is absent, then revision number, slug and ID. No dates are fabricated.
+- Replaced visible `n / 5` importance scores with localized semantic labels for service relevance, immediacy, procedural impact and affected population. Numeric values remain internal to sorting.
+- Added a localized Source status / 来源状态 diff heading.
+
+### Exact R1-changed files
+
+- `chatbot/components/immigration-service-home.tsx`
+- `chatbot/components/policy-intelligence-availability-notice.tsx`
+- `chatbot/components/policy-intelligence-product-page.tsx`
+- `chatbot/lib/policy-intelligence-product-copy.ts`
+- `chatbot/lib/policy-intelligence-product.test.ts`
+- `chatbot/lib/policy-intelligence-product.ts`
+- `chatbot/lib/policy-intelligence-server.ts`
+- `chatbot/lib/policy-intelligence/read-service.ts`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+### Validation and limits
+
+- Focused Stage-2 product suite: **26 passed, 0 failed**. Full `pnpm test:unit`: **425 passed, 0 failed, 0 skipped**.
+- `pnpm build`: **passed**, including TypeScript and Next production build; Cache Components routes remain partially prerendered with request-time streaming. Existing stale `baseline-browser-mapping` notices were printed. Build-generated `next-env.d.ts` and `tsconfig.tsbuildinfo` changes were restored.
+- Focused Ultracite and Biome: all **8 R1-changed TypeScript/TSX/test files passed** with no diagnostics.
+- Root `git diff --check`: **passed** after this append.
+- No schema change or migration was created. No database connection or migration was made. No live provider, source website, AWS, S3, SES or Stripe call occurred.
+- Live request-path integration and browser visual acceptance remain untested because this R1 task prohibited database access; the bounded visual acceptance is the next review stage.
+
+### Next boundary
+
+First obtain independent owner/ChatGPT source review of this R1 diff. After review, perform bounded visual acceptance with deterministic fixture data. Keep all work uncommitted/unpushed; do not apply migration 0023, start Stage 3, connect to a database or call external services.
+
+## P11-009 Stage 2 bounded visual acceptance
+
+**Status:** PASS. Stage 2 remains uncommitted and unpushed. Stage 3 has not started.
+
+- Ran the accepted pages in an isolated `/tmp/p11-009-stage2-visual` chatbot copy with a temporary in-memory loader and three obviously fictional policy fixtures (Home Affairs, Federal Register and ART). The rich fixture included two published revisions and a deterministic diff; the ART fixture had null source/effective dates, no lawyer commentary and no transition note. Browser API requests needed by the workspace were intercepted and answered with local fixtures; all non-local requests were blocked. No tracked product source was modified by the visual harness.
+- Captured evidence under `/tmp/p11-009-stage2-visual-evidence/`: Home zh-CN/en desktop (1440×900); `/intelligence` zh-CN/en desktop (1440×900) and English mobile (390×844); detail zh-CN/en desktop (1440×900, including history/diff) and zh-CN/en mobile (390×844); AI Workspace topic-reference card desktop (1440×900) and mobile (390×844). Every measured viewport had `scrollWidth` equal to viewport width.
+- Exercised search, source-family and source-status filters, Latest and Impact sorts, locale switching, official-source outbound-link presentation, published history, Added/Removed/Changed diff entries, the distinct Source status label, and the Ask AI policy link.
+- Provenance remained visually distinct across official source, AI-generated interpretation and lawyer commentary; the no-commentary state was explicit and no lawyer identity appeared. The null-date fixture displayed “Not stated” for both dates, with no date inferred; source-family labels were human-readable and no raw sourceConfigId appeared. Importance used semantic labels without visible numeric scores or percentages.
+- Home displayed no more than three policy previews. List controls remained usable at desktop/mobile widths. Long content had no mobile horizontal overflow. The workspace displayed the policy as a topic/reference card, identified the official-source link, retained its continuity notice, and left its normal mode controls and composer usable.
+- **Non-blocking harness observation:** the browser console reported local 404 resource responses from routes outside the explicitly stubbed workspace fixture APIs. There were no page errors, and the required pages and interactions passed. No outbound request was attempted.
+- No database was connected, no migration was applied, and no OpenAI/provider, official-source website, AWS, S3, SES, Stripe or other external service was contacted.
+
+
+## P11-009 Stage 2 final acceptance — 2026-09-30
+
+P11-009 Stage 2 is **ACCEPTED**.
+
+Acceptance evidence:
+- Stage 2 + R1 source review: PASS.
+- 425/425 unit tests: PASS.
+- 26/26 focused product tests: PASS.
+- Production build: PASS.
+- Focused Ultracite/Biome: PASS.
+- `git diff --check`: PASS.
+- Bounded visual acceptance across desktop/mobile and zh-CN/en: PASS.
+- Home/list/detail/history/diff/AI Workspace policy-reference continuity: PASS.
+- No migration was created or applied.
+- No database or external service was contacted during Stage 2 implementation/visual acceptance.
+
+The visual gate used deterministic isolated fixtures; it does not claim live
+staging/PostgreSQL request-path acceptance.
+
+Stage 3 is the next authorized planning boundary and has not started.
