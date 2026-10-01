@@ -938,3 +938,29 @@ Manual reviewed fallback entries remain valid disaster-recovery content and must
 The project must not add mandatory lawyer pre-publication review, queues/multi-worker orchestration, extra AI reviewer layers or a new Policy Intelligence architecture merely to achieve scheduling. Reuse the existing durable item/snapshot/revision/sync-run model and verifier/publication gate.
 
 Step A is the active coding unit. Step B and Step C require separate implementation/review and must not be bundled into Step A.
+
+## D-054 — Automatic Policy Intelligence maintenance is operational
+
+**Date:** 2026-10-01  
+**Status:** ACCEPTED
+
+The owner-approved automatic-maintenance model defined by D-053 is now implemented and deployed.
+
+Accepted steady state:
+
+- one daily EventBridge Scheduler invocation at 06:00 `Australia/Sydney`;
+- one dedicated ECS/Fargate one-off Policy Intelligence operator task;
+- one accepted `policy:sync-all` execution covering Home Affairs, Federal Register and ART serially;
+- existing evidence verifier/publication gate remains authoritative for automatic publication;
+- admin archive/restore is the exception-control mechanism;
+- archived items remain suppressed until explicit restore;
+- manual reviewed fallback content remains available for public continuity.
+
+Deployment identifiers:
+
+- source commit: `dc8595d365b565c869bcc82f2f02bc9cfd8ab9ec`;
+- operator image digest: `sha256:3caad29bc292b79de2508a4e0fdebb086a97824a709f45309e959b3fb369f28c`;
+- ECS task definition: `immigration-ai-staging-policy-sync:1`;
+- schedule: `immigration-ai-staging-policy-sync-daily`.
+
+The first live operator run completed successfully with container exit code 0 and all three configured sources reported succeeded. D-053 implementation is therefore accepted as operational.
