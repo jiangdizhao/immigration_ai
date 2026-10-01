@@ -554,3 +554,20 @@ The system now supports:
 - durable archived suppression across future syncs.
 
 Current active unit is **Step C**: deploy an independent Policy Intelligence operator and schedule it once daily at 06:00 Australia/Sydney. The long-lived web service must not execute scheduled sync.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — operational
+
+Automatic Policy Intelligence maintenance is deployed and accepted.
+
+Current production-style staging state:
+
+- operator source checkpoint: `dc8595d365b565c869bcc82f2f02bc9cfd8ab9ec`;
+- immutable operator image digest: `sha256:3caad29bc292b79de2508a4e0fdebb086a97824a709f45309e959b3fb369f28c`;
+- ECS task definition: `immigration-ai-staging-policy-sync:1`;
+- manual live run: PASS, container exit code 0, all three configured sources succeeded;
+- EventBridge Scheduler: `immigration-ai-staging-policy-sync-daily`;
+- schedule state: ENABLED;
+- schedule: 06:00 daily, `Australia/Sydney`;
+- scheduler targets one Fargate task using the dedicated operator task definition.
+
+The complete operating model is now: automatic daily sync, verifier-gated publication, and admin exception control through archive/restore. Archived items remain suppressed across future syncs. Manual reviewed fallback entries remain the disaster-recovery public path.
