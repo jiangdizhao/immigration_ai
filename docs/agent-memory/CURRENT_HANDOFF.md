@@ -3137,3 +3137,20 @@ Policy Intelligence automatic maintenance is now operational:
 Step-B admin archive/restore remains the exception-control layer. Archived items remain suppressed across future syncs until explicitly restored. Existing reviewed manual fallback content remains the public disaster-recovery path.
 
 **Automatic Policy Intelligence maintenance Steps A, B and C are complete and accepted.**
+
+## 2026-10-01 Policy Intelligence scheduler acceptance clarification
+
+The Step-C deployment record above remains valid, with one important precision:
+
+- the **manual live ECS operator run passed**;
+- the AWS CLI `tasks-stopped` waiter timed out before the task itself finished;
+- the task subsequently reached `STOPPED` with container `exitCode=0`;
+- the final operator aggregate reported all three sources succeeded;
+- the EventBridge Scheduler was created and is `ENABLED` for 06:00 `Australia/Sydney`;
+- however, the Scheduler has **not yet reached its first natural 06:00 invocation since creation**, so a naturally triggered scheduled run has not yet been observed end-to-end.
+
+Therefore the correct status is:
+
+**implementation/deployment complete; manual live operator acceptance PASS; scheduler configuration/enablement PASS; first natural scheduled-trigger observation pending.**
+
+This is not a source-code blocker and does not reopen Steps A/B/C implementation. The only remaining operational confirmation for this feature is to observe the next Scheduler-triggered ECS task and confirm its normal completion/log result.
