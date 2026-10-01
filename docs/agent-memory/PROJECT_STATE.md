@@ -512,3 +512,26 @@ Canonical current checkpoint for this hotfix:
 The public Policy Intelligence surface now has a stable reviewed-official-source fallback path and a denser legal-intelligence presentation. Preserve the architectural lesson from this recovery: automated policy discovery/analysis is not a public-page availability prerequisite.
 
 The project is paused at this checkpoint. Existing broader P11-005/P11-009 deferred infrastructure/security/migration items remain governed by their earlier records and must not be treated as closed by this hotfix acceptance.
+
+## 2026-10-01 Policy Intelligence operating-model decision
+
+The owner approved automatic policy maintenance as a product requirement. Manual-only publication is no longer the intended steady state.
+
+Target steady state:
+
+- daily official-source scanning;
+- AI analysis from acquired official-source evidence;
+- existing evidence verification/publication gate controls automatic publication;
+- uncertain/unsupported items stay held or `review_required`;
+- existing published/reviewed content survives a failed sync;
+- lawyer/admin users handle exceptions by archiving/restoring items rather than approving every publication;
+- archived items must not be silently republished by later sync;
+- manual reviewed fallback entries remain available for disaster recovery.
+
+Implementation is deliberately small:
+
+- Step A: all-source serial sync command + deterministic orchestration/publication-gate tests;
+- Step B: minimal admin archive/restore control and suppression behavior;
+- Step C: one daily EventBridge Scheduler launch of an independent ECS operator task at 06:00 Australia/Sydney.
+
+Current active unit is **Step A only**.
