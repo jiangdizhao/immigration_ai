@@ -953,3 +953,17 @@ The immediate Policy Intelligence recovery and presentation hotfix is complete.
 **Milestone handling:** close only the emergency Policy Intelligence hotfix. Broader deferred P11-005/P11-009 production-hardening items keep their existing status and are not implicitly accepted by this UI/content rollout.
 
 **Next action:** none. Project work is intentionally paused until the owner reports a concrete issue or requests the next refinement.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — STEP A ACTIVE
+
+Owner decision: Policy Intelligence must not remain manual-only. The long-term operating model is automated maintenance with lawyer/admin exception control.
+
+Approved three-step plan:
+
+1. **Step A — ACTIVE:** add a single all-source operator command that serially runs the existing official-source sync for Home Affairs, Federal Register and ART; confirm/preserve the existing verifier-gated automatic publication semantics; keep partial failures observable; source/local tests only.
+2. **Step B — PLANNED:** minimal admin management page with archive/unpublish + restore. Archived items must remain suppressed across future automatic syncs until explicitly restored.
+3. **Step C — PLANNED:** one EventBridge Scheduler -> independent ECS one-off operator task, initially daily at **06:00 Australia/Sydney**. Do not run scheduled sync inside the web service.
+
+Manual reviewed fallbacks remain disaster-recovery content. They are not the intended day-to-day maintenance mechanism.
+
+**Current next action:** implement and independently review Step A only. No AWS mutation, scheduler creation, admin UI, schema migration or public UI redesign belongs in Step A.
