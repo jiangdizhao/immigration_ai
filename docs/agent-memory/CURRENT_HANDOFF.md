@@ -1,6 +1,6 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-09-30
+**Updated:** 2026-10-01
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -2814,3 +2814,43 @@ The production image keeps its normal `CMD ["node", "server.js"]`. A separate bu
 **Validation:** `pnpm test:unit` — 463/463 passed; focused GuardDuty suite — 20/20 passed; focused Biome — passed; `pnpm build` — passed; `docker build --platform linux/amd64 -f chatbot/Dockerfile.production -t immigration-ai-chatbot:guardduty-reconciler-review .` — passed, local image ID `sha256:488910c47b8cb7118bc0ed266d0f7316525fd21aed4f6d6368870bbbf7794bd2`; `docker run --rm --read-only --user 1000:1000 --network none immigration-ai-chatbot:guardduty-reconciler-review node /app/ops/guardduty-malware-reconciler.cjs --self-test` — `guardduty_worker_self_test=passed`; `git diff --check` — passed.
 
 No AWS resource or configuration was changed; no SQS task was run, no database connection or migration occurred, and no image was pushed or deployed. No schema or migration files were changed. The worktree remains uncommitted and unpushed. Infrastructure/EventBridge/SQS configuration, image publication and worker deployment require separate approval.
+
+
+## Emergency Policy Intelligence product recovery — 2026-10-01
+
+**Current remote product checkpoint before this documentation update:** `e888d350e0d91ff98fc5221d85ddb94fd070e7fe` (`fix: bootstrap policy feed with reviewed official fallback`).
+
+Production is live at `https://www.aulawyers.com.au` on ECS service `immigration-ai-staging-web`; the latest recorded successful web rollout used task definition `immigration-ai-staging-web:32`. The Policy Intelligence public surface now renders one reviewed official-source fallback entry instead of an empty page.
+
+This recovery exposed a product/architecture mistake that must not be repeated: public Policy Intelligence availability must not depend on a long synchronous discovery -> acquisition -> analyzer -> verifier -> publication chain. Automated ingestion is background enhancement only. Existing published/reviewed content must remain visible even when discovery or AI analysis fails.
+
+Observed live sync evidence on 2026-10-01:
+
+- Federal Register: discovery/acquisition/snapshot/analysis worked, but no item published; two candidates were correctly held as non-policy-relevant and one verifier-format mismatch was later normalized.
+- ART: three candidates failed before publication with pipeline/provider-timeout behavior.
+- Home Affairs: the earlier live path was too slow for bootstrap and is not an acceptance blocker.
+- These pipelines remain useful for future background discovery, but are explicitly **NOT** the current UI-delivery critical path.
+
+The lawyer-provided visual/product authority for the immediate hotfix is:
+
+`chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html`
+
+The current production list/detail surfaces are materially below that reference in information hierarchy and legal-intelligence density. The immediate owner requirement is a **FAST single-batch UI/content hotfix**, not another infrastructure project.
+
+### Active hotfix contract
+
+Implement once, validate once, deploy once:
+
+1. Rework only `/intelligence` and `/intelligence/[id]` presentation toward the lawyer template.
+2. Keep the current production data model, server loaders, provenance separation and manual fallback mechanism.
+3. The list page must use dense legal-intelligence rows grouped by legal status, with source/identifier/date/category, affected group, key impact and a clear detail CTA.
+4. The detail page must use the template's legal-intelligence information hierarchy: legal/source metadata, bilingual policy summary, affected groups, practical impact, recommended actions/uncertainties when present, official-source action, and history only when real data exists.
+5. Do **not** copy prototype/fake legal claims, identifiers, statutory text, lawyer commentary, PDFs, or diff/history that production data does not actually support.
+6. Preserve the existing reviewed official fallback entry and add only genuinely verified official-source fallback entries if the coding task can support them from already-reviewed repository material; do not invent content.
+7. Do not modify DB schema/migrations, AWS infrastructure, Policy Intelligence ingestion architecture, model/provider settings, legal-service, billing, consultation flows, Phase 6 or ReasoningBank.
+8. Do not create new gates or subtasks. Required validation is only focused Policy Intelligence tests, `pnpm build`, and `git diff --check`.
+9. After one successful implementation batch, report exact changed files and validation. Do not perform AWS deployment from the coding task.
+
+### Delivery principle
+
+For this hotfix, the user-visible outcome is the priority: a stable, professional legal-intelligence list/detail experience closely aligned with the lawyer reference. Do not block delivery on crawler/LLM reliability work.

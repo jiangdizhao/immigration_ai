@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-09-30
+**Updated:** 2026-10-01
 
 ## Objective
 
@@ -42,7 +42,7 @@ Transform the existing production frontend into a Chinese-first immigration/stud
 | P11-006 | Matter-centered Client Portal | VERIFIED |
 | P11-007 | Lawyer Workspace continuity | VERIFIED — SOURCE + ASSIGNED-REQUEST DESKTOP/MOBILE ZH-CN/EN ACCEPTED |
 | P11-008 | Real appointment/consultation workflow | VERIFIED — P11-008 Final UI Acceptance: PASS; Stages 1–3 source accepted; Gates A+B, C, D, and E-Core PASS / ACCEPTED |
-| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — STAGES 1–3 ACCEPTED; STAGE 4 READ-ONLY STAGING PREFLIGHT NEXT |
+| P11-009 | Live Policy Intelligence + production hardening + bilingual/responsive/accessibility/E2E + AWS/staging acceptance, including deferred P11-005 production-readiness gates | ACTIVE — PRODUCTION ROLLOUT COMPLETE; EMERGENCY POLICY INTELLIGENCE UI FIDELITY HOTFIX ACTIVE |
 
 
 ## P11-009 Stage 1 accepted / Stage 2 activated — 2026-09-30
@@ -927,3 +927,14 @@ The final automated targeted Playwright rerun produced a sidebar/control false-n
 Stage 4 is now active. Its first gate is **read-only AWS/staging reconnaissance only**. No AWS mutation, migration, deployment, image push, task-definition update, S3/IAM change, scanner configuration, scheduler change or DNS/routing change is authorized by this activation.
 
 D-040 remains open and P11-005 remains **NOT VERIFIED** until Stage 4 supplies the required real environment evidence.
+
+
+## 2026-10-01 emergency Policy Intelligence UI hotfix
+
+Production rollout is complete and the public Policy Intelligence surface is no longer empty because checkpoint `e888d350e0d91ff98fc5221d85ddb94fd070e7fe` added a reviewed official-source fallback path. The current list/detail presentation is nevertheless not accepted by the owner because it does not match the lawyer-provided Sovereign Nexus legal-intelligence reference closely enough.
+
+The immediate active unit is intentionally narrow and fast:
+
+`lawyer template -> one list/detail UI implementation batch -> focused tests + build -> one deployment -> visual acceptance`
+
+No crawler, analyzer, verifier, database, migration, AWS infrastructure or model-routing redesign belongs in this hotfix. The public product must remain usable independently of automated ingestion success.

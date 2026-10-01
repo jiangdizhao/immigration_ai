@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-09-30
+**Updated:** 2026-10-01
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -484,3 +484,12 @@ Stage-3 acceptance combines direct source review, local production-image/native-
 The production deployment state is still not inferred from Git. The last recorded production-style ECS state remains historical until Stage 4 inspects authoritative AWS topology. D-040 remains open and P11-005 remains **NOT VERIFIED** pending actual staging migration, exact ECS/Fargate image/architecture verification, real S3/IAM/BPA/encryption evidence, concrete malware-scanner configuration/reconciliation, and deployment/rollback acceptance.
 
 The next execution unit must be read-only AWS/staging reconnaissance. Do not mutate AWS or staging until the reconnaissance result is reviewed and a separate owner authorization names the exact mutation/deployment plan.
+
+
+## 2026-10-01 Policy Intelligence production recovery
+
+The public production site is deployed and the Policy Intelligence surface now has a reviewed official-source fallback path. Automated discovery/analysis is no longer treated as a prerequisite for public availability.
+
+Current product correction in progress: rapidly rebase `/intelligence` and `/intelligence/[id]` toward the lawyer-provided Sovereign Nexus reference at `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html`. The hotfix is presentation/content-delivery only: no DB/schema, migration, AWS infrastructure, ingestion-architecture, legal-service or model-routing change.
+
+Project-wide operating lesson reaffirmed by this incident: prefer the minimum mechanism that delivers the user-visible outcome. Do not add proxy gates, hard content thresholds, repeated micro-checkpoints or automation dependencies unless a demonstrated risk requires them.
