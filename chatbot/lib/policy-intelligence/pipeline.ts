@@ -81,6 +81,13 @@ export type PolicyRevisionWriteResult = {
   created: boolean;
 };
 
+export class PolicyItemArchivedError extends Error {
+  constructor() {
+    super("policy_item_archived");
+    this.name = "PolicyItemArchivedError";
+  }
+}
+
 export function createPolicyModelMetadata(input: {
   provider: PolicyRevisionRecord["modelMetadata"]["provider"];
   model: string;
@@ -156,7 +163,7 @@ export type PolicySyncResult = {
   run: PolicyRunRecord;
   outcomes: Array<{
     candidateId: string;
-    outcome: "published" | "held" | "unchanged" | "failed";
+    outcome: "published" | "held" | "unchanged" | "failed" | "suppressed";
     reasonCode?: string;
   }>;
 };
@@ -301,6 +308,14 @@ export async function runPolicyIntelligenceSync(
           sourceStatus: "announced",
           editorialStatus: "draft",
         });
+        if (item.editorialStatus === "archived") {
+          outcomes.push({
+            candidateId: candidate.candidateId,
+            outcome: "suppressed",
+            reasonCode: "item_archived",
+          });
+          continue;
+        }
         const acquiredSnapshot = await dependencies.repository.acquireSnapshot({
           ...acquisition,
           sourceId,
@@ -416,6 +431,14 @@ export async function runPolicyIntelligenceSync(
           outcome: "published",
         });
       } catch (error) {
+        if (error instanceof PolicyItemArchivedError) {
+          outcomes.push({
+            candidateId: candidate.candidateId,
+            outcome: "suppressed",
+            reasonCode: "item_archived",
+          });
+          continue;
+        }
         run.failureCount += 1;
         run.heldCount += 1;
         runFailure = true;

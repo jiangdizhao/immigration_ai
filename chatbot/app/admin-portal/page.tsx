@@ -1,4 +1,4 @@
-import { ArrowRight, BriefcaseBusiness, ClipboardCheck } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, ClipboardCheck, Newspaper } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -69,6 +69,20 @@ async function AdminPortalPageContent() {
               </p>
               <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-violet-800">
                 Enter lawyer audit
+                <ArrowRight className="size-4 transition group-hover:translate-x-1" />
+              </span>
+            </Link>
+            <Link
+              className="group rounded-3xl border border-slate-200 bg-slate-50 p-6 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50"
+              href="/admin/policy-intelligence"
+            >
+              <Newspaper className="size-7 text-emerald-700" />
+              <h2 className="mt-5 text-xl font-semibold">Policy Intelligence</h2>
+              <p className="mt-2 min-h-12 text-sm leading-6 text-slate-600">
+                Archive or restore durable public policy items.
+              </p>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                Manage policies
                 <ArrowRight className="size-4 transition group-hover:translate-x-1" />
               </span>
             </Link>

@@ -1,3 +1,6 @@
+import type { AdminPolicyIntelligenceService } from "./admin-api";
+import { isCurrentPublishedPolicyRevision } from "./currentness";
+import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
   PolicyItemRecord,
@@ -153,20 +156,15 @@ export function createInMemoryPolicyIntelligenceRepository() {
         supersededAt: null,
       };
       revisions.set(revision.id, revision);
-      if (item.latestSnapshotId === input.snapshotId) {
+      if (
+        item.latestSnapshotId === input.snapshotId &&
+        item.editorialStatus !== "archived"
+      ) {
         item.editorialStatus = "review_required";
       }
       return { revision, created: true };
     },
     publishRevision(input): PolicyRevisionWriteResult {
-      const existing = [...revisions.values()].find(
-        (revision) =>
-          revision.snapshotId === input.snapshotId &&
-          revision.analysisFingerprint === input.analysisFingerprint
-      );
-      if (existing) {
-        return { revision: existing, created: false };
-      }
       const item = items.get(input.itemId);
       const snapshot = snapshots.get(input.snapshotId);
       if (!item) {
@@ -176,6 +174,17 @@ export function createInMemoryPolicyIntelligenceRepository() {
         throw new Error("revision_snapshot_item_mismatch");
       }
       assertPointerIntegrity(item);
+      if (item.editorialStatus === "archived") {
+        throw new PolicyItemArchivedError();
+      }
+      const existing = [...revisions.values()].find(
+        (revision) =>
+          revision.snapshotId === input.snapshotId &&
+          revision.analysisFingerprint === input.analysisFingerprint
+      );
+      if (existing) {
+        return { revision: existing, created: false };
+      }
       if (item.latestSnapshotId !== input.snapshotId) {
         throw new Error("revision_snapshot_not_latest");
       }
@@ -217,5 +226,57 @@ export function createInMemoryPolicyIntelligenceRepository() {
       return { revision, created: true };
     },
   };
-  return { repository, items, snapshots, revisions, runs };
+
+  const adminService: AdminPolicyIntelligenceService = {
+    async listItems() {
+      return [...items.values()].map((item) => {
+        const snapshot = item.latestSnapshotId
+          ? snapshots.get(item.latestSnapshotId)
+          : undefined;
+        const revision = item.latestPublishedRevisionId
+          ? revisions.get(item.latestPublishedRevisionId)
+          : undefined;
+        return {
+          id: item.id,
+          slug: item.slug,
+          title: snapshot?.officialTitle ?? null,
+          authority: snapshot?.authority ?? null,
+          sourceConfigId: item.sourceConfigId,
+          sourceStatus: item.sourceStatus,
+          editorialStatus: item.editorialStatus,
+          publishedAt: revision?.publishedAt ?? null,
+          updatedAt: revision?.generatedAt ?? snapshot?.retrievedAt ?? "",
+        };
+      });
+    },
+    async updateItem(itemId, action) {
+      const item = items.get(itemId);
+      if (!item) {
+        return { status: "not_found" };
+      }
+      if (action === "archive") {
+        item.editorialStatus = "archived";
+        return { status: "updated", editorialStatus: "archived" };
+      }
+      if (item.editorialStatus !== "archived") {
+        return { status: "not_archived" };
+      }
+      const revision = item.latestPublishedRevisionId
+        ? revisions.get(item.latestPublishedRevisionId)
+        : undefined;
+      const snapshot = revision ? snapshots.get(revision.snapshotId) : undefined;
+      const isCurrent = Boolean(
+        revision &&
+          snapshot &&
+          isCurrentPublishedPolicyRevision({
+            item: { ...item, editorialStatus: "published" },
+            revision,
+            snapshot,
+          })
+      );
+      item.editorialStatus = isCurrent ? "published" : "review_required";
+      return { status: "updated", editorialStatus: item.editorialStatus };
+    },
+  };
+  return { repository, items, snapshots, revisions, runs, adminService };
 }

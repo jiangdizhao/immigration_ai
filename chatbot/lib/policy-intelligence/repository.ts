@@ -7,6 +7,7 @@ import {
   policyIntelligenceSyncRun,
 } from "@/lib/db/schema";
 import { policyAnalysisSchema, policyVerificationSchema } from "./contracts";
+import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
   PolicyItemRecord,
@@ -335,7 +336,10 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
           generatedAt: new Date(revision.generatedAt),
         })
         .returning();
-      if (item.latestSnapshotId === revision.snapshotId) {
+      if (
+        item.latestSnapshotId === revision.snapshotId &&
+        item.editorialStatus !== "archived"
+      ) {
         await tx
           .update(policyIntelligenceItem)
           .set({
@@ -372,6 +376,9 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
         throw new Error("revision_snapshot_item_mismatch");
       }
       await assertItemPointersBelongToItem(tx, item);
+      if (item.editorialStatus === "archived") {
+        throw new PolicyItemArchivedError();
+      }
       const [existing] = await tx
         .select()
         .from(policyIntelligenceAnalysisRevision)

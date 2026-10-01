@@ -1395,3 +1395,110 @@ test("fixture sync is repeatable and idempotent with bounded telemetry", async (
     assert.equal(run.mode, "fixture");
   }
 });
+test("archived published items disappear publicly, retain history, suppress sync, and restore for future publication", async () => {
+  const h = dependencies({ hashes: ["archive-baseline", "post-restore"] });
+  const first = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(first.run.publishedCount, 1);
+
+  const item = [...h.store.items.values()][0];
+  assert.ok(item);
+  const oldRevision = h.store.revisions.get(item.latestPublishedRevisionId ?? "");
+  const oldSnapshot = oldRevision
+    ? h.store.snapshots.get(oldRevision.snapshotId)
+    : undefined;
+  assert.ok(oldRevision);
+  assert.ok(oldSnapshot);
+  const historyCounts = {
+    snapshots: h.store.snapshots.size,
+    revisions: h.store.revisions.size,
+  };
+  assert.equal(
+    isCurrentPublishedPolicyRevision({
+      item,
+      revision: oldRevision,
+      snapshot: oldSnapshot,
+    }),
+    true
+  );
+
+  const archived = await h.store.adminService.updateItem(item.id, "archive");
+  assert.deepEqual(archived, {
+    status: "updated",
+    editorialStatus: "archived",
+  });
+  assert.equal(
+    isCurrentPublishedPolicyRevision({
+      item,
+      revision: oldRevision,
+      snapshot: oldSnapshot,
+    }),
+    false
+  );
+  assert.deepEqual(
+    { snapshots: h.store.snapshots.size, revisions: h.store.revisions.size },
+    historyCounts
+  );
+
+  const suppressed = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(suppressed.run.failureCount, 0);
+  assert.equal(suppressed.run.publishedCount, 0);
+  assert.deepEqual(suppressed.outcomes, [
+    {
+      candidateId: candidate.candidateId,
+      outcome: "suppressed",
+      reasonCode: "item_archived",
+    },
+  ]);
+  assert.equal(item.editorialStatus, "archived");
+  assert.deepEqual(
+    { snapshots: h.store.snapshots.size, revisions: h.store.revisions.size },
+    historyCounts
+  );
+  assert.deepEqual(h.calls(), { analyzeCalls: 1, verifyCalls: 1 });
+
+  const restored = await h.store.adminService.updateItem(item.id, "restore");
+  assert.deepEqual(restored, {
+    status: "updated",
+    editorialStatus: "published",
+  });
+  const republished = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(republished.run.publishedCount, 1);
+  assert.equal(item.editorialStatus, "published");
+  assert.equal(h.store.revisions.size, historyCounts.revisions + 1);
+});
+
+test("archive during in-flight analysis cannot be undone by publication", async () => {
+  const h = dependencies();
+  h.deps.analyzer.analyze = ({ evidence }) => {
+    const item = [...h.store.items.values()][0];
+    assert.ok(item);
+    item.editorialStatus = "archived";
+    return analysis(evidence[0].evidenceRef);
+  };
+
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  const item = [...h.store.items.values()][0];
+  assert.ok(item);
+  assert.equal(item.editorialStatus, "archived");
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.publishedCount, 0);
+  assert.deepEqual(result.outcomes[0], {
+    candidateId: candidate.candidateId,
+    outcome: "suppressed",
+    reasonCode: "item_archived",
+  });
+  assert.equal(h.store.snapshots.size, 1);
+  assert.equal(h.store.revisions.size, 0);
+});

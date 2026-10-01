@@ -2993,3 +2993,35 @@ Accepted behavior:
 Focused validation was reported PASS: 41 tests, production build, and `git diff --check`.
 
 **Next active unit: Step B — minimal authenticated admin archive/restore control with archived-item suppression across future automatic sync.**
+
+## Policy Intelligence automatic-maintenance Step B implementation — 2026-10-01
+
+**Scope:** Step B only. Added an admin-only /admin/policy-intelligence page and /api/admin/policy-intelligence GET/PATCH endpoint. The page lists durable database-backed items and supports archive/unpublish and restore. The source-code manual fallback registry is untouched.
+
+**Lifecycle and sync behavior:** Archive sets the item editorialStatus to archived without deleting snapshots or revisions. Public reads already require published item status, so archived items disappear from live public list/detail/history projections. Restore sets published only when the latest published revision still belongs to the item and matches its latest snapshot; otherwise it returns the item to review_required. Sync skips already archived items before snapshot/analyzer work, and the transaction-locked publish path suppresses an in-flight publication with safe outcome item_archived. Held writes preserve archived status. Only an explicit admin restore re-enables the item.
+
+**Authorization:** The page uses the existing verified staff page guard restricted to admin. GET/PATCH use the existing requireAdminUser guard. The admin portal links to the new page. No lawyer/customer permissions were widened.
+
+**Changed files:**
+
+- chatbot/app/admin/policy-intelligence/page.tsx
+- chatbot/app/api/admin/policy-intelligence/route.ts
+- chatbot/components/admin-policy-intelligence.tsx
+- chatbot/app/admin-portal/page.tsx
+- chatbot/lib/policy-intelligence/admin-api.ts
+- chatbot/lib/policy-intelligence/admin-api.test.ts
+- chatbot/lib/policy-intelligence/admin-service.ts
+- chatbot/lib/policy-intelligence/memory-repository.ts
+- chatbot/lib/policy-intelligence/pipeline.ts
+- chatbot/lib/policy-intelligence/pipeline.test.ts
+- chatbot/lib/policy-intelligence/repository.ts
+- docs/agent-memory/CURRENT_HANDOFF.md
+
+**Validation:**
+
+- Focused command: pnpm exec node --import tsx --test lib/policy-intelligence/admin-api.test.ts lib/policy-intelligence/pipeline.test.ts lib/policy-intelligence.test.ts — PASS, 53 passed, 0 failed, 0 skipped.
+- pnpm build — PASS. Next.js emitted a non-blocking notice that local baseline-browser-mapping data is over two months old.
+- git diff --check — PASS after final source and documentation review.
+- No database migration or connection occurred. No AWS call occurred. No live provider or official-source sync occurred.
+- Work remains uncommitted and unpushed. Step C is not implemented.
+- Unresolved issue: none identified in this source-only Step B change.
