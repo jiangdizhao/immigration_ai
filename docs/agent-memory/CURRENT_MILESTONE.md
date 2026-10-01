@@ -1001,3 +1001,25 @@ Target:
 - perform one bounded live acceptance after deployment.
 
 Keep Step C operationally small: one operator task definition, one schedule, one schedule role if required, and the minimum existing secret/network wiring needed to run.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — COMPLETE / ACCEPTED
+
+The three-step automatic-maintenance plan is complete.
+
+- **Step A — ACCEPTED:** all-source serial operator at `4f6b1a905698970ae8a21ede41531cfd53f2dab4`.
+- **Step B — ACCEPTED:** admin archive/restore and durable archived suppression at `e741ff1b6d7ffc8dd662cd50e1c232d3256f272d`.
+- **Step C — ACCEPTED:** dedicated operator source at `dc8595d365b565c869bcc82f2f02bc9cfd8ab9ec`, live ECS task acceptance exit 0, and enabled daily EventBridge Scheduler.
+
+Deployed operator image digest:
+`sha256:3caad29bc292b79de2508a4e0fdebb086a97824a709f45309e959b3fb369f28c`
+
+ECS task definition:
+`immigration-ai-staging-policy-sync:1`
+
+Enabled schedule:
+`immigration-ai-staging-policy-sync-daily`
+
+Cadence:
+`cron(0 6 * * ? *)` in timezone `Australia/Sydney`.
+
+The live acceptance run succeeded for Home Affairs, Federal Register and ART. Automatic Policy Intelligence maintenance is now operational; no further implementation step is active for this feature.
