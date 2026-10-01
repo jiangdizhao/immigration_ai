@@ -938,3 +938,18 @@ The immediate active unit is intentionally narrow and fast:
 `lawyer template -> one list/detail UI implementation batch -> focused tests + build -> one deployment -> visual acceptance`
 
 No crawler, analyzer, verifier, database, migration, AWS infrastructure or model-routing redesign belongs in this hotfix. The public product must remain usable independently of automated ingestion success.
+
+## 2026-10-01 Policy Intelligence emergency hotfix — CLOSED / OWNER ACCEPTED
+
+The immediate Policy Intelligence recovery and presentation hotfix is complete.
+
+- Final validated/deployed source: `f1b48fc340085392c818ace917aa217bfca245c1`
+- ECS production-style service rollout: `immigration-ai-staging-web:33`
+- Deployed chatbot digest: `sha256:996fa0d155247eb3dd72296ee7f7a62fc182a3a4ff60c00d7f63d9a5c0d71a1e`
+- Rollout state: `COMPLETED`, desired/running/pending = `1/1/0`
+- Focused Policy Intelligence tests, production build and diff check all passed before deployment.
+- Owner visually reviewed the live `/intelligence` page and accepted the result as basically satisfactory.
+
+**Milestone handling:** close only the emergency Policy Intelligence hotfix. Broader deferred P11-005/P11-009 production-hardening items keep their existing status and are not implicitly accepted by this UI/content rollout.
+
+**Next action:** none. Project work is intentionally paused until the owner reports a concrete issue or requests the next refinement.
