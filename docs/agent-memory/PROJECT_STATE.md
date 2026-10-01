@@ -571,3 +571,18 @@ Current production-style staging state:
 - scheduler targets one Fargate task using the dedicated operator task definition.
 
 The complete operating model is now: automatic daily sync, verifier-gated publication, and admin exception control through archive/restore. Archived items remain suppressed across future syncs. Manual reviewed fallback entries remain the disaster-recovery public path.
+
+## 2026-10-01 Policy Intelligence scheduler verification state
+
+Current canonical state:
+
+- automatic-maintenance implementation is deployed;
+- manual live operator acceptance: **PASS**;
+- operator image/task definition: accepted;
+- EventBridge Scheduler configuration: **ENABLED and verified**;
+- schedule: 06:00 daily, `Australia/Sydney`;
+- first natural Scheduler-triggered invocation: **PENDING OBSERVATION**.
+
+The prior AWS CLI `tasks-stopped` waiter timeout did not indicate an ECS/operator failure. The same task later stopped normally with exit code 0 and all configured sources succeeded.
+
+No source-code change is required. The next operational check is only to observe the next scheduled ECS task and confirm exit/log status.
