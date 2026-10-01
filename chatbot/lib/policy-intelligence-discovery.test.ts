@@ -383,21 +383,24 @@ test("production discovery limits allow normal official pages and stay bounded",
 
 test("Home Affairs response cap remains bounded at its raised default", async () => {
   const source = getPolicyDiscoverySource("home-affairs-guidance");
-  const belowCap = "x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes - 1);
+  const cap = HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes;
   const page = await fetchOfficialPage(source.seedUrls[0], source, {
     lookupHost: publicLookup,
-    fetchImpl: () => Promise.resolve(response(belowCap)),
+    fetchImpl: () => Promise.resolve(response("normal official page")),
   });
-  assert.equal(page.bytes, HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes - 1);
+  assert.equal(page.bytes, Buffer.byteLength("normal official page"));
+
   await assert.rejects(
     fetchOfficialPage(source.seedUrls[0], source, {
       lookupHost: publicLookup,
       fetchImpl: () =>
         Promise.resolve(
-          response("x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes + 1))
+          response("x", "text/html", {
+            headers: { "content-length": String(cap + 1) },
+          })
         ),
     }),
-    /exceeds 8388608 bytes/
+    new RegExp(`exceeds ${cap} bytes`)
   );
 });
 
