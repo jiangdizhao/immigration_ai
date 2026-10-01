@@ -33,6 +33,7 @@ function setup() {
       generatedAt: "2026-10-01T00:00:00.000Z",
       editorialStatus: "published",
     },
+    pipelineFailures: [],
     publicationDiagnostics: { published: true, reasons: [] },
   };
   const records = new Map([[itemId, item]]);

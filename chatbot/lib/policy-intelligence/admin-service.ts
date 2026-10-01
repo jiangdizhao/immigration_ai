@@ -13,6 +13,7 @@ import type {
 } from "./admin-api";
 import { policyAnalysisSchema } from "./contracts";
 import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
+import { readCandidateFailureDiagnostics } from "./pipeline-failure-diagnostics";
 import { db } from "./server-db";
 
 export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
@@ -94,6 +95,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
             sourceConfigId: policyIntelligenceSyncRun.sourceConfigId,
             status: policyIntelligenceSyncRun.status,
             safeErrorCode: policyIntelligenceSyncRun.safeErrorCode,
+            metadata: policyIntelligenceSyncRun.metadata,
           })
           .from(policyIntelligenceSyncRun)
           .where(eq(policyIntelligenceSyncRun.sourceConfigId, sourceConfigId))
@@ -156,6 +158,11 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
               editorialStatus: revision.editorialStatus,
             }
           : null,
+        pipelineFailures: readCandidateFailureDiagnostics(
+          latestRunBySource.get(item.primarySourceConfigId)?.metadata,
+          item.id,
+          item.primarySourceConfigId
+        ),
         publicationDiagnostics: buildAdminPublicationDiagnostics({
           editorialStatus: item.editorialStatus,
           analysis: revision?.analysis ?? null,

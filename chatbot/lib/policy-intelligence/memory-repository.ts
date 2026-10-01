@@ -1,6 +1,7 @@
 import type { AdminPolicyIntelligenceService } from "./admin-api";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
 import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
+import { readCandidateFailureDiagnostics } from "./pipeline-failure-diagnostics";
 import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
@@ -50,6 +51,7 @@ export function createInMemoryPolicyIntelligenceRepository() {
         heldCount: 0,
         failureCount: 0,
         safeErrorCode: null,
+        candidateFailures: [],
       });
     },
     finishRun(run) {
@@ -294,6 +296,13 @@ export function createInMemoryPolicyIntelligenceRepository() {
                 editorialStatus: revision.editorialStatus,
               }
             : null,
+          pipelineFailures: readCandidateFailureDiagnostics(
+            latestSourceRun?.candidateFailures
+              ? { candidateFailures: latestSourceRun.candidateFailures }
+              : null,
+            item.id,
+            item.sourceConfigId
+          ),
           publicationDiagnostics: buildAdminPublicationDiagnostics({
             editorialStatus: item.editorialStatus,
             analysis: revision?.analysis ?? null,

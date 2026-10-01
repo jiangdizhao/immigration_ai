@@ -1046,6 +1046,68 @@ test("verifier failure fails closed and telemetry stores only a safe code", asyn
   assert.equal(result.run.safeErrorCode, "pipeline_error");
   assert.doesNotMatch(JSON.stringify(result.run), /secret|key=|https:/i);
 });
+
+test("analysis failure after snapshot is persisted with item and snapshot context", async () => {
+  const h = dependencies({
+    analyze: () => {
+      const error = new Error("provider timeout with private response");
+      Object.assign(error, { code: "provider_timeout" });
+      throw error;
+    },
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const failure = result.run.candidateFailures[0];
+  assert.equal(failure.itemId, "fixture-1");
+  assert.equal(failure.snapshotId, "fixture-2");
+  assert.equal(failure.sourceConfigId, candidate.sourceConfigId);
+  assert.equal(failure.stage, "analysis");
+  assert.equal(failure.errorCode, "provider_timeout");
+  assert.equal(failure.message, "The analysis provider did not return a result in time.");
+  assert.equal(failure.timestamp, now);
+  assert.equal(h.store.revisions.size, 0);
+  const [adminItem] = await h.store.adminService.listItems();
+  assert.equal(adminItem.pipelineFailures[0].snapshotId, failure.snapshotId);
+});
+
+test("verification failure is attributed to the verification stage", async () => {
+  const h = dependencies({
+    verify: () => {
+      throw new Error("verifier internal error");
+    },
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  assert.equal(result.run.candidateFailures[0].stage, "verification");
+  assert.equal(result.run.candidateFailures[0].errorCode, "pipeline_error");
+  assert.equal(result.run.candidateFailures[0].message, "The analysis could not be verified.");
+  assert.equal(h.store.revisions.size, 0);
+});
+
+test("unknown candidate exception is sanitized and does not leak secrets", async () => {
+  const secret = "sk-live-secret-token-123";
+  const h = dependencies({
+    analyze: () => {
+      throw new Error(`provider response ${secret} https://private.example/?api_key=${secret}`);
+    },
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const serialized = JSON.stringify({ run: result.run, outcomes: result.outcomes });
+  assert.equal(result.run.candidateFailures[0].errorCode, "pipeline_error");
+  assert.equal(
+    result.run.candidateFailures[0].message,
+    "The source snapshot could not be analyzed."
+  );
+  assert.doesNotMatch(serialized, /sk-live-secret-token|private\.example|api_key/i);
+});
+
+test("successful candidate retains publication behavior without failure diagnostics", async () => {
+  const h = dependencies();
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  assert.equal(result.run.publishedCount, 1);
+  assert.deepEqual(result.run.candidateFailures, []);
+  const [adminItem] = await h.store.adminService.listItems();
+  assert.deepEqual(adminItem.pipelineFailures, []);
+});
+
 test("malformed verifier claim sets fail closed", async () => {
   const h = dependencies({
     verify: () => ({

@@ -233,6 +233,56 @@ export function AdminPolicyIntelligence({
                               </p>
                             )}
                           </div>
+                          {item.pipelineFailures.length > 0 ? (
+                            <div className="mt-4 border-t border-amber-200 pt-4">
+                              <h3 className="text-sm font-semibold text-amber-900">
+                                Pipeline failure
+                              </h3>
+                              <ul className="mt-2 space-y-3">
+                                {item.pipelineFailures.map((failure, index) => (
+                                  <li
+                                    className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                                    key={`${failure.timestamp}-${failure.stage}-${index}`}
+                                  >
+                                    <dl className="grid gap-2 sm:grid-cols-2">
+                                      <div>
+                                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          Stage
+                                        </dt>
+                                        <dd className="mt-1 text-slate-800">
+                                          {failure.stage}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          Error code
+                                        </dt>
+                                        <dd className="mt-1 font-mono text-slate-800">
+                                          {failure.errorCode}
+                                        </dd>
+                                      </div>
+                                      <div className="sm:col-span-2">
+                                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          Message
+                                        </dt>
+                                        <dd className="mt-1 text-slate-700">
+                                          {failure.message}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          Failed at
+                                        </dt>
+                                        <dd className="mt-1 text-slate-700">
+                                          {formatDateTime(failure.timestamp)}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                         </section>
                       </td>
                     </tr>

@@ -3182,3 +3182,27 @@ Source sync failures are stored by source rather than item. When the latest sour
 - Requested `pnpm test` (Playwright E2E) — **INCOMPLETE / FAIL**. The first two chat tests timed out after 240 seconds waiting for the home-page `multimodal-input` control; the other 46 tests were not completed. The remaining run was stopped after the repeated startup/page-load failure. The build and unit suite pass.
 
 No AWS resources were changed and no database migration was applied.
+
+## 2026-10-02 Policy Intelligence candidate pipeline failure diagnostics
+
+**Scope:** Admin observability only. Candidate-level failures from `runPolicyIntelligenceSync` now record the item ID, snapshot ID when available, source config ID, processing stage, allowlisted safe error code, static safe message, and timestamp. The diagnostics are stored in the existing `PolicyIntelligenceSyncRun.metadata` JSON field and projected only onto the matching item by `/api/admin/policy-intelligence`. The admin detail section displays each recorded pipeline failure with its stage, code, message, and time. Unknown exceptions map to `pipeline_error`; exception text and provider responses are not persisted in the item diagnostic. No discovery behavior, verifier requirements, publication rules, or thresholds changed. No database migration or AWS change was made.
+
+**Changed files:**
+
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/pipeline-failure-diagnostics.ts`
+- `chatbot/lib/policy-intelligence/repository.ts`
+- `chatbot/lib/policy-intelligence/admin-api.ts`
+- `chatbot/lib/policy-intelligence/admin-api.test.ts`
+- `chatbot/lib/policy-intelligence/admin-service.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/components/admin-policy-intelligence.tsx`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+**Validation:**
+
+- Focused pipeline tests — **PASS**, 44 passed, 0 failed.
+- `pnpm test:unit` — **PASS**, 482 passed, 0 failed, 0 skipped.
+- `pnpm build` — **PASS**. Next emitted the existing notice that local `baseline-browser-mapping` data is over two months old.
+- `git diff --check` — **PASS**.

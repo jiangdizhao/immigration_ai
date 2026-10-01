@@ -72,6 +72,26 @@ export type PolicyRunRecord = {
   heldCount: number;
   failureCount: number;
   safeErrorCode: string | null;
+  candidateFailures: PolicyCandidateFailureDiagnostic[];
+};
+
+export type PolicyCandidateFailureStage =
+  | "discovery"
+  | "source_validation"
+  | "snapshot"
+  | "analysis"
+  | "verification"
+  | "publication_gate"
+  | "persistence";
+
+export type PolicyCandidateFailureDiagnostic = {
+  itemId: string | null;
+  snapshotId: string | null;
+  sourceConfigId: string;
+  stage: PolicyCandidateFailureStage;
+  errorCode: string;
+  message: string;
+  timestamp: string;
 };
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -115,6 +135,7 @@ export interface PolicyIntelligenceRepository {
       | "heldCount"
       | "failureCount"
       | "safeErrorCode"
+      | "candidateFailures"
     >
   ): MaybePromise<void>;
   finishRun(run: PolicyRunRecord): MaybePromise<void>;
@@ -257,6 +278,40 @@ function safeErrorCode(error: unknown): string {
   return "pipeline_error";
 }
 
+const DIAGNOSTIC_ERROR_MESSAGES: Record<string, string> = {
+  provider_timeout: "The analysis provider did not return a result in time.",
+  provider_error: "The analysis provider could not complete this request.",
+  pipeline_error: "The item could not be processed due to an internal pipeline error.",
+  source_config_mismatch: "The discovered candidate did not match its configured source.",
+  source_identity_incomplete: "The acquired source was missing required identity information.",
+  unknown_analysis_evidence_ref: "The analysis referred to evidence outside the retrieved snapshot.",
+};
+
+const CANDIDATE_DIAGNOSTIC_CODES = new Set(Object.keys(DIAGNOSTIC_ERROR_MESSAGES));
+
+function safeCandidateFailure(error: unknown, stage: PolicyCandidateFailureStage) {
+  const rawCode = safeErrorCode(error);
+  const errorCode = CANDIDATE_DIAGNOSTIC_CODES.has(rawCode)
+    ? rawCode
+    : "pipeline_error";
+  const stageMessages: Partial<Record<PolicyCandidateFailureStage, string>> = {
+    source_validation: "The discovered source failed required validation.",
+    snapshot: "The source snapshot could not be stored.",
+    analysis: "The source snapshot could not be analyzed.",
+    verification: "The analysis could not be verified.",
+    publication_gate: "The publication decision could not be completed.",
+    persistence: "The analysis result could not be stored.",
+    discovery: "The source candidate could not be discovered.",
+  };
+  return {
+    errorCode,
+    message:
+      errorCode === "pipeline_error"
+        ? stageMessages[stage] ?? DIAGNOSTIC_ERROR_MESSAGES.pipeline_error
+        : DIAGNOSTIC_ERROR_MESSAGES[errorCode],
+  };
+}
+
 export async function runPolicyIntelligenceSync(
   dependencies: PolicySyncDependencies,
   sourceConfigId: string
@@ -278,6 +333,7 @@ export async function runPolicyIntelligenceSync(
     heldCount: 0,
     failureCount: 0,
     safeErrorCode: null,
+    candidateFailures: [],
   };
   await dependencies.repository.startRun(run);
   const outcomes: PolicySyncResult["outcomes"] = [];
@@ -286,6 +342,9 @@ export async function runPolicyIntelligenceSync(
     const candidates = await dependencies.discover();
     run.discoveredCount = candidates.length;
     for (const candidate of candidates) {
+      let stage: PolicyCandidateFailureStage = "source_validation";
+      let itemId: string | null = null;
+      let snapshotId: string | null = null;
       try {
         if (candidate.sourceConfigId !== sourceConfigId) {
           throw new Error("source_config_mismatch");
@@ -308,6 +367,7 @@ export async function runPolicyIntelligenceSync(
           sourceStatus: "announced",
           editorialStatus: "draft",
         });
+        itemId = item.id;
         if (item.editorialStatus === "archived") {
           outcomes.push({
             candidateId: candidate.candidateId,
@@ -316,6 +376,7 @@ export async function runPolicyIntelligenceSync(
           });
           continue;
         }
+        stage = "snapshot";
         const acquiredSnapshot = await dependencies.repository.acquireSnapshot({
           ...acquisition,
           sourceId,
@@ -327,6 +388,7 @@ export async function runPolicyIntelligenceSync(
           },
         });
         const snapshot = acquiredSnapshot.snapshot;
+        snapshotId = snapshot.id;
         if (acquiredSnapshot.created) {
           run.snapshottedCount += 1;
         } else {
@@ -350,6 +412,7 @@ export async function runPolicyIntelligenceSync(
           continue;
         }
         const evidence = [toEvidencePacket(snapshot)];
+        stage = "analysis";
         const analysis = policyAnalysisSchema.parse(
           await dependencies.analyzer.analyze({ evidence })
         );
@@ -370,11 +433,13 @@ export async function runPolicyIntelligenceSync(
         ) {
           throw new Error("unknown_analysis_evidence_ref");
         }
+        stage = "verification";
         const verification = validatePolicyVerification(
           await dependencies.verifier.verify({ analysis, evidence }),
           analysis,
           allowedRefs
         );
+        stage = "publication_gate";
         const gate = evaluatePublicationGate({
           analysis,
           verification,
@@ -390,6 +455,7 @@ export async function runPolicyIntelligenceSync(
           modelMetadata: dependencies.modelMetadata,
           generatedAt: now(),
         };
+        stage = "persistence";
         if (!gate.eligible) {
           const write = await dependencies.repository.saveHeldRevision({
             ...revisionInput,
@@ -442,12 +508,21 @@ export async function runPolicyIntelligenceSync(
         run.failureCount += 1;
         run.heldCount += 1;
         runFailure = true;
-        const code = safeErrorCode(error);
-        run.safeErrorCode ??= code;
+        const diagnostic = safeCandidateFailure(error, stage);
+        run.safeErrorCode ??= diagnostic.errorCode;
+        run.candidateFailures.push({
+          itemId,
+          snapshotId,
+          sourceConfigId,
+          stage,
+          errorCode: diagnostic.errorCode,
+          message: diagnostic.message,
+          timestamp: now(),
+        });
         outcomes.push({
           candidateId: candidate.candidateId,
           outcome: "failed",
-          reasonCode: code,
+          reasonCode: diagnostic.errorCode,
         });
       }
     }
@@ -459,7 +534,7 @@ export async function runPolicyIntelligenceSync(
   } catch (error) {
     run.failureCount += 1;
     run.status = "failed";
-    run.safeErrorCode = safeErrorCode(error);
+    run.safeErrorCode = safeCandidateFailure(error, "discovery").errorCode;
   }
   run.completedAt = now();
   await dependencies.repository.finishRun(run);
