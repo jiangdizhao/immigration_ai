@@ -1,0 +1,5 @@
+{
+  "name": "p11-009-migration-runner-runtime",
+  "private": true,
+  "type": "module"
+}

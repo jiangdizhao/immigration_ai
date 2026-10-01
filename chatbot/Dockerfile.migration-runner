@@ -1,0 +1,31 @@
+FROM node:22-bookworm-slim AS build
+WORKDIR /build
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+COPY chatbot/migration-runner/package.json ./package.json
+COPY chatbot/migration-runner/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY chatbot/scripts/db-migration-operator.ts ./scripts/db-migration-operator.ts
+COPY chatbot/lib/production/migration-preflight.ts ./lib/production/migration-preflight.ts
+COPY chatbot/lib/db/migrations ./lib/db/migrations
+RUN pnpm exec esbuild scripts/db-migration-operator.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/db-migration-operator.js
+
+FROM node:22-bookworm-slim AS runtime-dependencies
+WORKDIR /runtime-dependencies
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+COPY chatbot/migration-runner/package.json ./package.json
+COPY chatbot/migration-runner/pnpm-lock.yaml ./pnpm-lock.yaml
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /opt/migration/chatbot
+ENV NODE_ENV=production
+RUN rm -rf /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
+COPY --from=runtime-dependencies --chown=1000:1000 /runtime-dependencies/node_modules ./node_modules
+COPY --from=build --chown=1000:1000 /build/dist ./dist
+COPY --from=build --chown=1000:1000 /build/lib/db/migrations ./lib/db/migrations
+COPY chatbot/migration-runner/runtime.package.json ./package.json
+COPY chatbot/scripts/migration-runner-dispatch.mjs /runner/dispatch.mjs
+USER 1000:1000
+ENTRYPOINT ["node", "/runner/dispatch.mjs"]
+CMD ["preflight"]

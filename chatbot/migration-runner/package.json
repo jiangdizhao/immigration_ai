@@ -1,0 +1,13 @@
+{
+  "name": "p11-009-migration-runner-build",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@9.12.3",
+  "dependencies": {
+    "drizzle-orm": "0.34.1",
+    "postgres": "3.4.5"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -2322,3 +2322,481 @@ The read-only gate must identify, without inferring from local Compose:
 This gate authorizes **no mutation**: no service update, task-definition registration, image push, database migration, S3/IAM/policy change, scheduler creation/update, scanner enablement, DNS/routing change, or deployment. If credentials/topology are unavailable, stop and report rather than guessing.
 
 After read-only reconnaissance, return for owner review before Stage-4 mutation/deployment.
+
+## P11-009 Stage 4A read-only staging reconnaissance — corrected authoritative AWS scope
+
+**Authoritative result:** reconnaissance was repeated only in the owner-confirmed staging profile/account/region below. The previous Stage 4A reconnaissance used the default account `804448482941`; its conclusions are **discarded** and must not be used for staging decisions. This entry supersedes that result. No AWS or database resource was modified. Stage 4B was not started.
+
+### Startup and identity
+
+- Repository: `jiangdizhao/immigration_ai`.
+- Starting branch: `phase11-chinese-service-platform-ui-rebase`.
+- Starting HEAD: `f5605b0e336fe7eb75326a18cf64c2e53dd4a3d9`.
+- Starting worktree: clean.
+- AWS profile: `aulawyers-staging`.
+- AWS account: `747452892291`; caller `arn:aws:iam::747452892291:user/immigration-ai-deployer`.
+- AWS region: `ap-southeast-2`.
+- Every AWS query in this corrected reconnaissance was scoped to that profile/account/region, except Route 53's global hosted-zone read and the read-only DNS lookup of the verified staging hostname.
+
+### ECS/Fargate topology and deployed image identity
+
+- Cluster `immigration-ai-staging`, ARN `arn:aws:ecs:ap-southeast-2:747452892291:cluster/immigration-ai-staging`: `ACTIVE`; 1 active service, 0 registered EC2 container instances, 1 running task, 0 pending. Cluster default capacity provider is `FARGATE`, weight 1.
+- Service `immigration-ai-staging-web`: `ACTIVE`, desired/running/pending `1/1/0`, launch type `FARGATE`, platform `1.4.0`, network mode `awsvpc`, public IP assignment enabled. Current task definition is `arn:aws:ecs:ap-southeast-2:747452892291:task-definition/immigration-ai-staging-web:30`. Deployment strategy is rolling, `maximumPercent=200`, `minimumHealthyPercent=100`; deployment circuit breaker and automatic rollback are disabled. The primary deployment is completed.
+- Task definition revision 30 sets `cpu=1024`, `memory=2048`, `runtimePlatform=LINUX/X86_64`. It has two containers:
+  - `chatbot`: `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot:e6c44f2-phase10-fast-202609090800`, port 3000.
+  - `legal-service`: `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/legal-service:3b36532-phase10-2-fast-uncapped-202609110538`, port 8000.
+- The running task confirms deployed digests:
+  - Chatbot: `sha256:fcb3a6078ebfaf820ab1b0b91ea0c59d5f18954827533579648daf87e4c35c16`.
+  - Legal Service: `sha256:3f53702199becae880f3e03c2410f5b3017fbcf1aa160d52151807b40030cc58`.
+- These are exact rollback image anchors, but their Phase-10 tags predate the accepted P11-009 source. ECR `describe-images` reported Docker schema-2 manifests and recent tags; it did not expose architecture metadata. The deployed ECS task runtime itself is explicitly `X86_64`/Linux. Stage-3's local production image/native-verifier evidence was also x86_64, but it is not either deployed digest and therefore does not prove native verification of these staging images.
+- Neither container defines an ECS container health check; ECS container health is `UNKNOWN`. The chatbot ALB target is separately healthy.
+- Task and execution roles: `arn:aws:iam::747452892291:role/immigration-ai-staging-ecs-task-role` and `arn:aws:iam::747452892291:role/immigration-ai-staging-ecs-execution-role`.
+- Environment-variable names were inspected without values. The chatbot task definition does not set `MATTER_DOCUMENTS_S3_BUCKET`; it also has no secret reference with that name. It does include `AWS_REGION`, `LEGAL_SERVICE_URL`, `APP_BASE_URL`, and other application settings. Secret references were limited to reference names/ARNs, never values. Chatbot references include `AUTH_SECRET`, `LAWYER_REVIEW_ASSERTION_SECRET`, `LAWYER_REVIEW_TOKEN`, `LEGAL_SERVICE_API_KEY`, `POSTGRES_URL`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`. Notably, the two Stripe references point to SSM parameter names under `/immigration-ai/production/chatbot/` despite this being the staging task. Legal Service references include `DATABASE_URL`, `LAWYER_REVIEW_ASSERTION_SECRET`, `LEGAL_SERVICE_API_KEY`, and `OPENAI_API_KEY`. No referenced value was fetched.
+- The two ECR repositories exist in `ap-southeast-2`: `immigration-ai/chatbot` and `immigration-ai/legal-service`. For each, the deployed tag/digest was also the newest image in the inspected recent image metadata. No image was pushed, tagged or deleted.
+
+### RDS and migration status
+
+- RDS is a PostgreSQL instance, not Aurora: `immigration-ai-staging-postgres`, endpoint `immigration-ai-staging-postgres.ctkuiomwqo61.ap-southeast-2.rds.amazonaws.com:5432`, engine version `18.3`, AZ `ap-southeast-2c`, instance class `db.t4g.micro`, gp3 20 GiB.
+- VPC `vpc-04c15c51747904e9a`; DB subnet group spans `subnet-020c9fa83beff2e52`, `subnet-0a501eeb320072fae`, and `subnet-05a1fd04555a84d62`. DB security group: `sg-0bbd25e2fdc9ded8b` (`immigration-ai-staging-rds-sg`). Its port-5432 ingress references security groups `sg-0223d743f5721b006` and `sg-0e32ee9fb1b6b5ea3`; no IPv4 CIDR ingress was returned. The ECS service uses `sg-0223d743f5721b006` (`immigration-ai-staging-chatbot-sg`).
+- RDS reports `available`, automated backup retention 3 days, latest restorable time `2026-09-30T21:58:00Z`, and deletion protection disabled. **Storage encryption is disabled and `PubliclyAccessible=true`**. The observed security-group ingress is source-security-group based, not an unrestricted CIDR rule; the public-access flag nevertheless needs explicit owner/security review before migration/deployment decisions.
+- Five recent automated snapshots were available (2026-09-26 through 2026-09-30); the latest is `rds:immigration-ai-staging-postgres-2026-09-30-16-01`. The inspected automated snapshots are unencrypted. Three older manual snapshots were also available and unencrypted: `immigration-ai-staging-pre-overwrite-20260827-170456`, `immigration-ai-staging-pre-phase8-20260829-191605`, and `immigration-ai-staging-pre-phase9-20260905-091611`. No snapshot was created.
+- The task definition references the SSM parameter name for chatbot `POSTGRES_URL`, but this task did not retrieve its value. There was no approved local secure injection path available that avoids reading the secret value, so no DB connection or stock preflight was attempted. **STAGING DB LEDGER — PENDING FOR STAGE 4B PREFLIGHT.** Repository migration head is `0023_chief_famine`; staging ledger/current database identity remains unverified.
+
+### MatterDocument S3 and task-role IAM
+
+- The application storage source requires `MATTER_DOCUMENTS_S3_BUCKET`, but the deployed chatbot task definition does not configure that environment name or a corresponding secret reference. Consequently no actual MatterDocument bucket can be traced from the deployed task configuration; no bucket was guessed, and no bucket/object API was called.
+- Task role `immigration-ai-staging-ecs-task-role` has no attached managed policies and one inline policy, `ImmigrationAiSesTransactionalEmail`. Its only statements allow `ses:SendEmail` and `ses:SendRawEmail`, constrained by the SES FromAddress. No MatterDocument S3 permission appears in the inspected role policy. Static S3 access is therefore **MISSING**, and effective access was not tested.
+- Bucket region, encryption, Block Public Access, public-policy status, versioning, ownership, lifecycle, and public-URL behavior are **UNKNOWN** because the bucket is not configured in the actual task definition. No customer objects were listed or accessed.
+
+### Malware scanning and Policy Intelligence schedule
+
+- **NO CONCRETE SCANNER CONFIG FOUND.** In `ap-southeast-2`, GuardDuty returned no detector and no Malware Protection for S3 plan; EventBridge returned no rules and only the default event bus; Lambda and Step Functions inventories were empty. EventBridge Scheduler has only its default group and no schedules. With no configured MatterDocument bucket, bucket notifications could not be traced. No scanner was configured.
+- **No Policy Intelligence schedule found.** Scheduler returned no schedules; EventBridge rules, Lambda functions and Step Functions state machines were empty; the ECS cluster has only the web service, with no scheduled task discovered. No target, schedule expression, schedule role or sync execution exists to roll back.
+- The production Dockerfile builds a Next standalone web image with `CMD ["node", "server.js"]`; it does not explicitly copy the `scripts/policy-sync.ts` operator entry point or its `tsx` runner into the runtime stage. A dedicated, validated operator image/entry point is needed before a schedule target can be specified safely.
+
+### ALB, DNS and routing
+
+- Internet-facing active ALB: `immigration-ai-staging-alb`, DNS `immigration-ai-staging-alb-1443333259.ap-southeast-2.elb.amazonaws.com`, VPC `vpc-04c15c51747904e9a`.
+- Listener port 80 redirects HTTP to HTTPS 443 (301). Listener 443 terminates TLS with issued ACM certificate `b903b9d5-ba4e-4ca0-83ff-ac1f20577d5d` for `staging.aulawyers.au`. The hostname resolved read-only to the ALB DNS name/IPs. No Route 53 hosted zone exists in this account, so DNS appears externally managed; no DNS change is proposed.
+- The HTTPS listener has a default forward (no host/path conditions) to target group `iai-stg-chatbot-tg`, ARN `arn:aws:elasticloadbalancing:ap-southeast-2:747452892291:targetgroup/iai-stg-chatbot-tg/c7b894dce6c9b5aa`. It targets IP port 3000, HTTP health path `/ping`, expected code 200; the current target is healthy. The listener/target group exposes the chatbot only. Legal Service runs as a second container in the same task; no separate public Legal Service target group/rule was found.
+
+### Rollback anchors
+
+- ECS cluster/service: `immigration-ai-staging` / `immigration-ai-staging-web`; desired/running `1/1`.
+- Prior task definition: `immigration-ai-staging-web:30`.
+- Prior chatbot image digest: `sha256:fcb3a6078ebfaf820ab1b0b91ea0c59d5f18954827533579648daf87e4c35c16`.
+- Prior Legal Service image digest: `sha256:3f53702199becae880f3e03c2410f5b3017fbcf1aa160d52151807b40030cc58`.
+- ALB HTTPS listener currently forwards to `iai-stg-chatbot-tg`; target health is healthy. HTTP redirects to HTTPS.
+- RDS backup posture: 3-day retention, latest restorable time above, latest listed automated snapshot `rds:immigration-ai-staging-postgres-2026-09-30-16-01` (available, unencrypted). Existing RDS is not encrypted and publicly accessible; owner must decide whether that backup posture is adequate before a migration gate.
+- No S3 bucket, scanner, scheduler or schedule target exists in the inspected task/configuration inventory to serve as a rollback anchor.
+
+### Stage 4 gap matrix
+
+| Requirement | Observed state | Status | Exact proposed Stage-4B action |
+|---|---|---|---|
+| Production chatbot image | Deployed Phase-10 tag/digest above; branch source is newer | Missing current-source image | Build the reviewed source for Linux x86_64, run the in-image native verifier, then push an immutable commit-tagged image to `immigration-ai/chatbot` only after separate Stage-4B authorization. |
+| Production Legal Service image | Deployed Phase-10 tag/digest above in same task | Unknown whether source delta requires rebuild | Compare accepted source to this digest's release; retain it if unchanged, otherwise build/test/push a matching immutable image to `immigration-ai/legal-service`. |
+| ECS CPU architecture | Fargate `LINUX/X86_64` | Ready as a deployment constraint | Build all replacement images for x86_64 and preserve this runtime platform in the replacement task definition. |
+| `@napi-rs/canvas` verifier | Stage-3 verifier passed on a local x86_64 image, not these ECR digests | Unknown for deployed image | Run the verifier against the exact candidate chatbot image/digest before deployment. |
+| Migration 0023/current head | Repository head 0023; staging DB ledger not checked | Pending | Use only an already-approved secure injection path; run stock read-only preflight and confirm exact database/server identity and ledger before any separately authorized migration. |
+| MatterDocument private S3 | Required bucket env is absent; bucket cannot be identified | Missing configuration / unknown bucket | Owner must identify an existing bucket or approve a new staging bucket. Then set `MATTER_DOCUMENTS_S3_BUCKET` and run read-only posture checks before use. |
+| S3 encryption | Target bucket unknown | Unknown | Verify default encryption on the owner-confirmed bucket; meet the existing preflight's accepted encryption policy before use. |
+| S3 Block Public Access | Target bucket unknown | Unknown | Verify all bucket-level BPA flags and policy posture; obtain separate approval for any corrective change. |
+| IAM access | Task role has only SES inline permissions; no S3 policy | Missing static S3 permissions | After bucket confirmation, add only the reviewed least-privilege object actions scoped to that bucket on `immigration-ai-staging-ecs-task-role`; prove runtime access later in Stage 4C. |
+| Malware scanner | No GuardDuty detector/plan or connected scanner path found | Missing | Owner must select/approve a concrete scanner and event/reconciliation design; then verify digest-bound fail-closed `securityStatus` reconciliation before enabling document processing. |
+| Scanner → `securityStatus` | No scanner event path found | Missing | Implement/configure the approved event-to-reconciliation path and test idempotent clean/rejected/failed handling in the authorized acceptance gate. |
+| Policy Intelligence operator sync | No sync task; current production web image does not explicitly package its operator script/runner | Missing | Build and validate a dedicated operator artifact/entry point from the reviewed chatbot source; keep it separate from the web service runtime. |
+| Policy Intelligence scheduler | No schedule/rule/Lambda target found | Missing | After the operator artifact is validated, create the separately approved EventBridge Scheduler target for a one-off Fargate task in `immigration-ai-staging`; cadence, non-overlap and failure policy require owner input. |
+| Staging routing | HTTPS hostname resolves to ALB; listener and chatbot target are healthy; no public Legal Service route | Ready for current chatbot path; Legal Service external route unknown/not found | Preserve current HTTPS listener/default chatbot target unless approved acceptance requires a change; owner must specify if Legal Service needs a separate public endpoint. |
+| Rollback readiness | Task definition/digests, healthy target and an RDS snapshot are recorded; DB snapshot is unencrypted and DB is public | Partial | Capture fresh approved rollback anchors before rollout; owner must resolve DB backup/security adequacy. Roll back ECS to task definition `immigration-ai-staging-web:30` and the two exact digests above if application health fails. |
+
+### Proposed Stage 4B plan — not executed
+
+**ALREADY CORRECT — NO CHANGE**
+
+- Preserve cluster `immigration-ai-staging`, service `immigration-ai-staging-web`, Fargate `LINUX/X86_64`, the working ALB TLS redirect/listener, `staging.aulawyers.au` mapping, and healthy chatbot target unless an approved test demonstrates a specific defect.
+- Treat task definition revision 30 and the two running image digests as rollback anchors. Keep Legal Service on its current digest if source review confirms it has no required change.
+- Do not alter Route 53; no hosted zone is present in this account and the verified hostname already resolves to the ALB.
+
+**MUTATION REQUIRED — only after separate Stage-4B authorization**
+
+1. Resolve the DB posture/backup decision first. Use the existing `immigration-ai-staging-postgres` and its secure secret references only after owner review of `PubliclyAccessible=true`, storage encryption disabled, deletion protection disabled and unencrypted snapshots. Establish a secure preflight path, confirm `current_database()` and the ledger through 0023, and obtain an approved backup/recovery plan before a migration. Do not assume the unencrypted snapshot is an acceptable recovery point.
+2. Identify or approve the exact staging MatterDocument bucket; configure `MATTER_DOCUMENTS_S3_BUCKET`, private access, approved default encryption, versioning/ownership/lifecycle posture, and least-privilege S3 statements on `immigration-ai-staging-ecs-task-role`. The bucket name and any required bucket mutation remain unresolved, so no exact bucket ARN can yet be specified.
+3. Obtain approval for scanner selection. If GuardDuty Malware Protection for S3 is selected, scope it to the confirmed bucket and build the approved notification/reconciliation path; no scanner choice or setup is pre-authorized here.
+4. Build the reviewed chatbot source for `linux/amd64` and tag the candidate immutably as `f5605b0e3-p11-009-stage4b-20261001` in `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot`. Record the resulting digest and pass `scripts/verify-native-runtime.mjs` inside that exact image with networking disabled. Rebuild/tag the Legal Service image in `immigration-ai/legal-service` only if source review shows its current deployed digest is stale for this release.
+5. After DB preflight and its separate migration authorization, apply stock migrations only to database `immigration-ai-staging-postgres`, stopping unless its safe identity and ledger match the approved plan. Then register a new revision of `immigration-ai-staging-web` based on revision 30, preserving Fargate x86_64, sidecar composition, network settings and secret references while replacing only approved image digests/configuration. Before update, verify the current revision is still 30; do not assume revision 31 if another deployment has advanced it.
+6. Update only service `immigration-ai-staging-web`; verify deployment completion, ECS task health, ALB target health on `/ping`, TLS endpoint, login/RBAC, Policy Intelligence reads and approved MatterDocument scanner lifecycle. Retain the existing ALB listener/target group unless an explicit routing requirement is approved.
+7. Build a dedicated sync operator artifact because the production standalone web image does not explicitly package `scripts/policy-sync.ts`/`tsx`. After owner-approved cadence, overlap/failure behavior, secret references and egress are defined, create a schedule tentatively named `immigration-ai-staging-policy-sync` targeting a one-off Fargate task in cluster `immigration-ai-staging`; use a dedicated task definition/family and least-privilege scheduler role rather than running sync in the web service. No schedule expression or bucket/source secret values are inferred.
+
+**Rollback order:** disable only the newly approved sync schedule first; restore service `immigration-ai-staging-web` to the captured pre-deployment task definition `immigration-ai-staging-web:30` with chatbot digest `sha256:fcb3a6078ebfaf820ab1b0b91ea0c59d5f18954827533579648daf87e4c35c16` and Legal Service digest `sha256:3f53702199becae880f3e03c2410f5b3017fbcf1aa160d52151807b40030cc58`; confirm `/ping` target health and staging login. Restore any separately changed listener target only from its captured value. Do not roll back database schema by improvisation; use only a separately reviewed DB recovery/forward-fix plan. Preserve the bucket and IAM policy for diagnosis until an approved cleanup decision.
+
+**UNKNOWN — OWNER INPUT REQUIRED**
+
+- Whether the production-namespace Stripe SSM references in the staging task definition are intentional; whether the publicly accessible, unencrypted RDS instance and unencrypted snapshots are acceptable or require a separately designed secure cutover.
+- The actual MatterDocument bucket name (no bucket setting/reference exists in task definition), desired versioning/lifecycle posture, and approved scanner/provider/event design.
+- Whether Legal Service needs an external endpoint; current evidence shows only an internal sidecar and chatbot public route.
+- Policy sync cadence, accepted source set, live-provider authorization, no-overlap/failure policy, operator task IAM/network egress, and the dedicated sync image/task definition.
+- Any change to listener routing or ECS deployment-circuit-breaker policy.
+
+The automatic reviewer rejected one initial Scheduler query because requesting the complete target object could expose inline `Input` or secret-bearing configuration. A safer metadata-only Scheduler query returned no schedules; no target payload was retrieved. No secret values were read. No AWS/database mutation, migration, image push, task-definition registration, ECS update, S3/IAM/scanner/scheduler/routing change, or policy sync occurred. `git diff --check` passed after this append; stop with this handoff change uncommitted and unpushed.
+
+## P11-009 Stage 4B-0 deployment decision closure
+
+### Scope and decision status
+
+Read-only AWS reconnaissance was scoped to account `747452892291` (`aulawyers-staging`) in `ap-southeast-2`. No AWS configuration was changed, no DB connection or migration was attempted, no secret values were read, and no live Policy Intelligence sync or external provider/source request was made. No deployment was performed.
+
+### A. Database security and migration readiness
+
+The staging PostgreSQL 18.3 instance `immigration-ai-staging-postgres` is a single-AZ `db.t4g.micro`, 20 GiB gp3, in `ap-southeast-2c`. It is publicly addressable and the VPC's only subnets have an Internet Gateway route; however, the observed database security group permits port 5432 only from the chatbot and Legal Service security groups. Public DNS/routing exists, but arbitrary Internet DB ingress was not demonstrated and is denied by those ingress rules. The VPC currently has no private subnets or NAT gateway. RDS storage and inspected snapshots are unencrypted; deletion protection and Multi-AZ are off; backup retention is three days. No database login was made.
+
+**Recommendation: Option B, encrypted snapshot-copy and restore to a new private staging RDS instance.** RDS cannot enable storage encryption in place. Candidate names (proposals only): `immigration-ai-staging-postgres-secure`, `immigration-ai-staging-db-private-subnet-group`, and `immigration-ai-staging-postgres-private-sg`. Create private subnets across at least two AZs with local-only routing, restrict DB 5432 to application/operator task security groups, and enable deletion protection plus an owner-approved backup policy. Use AWS-managed `aws/rds` unless the owner requires a customer-managed key. Quiesce writes for the final snapshot and cutover. Keep the old DB unchanged as rollback; writes resumed on the replacement will not be present on the old DB, so keep writes paused through acceptance or explicitly account for this data gap.
+
+Option A, disabling public accessibility and tightening ingress/protection on the current DB, is a lower-change fallback but leaves data and snapshots unencrypted and retains public-subnet placement; accept only under a time-bounded owner waiver. Option C, replication to reduce downtime, adds complexity without a staging zero-downtime requirement.
+
+**DB LEDGER REQUIRES CONTROLLED STAGE-4B-1 PREFLIGHT.** Repository migration head is `0023_chief_famine`. Parameter names inspected only: `/immigration-ai/staging/chatbot/postgres-url` and `/immigration-ai/staging/legal-service/database-url`. The existing lawyer-review export helper decrypts a parameter into a persistent plaintext file and must not be used. Stage 4B-1 should use an in-memory wrapper: capture SSM output without printing, retrieve only the exact chatbot `POSTGRES_URL`, verify its hostname against the expected RDS endpoint, and inject it directly into the `pnpm db:preflight` child environment. Never write/log the value or use shell expansion. `db:preflight --preflight` performs read-only ledger inspection and emits sanitized DB/server/ledger status. Preflight the source before snapshot and the restored target before migration. Migrate the accepted replacement only if its ledger is behind, using the controlled migration procedure; never migrate the source DB as part of this cutover.
+
+### B. Stripe staging references
+
+The current staging chatbot task definition references production-namespaced parameters `/immigration-ai/production/chatbot/stripe-secret-key` and `/immigration-ai/production/chatbot/stripe-webhook-secret`, while separate staging-namespaced SecureStrings exist. Classification: **LIKELY STAGING MISCONFIGURATION**. Values and credential mode were not read and must not be inferred from parameter names. The owner must confirm the intended nonproduction parameter pair before a later authorized staging reference change. No references were changed.
+
+### C. MatterDocument storage
+
+The account returned no S3 buckets: **NO EXISTING AUTHORITATIVE MATTERDOCUMENT BUCKET FOUND**. The staging task has no `MATTER_DOCUMENTS_S3_BUCKET`, and its task role has no S3 permissions. The application uses `matter-documents/<uuid>` keys and needs only `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the object prefix; it does not need bucket listing, ACL, public access, or object URLs.
+
+Candidate design only: bucket `immigration-ai-staging-matter-documents-747452892291` in `ap-southeast-2`; all Block Public Access settings on; Object Ownership `BucketOwnerEnforced`; default SSE-S3/AES256; no public policy/ACL; task-role actions limited to `arn:aws:s3:::immigration-ai-staging-matter-documents-747452892291/matter-documents/*`. Start with versioning off to preserve current hard-delete semantics. In a versioned bucket, ordinary `DeleteObject` creates a delete marker and leaves prior versions; versioning therefore requires version-aware purge and an owner-approved retention policy. Do not invent an expiry period. Add S3 data-event audit and operational metrics/alarms without logging object bodies. Bucket controls remain unknown until an authoritative bucket is selected or created.
+
+### D. Malware scanning
+
+No GuardDuty detector, S3 Malware Protection plan, EventBridge rules, Lambda/Step Functions, schedules, or bucket were found: **NO CONCRETE SCANNER CONFIG FOUND**.
+
+**Recommendation: GuardDuty Malware Protection for S3 → EventBridge → SQS + DLQ → dedicated private reconciler.** Consume at-least-once scan events idempotently; match exact bucket/key/version to the stored MatterDocument and verify its SHA-256 against the exact object/checksum before changing scan state. `COMPLETED + NO_THREATS_FOUND` may become clean; `COMPLETED + THREATS_FOUND` becomes rejected; skipped, unsupported, access-denied, or failed results remain pending only for bounded retry or become failed, never clean. Use the existing pending-only compare-and-set flow against duplicates; bound retries and alarm on DLQ and scan cost. Keep scanner access separate from the chatbot role and scope it to the approved prefix. Custom ClamAV Fargate is an alternative with direct byte hashing but requires signature, capacity, and availability operations and fail-closed treatment of unsupported files. Configure neither option until bucket, verdict contract, cost owner, and acceptance criteria are approved.
+
+### E. Policy Intelligence operator and cadence
+
+No operator deployment or schedule exists. `chatbot/scripts/policy-sync.ts` accepts one source ID per invocation (`home-affairs-guidance`, `federal-register-legislation`, or `art-immigration-review`) and requires `POSTGRES_URL`, `OPENAI_API_KEY`, and `POLICY_INTELLIGENCE_ENABLED=true`; model, reasoning, provider timeout, and output limits are configurable. The current standalone web image starts `node server.js` and does not explicitly package the sync script/tsx runtime. Do not schedule this work inside the long-lived web process.
+
+Recommend a separate reviewed operator image/task, e.g. `immigration-ai-staging-policy-sync`, from the same reviewed source and locked dependencies, with dedicated no-inbound security group/role, initially 1 vCPU/2 GiB, and serial source runs. Inject only staging DB/OpenAI secret references; never log values. Connect to the private database on 5432 through narrow SG rules; constrain outbound HTTPS 443 to required official source sites and `api.openai.com` as supported by network controls. Add a source-level PostgreSQL advisory/single-flight lock. Bound each source run at 30 minutes and a three-source batch at 90 minutes; no provider retries. Scheduler launch/API errors may have one bounded retry and DLQ; task failure should alarm and be inspected against `SyncRun` before manual retry. Use a dedicated log group with owner-approved retention and no secrets or sensitive source text.
+
+Cadence options: daily at 02:00 Australia/Sydney (recommended only after live source/provider acceptance; lowest load); every six hours (~4x daily call volume); hourly (~24x, greater overlap/noise risk). Initial state: **DISABLED / MANUAL ONE-OFF ONLY** until a live source/provider acceptance gate passes. Seek separate approval before daily scheduling, with non-overlap lock, failure alarms, and a cost limit.
+
+### Legal Service release and ECS health
+
+The deployed Legal Service image maps to commit `3b3653202f9b067fbed4adfd410edc02cb7215cc`; accepted Phase 11 source since then changes Legal Service query, customer-document context, answer, reasoning, archive, and review-trace runtime paths. **Legal Service rebuild required**; do not reuse the Phase 10 image. **No public Legal Service endpoint required**: it is a chatbot sidecar in the same `awsvpc` task, uses `http://127.0.0.1:8000`, and the ALB routes only to chatbot. Add/verify the ECS Legal Service `/api/v1/health` check and chatbot dependency on Legal Service `HEALTHY` if supported.
+
+The ECS deployment circuit breaker and rollback are disabled. **Recommendation for Stage 4B-1:** enable both while retaining rolling `maximumPercent=200` / `minimumHealthyPercent=100`, and configure ECS health checks for chatbot `/ping` and Legal Service `/api/v1/health`. Verify grace periods and desired-count-one behavior before rollout. The ECS breaker has a minimum failure threshold of three, so rollback may not be immediate.
+
+### Dependency-ordered Stage 4B-1 plan
+
+1. Obtain owner decisions below, name change/rollback owners, set a write-quiesce window, and run safe in-memory migration preflight against the source.
+2. Create two-AZ private networking, proposed private DB subnet group, and narrowly scoped DB/task security groups; verify no Internet route or unintended DB ingress.
+3. Quiesce writes; snapshot and verify, copy encrypted, and restore the secure DB with protection/backups. Keep source untouched. Preflight the restored endpoint and ledger; migrate only the new DB if behind. Validate DB/app compatibility before cutover.
+4. Update staging DB secret references, roll a reviewed task definition, and verify chatbot/Legal Service health and DB behavior. Keep writes paused through acceptance; retain source for rollback and account for post-cutover writes if reverting.
+5. After DB acceptance, owner-confirm the Stripe staging pair; build/deploy Legal Service from accepted Phase 11 source with health checks and ECS breaker/rollback; confirm no public Legal Service route.
+6. Only after approval, configure the MatterDocument bucket and prefix IAM; verify encryption, public-access blocks, and deletion behavior. Deploy scanner/queue/reconciler after threat-state and cost approval; test clean, infected, unsupported/failure, duplicate, and DLQ cases before enabling uploads.
+7. Build the separate operator; test one approved source at a time, locking/idempotency, runtime, telemetry, and alarms. Keep schedule disabled until live acceptance, then seek daily-cadence approval.
+
+At each cutover compare task/image digests, target/container health, DB endpoint/ledger, alarms, and safe smoke behavior. Rollback restores prior staging secret references/task definition while retaining the old DB and snapshots. Do not remove source, snapshots, old task definition, or rollback configuration before an approved soak/retention gate.
+
+### Owner decisions before Stage 4B-1
+
+- Approve encrypted private DB replacement, change window, `aws/rds` versus customer KMS key, backups/retention, and cutover/rollback owners.
+- Confirm the exact staging Stripe parameter pair and approved nonproduction credential mode.
+- Approve candidate MatterDocument bucket, data classification, versioning/delete semantics, audit/retention policy, and upload acceptance gate.
+- Approve GuardDuty/SQS/DLQ/reconciler, fail-closed mapping, scan-cost cap, and security owner.
+- Approve operator image/task, secrets, egress set, runtime/cost caps; keep schedule disabled until pilot, then decide daily cadence.
+- Approve Legal Service rebuild, health checks, ECS breaker/rollback, change window, and release owner.
+
+### AWS references
+
+Primary documentation: [RDS encryption and encrypted snapshot restore](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html); [RDS VPC/public-access behavior](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html); [ECS `awsvpc` networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking-awsvpc.html); [S3 delete/version behavior](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html); [GuardDuty S3 scan events](https://docs.aws.amazon.com/guardduty/latest/ug/monitor-with-eventbridge-s3-malware-protection.html); [EventBridge DLQ](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html); [GuardDuty pricing](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-pricing.html); [ECS deployment circuit breaker](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-circuit-breaker.html).
+
+No database data, AWS resources, secrets, or deployments were modified during Stage 4B-0.
+
+## P11-009 Stage 4B-0 decision closure
+
+This section records the final owner decisions for the transition into Stage 4B-1. It supersedes earlier open questions and tentative recommendations in the preceding Stage 4A/4B reconnaissance; those historical findings remain unchanged. This is a deployment decision record, not authorization to execute AWS changes.
+
+### Final owner decisions
+
+1. **RDS — Option B.** Replace the current staging RDS with a new encrypted private instance because current storage and snapshots are unencrypted and the instance is publicly accessible. Stage 4B-1 sequence: old staging RDS → snapshot → encrypted copy → new private RDS → application cutover. Keep the old RDS as a rollback anchor; do not delete it immediately. Retaining the current RDS as the long-term staging database and replication-based replacement are rejected alternatives. No RDS change occurs in Stage 4B-0.
+2. **Migration 0023.** Run migration 0023 only against the new staging database, after controlled `db:preflight`. Do not migrate the old RDS directly. Future completion requires preflight, migration-status verification, acknowledged migration, and application connectivity confirmation.
+3. **Stripe — intentional shared Stripe configuration.** Keep the existing Stripe configuration. Separate staging credentials are unavailable and require external owner action; an independent staging Stripe account is not required at this stage. Do not describe the current configuration as a misconfiguration and do not request new credentials. Stage 4B-1 should verify configuration resolution and expected payment/webhook routing only. Do not record secret values.
+4. **MatterDocument S3.** Create a dedicated private staging bucket with Block Public Access enabled, SSE-S3/AES256, and `BucketOwnerEnforced` ownership. There is no public URL dependency or client-controlled object access. Start with versioning **OFF**; production versioning can be reconsidered later. Future IAM must be least privilege. No bucket or IAM changes occur now.
+5. **Malware scanning.** Preferred architecture is GuardDuty Malware Protection for S3 + EventBridge + SQS/DLQ + a private reconciliation worker. Do not implement in Stage 4B-0. The application's existing `securityStatus` state machine remains authoritative.
+6. **Policy Intelligence operator.** Do not run policy sync inside the chatbot web service. Use independent operator execution, preferably a dedicated ECS scheduled task. Initial operation is **MANUAL ONLY**, with no recurring schedule. After validation, daily Australia/Sydney cadence may be considered. No scheduler implementation occurs now.
+7. **ECS deployment safety.** Future ECS deployment enables the deployment circuit breaker and automatic rollback while keeping the current rolling deployment strategy. Do not modify ECS now.
+
+Rejected choices are therefore: keeping the current RDS as the long-term staging DB; migrating 0023 on the old RDS; treating Stripe namespace reuse as a blocker or obtaining new Stripe credentials now; enabling S3 versioning initially; running policy sync in the web service or enabling an initial recurring schedule; and rolling out ECS without the circuit breaker/automatic rollback. These decisions do not authorize present execution.
+
+### Approved Stage 4B-1 order
+
+1. **RDS replacement preparation** — Objective: prepare encrypted private replacement and preserve a recoverable source. Prerequisite: controlled source preflight and approved change window. Rollback anchor: unchanged old staging RDS and verified source snapshot.
+2. **Database cutover and migration verification** — Objective: cut application database use to the replacement and verify migration 0023/application connectivity. Prerequisite: replacement ready, target preflight complete, and migration acknowledged. Rollback anchor: old RDS plus captured prior staging database references/task definition; preserve the new DB for diagnosis.
+3. **Build/update deployment artifacts** — Objective: prepare reviewed artifacts for the accepted P11-009 source. Prerequisite: database cutover accepted and source/release revision fixed. Rollback anchor: currently deployed image digests and task definition revision 30.
+4. **ECS rollout** — Objective: deploy the reviewed artifacts with rolling strategy, circuit breaker, and automatic rollback. Prerequisite: artifacts available and health checks/rollback settings reviewed. Rollback anchor: captured prior task definition and deployed image digests.
+5. **MatterDocument S3 infrastructure** — Objective: provide the dedicated private staging bucket and least-privilege application access. Prerequisite: bucket design and ownership approved, with S3 public-access/encryption controls specified. Rollback anchor: disable the new application reference/IAM access while retaining bucket data for diagnosis.
+6. **Scanner integration** — Objective: connect GuardDuty scan results through EventBridge and SQS/DLQ to a private reconciler while retaining application `securityStatus` authority. Prerequisite: bucket available and failure/duplicate handling agreed. Rollback anchor: disable event consumption and keep uploads fail-closed/pending under the existing state machine.
+7. **Policy Intelligence operator** — Objective: run policy sync through a separate operator in manual mode. Prerequisite: reviewed operator artifact, secrets/network access, and single-flight controls. Rollback anchor: disable/stop the operator task; no recurring schedule is enabled initially.
+8. **Runtime acceptance** — Objective: confirm deployment succeeds, critical paths work, security boundaries hold, and rollback is available. Prerequisite: preceding approved phases complete. Rollback anchor: the captured prior task definition/images, old RDS, and retained diagnostic resources.
+
+Acceptance is a safe deployment with known risks and rollback capability, not proof of zero defects. Deployment success, critical-path behavior, security boundaries, and rollback availability are the focus; minor UI or non-critical defects alone do not block deployment.
+
+### Remaining approvals before Stage 4B-1 execution
+
+- Confirm the maintenance/write-quiesce window, cutover owner, rollback owner, and final change window.
+- At execution planning, choose the approved KMS key approach and confirm replacement DB size/network/resource details and associated cost; the selected approach must remain encrypted and private.
+- Approve the concrete staging bucket name, cost/ownership tags, and execution change window; keep the agreed private, encrypted, versioning-off design.
+- Confirm operational owners for scanner alerts/DLQ and manual Policy Intelligence failures, and approve any later daily cadence separately after validation.
+- Approve the final reviewed artifacts and staged AWS change set immediately before Stage 4B-1 actions.
+
+Stage 4B-0 is complete. Stage 4B-1 has not started. No AWS resource, database, IAM policy, deployment artifact, or application source was changed; no migration, deployment, commit, or push was performed.
+
+### Stage 4B approved snapshot creation — 2026-10-01
+
+Owner approved creation of exactly one manual snapshot from the existing staging database. Snapshot `immigration-ai-staging-pre-p11-009-4b-20261001` was created from `immigration-ai-staging-postgres` in `ap-southeast-2`.
+
+- ARN: `arn:aws:rds:ap-southeast-2:747452892291:snapshot:immigration-ai-staging-pre-p11-009-4b-20261001`
+- Status: `available` (100% complete at final read)
+- Encrypted: `false` (source snapshot is unencrypted; no encrypted copy was made)
+- Creation time: `2026-10-01T00:44:33.214000+00:00`
+
+The source RDS remains unchanged and retained as the rollback anchor. This was the only AWS mutation in this step. No snapshot copy, RDS restore, subnet/security-group/networking change, migration, ECS update, S3/IAM change, policy sync, or deployment was performed. Stage 4B remains in progress; stop here and await approval before the next mutation.
+
+### Stage 4B approved encrypted snapshot copy — 2026-10-01
+
+Owner approved copying only the existing manual staging snapshot to an encrypted copy. The copy is complete and available.
+
+- Snapshot: `immigration-ai-staging-pre-p11-009-4b-20261001-encrypted`
+- ARN: `arn:aws:rds:ap-southeast-2:747452892291:snapshot:immigration-ai-staging-pre-p11-009-4b-20261001-encrypted`
+- Encryption: enabled; AWS-managed RDS KMS key `alias/aws/rds` (`arn:aws:kms:ap-southeast-2:747452892291:key/ebe23512-d5dc-4bc4-a2d1-bcb407bc2ccc`)
+- Status: `available` (100% complete at final read)
+- Source snapshot: `arn:aws:rds:ap-southeast-2:747452892291:snapshot:immigration-ai-staging-pre-p11-009-4b-20261001`
+- Creation time: `2026-10-01T00:55:07.060000+00:00`
+
+No RDS restore, subnet/network/security-group/ECS change, migration, S3/IAM change, policy sync, or deployment was performed. The source database and unencrypted source snapshot remain unchanged. Stop here and await approval before the next mutation.
+
+### Stage 4B private-network prerequisites — 2026-10-01
+
+Owner approved creation of only the private networking prerequisites for the future staging RDS restore. Final read-only verification confirmed:
+
+- RDS subnet group `immigration-ai-staging-db-private-subnet-group` — ARN `arn:aws:rds:ap-southeast-2:747452892291:subgrp:immigration-ai-staging-db-private-subnet-group`; status `Complete`.
+- Private subnet `subnet-0ebf23bb3c526add8` — `172.31.48.0/24`, `ap-southeast-2a`; `MapPublicIpOnLaunch=false`.
+- Private subnet `subnet-055d274980dd1aa6e` — `172.31.49.0/24`, `ap-southeast-2b`; `MapPublicIpOnLaunch=false`.
+- Dedicated route table `rtb-0dbf3c5d3de2d788c` — only route is active local VPC route `172.31.0.0/16`; no Internet Gateway or NAT route. Associations are `rtbassoc-0b271e185fa4806ba` to the 2a subnet and `rtbassoc-09028785a42f15f66` to the 2b subnet; both are associated and non-main.
+- Dedicated DB security group `immigration-ai-staging-postgres-private-sg` — ID `sg-0c4361ad74a4183cb`; ingress is TCP 5432 only from chatbot SG `sg-0223d743f5721b006` and Legal Service SG `sg-0e32ee9fb1b6b5ea3`; no CIDR ingress. Egress rules are empty.
+
+Existing public subnets and route table were not modified. The old RDS remains available and unchanged. No RDS restore, ECS change, application-secret change, migration, or traffic cutover occurred. Stop here and await separate approval before restoring the encrypted snapshot.
+
+### Stage 4B approved private RDS restore — 2026-10-01
+
+Owner approved restoring the encrypted snapshot into a new private staging DB instance. Final read-only verification reports:
+
+- Identifier: `immigration-ai-staging-postgres-secure`
+- Endpoint: `immigration-ai-staging-postgres-secure.ctkuiomwqo61.ap-southeast-2.rds.amazonaws.com:5432`
+- Status: `available`
+- Source snapshot: `immigration-ai-staging-pre-p11-009-4b-20261001-encrypted`
+- Encryption: enabled; KMS key `arn:aws:kms:ap-southeast-2:747452892291:key/ebe23512-d5dc-4bc4-a2d1-bcb407bc2ccc`
+- Accessibility: `PubliclyAccessible=false`
+- Subnet group: `immigration-ai-staging-db-private-subnet-group` (subnets in `ap-southeast-2a` and `ap-southeast-2b`)
+- Security group: `sg-0c4361ad74a4183cb` (`immigration-ai-staging-postgres-private-sg`)
+- Configuration: PostgreSQL 18.3, `db.t4g.micro`, 20 GiB gp3, 3000 IOPS / 125 MiB/s, `default.postgres18` in-sync, single-AZ.
+
+The existing `immigration-ai-staging-postgres` remains available and unchanged. No migration, DB preflight, application-secret update, ECS change, or traffic cutover was performed. Stop here and await approval before any further action.
+
+### Stage 4B migration preflight attempt — 2026-10-01
+
+The approved preflight was attempted against `immigration-ai-staging-postgres-secure` using the repository command `pnpm db:preflight`. The staging `POSTGRES_URL` was retrieved and handled in memory only; its hostname was retargeted to the new RDS endpoint, and no credential was printed or written. Preflight exited with code 1 and emitted no database/ledger summary. A credential-free network check resolved the target to private address `172.31.48.11`, but TCP 5432 timed out from this execution environment. Thus the target database identity and migration ledger remain **UNVERIFIED**. Repository migration head is `0023_chief_famine`.
+
+Migration 0023 was **NOT RUN** because the approved preflight could not verify the target identity and ledger. The new RDS remains unchanged by this attempt; the old RDS, ECS, application secrets, and traffic were not changed. Database connectivity from this execution host is **UNAVAILABLE**. A controlled in-VPC execution path using the current repository migration operator is required before preflight and the acknowledged migration can proceed. Stop and obtain approval for that execution path; do not cut over application traffic.
+
+### Stage 4B in-VPC migration-runner reconnaissance — 2026-10-01
+
+Read-only staging topology review; no AWS mutation, task creation, service update, database connection, or migration was performed.
+
+**Existing ECS topology**
+
+- VPC: `vpc-04c15c51747904e9a` (`172.31.0.0/16`).
+- Cluster `immigration-ai-staging`: `ACTIVE`, FARGATE capacity provider.
+- Service `immigration-ai-staging-web`: `ACTIVE`, 1 desired/running Fargate task, task definition `immigration-ai-staging-web:30`, `awsvpc` network mode.
+- Service subnets: `subnet-020c9fa83beff2e52` (`ap-southeast-2a`), `subnet-0a501eeb320072fae` (`ap-southeast-2c`), and `subnet-05a1fd04555a84d62` (`ap-southeast-2b`). These are the existing public-route subnets. Service `assignPublicIp=ENABLED`.
+- Service security group: chatbot SG `sg-0223d743f5721b006`. It has outbound allow-all and inbound TCP 3000 only from the ALB security group.
+- New private DB network already prepared: subnet group `immigration-ai-staging-db-private-subnet-group`, subnets `subnet-0ebf23bb3c526add8` (`ap-southeast-2a`) and `subnet-055d274980dd1aa6e` (`ap-southeast-2b`), local-only route table `rtb-0dbf3c5d3de2d788c`.
+- New DB security group `sg-0c4361ad74a4183cb` allows TCP 5432 only from chatbot SG `sg-0223d743f5721b006` and Legal Service SG `sg-0e32ee9fb1b6b5ea3`; it has no egress rules. The VPC currently has no NAT gateway or VPC endpoints.
+- Task execution role: `arn:aws:iam::747452892291:role/immigration-ai-staging-ecs-execution-role`. Its standard ECS execution policy is attached; its inline policy allows SSM reads across the staging parameter path, reads of the two production-namespaced Stripe parameters, and `kms:Decrypt` on `*`. Do not reuse this broad role for a migration runner.
+- Existing task role: `arn:aws:iam::747452892291:role/immigration-ai-staging-ecs-task-role`; its inline policy is transactional SES access. Do not reuse application task permissions for the runner.
+- ECS Exec is disabled on the service. Revision 30 is a web task definition with chatbot and Legal Service containers and their application secrets, not a dedicated migration job.
+
+**Can a one-off task run and reach the DB?** ECS/Fargate supports a separate one-off `RunTask` using `awsvpc` in this VPC. VPC-local routing connects task ENIs to the private RDS subnets. With the currently allowed chatbot SG, a task could reach port 5432 because that SG is an allowed source on the DB SG; however, reusing it also inherits broad outbound and ALB-originated TCP 3000 ingress. The safest design is a dedicated runner SG with no ingress and a temporary, exact DB-SG ingress rule for TCP 5432 from that runner SG. No connection or task was attempted.
+
+**Recommended runner type**
+
+Use a short-lived, dedicated Fargate `RunTask` with its own migration-only image built from the reviewed repository revision containing migration `0023_chief_famine`; do not reuse the current web task definition/image or run ECS Exec (disabled). Place it in private VPC subnets with `assignPublicIp=DISABLED`, a no-ingress runner SG, and a hard task timeout. The currently prepared private subnet route table has only the local route, so a private runner also needs private AWS service connectivity for ECR image pull (ECR API/DKR and S3 image layers), CloudWatch Logs, and SSM parameter retrieval. No such VPC endpoints currently exist. Provide those through approved VPC endpoints and endpoint SG/policy controls (or separately approve another bounded egress design); do not add a NAT/IGW route to the DB subnets by default.
+
+The runner entrypoint should receive only the required staging DB secret through ECS secret injection, validate the source URL's known old-RDS host, replace only the host with the approved private target in memory, and run the repository preflight followed by the acknowledged migration. It must not log environment values or command-line credentials. The current deployment image predates the present repository migration head, so use an artifact built from the exact reviewed migration source.
+
+**Required permissions**
+
+- Dedicated task execution role: ECR authorization/image-read permissions scoped to the runner repository; log-stream write permissions scoped to its dedicated log group; and `ssm:GetParameters` only for `/immigration-ai/staging/chatbot/postgres-url`. Allow KMS decrypt only as required by that parameter's encryption key. Avoid the current execution role's broad staging/production Stripe read scope and wildcard KMS decrypt.
+- Dedicated task role: no AWS permissions required for the migration process if secret retrieval is performed by ECS execution-role injection and the process only connects to PostgreSQL.
+- One-off operator: `ecs:RunTask`, `ecs:DescribeTasks`, and `ecs:StopTask` scoped to the dedicated task/cluster, plus `iam:PassRole` only for the dedicated task and execution roles. If the task definition must be registered, separately scope `ecs:RegisterTaskDefinition` and the same `iam:PassRole` permissions.
+- Temporary network authorization: add only TCP 5432 ingress to the new DB SG from the runner SG; the runner SG should allow DB TCP 5432 and only the HTTPS paths needed to the approved private endpoints.
+
+**Network path and cleanup**
+
+Path: private Fargate task ENI → VPC local route → private RDS endpoint:5432, with no public IP; task startup/logging/secret traffic stays on private ECR/S3/Logs/SSM endpoints. RDS remains non-public. The runner SG is removed from the DB SG ingress immediately after the task exits. Stop the task if still running, retain bounded logs without secrets, deregister its task definition after diagnosis, then remove its SG and any runner-only endpoints/subnets only after confirming they are unused and receiving the relevant cleanup approval. Leave the restored and old DBs intact; no schema rollback or traffic cutover is part of runner cleanup.
+
+AWS reference: [ECS `awsvpc` task networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking-awsvpc.html).
+
+### Stage 4B migration-runner path comparison — 2026-10-01
+
+Bounded decision analysis only. No AWS resources were created or modified; no task was created, no database connection was made, and no migration was run. Current VPC reconnaissance found no NAT gateway or VPC endpoints. The private DB route table is local-only; existing public-route ECS subnets have internet egress and use public task IPs.
+
+| Factor | Option A — permanent private endpoints (ECR API, ECR DKR, S3 gateway, CloudWatch Logs, SSM) | Option B — temporary migration-only path |
+|---|---|---|
+| Implementation time | Higher for this migration: create/configure four interface endpoints, endpoint security/policies and private DNS, associate the S3 gateway endpoint with route tables, then validate private task startup and logging. | Lower for a single run: use a dedicated one-off Fargate task in an existing public-route subnet with a public IP for outbound image/SSM/log access, a dedicated no-ingress SG, and a temporary DB-SG TCP 5432 rule from that SG. Keep the RDS private. |
+| Cost | Ongoing hourly and data-processing charges for four interface endpoints, including idle periods; the S3 gateway endpoint has no additional endpoint charge. | Fargate task runtime, public IPv4 while assigned, and modest image/log/data-transfer charges. Public IPv4 is currently priced at USD $0.005/hour; task compute is billed for its runtime. Costs end with task/IPv4 cleanup. |
+| Security impact | Stronger private-only service path: no public runner IP is needed, with endpoint SGs and policies available to constrain access. Endpoints create persistent private service paths that require narrowly scoped policies and ongoing review. | Weaker network isolation while the task runs because it has a public IP and outbound internet path. Reduce exposure with no ingress, a dedicated least-privilege task/execution role, a dedicated SG, a fixed task lifetime, and DB ingress limited to that SG on 5432. The database remains private. |
+| Rollback complexity | More infrastructure to remove later; first confirm no other private workloads depend on the endpoints, then remove endpoint associations/endpoints and policies. | Straightforward after the run: stop the task, remove the temporary DB-SG rule, then remove the task definition/runner SG and related temporary artifacts. Preserve logs for the migration record. |
+
+**Recommendation for this single staging migration: Option B**, using the bounded one-off Fargate path described above. It has the shorter implementation path and avoids ongoing endpoint charges for infrastructure with no current private-task dependency. Option A provides the tighter private service path and is a better fit if recurring private ECS workloads are approved. This is a recommendation only; it does not authorize creating resources or running the migration.
+
+Pricing references: [AWS PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/), [S3 gateway endpoints](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html), [Amazon VPC pricing](https://aws.amazon.com/vpc/pricing/), and [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/).
+
+### Stage 4B one-off migration runner preparation — 2026-10-01
+
+Option B (temporary one-off Fargate runner) is the selected path. This is a plan for approval only: read-only AWS metadata was checked; no AWS resources, task, secret, security rule, RDS setting, ECS service, or application deployment was changed. No DB connection or migration was attempted. Only this handoff file was updated.
+
+**Bounded task design**
+
+- Register a separate Fargate task-definition family `immigration-ai-staging-p11-009-migration`; do not use `immigration-ai-staging-web:30`. Use Linux/X86_64, `awsvpc`, 0.5 vCPU / 1 GiB, no ports, no application server, no privileged mode, read-only root filesystem, and one container with a fixed migration-only dispatcher. Its only allowed operations are the repository's `pnpm db:preflight` and acknowledged `pnpm db:migrate:operator -- --acknowledge-migrations --expect-database=<confirmed-name>` commands. Default task command is preflight; migration invocation requires the exact DB name learned from a successful preflight and a separately authorized task run.
+- Build a purpose-built image from source revision `f5605b0e336fe7eb75326a18cf64c2e53dd4a3d9`, containing only the migration operator, required runtime dependencies, and migration files (head `0023_chief_famine`), with a wrapper that invokes only those repository commands. Do not use the current web image: it predates this migration head and is not a migration runner. Push a uniquely tagged image to existing ECR repository `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot` (scan-on-push enabled; repository currently uses mutable tags); register the task definition with the resulting immutable image digest. No new ECR repository is needed.
+- Inject only `POSTGRES_URL` from `/immigration-ai/staging/chatbot/postgres-url` (ARN `arn:aws:ssm:ap-southeast-2:747452892291:parameter/immigration-ai/staging/chatbot/postgres-url`). It is a `SecureString` encrypted with `alias/aws/ssm`. The runner wrapper must validate the injected URL host equals the old staging DB endpoint `immigration-ai-staging-postgres.ctkuiomwqo61.ap-southeast-2.rds.amazonaws.com`, replace only the hostname in memory with `immigration-ai-staging-postgres-secure.ctkuiomwqo61.ap-southeast-2.rds.amazonaws.com`, preserve the database name/credentials, and never print or persist the URL. No other application secret, Stripe value, provider credential, or runtime setting is included. The exact database name remains to be confirmed by preflight.
+
+**Exact proposed AWS resources and network**
+
+1. IAM execution role `immigration-ai-staging-p11-009-migration-execution-role`, trusted by `ecs-tasks.amazonaws.com`, with a custom least-privilege inline policy only: `ecr:GetAuthorizationToken` (Resource `*` as required by AWS) plus ECR image pull actions scoped to repository `immigration-ai/chatbot`; `logs:CreateLogStream`/`logs:PutLogEvents` scoped to the dedicated log group streams; and `ssm:GetParameters` scoped only to the staging chatbot DB parameter ARN. No Stripe, application, SES, S3, provider, or broad KMS permissions. AWS ECS documentation says `kms:Decrypt` is needed only for a customer-managed key; this parameter uses the AWS-managed `alias/aws/ssm` key.
+2. IAM task role `immigration-ai-staging-p11-009-migration-task-role`, ECS task trust only and no attached permission policies. The container needs no AWS API permissions; ECS agent secret retrieval, image pull, and log delivery use the execution role.
+3. CloudWatch log group `/ecs/immigration-ai-staging/p11-009-migration`, create before task registration, 14-day retention; emit only sanitized operator summaries/errors.
+4. Security group `immigration-ai-staging-p11-009-migration-runner-sg` in VPC `vpc-04c15c51747904e9a`, with no ingress. Egress: TCP 5432 to restored DB SG `sg-0c4361ad74a4183cb`; TCP 443 to `0.0.0.0/0` only while the runner exists, for public ECR, SSM, and CloudWatch Logs endpoints. Security groups do not filter by FQDN, so the temporary HTTPS destination range is broader than named AWS endpoints; no other outbound ports are needed. This tradeoff is bounded by no ingress, a single-purpose image/role, and short task lifetime.
+5. A temporary ingress permission on the restored DB SG `sg-0c4361ad74a4183cb`: TCP 5432, source exactly the runner SG above. Remove it as soon as the one-off task stops. This does not change the RDS instance's `PubliclyAccessible=false` setting or the old RDS.
+6. Task-definition family `immigration-ai-staging-p11-009-migration`, referencing the purpose-built image by digest, the two dedicated roles, the exact SSM parameter, dedicated log group, and preflight-only default command. No ECS service update or service task-definition change.
+7. ECR image push to the existing `immigration-ai/chatbot` repository is a required artifact publication, not creation of a repository; the pushed unique tag/digest must be recorded and the task definition pinned to the digest.
+
+**Verified subnet and route choice**
+
+Use existing public-route subnet `subnet-020c9fa83beff2e52` (`ap-southeast-2a`, VPC `vpc-04c15c51747904e9a`, `172.31.0.0/20`). It has no explicit route-table association and inherits main route table `rtb-04c841decc28b6afd`, whose active routes are VPC-local `172.31.0.0/16` and `0.0.0.0/0` via IGW `igw-07c407c09e387ca16`. The subnet has `MapPublicIpOnLaunch=true`; the ECS `RunTask` network configuration must explicitly set `assignPublicIp=ENABLED` because there is no NAT or service endpoint path. Fargate cluster `immigration-ai-staging` is `ACTIVE` with FARGATE capacity provider; service task definition `:30` is Linux/X86_64, Fargate-compatible `awsvpc`, confirming the selected launch/network mode. The task ENI reaches the private DB over the VPC-local route. Public IP belongs only to the short-lived runner; the restored RDS remains private.
+
+**Creation and cleanup order**
+
+After approval: build/scan/push the minimal image and record its digest; create the log group and two dedicated IAM roles/policy; create the no-ingress runner SG; add only the temporary DB ingress rule; register the preflight-only task definition; then stop for review of preflight output before any migration-run approval. No `RunTask` is included in this resource-creation approval unless explicitly stated.
+
+Rollback/removal: if a task was later authorized and started, stop it first; revoke the temporary DB-SG ingress immediately; preserve sanitized CloudWatch logs for the record; deregister the task-definition revision; remove the runner SG and dedicated IAM policy/roles; remove the unique ECR image tag after retaining the required artifact record; delete the log group only after required logs are retained. No service change or RDS-instance change needs rollback. Infrastructure cleanup does not reverse database schema changes if a later, separately approved migration runs.
+
+**Expected incremental cost**
+
+No standing VPC endpoint or NAT cost is introduced. A single 0.5-vCPU/1-GiB Fargate task is billed from image download until task termination, rounded to seconds, plus one public IPv4 at USD $0.005/hour while attached, image/log storage, and small data-transfer charges. Task-definition/IAM/security-group resources have no hourly compute charge; the retained image and log storage have storage charges. Exact Fargate rate varies by region and is not estimated here. [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/) and [Amazon VPC public IPv4 pricing](https://aws.amazon.com/vpc/pricing/).
+
+AWS references: [ECS task execution role and SSM permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html), [ECS `awsvpc` networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-networking-awsvpc.html), and [Fargate pricing](https://aws.amazon.com/fargate/pricing/).
+
+### Stage 4B migration-only runner resources prepared — 2026-10-01
+
+Owner approved the bounded runner resource preparation. All authorized resources were created and read-back verified. No ECS task was started; `RunTask`, `db:preflight`, migration 0023, and all database connections remain **NOT RUN**. ECS service `immigration-ai-staging-web` remains ACTIVE on `immigration-ai-staging-web:30` with desired/running count 1. No application secret, RDS instance configuration, old RDS, or traffic was changed.
+
+**Image**
+
+- Built from reviewed application source commit `f5605b0e336fe7eb75326a18cf64c2e53dd4a3d9` in an isolated `/tmp` context. The image contains only the migration operator, preflight helper, migration files/journal, pinned `drizzle-orm` 0.34.1, `postgres` 3.4.5, `tsx` 4.19.3, and a fixed dispatcher; it does not contain the web app runtime.
+- Existing ECR repository: `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot` (no new repository).
+- Unique tag: `p11-009-stage4b-migration-f5605b0`
+- Immutable digest: `sha256:cc787a26c3edf7b73e033100471c47d3a179803fbfd6cd5c5ebbd4144b7136be`
+- ECR image scan status: `COMPLETE`. The local Docker registry login was removed after push.
+- Dispatcher defaults to `preflight`; its migration mode requires an explicit expected database name. It validates the injected source host against the old staging RDS hostname and replaces only the host in memory with the private restored RDS endpoint. It never prints the URL.
+
+**Created AWS resources**
+
+- Execution role: `arn:aws:iam::747452892291:role/immigration-ai-staging-p11-009-migration-execution-role`. No managed policies. Its only inline policy grants ECR auth plus image pulls from `immigration-ai/chatbot`, log stream creation/write to the dedicated log group, and `ssm:GetParameters` for only `/immigration-ai/staging/chatbot/postgres-url`. No Stripe, application, SES, provider, S3, or KMS permissions.
+- Empty task role: `arn:aws:iam::747452892291:role/immigration-ai-staging-p11-009-migration-task-role`. No managed, inline, or application permissions.
+- Log group: `/ecs/immigration-ai-staging/p11-009-migration`; retention 14 days.
+- Runner security group: `sg-0fe4dadb2de1ce6dd` in `vpc-04c15c51747904e9a`; ingress is empty. Egress is TCP 443 to `0.0.0.0/0` for HTTPS AWS service access and TCP 5432 only to restored DB SG `sg-0c4361ad74a4183cb`.
+- Temporary restored-DB SG ingress rule: `sgr-078ee14f3694eebd9`, TCP 5432 with source exactly runner SG `sg-0fe4dadb2de1ce6dd`. The existing chatbot and Legal Service source rules remain present. The restored RDS remains `PubliclyAccessible=false`.
+- Task definition: `arn:aws:ecs:ap-southeast-2:747452892291:task-definition/immigration-ai-staging-p11-009-migration:1`, status `ACTIVE`; Fargate, Linux/X86_64, `awsvpc`, 512 CPU / 1024 MiB. It is pinned to the ECR digest above, uses the two dedicated roles, has a read-only root filesystem and non-root UID/GID 1000, exposes no ports, and references only the staging chatbot DB parameter as a secret. Default command is `preflight`; log output goes to the dedicated 14-day group.
+
+**Network confirmation**
+
+Runner subnet remains `subnet-020c9fa83beff2e52` (`ap-southeast-2a`) in VPC `vpc-04c15c51747904e9a`. It inherits main route table `rtb-04c841decc28b6afd` with active local and Internet Gateway default routes; `RunTask` must explicitly set `assignPublicIp=ENABLED`. The task-to-RDS path uses the VPC-local route. Private RDS subnets/route table were not changed. Runner SG outbound HTTPS is limited to TCP 443, though destination is `0.0.0.0/0` because security groups cannot restrict by FQDN.
+
+Read-back confirmed no task in RUNNING state for the migration family and confirmed the web service still uses revision 30. The task definition is registered but has not been run. The temporary database ingress rule and runner resources remain in place pending the separately approved preflight/run step and later cleanup approval. **Stop here; obtain separate approval before any `RunTask`, preflight, or migration execution.**
+
+### Stage 4B one-off preflight task attempt — 2026-10-01
+
+Owner approved exactly one `RunTask` using `immigration-ai-staging-p11-009-migration:1` for preflight only. No command override was supplied; the task definition default was `preflight`. ECS injected only the referenced staging DB parameter. The task ran in `subnet-020c9fa83beff2e52` with runner SG `sg-0fe4dadb2de1ce6dd` and a public IP for HTTPS service access.
+
+- Task ARN: `arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/ce658b19da204d5c8291a169534050f6`
+- Started: `2026-10-01T12:27:36.861000+10:00`
+- Stopped: `2026-10-01T12:28:01.559000+10:00`
+- Final status: `STOPPED`; container exit code `1`; stopped reason `Essential container in task exited`.
+- Sanitized failure: Corepack failed before launching `pnpm db:preflight` because it attempted to create `/home/node/.cache/node/corepack/v1` while the task root filesystem was read-only.
+- Preflight result: **NOT COMPLETED**. Target database identity and migration ledger status are **UNVERIFIED**. The runner did not emit a preflight summary. The reviewed repository migration head remains `0023_chief_famine`, but this task did not report it.
+- No DB connection was made and no migration command was launched; therefore no database migration or schema change occurred. This is supported by the container log failing at Corepack startup before pnpm/operator execution.
+- Final read-back confirmed this task is `STOPPED`, no migration runner task is running, and `immigration-ai-staging-web` remains ACTIVE on revision 30 with one desired/running task.
+
+No task retry, image change, task-definition change, DB query, migration, secret/RDS/service change, or traffic cutover was performed. The dedicated runner resources and temporary DB SG ingress remain as previously prepared; cleanup is pending its separately authorized step. Stop here and obtain separate approval before rebuilding/revising the runner or making another `RunTask` attempt. Migration execution still requires separate approval after a successful preflight.
+
+### Stage 4B migration runner Corepack correction — 2026-10-01
+
+The single prior preflight task failed before repository preflight or DB access. Corepack attempted to create `/home/node/.cache/node/corepack/v1` while the container root filesystem was read-only. The image had prepared Corepack's pnpm cache under the build user's default location, but the task runs as UID/GID 1000 and Corepack therefore looked under `/home/node`.
+
+**Minimal runner-only correction**
+
+- Kept `readonlyRootFilesystem=true` and non-root UID/GID 1000.
+- Fargate does not support `tmpfs`; rather than add a writable `/tmp` mount, rebuilt the migration-only image from reviewed source revision `f5605b0e336fe7eb75326a18cf64c2e53dd4a3d9` with pnpm 9.12.3 pre-populated in `/opt/corepack`, readable by the runtime UID.
+- Set image and task-definition environment `COREPACK_HOME=/opt/corepack` and `COREPACK_ENABLE_NETWORK=0`, so Corepack uses the preloaded cache and cannot try to download pnpm at runtime. No writable filesystem mount or other infrastructure was added.
+- New ECR tag: `p11-009-stage4b-migration-f5605b0-corepackfix1`
+- New immutable ECR digest: `sha256:2e513c2f3f67ee47165890a8c96e5dd52b6160e6798c819275994cca43e2f6e8`
+- Registered task definition revision: `arn:aws:ecs:ap-southeast-2:747452892291:task-definition/immigration-ai-staging-p11-009-migration:2`; status `ACTIVE`, command remains `preflight`, image is pinned to the new digest, root filesystem remains read-only, runtime user remains `1000:1000`, and only the staging chatbot DB parameter is referenced as a secret.
+
+**Validation performed**
+
+- Corrected Docker build completed from the isolated reviewed source context; image inspection confirms the `/opt/corepack` environment, `COREPACK_ENABLE_NETWORK=0`, and preflight default command.
+- ECR read-back confirms the new tag/digest exists.
+- ECS task-definition read-back confirms revision 2 and the corrected environment, digest, secret reference, and read-only setting.
+- No task was started for this correction, no `RunTask` retry occurred, and no database connection, preflight, migration, application-service update, secret change, or RDS change was made. Read-only ECS checks confirmed no migration runner is currently running and the web service remains on revision 30.
+
+Stop here. Obtain separate approval before retrying `RunTask` for preflight; migration execution remains separately gated on successful preflight and its own approval.
+
+### Stage 4B revision-2 preflight retry — 2026-10-01
+
+Owner approved exactly one Fargate task using `immigration-ai-staging-p11-009-migration:2`, with its default command and no override. One task was started; no retry was made.
+
+- Task ARN: `arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/487e880a698641b5b9f7e071ef7ecfaa`
+- Started: `2026-10-01T12:39:33.426000+10:00`
+- Stopped: `2026-10-01T12:39:59.750000+10:00`
+- Final status: `STOPPED`; container exit code `1`; no migration runner task remains RUNNING.
+- Sanitized task log confirms the default command invoked `pnpm db:preflight`, which invoked `tsx scripts/db-migration-operator.ts --preflight`. `tsx` failed before the operator started because it could not create `/tmp/tsx-1000` on the read-only root filesystem. The Corepack issue is fixed (`COREPACK_HOME=/opt/corepack` worked); the remaining failure is the missing writable temporary directory required by `tsx`.
+- Database identity verification: **NOT COMPLETED**. Migration ledger status: **NOT COMPLETED / UNVERIFIED**. Repository migration head was not emitted by this task; the reviewed source journal head remains `0023_chief_famine`.
+- No DB connection occurred and no migration command/schema change occurred: execution stopped inside `tsx` before the repository migration operator could connect. The task command was preflight only and did not include `db:migrate` or `--acknowledge-migrations`.
+
+No task-definition, image, IAM, security-group, secret, RDS, or ECS service changes were made during this retry. Task definition revision 2 remains active; the web service remains on revision 30. Stop here. Obtain separate approval before any runner adjustment/retry, and separate approval before migration execution.
+
+### Stage 4B precompiled migration runner local correction — 2026-10-01
+
+**Confirmed root cause:** With `readonlyRootFilesystem=true` and runtime user `1000:1000`, `tsx` 4.19.3 attempts to create `/tmp/tsx-1000` for its runtime IPC server. The Fargate task's read-only root had no writable `/tmp`, so the command failed before the repository migration operator started.
+
+**Architectural correction:** The image now compiles `db-migration-operator.ts` to `dist/db-migration-operator.js` in its build stage using esbuild. The runtime dispatcher invokes that JavaScript directly with Node for both preflight and explicitly acknowledged migration modes. It preserves source-host validation, in-memory replacement with the private target host, explicit expected-database requirement for migration mode, and credential-safe errors. The runtime stage installs only `drizzle-orm` and `postgres`; it contains no `tsx`, esbuild, pnpm, or Corepack package/cache. Drizzle SQL migrations and journal are retained. Read-only root and UID/GID `1000:1000` remain; no writable `/tmp` workaround was added.
+
+**Files added/changed:**
+
+- `chatbot/Dockerfile.migration-runner` — multi-stage compile and minimal runtime image.
+- `chatbot/scripts/migration-runner-dispatch.mjs` — direct Node dispatcher with the existing DB host guard and approval gates.
+- `chatbot/migration-runner/package.json` and `chatbot/migration-runner/pnpm-lock.yaml` — pinned build/runtime dependency manifests; `esbuild` is build-only.
+- `chatbot/migration-runner/runtime.package.json` — minimal ESM runtime package metadata.
+- `docs/agent-memory/CURRENT_HANDOFF.md` — this validation record.
+
+**Local validation:**
+
+- Built locally: `docker build --platform linux/amd64 --file chatbot/Dockerfile.migration-runner --tag p11-009-migration-precompiled:local .` — **PASS**; TypeScript operator compiled to `dist/db-migration-operator.js`, production dependency install included only `drizzle-orm` and `postgres`.
+- Local image ID: `sha256:d64c91af942ad4b4e3f852f80ae28233096376f34cd20ae29afc0ebc32d71f02` (local only; not pushed to ECR).
+- Ran the requested command under a read-only root, UID/GID `1000:1000`, and `--network none`, supplying only a dummy URL: `docker run --rm --read-only --user 1000:1000 --network none -e POSTGRES_URL='<dummy validation URL>' p11-009-migration-precompiled:local preflight` — the compiled Node dispatcher/operator ran and exited `1` with only `Migration preflight or execution failed. Connection details were withheld.` This expected isolated-network failure occurred after the former `/tmp/tsx-1000`, tsx, and Corepack failure points; no database was reachable and no credentials were used.
+- `git diff --check` — **PASS**.
+
+**No ECS task, database connection, migration, or AWS runtime mutation was performed.** No image push or ECS task-definition registration was performed. ECR publication and a final corrected ECS task-definition revision remain subject to separate approval, as does any preflight retry and migration execution.
