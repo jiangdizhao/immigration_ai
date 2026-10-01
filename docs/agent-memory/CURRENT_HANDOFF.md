@@ -3025,3 +3025,21 @@ Focused validation was reported PASS: 41 tests, production build, and `git diff 
 - No database migration or connection occurred. No AWS call occurred. No live provider or official-source sync occurred.
 - Work remains uncommitted and unpushed. Step C is not implemented.
 - Unresolved issue: none identified in this source-only Step B change.
+
+## Policy Intelligence automatic maintenance Step B — ACCEPTED — 2026-10-01
+
+Remote implementation checkpoint `e741ff1b6d7ffc8dd662cd50e1c232d3256f272d` was independently reviewed and accepted.
+
+Accepted behavior:
+
+- Added authenticated admin-only Policy Intelligence management at `/admin/policy-intelligence`.
+- Admin can archive/unpublish and restore/reactivate durable live Policy Intelligence items.
+- Archive preserves snapshots/revisions/history and removes the item from public published reads.
+- Archived items are suppression tombstones. The automatic sync path skips archived items and the transaction-locked `publishRevision` path also refuses publication if archiving races with an in-flight publish.
+- Restore returns to `published` only when the latest published revision still matches the current latest snapshot; otherwise the item returns to `review_required`.
+- Existing admin authorization boundaries are reused; customer/lawyer permissions were not widened.
+- No schema migration, AWS call, deployment, or live provider/source sync was included.
+
+Focused validation was reported PASS: 53 tests, production build, and `git diff --check`.
+
+**Next active unit: Step C — deploy the independent Policy Intelligence operator and schedule one daily run at 06:00 Australia/Sydney.**
