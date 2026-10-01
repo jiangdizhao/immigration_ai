@@ -919,3 +919,22 @@ Stage-3 acceptance does not close D-040 and does not mark P11-005 VERIFIED.
 Stage 4 therefore starts with a **read-only authoritative staging reconnaissance gate**. Historical notes and local Compose must not be used to infer live AWS topology. Before any staging mutation, the project must inspect the actual ECS/Fargate, image, database, S3/IAM/BPA/encryption, malware-scanning, scheduler and routing state and produce an exact rollout/rollback plan.
 
 Stage-4 reconnaissance itself does not authorize deployment, migration, image push, ECS/task-definition updates, S3/IAM changes, scanner configuration, scheduler changes or DNS/routing changes. Those require a separate explicit owner authorization after the reconnaissance report.
+
+## D-053 — Policy Intelligence uses automatic daily maintenance with exception-only admin control
+
+**Date:** 2026-10-01  
+**Status:** ACCEPTED
+
+The owner rejected manual-only Policy Intelligence maintenance as the steady-state product model. The accepted operating model is automatic official-source maintenance with lawyer/admin intervention only for exceptions.
+
+The minimal implementation is intentionally three steps:
+
+1. **Step A:** one all-source serial operator command reusing the existing discovery -> acquisition -> AI analysis -> evidence verification -> publication pipeline for Home Affairs, Federal Register and ART. Existing publication-gate semantics remain authoritative: verified/eligible revisions may auto-publish; uncertain or unsupported revisions remain held/`review_required`. One source failure must not block attempts for the others.
+2. **Step B:** a minimal authenticated admin surface for archive/unpublish and restore. Existing `archived` lifecycle state should be reused where possible. Archived items are explicit suppression tombstones and must not be silently republished by later automatic sync until an authorized restore.
+3. **Step C:** one EventBridge Scheduler entry launches one independent ECS one-off Policy Intelligence operator task daily at **06:00 Australia/Sydney**. Scheduled sync must not run inside the long-lived web service.
+
+Manual reviewed fallback entries remain valid disaster-recovery content and must remain public-capable when the live pipeline is unavailable. Automated ingestion failure must never blank or retract existing reviewed/published content.
+
+The project must not add mandatory lawyer pre-publication review, queues/multi-worker orchestration, extra AI reviewer layers or a new Policy Intelligence architecture merely to achieve scheduling. Reuse the existing durable item/snapshot/revision/sync-run model and verifier/publication gate.
+
+Step A is the active coding unit. Step B and Step C require separate implementation/review and must not be bundled into Step A.
