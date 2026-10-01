@@ -2953,3 +2953,25 @@ Do not add Kafka, a policy queue, multi-worker orchestration, mandatory lawyer a
 ### Current execution point
 
 The emergency UI hotfix remains closed and accepted. **Step A is now the next coding unit.** Step B and Step C must not be implemented implicitly in the Step-A coding task.
+
+## Policy Intelligence automatic-maintenance Step A implementation — 2026-10-01
+
+**Scope:** Step A only. Added a thin all-source CLI wrapper around the existing single-source policy:sync operator. The wrapper runs child processes serially in the configured order: home-affairs-guidance, federal-register-legislation, then art-immigration-review. Child stdout/stderr is discarded; the wrapper prints only source IDs, succeeded/failed status, aggregate status, and exit code. A failed source does not prevent later attempts. The command exits 0 only when all three succeed and 1 if any fail. The existing discovery, acquisition, analysis, verification, repository and publication path is reused without pipeline or schema changes.
+
+**Publication contract:** Existing pipeline coverage was run and left unchanged. It verifies verified/eligible publication; unsupported decisive claims, uncertain source status, and unsupported source status remain held/review_required; failed later work does not remove existing published history.
+
+**Changed files:**
+
+- chatbot/package.json — added policy:sync-all, preserving policy:sync.
+- chatbot/scripts/policy-sync-all.ts — serial subprocess orchestration and safe aggregate status.
+- chatbot/scripts/policy-sync-all.test.ts — offline ordering, serial execution, continue-after-failure, aggregate exit, and summary-redaction tests.
+- docs/agent-memory/CURRENT_HANDOFF.md — this implementation record.
+
+**Validation:**
+
+- Focused command: pnpm exec node --import tsx --test scripts/policy-sync-all.test.ts lib/policy-intelligence/pipeline.test.ts — PASS, 41 passed, 0 failed, 0 skipped.
+- pnpm build — PASS. Next.js emitted a non-blocking notice that the local baseline-browser-mapping data is over two months old.
+- git diff --check — PASS.
+- No AWS call or resource change occurred. No database connection or migration occurred. No live OpenAI/provider or official-source sync occurred.
+- Work remains uncommitted and unpushed. Step B and Step C are not implemented.
+- Unresolved issue: none identified in this Step A source-only change.

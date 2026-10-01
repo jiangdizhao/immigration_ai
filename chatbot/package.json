@@ -29,6 +29,7 @@
     "matter-documents:purge": "tsx scripts/matter-document-maintenance.ts purge",
     "build:document-parser-worker": "node scripts/build-document-parser-worker.mjs",
     "policy:sync": "node --conditions=react-server --import tsx scripts/policy-sync.ts",
+    "policy:sync-all": "node --conditions=react-server --import tsx scripts/policy-sync-all.ts",
     "s3:preflight": "tsx scripts/s3-security-preflight.ts",
     "test:stage3:e2e": "playwright test -c playwright.stage3.config.ts",
     "build:guardduty-malware-reconciler": "node scripts/build-guardduty-malware-reconciler.mjs"
