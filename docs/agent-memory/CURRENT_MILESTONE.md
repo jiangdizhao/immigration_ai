@@ -982,3 +982,22 @@ Step B is now the only active implementation unit:
 - no scheduler/AWS work yet.
 
 Step C remains planned: one daily EventBridge Scheduler -> independent ECS one-off operator at 06:00 Australia/Sydney.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — STEP B ACCEPTED / STEP C ACTIVE
+
+Step B is accepted at `e741ff1b6d7ffc8dd662cd50e1c232d3256f272d`.
+
+Step C is now the only active implementation unit.
+
+Target:
+
+- package the existing `pnpm policy:sync-all` operator into an independent ECS one-off runnable artifact;
+- do not run sync inside the long-lived chatbot web service;
+- use one EventBridge Scheduler entry;
+- cadence: **daily at 06:00 Australia/Sydney**;
+- use the already accepted all-source serial orchestration;
+- preserve existing verifier-gated auto-publication and archived-item suppression;
+- manual reviewed fallbacks remain disaster recovery;
+- perform one bounded live acceptance after deployment.
+
+Keep Step C operationally small: one operator task definition, one schedule, one schedule role if required, and the minimum existing secret/network wiring needed to run.
