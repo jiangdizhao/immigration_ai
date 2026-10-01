@@ -541,3 +541,16 @@ Current active unit is **Step A only**.
 Policy Intelligence Step A is accepted at `4f6b1a905698970ae8a21ede41531cfd53f2dab4`. The repository now has one all-source serial operator command while preserving the existing verifier-gated publication pipeline.
 
 Current active unit is **Step B only**: minimal authenticated admin archive/restore control plus durable suppression of archived items across future syncs. Step C scheduling remains unimplemented.
+
+## 2026-10-01 automatic maintenance checkpoint — Step B accepted
+
+Step B is accepted at `e741ff1b6d7ffc8dd662cd50e1c232d3256f272d`.
+
+The system now supports:
+
+- all-source serial policy sync;
+- verifier-gated automatic publication;
+- admin archive/unpublish and restore;
+- durable archived suppression across future syncs.
+
+Current active unit is **Step C**: deploy an independent Policy Intelligence operator and schedule it once daily at 06:00 Australia/Sydney. The long-lived web service must not execute scheduled sync.
