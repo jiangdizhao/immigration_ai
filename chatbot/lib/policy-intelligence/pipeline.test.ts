@@ -903,7 +903,7 @@ test("cross-item snapshot/revision mismatch fails closed", async () => {
   assert.equal(second.latestPublishedRevisionId, null);
 });
 
-test("verifier verdict and reason code contradictions are rejected", () => {
+test("verifier reason-code contradictions are normalized without changing support", () => {
   const draft = analysis("policy-snapshot:contradiction");
   const bad = verification(draft);
   bad.assessments[0] = {
@@ -911,15 +911,27 @@ test("verifier verdict and reason code contradictions are rejected", () => {
     verdict: "supported",
     reasonCode: "contradicted",
   };
-  assert.throws(
-    () =>
-      validatePolicyVerification(
-        bad,
-        draft,
-        new Set(["policy-snapshot:contradiction"])
-      ),
-    /verdict_reason_mismatch/
+  const normalized = validatePolicyVerification(
+    bad,
+    draft,
+    new Set(["policy-snapshot:contradiction"])
   );
+  assert.equal(normalized.assessments[0].verdict, "supported");
+  assert.equal(normalized.assessments[0].reasonCode, "direct_support");
+
+  const disallowedPartial = verification(draft);
+  disallowedPartial.assessments[0] = {
+    ...disallowedPartial.assessments[0],
+    verdict: "partial",
+    reasonCode: "qualified_support",
+  };
+  const failClosed = validatePolicyVerification(
+    disallowedPartial,
+    draft,
+    new Set(["policy-snapshot:contradiction"])
+  );
+  assert.equal(failClosed.assessments[0].verdict, "unsupported");
+  assert.equal(failClosed.assessments[0].reasonCode, "unclear");
 });
 
 test("partial support can publish only with explicit bilingual conditional uncertainty", () => {

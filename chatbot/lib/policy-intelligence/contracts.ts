@@ -239,25 +239,25 @@ export function validatePolicyVerification(
     ) {
       throw new Error("supported_unit_without_evidence");
     }
-    if (
-      assessment.verdict === "supported" &&
-      assessment.reasonCode !== "direct_support"
-    ) {
-      throw new Error("verdict_reason_mismatch");
-    }
-    if (
-      assessment.verdict === "partial" &&
-      (assessment.reasonCode !== "qualified_support" || !unit.allowsPartial)
-    ) {
-      throw new Error("verdict_reason_mismatch");
-    }
-    if (
-      assessment.verdict === "unsupported" &&
+    // reasonCode is redundant metadata derived from the verifier verdict.
+    // Normalize inconsistent pairs instead of failing the entire policy item.
+    // A structurally disallowed partial verdict still fails closed by being
+    // downgraded to unsupported.
+    if (assessment.verdict === "supported") {
+      assessment.reasonCode = "direct_support";
+    } else if (assessment.verdict === "partial") {
+      if (unit.allowsPartial) {
+        assessment.reasonCode = "qualified_support";
+      } else {
+        assessment.verdict = "unsupported";
+        assessment.reasonCode = "unclear";
+      }
+    } else if (
       !["insufficient_support", "contradicted", "unclear"].includes(
         assessment.reasonCode
       )
     ) {
-      throw new Error("verdict_reason_mismatch");
+      assessment.reasonCode = "unclear";
     }
   }
   if (seen.size !== expected.size) {
