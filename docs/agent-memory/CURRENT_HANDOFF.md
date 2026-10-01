@@ -2854,3 +2854,49 @@ Implement once, validate once, deploy once:
 ### Delivery principle
 
 For this hotfix, the user-visible outcome is the priority: a stable, professional legal-intelligence list/detail experience closely aligned with the lawyer reference. Do not block delivery on crawler/LLM reliability work.
+
+## Policy Intelligence emergency hotfix closure — 2026-10-01
+
+**Owner acceptance:** PASS for the immediate Policy Intelligence recovery/hotfix. The owner reviewed the deployed `/intelligence` surface and reported it is basically satisfactory. The emergency UI/content task is therefore closed and the project may pause here until a new issue or refinement is requested.
+
+### Final source and validation checkpoint
+
+- Branch: `phase11-chinese-service-platform-ui-rebase`
+- Validated/deployed source commit: `f1b48fc340085392c818ace917aa217bfca245c1` (`fix: repair reviewed policy registry syntax`)
+- Preceding content expansion commit: `980638a26225e65aa98466a7c786e8b4e72a3151`
+- Focused Policy Intelligence validation: **PASS**
+  - `lib/policy-intelligence.test.ts`
+  - `lib/policy-intelligence-product.test.ts`
+  - `lib/policy-intelligence-registry.test.ts`
+- `pnpm build`: **PASS**
+- `git diff --check`: **PASS**
+- The final syntax repair was intentionally minimal: the stray `},,` in `chatbot/content/policy-intelligence/registry.ts` was corrected to `},`.
+
+### Final AWS rollout evidence
+
+- AWS profile/account/region used: `aulawyers-staging` / `747452892291` / `ap-southeast-2`
+- ECS cluster/service: `immigration-ai-staging` / `immigration-ai-staging-web`
+- New task definition: `immigration-ai-staging-web:33`
+- Chatbot image was deployed by immutable digest:
+  `sha256:996fa0d155247eb3dd72296ee7f7a62fc182a3a4ff60c00d7f63d9a5c0d71a1e`
+- Legal Service image remained unchanged:
+  `sha256:badd60cf2f5a28b364aefd4696c00dbfeabdb20bfd7b12dbc169692c595af6c4`
+- ECS service state after rollout:
+  - desired = 1
+  - running = 1
+  - pending = 0
+  - PRIMARY rollout state = `COMPLETED`
+  - running task definition = revision 33
+  - running chatbot container digest exactly matched the intended immutable digest above
+
+### User-visible acceptance
+
+The deployed Policy Intelligence list now presents multiple reviewed official-source fallback entries in the dense legal-intelligence layout, grouped under legal/source status, with source identity, dates, affected groups, practical impact and detail/source actions visible. The owner reviewed the live result and accepted the immediate hotfix as sufficiently complete.
+
+### Important retained product rule
+
+Public Policy Intelligence availability must remain independent from the full automated discovery -> acquisition -> analyzer -> verifier -> publication chain. Reviewed/published fallback content is a legitimate availability mechanism. Automated ingestion is a background enhancement and must not become a blocker for the public surface.
+
+### Current stop point
+
+Do not reopen this emergency hotfix without a concrete defect or new product request. Do not infer that unrelated deferred P11-005/P11-009 infrastructure items are closed by this acceptance. Those broader items retain their previously documented status. For the current owner request, work pauses here.
