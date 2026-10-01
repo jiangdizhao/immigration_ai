@@ -481,8 +481,17 @@ export async function loadPolicyProductState(input: {
     const policies = (await input.readLive())
       .map(projectLivePolicy)
       .sort(latestPolicyOrder);
-    return policies.length
-      ? { availability: "LIVE_AVAILABLE", policies }
+    if (policies.length) {
+      return { availability: "LIVE_AVAILABLE", policies };
+    }
+    const manualPolicies = projectPublishedPolicies(input.manualEntries)
+      .map(projectManualPolicy)
+      .sort(latestPolicyOrder);
+    return manualPolicies.length
+      ? {
+          availability: "LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK",
+          policies: manualPolicies,
+        }
       : { availability: "LIVE_AVAILABLE_EMPTY", policies: [] };
   }
   const policies = projectPublishedPolicies(input.manualEntries)

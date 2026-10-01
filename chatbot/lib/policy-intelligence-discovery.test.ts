@@ -526,15 +526,17 @@ test("discovery is bounded, deduplicated, and produces non-public provenance can
   );
 });
 
-test("production editorial registry remains empty and public modules do not import discovery", () => {
+test("production editorial registry contains reviewed official fallback and public modules do not import discovery", () => {
   const registry = readFileSync(
     resolve(testDirectory, "../content/policy-intelligence/registry.ts"),
     "utf8"
   );
   assert.match(
     registry,
-    /MANUAL_POLICY_ENTRIES: readonly PolicyEntry\[\] = \[\];/
+    /manual-skilled-processing-priorities-2026-09-19/
   );
+  assert.match(registry, /Department of Home Affairs/);
+  assert.doesNotMatch(registry, /Synthetic policy source fixture/);
   assert.doesNotThrow(() => validatePolicyEntries([]));
   for (const component of [
     "../components/immigration-service-home.tsx",

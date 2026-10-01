@@ -13,7 +13,7 @@ const copy = {
       LIVE_AVAILABLE: "内容来自当前已发布的政策分析及其官方来源记录。",
       LIVE_AVAILABLE_EMPTY: "实时政策库已启用，目前没有可公开展示的现行内容。",
       LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK:
-        "实时政策库暂不可用；以下仅为已发布的人工兼容内容。",
+        "当前没有可公开展示的实时条目；以下显示已审核的人工发布政策内容。",
       LIVE_UNAVAILABLE: "实时政策库尚不可用，且目前没有已发布的兼容内容。",
     },
     liveOrigin: "实时发布",
@@ -112,7 +112,7 @@ const copy = {
       LIVE_AVAILABLE_EMPTY:
         "The live policy store is available, with no current public items.",
       LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK:
-        "The live policy store is unavailable; only manually published compatibility content is shown.",
+        "There are currently no public live items; reviewed manually published policy content is shown below.",
       LIVE_UNAVAILABLE:
         "The live policy store is unavailable and there is no published compatibility content.",
     },

@@ -248,16 +248,18 @@ test("unavailable schema and empty manual registry is explicitly unavailable", a
   });
   assert.deepEqual(result, { availability: "LIVE_UNAVAILABLE", policies: [] });
 });
-test("available schema with zero current records remains truly empty", async () => {
+test("available schema with zero live records serves reviewed manual fallback", async () => {
   const result = await loadPolicyProductState({
     checkSchema: async () => true,
     readLive: async () => [],
     manualEntries: [manualEntry()],
   });
-  assert.deepEqual(result, {
-    availability: "LIVE_AVAILABLE_EMPTY",
-    policies: [],
-  });
+  assert.equal(result.availability, "LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK");
+  assert.deepEqual(
+    result.policies.map((item) => item.slug),
+    ["manual-policy"]
+  );
+  assert.equal(result.policies[0]?.origin, "manual");
 });
 test("unexpected availability and live read errors propagate without manual fallback", async () => {
   await assert.rejects(
