@@ -2975,3 +2975,21 @@ The emergency UI hotfix remains closed and accepted. **Step A is now the next co
 - No AWS call or resource change occurred. No database connection or migration occurred. No live OpenAI/provider or official-source sync occurred.
 - Work remains uncommitted and unpushed. Step B and Step C are not implemented.
 - Unresolved issue: none identified in this Step A source-only change.
+
+## Policy Intelligence automatic maintenance Step A — ACCEPTED — 2026-10-01
+
+Remote implementation checkpoint `4f6b1a905698970ae8a21ede41531cfd53f2dab4` was independently reviewed and accepted.
+
+Accepted behavior:
+
+- `pnpm policy:sync-all` is a thin wrapper around the existing single-source `policy:sync` operator.
+- Sources execute serially in the required order: Home Affairs -> Federal Register -> ART.
+- A failed source does not prevent later sources from being attempted.
+- Aggregate result is bounded and safe; exit code is 0 only when all source runs succeed and 1 on any partial failure.
+- Existing discovery/acquisition/analyzer/verifier/repository/publication behavior is reused without a parallel pipeline.
+- Existing verifier/publication-gate semantics remain unchanged.
+- No AWS, database migration, live provider/source sync, Step-B admin UI or Step-C scheduler work was included.
+
+Focused validation was reported PASS: 41 tests, production build, and `git diff --check`.
+
+**Next active unit: Step B — minimal authenticated admin archive/restore control with archived-item suppression across future automatic sync.**
