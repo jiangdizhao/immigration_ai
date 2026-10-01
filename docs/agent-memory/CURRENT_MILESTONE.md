@@ -1023,3 +1023,16 @@ Cadence:
 `cron(0 6 * * ? *)` in timezone `Australia/Sydney`.
 
 The live acceptance run succeeded for Home Affairs, Federal Register and ART. Automatic Policy Intelligence maintenance is now operational; no further implementation step is active for this feature.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — deployment complete / first scheduled run pending observation
+
+Clarification to the prior COMPLETE / ACCEPTED entry:
+
+- Steps A and B remain fully accepted.
+- Step C source, image, ECS task definition, manual live execution and Scheduler configuration are accepted.
+- The manual live ECS task succeeded with container exit code 0 and all three sources reported succeeded.
+- The earlier AWS CLI waiter timeout was only a client-side waiter timeout; it was not a sync-task timeout or failure.
+- The EventBridge Scheduler is enabled at 06:00 `Australia/Sydney`.
+- The first **naturally Scheduler-triggered** run has not yet occurred/been observed because the schedule was created after the day's 06:00 trigger point.
+
+No further code implementation is active. The remaining item is one operational observation of the next scheduled invocation.
