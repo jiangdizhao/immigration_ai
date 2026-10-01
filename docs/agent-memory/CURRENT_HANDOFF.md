@@ -2900,3 +2900,56 @@ Public Policy Intelligence availability must remain independent from the full au
 ### Current stop point
 
 Do not reopen this emergency hotfix without a concrete defect or new product request. Do not infer that unrelated deferred P11-005/P11-009 infrastructure items are closed by this acceptance. Those broader items retain their previously documented status. For the current owner request, work pauses here.
+
+## Policy Intelligence automatic-maintenance plan approved — 2026-10-01
+
+The owner rejected manual-only policy maintenance as the long-term operating model. The accepted product direction is now **automatic daily maintenance with exception-only lawyer/admin intervention**.
+
+### Approved target behavior
+
+Keep the existing official-source-grounded pipeline and make it operationally simple:
+
+`official-source discovery -> acquisition -> bilingual AI analysis -> existing evidence verifier -> automatic publication when the existing publication gate passes`
+
+If status/effect/applicability/evidence is uncertain or verification fails, the item must remain held/`review_required` and must not become public. A failed crawler/provider/source run must never remove or hide already published/reviewed content.
+
+Initial official source set remains:
+
+1. `home-affairs-guidance`
+2. `federal-register-legislation`
+3. `art-immigration-review`
+
+### Minimal implementation sequence
+
+**Step A — one-command all-source sync + publication-rule confirmation**
+
+- Add one operator command that serially runs the existing live sync for all three configured official sources.
+- Reuse the existing discovery/acquisition/analyzer/verifier/publication implementation; do not create a second pipeline.
+- Preserve existing verified auto-publication semantics: only the existing publication gate may publish automatically; held/review-required results remain non-public.
+- One source failure must not prevent attempts for the remaining configured sources; final command status/report must make partial failure observable.
+- Add deterministic offline/fake coverage for orchestration and publication/hold behavior.
+- No AWS/scheduler/admin UI/database migration in Step A.
+
+**Step B — minimal admin exception control**
+
+- Add a small authenticated admin Policy Intelligence management surface.
+- Required operations only: view current policy items, archive/unpublish, and restore/reactivate.
+- Use the existing durable `editorialStatus` lifecycle where possible; avoid new schema/migration unless source review proves it unavoidable.
+- An `archived` item acts as an explicit suppression tombstone: later automatic sync may observe the official source but must not silently republish that item until an authorized admin restores it.
+- Lawyer/admin work is exception handling, not mandatory pre-publication review.
+
+**Step C — one daily AWS schedule**
+
+- Use one EventBridge Scheduler entry invoking one independent ECS one-off Policy Intelligence operator task; do not run sync inside the long-lived web service.
+- Initial cadence approved by product direction: **daily at 06:00 Australia/Sydney**.
+- The scheduled operator runs the Step-A all-source command serially.
+- Manual reviewed fallback content remains available as disaster recovery and must not be deleted merely because automation is enabled.
+- After deployment, run one bounded live acceptance proving discovery -> analysis -> verification -> publication, plus admin archive persistence across a subsequent sync.
+
+### Complexity constraints
+
+Do not add Kafka, a policy queue, multi-worker orchestration, mandatory lawyer approval, review email workflows, new RAG/ReasoningBank paths, extra AI reviewer layers, or a Policy Intelligence architecture rewrite. Reuse the current durable Policy Intelligence item/snapshot/revision/sync-run model and existing verifier/publication gate.
+
+### Current execution point
+
+The emergency UI hotfix remains closed and accepted. **Step A is now the next coding unit.** Step B and Step C must not be implemented implicitly in the Step-A coding task.
