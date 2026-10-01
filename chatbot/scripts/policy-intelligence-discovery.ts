@@ -10,12 +10,12 @@ export const DISCOVERY_LIMITS = {
   maxLinksPerPage: 8,
   maxCandidates: 10,
   maxAlertItems: 100,
-  maxTotalBytes: 256_000,
-  maxResponseBytes: 128_000,
+  maxTotalBytes: 32 * 1024 * 1024,
+  maxResponseBytes: 8 * 1024 * 1024,
   maxPreviewCharacters: 500,
   maxRedirects: 3,
-  requestTimeoutMs: 5000,
-  maxRuntimeMs: 15_000,
+  requestTimeoutMs: 15_000,
+  maxRuntimeMs: 60_000,
 } as const;
 
 export const HOME_AFFAIRS_ALERT_LIMITS = {
@@ -23,8 +23,8 @@ export const HOME_AFFAIRS_ALERT_LIMITS = {
   maxLinksPerPage: 1,
   maxCandidates: DISCOVERY_LIMITS.maxCandidates,
   maxAlertItems: DISCOVERY_LIMITS.maxAlertItems,
-  maxTotalBytes: 2 * 1024 * 1024,
-  maxResponseBytes: 2 * 1024 * 1024,
+  maxTotalBytes: 32 * 1024 * 1024,
+  maxResponseBytes: 8 * 1024 * 1024,
 } as const;
 
 export type DiscoveryLimits = Partial<

@@ -57,6 +57,57 @@ test("acquisition reuses allowlist and stores normalized bounded evidence rather
   assert.equal(result.sourceMetadata.evidenceTruncated, false);
 });
 
+
+test("short non-empty official evidence is accepted", async () => {
+  const result = await acquireOfficialPolicySource({
+    candidate: { ...candidate, discoveredTitle: "Official page title" },
+    fetchOptions: fixtureFetch(
+      200,
+      {},
+      "<html><body><p>Short official notice.</p></body></html>"
+    ),
+  });
+  assert.match(result.normalizedEvidence, /Short official notice\./);
+  assert.ok(result.normalizedEvidence.length < 120);
+});
+
+test("Home Affairs structured alert title and content support a short detail page", async () => {
+  const result = await acquireOfficialPolicySource({
+    candidate: {
+      ...candidate,
+      discoveredTitle: "Official alert title",
+      preview: "Official structured alert content from siteData.",
+    },
+    fetchOptions: fixtureFetch(
+      200,
+      {},
+      "<html><body><p>Brief detail.</p></body></html>"
+    ),
+  });
+  assert.match(result.normalizedEvidence, /Official alert title/);
+  assert.match(result.normalizedEvidence, /Official structured alert content from siteData\./);
+  assert.match(result.normalizedEvidence, /Brief detail/);
+  assert.equal(result.contentHash.length, 64);
+});
+
+test("genuinely empty official evidence is still rejected", async () => {
+  await assert.rejects(
+    acquireOfficialPolicySource({
+      candidate: {
+        ...candidate,
+        discoveredTitle: "Official page title",
+        discoveryStrategy: "direct_page",
+      },
+      fetchOptions: fixtureFetch(
+        200,
+        {},
+        "<html><head><script>executable text is not evidence</script></head><body></body></html>"
+      ),
+    }),
+    /source_evidence_empty/
+  );
+});
+
 test("oversized normalized source retains bounded evidence and explicit truncation", async () => {
   const oversized = `<html><head><title>Official page title</title></head><body>${"Policy text. ".repeat(12_000)}</body></html>`;
   const details = normalizeOfficialHtmlEvidenceDetails(oversized);
@@ -125,7 +176,10 @@ test("DNS, timeout, and response-byte protections remain enforced during acquisi
   await assert.rejects(
     acquireOfficialPolicySource({
       candidate,
-      fetchOptions: fixtureFetch(200, { "content-length": "3000000" }),
+      fetchOptions: {
+        ...fixtureFetch(200, { "content-length": "9" }, "123456789"),
+        maxResponseBytes: 8,
+      },
     }),
     /exceeds/
   );

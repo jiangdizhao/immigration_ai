@@ -11,7 +11,6 @@ import {
 
 export const POLICY_ACQUISITION_LIMITS = {
   maxEvidenceCharacters: 100_000,
-  minEvidenceCharacters: 120,
 } as const;
 
 export type OfficialSourceAcquisition = {
@@ -138,12 +137,39 @@ export function createOfficialSourceSnapshotInput(input: {
   const normalized = normalizeOfficialHtmlEvidenceDetails(
     input.fetchedPage.body
   );
-  const normalizedEvidence = normalized.normalizedEvidence;
-  if (
-    normalizedEvidence.length < POLICY_ACQUISITION_LIMITS.minEvidenceCharacters
-  ) {
-    throw new Error("source_evidence_too_short");
+  const pageEvidence = normalized.normalizedEvidence;
+  const useStructuredAlertEvidence =
+    source.strategy === "home_affairs_site_alerts" &&
+    input.candidate.discoveryStrategy === "home_affairs_site_alerts" &&
+    pageEvidence.length < 120;
+  const structuredAlertParts = useStructuredAlertEvidence
+    ? [input.candidate.discoveredTitle, input.candidate.preview]
+        .filter((part): part is string => typeof part === "string")
+        .map((part) =>
+          normalizeOfficialHtmlEvidenceDetails(part.slice(0, 500))
+            .normalizedEvidence
+        )
+        .filter(Boolean)
+    : [];
+  const completeEvidence = [
+    ...structuredAlertParts,
+    ...(pageEvidence ? [pageEvidence] : []),
+  ].join("\n\n");
+  if (!completeEvidence) {
+    throw new Error("source_evidence_empty");
   }
+  const normalizedEvidence = completeEvidence.slice(
+    0,
+    POLICY_ACQUISITION_LIMITS.maxEvidenceCharacters
+  );
+  const evidenceTruncated =
+    normalized.evidenceTruncated ||
+    completeEvidence.length > POLICY_ACQUISITION_LIMITS.maxEvidenceCharacters;
+  const contentHash = useStructuredAlertEvidence
+    ? fingerprintContent(
+        `${normalized.fullContentHash}\n${input.candidate.contentHash}\n${completeEvidence}`
+      )
+    : normalized.fullContentHash;
   const officialTitle =
     pageCandidate.discoveredTitle ?? input.candidate.discoveredTitle;
   if (!officialTitle?.trim()) {
@@ -169,15 +195,15 @@ export function createOfficialSourceSnapshotInput(input: {
       input.candidate.explicitSourceDate ??
       null,
     effectiveDate: null,
-    evidenceTruncated: normalized.evidenceTruncated,
+    evidenceTruncated,
     normalizedEvidence,
-    contentHash: normalized.fullContentHash,
+    contentHash,
     sourceMetadata: {
       requestedUrl: input.fetchedPage.requestedUrl,
       finalUrl: canonicalUrl,
       redirectChain: input.fetchedPage.redirectChain,
       bytesReceived: input.fetchedPage.bytes,
-      evidenceTruncated: normalized.evidenceTruncated,
+      evidenceTruncated,
       titleSource: pageCandidate.sourceMetadata.titleSource,
       dateSource: pageCandidate.sourceMetadata.dateSource,
       discoveryStrategy: input.candidate.discoveryStrategy,

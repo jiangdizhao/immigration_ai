@@ -8,6 +8,7 @@ import {
   candidateFromPage,
   canonicalizeOfficialUrl,
   DISCOVERY_CANDIDATE_SCHEMA,
+  DISCOVERY_LIMITS,
   type DiscoveryFetchOptions,
   deduplicateCandidates,
   discoverPolicyCandidates,
@@ -366,7 +367,21 @@ test("Home Affairs alert URLs resolve safely without becoming fetch targets", ()
   assert.equal(resolveHomeAffairsAlertUrl("", baseUrl, source), undefined);
 });
 
-test("Home Affairs decoded response cap is source-specific and hard-bounded", async () => {
+test("production discovery limits allow normal official pages and stay bounded", () => {
+  assert.ok(DISCOVERY_LIMITS.maxResponseBytes >= 8 * 1024 * 1024);
+  assert.ok(DISCOVERY_LIMITS.maxTotalBytes >= 32 * 1024 * 1024);
+  assert.equal(DISCOVERY_LIMITS.requestTimeoutMs, 15_000);
+  assert.equal(DISCOVERY_LIMITS.maxRuntimeMs, 60_000);
+  assert.ok(
+    HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes >= 8 * 1024 * 1024
+  );
+  assert.ok(HOME_AFFAIRS_ALERT_LIMITS.maxTotalBytes >= 32 * 1024 * 1024);
+  assert.equal(DISCOVERY_LIMITS.maxPages, 4);
+  assert.equal(DISCOVERY_LIMITS.maxLinksPerPage, 8);
+  assert.equal(DISCOVERY_LIMITS.maxCandidates, 10);
+});
+
+test("Home Affairs response cap remains bounded at its raised default", async () => {
   const source = getPolicyDiscoverySource("home-affairs-guidance");
   const belowCap = "x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes - 1);
   const page = await fetchOfficialPage(source.seedUrls[0], source, {
@@ -382,7 +397,7 @@ test("Home Affairs decoded response cap is source-specific and hard-bounded", as
           response("x".repeat(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes + 1))
         ),
     }),
-    /exceeds 2097152 bytes/
+    /exceeds 8388608 bytes/
   );
 });
 
