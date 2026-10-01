@@ -964,3 +964,16 @@ Deployment identifiers:
 - schedule: `immigration-ai-staging-policy-sync-daily`.
 
 The first live operator run completed successfully with container exit code 0 and all three configured sources reported succeeded. D-053 implementation is therefore accepted as operational.
+
+## D-055 — Scheduler deployment is accepted; first natural trigger remains an observation item
+
+**Date:** 2026-10-01  
+**Status:** ACCEPTED
+
+D-054 is clarified as follows.
+
+The automatic Policy Intelligence operator itself has passed live execution: the manually launched ECS task completed with container exit code 0 and all three configured sources succeeded. The AWS CLI `tasks-stopped` waiter timed out before that completion, but authoritative ECS state later confirmed success; the waiter timeout is not treated as an operator timeout or failure.
+
+The EventBridge Scheduler `immigration-ai-staging-policy-sync-daily` has been created, verified and is `ENABLED` for `cron(0 6 * * ? *)` in timezone `Australia/Sydney`.
+
+Because the schedule was created after the current day's 06:00 trigger point, no naturally Scheduler-triggered execution has yet been observed. This does not reopen implementation or deployment. It remains a single operational observation item: confirm the next scheduled ECS task launches and completes normally.
