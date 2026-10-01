@@ -10,14 +10,16 @@ const registryPath = resolve(
   "../content/policy-intelligence/registry.ts"
 );
 
-test("editorial registry is server-only and production-empty", () => {
+test("editorial registry is server-only and contains reviewed production fallbacks", () => {
   const source = readFileSync(registryPath, "utf8");
 
   assert.match(source, /^import "server-only";/m);
-  assert.match(
-    source,
-    /MANUAL_POLICY_ENTRIES: readonly PolicyEntry\[\] = \[\];/
-  );
+  assert.match(source, /MANUAL_POLICY_ENTRIES: readonly PolicyEntry\[\] = \[/);
+  assert.match(source, /manual-skilled-processing-priorities-2026-09-19/);
+  assert.match(source, /manual-student-visa-onshore-preclusion-2026-09-24/);
+  assert.match(source, /manual-evisitor-arrangements-2026-09-28/);
+  assert.match(source, /manual-health-specified-countries-2026-09-28/);
+  assert.doesNotMatch(source, /Synthetic policy source fixture/);
   assert.doesNotThrow(() => validatePolicyEntries([]));
 });
 
