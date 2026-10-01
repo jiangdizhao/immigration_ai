@@ -493,3 +493,22 @@ The public production site is deployed and the Policy Intelligence surface now h
 Current product correction in progress: rapidly rebase `/intelligence` and `/intelligence/[id]` toward the lawyer-provided Sovereign Nexus reference at `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html`. The hotfix is presentation/content-delivery only: no DB/schema, migration, AWS infrastructure, ingestion-architecture, legal-service or model-routing change.
 
 Project-wide operating lesson reaffirmed by this incident: prefer the minimum mechanism that delivers the user-visible outcome. Do not add proxy gates, hard content thresholds, repeated micro-checkpoints or automation dependencies unless a demonstrated risk requires them.
+
+## 2026-10-01 current production checkpoint — Policy Intelligence hotfix accepted
+
+The immediate Policy Intelligence production-recovery task is now closed.
+
+Canonical current checkpoint for this hotfix:
+
+- branch: `phase11-chinese-service-platform-ui-rebase`;
+- source: `f1b48fc340085392c818ace917aa217bfca245c1`;
+- ECS web task definition: `immigration-ai-staging-web:33`;
+- chatbot image digest: `sha256:996fa0d155247eb3dd72296ee7f7a62fc182a3a4ff60c00d7f63d9a5c0d71a1e`;
+- legal-service digest unchanged at `sha256:badd60cf2f5a28b364aefd4696c00dbfeabdb20bfd7b12dbc169692c595af6c4`;
+- ECS rollout completed with one desired/running task and zero pending tasks;
+- focused Policy Intelligence tests, `pnpm build`, and `git diff --check` passed before rollout;
+- owner visual acceptance of the live `/intelligence` page: **PASS for the immediate hotfix**.
+
+The public Policy Intelligence surface now has a stable reviewed-official-source fallback path and a denser legal-intelligence presentation. Preserve the architectural lesson from this recovery: automated policy discovery/analysis is not a public-page availability prerequisite.
+
+The project is paused at this checkpoint. Existing broader P11-005/P11-009 deferred infrastructure/security/migration items remain governed by their earlier records and must not be treated as closed by this hotfix acceptance.
