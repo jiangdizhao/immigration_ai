@@ -48,7 +48,7 @@ export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
       method: "manual-reviewed-official-source",
       discoveredAt: "2026-10-01T00:00:00.000Z",
     },
-  },,
+  },
   {
     id: "manual-student-visa-onshore-preclusion-2026-09-24",
     slug: "student-visa-onshore-preclusion-lin-26-068",
