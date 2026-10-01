@@ -13,13 +13,13 @@ export function PolicyIntelligenceAvailabilityNotice({
   const copy = getPolicyProductCopy(locale);
   return (
     <aside
-      className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"
+      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-[#315d86] bg-white px-3 py-2.5"
       data-policy-availability={state.availability}
     >
-      <p className="font-semibold text-slate-900">
+      <p className="text-xs font-semibold text-slate-900">
         {copy.availability[state.availability]}
       </p>
-      <p className="mt-1 text-sm leading-6 text-slate-600">
+      <p className="text-xs leading-5 text-slate-600">
         {copy.availabilityDescription[state.availability]}
       </p>
     </aside>
