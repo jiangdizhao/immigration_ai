@@ -1,16 +1,18 @@
 import "server-only";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   policyIntelligenceAnalysisRevision,
   policyIntelligenceItem,
   policyIntelligenceSourceSnapshot,
+  policyIntelligenceSyncRun,
 } from "@/lib/db/schema";
 import type {
   AdminPolicyIntelligenceItem,
   AdminPolicyIntelligenceService,
 } from "./admin-api";
 import { policyAnalysisSchema } from "./contracts";
+import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
 import { db } from "./server-db";
 
 export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
@@ -19,7 +21,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
       .select({
         item: policyIntelligenceItem,
         snapshot: policyIntelligenceSourceSnapshot,
-        revision: policyIntelligenceAnalysisRevision,
+        publishedRevision: policyIntelligenceAnalysisRevision,
       })
       .from(policyIntelligenceItem)
       .leftJoin(
@@ -29,10 +31,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
             policyIntelligenceSourceSnapshot.id,
             policyIntelligenceItem.latestSnapshotId
           ),
-          eq(
-            policyIntelligenceSourceSnapshot.itemId,
-            policyIntelligenceItem.id
-          )
+          eq(policyIntelligenceSourceSnapshot.itemId, policyIntelligenceItem.id)
         )
       )
       .leftJoin(
@@ -50,9 +49,86 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
       )
       .orderBy(desc(policyIntelligenceItem.updatedAt));
 
-    return rows.map(({ item, snapshot, revision }) => {
+    const itemIds = rows.map(({ item }) => item.id);
+    const latestSnapshotByItem = new Map(
+      rows.flatMap(({ item, snapshot }) =>
+        snapshot ? [[item.id, snapshot.id] as const] : []
+      )
+    );
+    const snapshotIds = rows.flatMap(({ snapshot }) =>
+      snapshot ? [snapshot.id] : []
+    );
+    const revisions =
+      itemIds.length > 0 && snapshotIds.length > 0
+        ? await db
+            .select()
+            .from(policyIntelligenceAnalysisRevision)
+            .where(
+              and(
+                inArray(policyIntelligenceAnalysisRevision.itemId, itemIds),
+                inArray(
+                  policyIntelligenceAnalysisRevision.snapshotId,
+                  snapshotIds
+                )
+              )
+            )
+            .orderBy(desc(policyIntelligenceAnalysisRevision.revisionNumber))
+        : [];
+    const latestRevisionByItem = new Map<string, (typeof revisions)[number]>();
+    for (const revision of revisions) {
+      if (
+        revision.snapshotId === latestSnapshotByItem.get(revision.itemId) &&
+        !latestRevisionByItem.has(revision.itemId)
+      ) {
+        latestRevisionByItem.set(revision.itemId, revision);
+      }
+    }
+
+    const sourceConfigIds = [
+      ...new Set(rows.map(({ item }) => item.primarySourceConfigId)),
+    ];
+    const sourceRunEntries = await Promise.all(
+      sourceConfigIds.map(async (sourceConfigId) => {
+        const [run] = await db
+          .select({
+            sourceConfigId: policyIntelligenceSyncRun.sourceConfigId,
+            status: policyIntelligenceSyncRun.status,
+            safeErrorCode: policyIntelligenceSyncRun.safeErrorCode,
+          })
+          .from(policyIntelligenceSyncRun)
+          .where(eq(policyIntelligenceSyncRun.sourceConfigId, sourceConfigId))
+          .orderBy(desc(policyIntelligenceSyncRun.startedAt))
+          .limit(1);
+        return [sourceConfigId, run] as const;
+      })
+    );
+    const latestRunBySource = new Map(
+      sourceRunEntries.flatMap(([sourceConfigId, run]) =>
+        run ? [[sourceConfigId, run] as const] : []
+      )
+    );
+
+    return rows.map(({ item, snapshot, publishedRevision }) => {
+      const revision = latestRevisionByItem.get(item.id) ?? null;
       const parsedAnalysis = revision
         ? policyAnalysisSchema.safeParse(revision.analysis)
+        : null;
+      const evidence = snapshot
+        ? {
+            evidenceRef: `policy-snapshot:${snapshot.id}`,
+            snapshotId: snapshot.id,
+            sourceConfigId: snapshot.sourceConfigId,
+            sourceId: snapshot.sourceId,
+            authority: snapshot.authority,
+            canonicalUrl: snapshot.canonicalUrl,
+            officialTitle: snapshot.officialTitle,
+            retrievedAt: snapshot.retrievedAt.toISOString(),
+            contentHash: snapshot.contentHash,
+            sourceDate: snapshot.sourceDate,
+            effectiveDate: snapshot.effectiveDate,
+            evidenceTruncated: snapshot.evidenceTruncated,
+            text: snapshot.normalizedEvidence,
+          }
         : null;
       return {
         id: item.id,
@@ -64,8 +140,29 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
         sourceConfigId: item.primarySourceConfigId,
         sourceStatus: item.sourceStatus,
         editorialStatus: item.editorialStatus,
-        publishedAt: revision?.publishedAt?.toISOString() ?? null,
+        publishedAt: publishedRevision?.publishedAt?.toISOString() ?? null,
         updatedAt: item.updatedAt.toISOString(),
+        latestSnapshot: snapshot
+          ? {
+              sourceUrl: snapshot.canonicalUrl,
+              retrievedAt: snapshot.retrievedAt.toISOString(),
+              sourceTitle: snapshot.officialTitle,
+            }
+          : null,
+        latestRevision: revision
+          ? {
+              revisionNumber: revision.revisionNumber,
+              generatedAt: revision.generatedAt.toISOString(),
+              editorialStatus: revision.editorialStatus,
+            }
+          : null,
+        publicationDiagnostics: buildAdminPublicationDiagnostics({
+          editorialStatus: item.editorialStatus,
+          analysis: revision?.analysis ?? null,
+          verification: revision?.verification ?? null,
+          evidence,
+          latestSourceRun: latestRunBySource.get(item.primarySourceConfigId),
+        }),
       };
     }) satisfies AdminPolicyIntelligenceItem[];
   },
@@ -108,10 +205,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
                       policyIntelligenceAnalysisRevision.id,
                       item.latestPublishedRevisionId
                     ),
-                    eq(
-                      policyIntelligenceAnalysisRevision.itemId,
-                      item.id
-                    ),
+                    eq(policyIntelligenceAnalysisRevision.itemId, item.id),
                     eq(
                       policyIntelligenceAnalysisRevision.editorialStatus,
                       "published"
@@ -120,10 +214,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
                       policyIntelligenceAnalysisRevision.snapshotId,
                       item.latestSnapshotId
                     ),
-                    eq(
-                      policyIntelligenceSourceSnapshot.itemId,
-                      item.id
-                    )
+                    eq(policyIntelligenceSourceSnapshot.itemId, item.id)
                   )
                 )
                 .limit(1)

@@ -1,4 +1,17 @@
 import { z } from "zod";
+import type { AdminPublicationDiagnostics } from "./publication-diagnostics";
+
+export type AdminPolicyIntelligenceSnapshot = {
+  sourceUrl: string;
+  retrievedAt: string;
+  sourceTitle: string;
+};
+
+export type AdminPolicyIntelligenceRevision = {
+  revisionNumber: number;
+  generatedAt: string;
+  editorialStatus: string;
+};
 
 export type AdminPolicyIntelligenceItem = {
   id: string;
@@ -10,6 +23,9 @@ export type AdminPolicyIntelligenceItem = {
   editorialStatus: string;
   publishedAt: string | null;
   updatedAt: string;
+  latestSnapshot: AdminPolicyIntelligenceSnapshot | null;
+  latestRevision: AdminPolicyIntelligenceRevision | null;
+  publicationDiagnostics: AdminPublicationDiagnostics;
 };
 
 export type AdminPolicyIntelligenceUpdate =

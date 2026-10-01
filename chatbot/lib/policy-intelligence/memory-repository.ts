@@ -1,5 +1,6 @@
 import type { AdminPolicyIntelligenceService } from "./admin-api";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
+import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
 import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
@@ -233,9 +234,42 @@ export function createInMemoryPolicyIntelligenceRepository() {
         const snapshot = item.latestSnapshotId
           ? snapshots.get(item.latestSnapshotId)
           : undefined;
-        const revision = item.latestPublishedRevisionId
+        const publishedRevision = item.latestPublishedRevisionId
           ? revisions.get(item.latestPublishedRevisionId)
           : undefined;
+        const revision = snapshot
+          ? [...revisions.values()]
+              .filter(
+                (candidate) =>
+                  candidate.itemId === item.id &&
+                  candidate.snapshotId === snapshot.id
+              )
+              .sort((left, right) => right.revisionNumber - left.revisionNumber)
+              .at(0)
+          : undefined;
+        const latestSourceRun = [...runs.values()]
+          .filter((run) => run.sourceConfigId === item.sourceConfigId)
+          .sort(
+            (left, right) =>
+              Date.parse(right.startedAt) - Date.parse(left.startedAt)
+          )[0];
+        const evidence = snapshot
+          ? {
+              evidenceRef: `policy-snapshot:${snapshot.id}`,
+              snapshotId: snapshot.id,
+              sourceConfigId: snapshot.sourceConfigId,
+              sourceId: snapshot.sourceId,
+              authority: snapshot.authority,
+              canonicalUrl: snapshot.canonicalUrl,
+              officialTitle: snapshot.officialTitle,
+              retrievedAt: snapshot.retrievedAt,
+              contentHash: snapshot.contentHash,
+              sourceDate: snapshot.sourceDate,
+              effectiveDate: snapshot.effectiveDate,
+              evidenceTruncated: snapshot.evidenceTruncated,
+              text: snapshot.normalizedEvidence,
+            }
+          : null;
         return {
           id: item.id,
           slug: item.slug,
@@ -244,8 +278,34 @@ export function createInMemoryPolicyIntelligenceRepository() {
           sourceConfigId: item.sourceConfigId,
           sourceStatus: item.sourceStatus,
           editorialStatus: item.editorialStatus,
-          publishedAt: revision?.publishedAt ?? null,
+          publishedAt: publishedRevision?.publishedAt ?? null,
           updatedAt: revision?.generatedAt ?? snapshot?.retrievedAt ?? "",
+          latestSnapshot: snapshot
+            ? {
+                sourceUrl: snapshot.canonicalUrl,
+                retrievedAt: snapshot.retrievedAt,
+                sourceTitle: snapshot.officialTitle,
+              }
+            : null,
+          latestRevision: revision
+            ? {
+                revisionNumber: revision.revisionNumber,
+                generatedAt: revision.generatedAt,
+                editorialStatus: revision.editorialStatus,
+              }
+            : null,
+          publicationDiagnostics: buildAdminPublicationDiagnostics({
+            editorialStatus: item.editorialStatus,
+            analysis: revision?.analysis ?? null,
+            verification: revision?.verification ?? null,
+            evidence,
+            latestSourceRun: latestSourceRun
+              ? {
+                  status: latestSourceRun.status,
+                  safeErrorCode: latestSourceRun.safeErrorCode,
+                }
+              : null,
+          }),
         };
       });
     },
@@ -264,7 +324,9 @@ export function createInMemoryPolicyIntelligenceRepository() {
       const revision = item.latestPublishedRevisionId
         ? revisions.get(item.latestPublishedRevisionId)
         : undefined;
-      const snapshot = revision ? snapshots.get(revision.snapshotId) : undefined;
+      const snapshot = revision
+        ? snapshots.get(revision.snapshotId)
+        : undefined;
       const isCurrent = Boolean(
         revision &&
           snapshot &&

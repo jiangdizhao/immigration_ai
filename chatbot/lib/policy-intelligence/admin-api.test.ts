@@ -23,6 +23,17 @@ function setup() {
     editorialStatus: "published",
     publishedAt: "2026-10-01T00:00:00.000Z",
     updatedAt: "2026-10-01T00:00:00.000Z",
+    latestSnapshot: {
+      sourceUrl: "https://immi.homeaffairs.gov.au/policy/example",
+      retrievedAt: "2026-10-01T00:00:00.000Z",
+      sourceTitle: "Policy example",
+    },
+    latestRevision: {
+      revisionNumber: 2,
+      generatedAt: "2026-10-01T00:00:00.000Z",
+      editorialStatus: "published",
+    },
+    publicationDiagnostics: { published: true, reasons: [] },
   };
   const records = new Map([[itemId, item]]);
   const service: AdminPolicyIntelligenceService = {
@@ -37,8 +48,7 @@ function setup() {
       if (action === "restore" && current.editorialStatus !== "archived") {
         return { status: "not_archived" };
       }
-      current.editorialStatus =
-        action === "archive" ? "archived" : "published";
+      current.editorialStatus = action === "archive" ? "archived" : "published";
       return {
         status: "updated",
         editorialStatus: current.editorialStatus as "archived" | "published",
@@ -110,7 +120,9 @@ test("admin listing is authenticated and returns only management fields", async 
     service,
   });
   assert.equal(allowed.status, 200);
-  assert.deepEqual(await allowed.json(), { items: [await service.listItems().then(([item]) => item)] });
+  assert.deepEqual(await allowed.json(), {
+    items: [await service.listItems().then(([item]) => item)],
+  });
 });
 
 test("invalid action request is rejected without changing item state", async () => {

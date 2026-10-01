@@ -1,8 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminPolicyIntelligenceItem } from "@/lib/policy-intelligence/admin-api";
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+  return new Intl.DateTimeFormat("en-AU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Australia/Sydney",
+  }).format(new Date(value));
+}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -32,9 +43,9 @@ export function AdminPolicyIntelligence({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, action }),
       });
-      const data = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       if (!response.ok) {
         setNotice(data?.error ?? "Unable to update this policy item.");
         return;
@@ -65,46 +76,176 @@ export function AdminPolicyIntelligence({
             {initialItems.map((item) => {
               const archived = item.editorialStatus === "archived";
               return (
-                <tr key={item.id}>
-                  <td className="px-4 py-4 align-top">
-                    <p className="font-semibold text-slate-900">
-                      {item.title ?? item.slug}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.authority ?? item.sourceConfigId} · {item.slug}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4 align-top text-slate-700">
-                    {item.sourceStatus}
-                  </td>
-                  <td className="px-4 py-4 align-top text-slate-700">
-                    {item.editorialStatus}
-                  </td>
-                  <td className="px-4 py-4 align-top text-slate-700">
-                    {formatDate(item.publishedAt ?? item.updatedAt)}
-                  </td>
-                  <td className="px-4 py-4 align-top">
-                    <button
-                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                      disabled={pendingId !== null}
-                      onClick={() =>
-                        update(item.id, archived ? "restore" : "archive")
-                      }
-                      type="button"
-                    >
-                      {pendingId === item.id
-                        ? "Saving…"
-                        : archived
-                          ? "Restore"
-                          : "Archive / Unpublish"}
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={item.id}>
+                  <tr>
+                    <td className="px-4 py-4 align-top">
+                      <p className="font-semibold text-slate-900">
+                        {item.title ?? item.slug}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.authority ?? item.sourceConfigId} · {item.slug}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4 align-top text-slate-700">
+                      {item.sourceStatus}
+                    </td>
+                    <td className="px-4 py-4 align-top text-slate-700">
+                      {item.editorialStatus}
+                    </td>
+                    <td className="px-4 py-4 align-top text-slate-700">
+                      {formatDate(item.publishedAt ?? item.updatedAt)}
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <button
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                        disabled={pendingId !== null}
+                        onClick={() =>
+                          update(item.id, archived ? "restore" : "archive")
+                        }
+                        type="button"
+                      >
+                        {pendingId === item.id
+                          ? "Saving…"
+                          : archived
+                            ? "Restore"
+                            : "Archive / Unpublish"}
+                      </button>
+                    </td>
+                  </tr>
+                  {item.editorialStatus !== "published" ? (
+                    <tr>
+                      <td
+                        className="border-t border-slate-100 bg-slate-50 px-4 py-5"
+                        colSpan={5}
+                      >
+                        <section aria-label="Publication Status Detail">
+                          <h2 className="font-semibold text-slate-900">
+                            Publication Status Detail
+                          </h2>
+                          <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                            <div>
+                              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Current item status
+                              </dt>
+                              <dd className="mt-1 text-slate-800">
+                                {item.editorialStatus}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Latest source snapshot
+                              </dt>
+                              <dd className="mt-1 break-words text-slate-800">
+                                {item.latestSnapshot ? (
+                                  <>
+                                    <a
+                                      className="text-sky-800 underline"
+                                      href={item.latestSnapshot.sourceUrl}
+                                      rel="noreferrer"
+                                      target="_blank"
+                                    >
+                                      {item.latestSnapshot.sourceTitle}
+                                    </a>
+                                    <span className="block break-all text-xs text-slate-600">
+                                      {item.latestSnapshot.sourceUrl}
+                                    </span>
+                                    <span className="block text-xs text-slate-600">
+                                      Retrieved{" "}
+                                      {formatDateTime(
+                                        item.latestSnapshot.retrievedAt
+                                      )}
+                                    </span>
+                                  </>
+                                ) : (
+                                  "No snapshot stored"
+                                )}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Latest analysis revision
+                              </dt>
+                              <dd className="mt-1 text-slate-800">
+                                {item.latestRevision ? (
+                                  <>
+                                    <span>
+                                      Revision{" "}
+                                      {item.latestRevision.revisionNumber} ·{" "}
+                                      {item.latestRevision.editorialStatus}
+                                    </span>
+                                    <span className="block text-xs text-slate-600">
+                                      Generated{" "}
+                                      {formatDateTime(
+                                        item.latestRevision.generatedAt
+                                      )}
+                                    </span>
+                                  </>
+                                ) : (
+                                  "No analysis revision stored"
+                                )}
+                              </dd>
+                            </div>
+                          </dl>
+                          <div className="mt-4 border-t border-slate-200 pt-4">
+                            <h3 className="text-sm font-semibold text-slate-900">
+                              {item.publicationDiagnostics.published
+                                ? "PUBLISHED"
+                                : "NOT PUBLISHED"}
+                            </h3>
+                            {item.publicationDiagnostics.reasons.length > 0 ? (
+                              <>
+                                <p className="mt-2 text-sm text-slate-700">
+                                  Publication blocked because:
+                                </p>
+                                <ul className="mt-2 space-y-2 text-sm">
+                                  {item.publicationDiagnostics.reasons.map(
+                                    (reason, index) => (
+                                      <li
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+                                        key={`${reason.reasonCode}-${reason.unitId ?? reason.scope ?? "item"}-${index}`}
+                                      >
+                                        <code className="font-semibold text-slate-900">
+                                          {reason.reasonCode}
+                                        </code>
+                                        {reason.unitId ? (
+                                          <span className="ml-2 text-xs text-slate-500">
+                                            Unit: {reason.unitId}
+                                          </span>
+                                        ) : null}
+                                        {reason.scope === "source_sync" ? (
+                                          <span className="ml-2 text-xs font-medium text-amber-800">
+                                            Source sync diagnostic; not
+                                            item-specific
+                                          </span>
+                                        ) : null}
+                                        <p className="mt-1 text-slate-700">
+                                          {reason.explanation}
+                                        </p>
+                                      </li>
+                                    )
+                                  )}
+                                </ul>
+                              </>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-600">
+                                No blocking reason is available in the stored
+                                diagnostics.
+                              </p>
+                            )}
+                          </div>
+                        </section>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               );
             })}
             {initialItems.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-slate-500" colSpan={5}>
+                <td
+                  className="px-4 py-8 text-center text-slate-500"
+                  colSpan={5}
+                >
                   No durable Policy Intelligence items yet.
                 </td>
               </tr>
@@ -113,7 +254,10 @@ export function AdminPolicyIntelligence({
         </table>
       </div>
       {notice ? (
-        <p aria-live="polite" className="border-t border-slate-100 px-4 py-3 text-sm text-slate-700">
+        <p
+          aria-live="polite"
+          className="border-t border-slate-100 px-4 py-3 text-sm text-slate-700"
+        >
           {notice}
         </p>
       ) : null}

@@ -3154,3 +3154,31 @@ Therefore the correct status is:
 **implementation/deployment complete; manual live operator acceptance PASS; scheduler configuration/enablement PASS; first natural scheduled-trigger observation pending.**
 
 This is not a source-code blocker and does not reopen Steps A/B/C implementation. The only remaining operational confirmation for this feature is to observe the next Scheduler-triggered ECS task and confirm its normal completion/log result.
+
+## Admin Policy Intelligence publication diagnostics — 2026-10-02
+
+**Scope:** Admin observability only. `/api/admin/policy-intelligence` now returns the latest stored snapshot and the latest analysis revision for that snapshot, plus `publicationDiagnostics`. For unpublished items, diagnostics reuse the existing `evaluatePublicationGate` against stored analysis, verification, and snapshot evidence, preserving every gate reason and unsupported verifier assessment. A small explanation map keeps each original `reasonCode`; unknown codes remain intact and receive a safe fallback explanation. The page displays item status, source URL/title/retrieved time, revision number/generated time/status, and every diagnostic. Published items report no blocking diagnostics and do not render the detail section.
+
+Source sync failures are stored by source rather than item. When the latest source run is failed or partial, its safe error code is shown with a `source_sync` scope and an explicit note that it is not item-specific. No pipeline, analyzer, verifier, publication threshold, or stored schema behavior changed. No database migration or AWS change was made.
+
+**Changed files:**
+
+- `chatbot/lib/policy-intelligence/publication-diagnostics.ts`
+- `chatbot/lib/policy-intelligence/publication-diagnostics.test.ts`
+- `chatbot/lib/policy-intelligence/admin-api.ts`
+- `chatbot/lib/policy-intelligence/admin-api.test.ts`
+- `chatbot/lib/policy-intelligence/admin-service.ts`
+- `chatbot/lib/policy-intelligence/memory-repository.ts`
+- `chatbot/components/admin-policy-intelligence.tsx`
+- `chatbot/package.json` — registered the diagnostics and admin API tests in `test:unit`.
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+**Validation:**
+
+- `pnpm exec node --import tsx --test lib/policy-intelligence/publication-diagnostics.test.ts lib/policy-intelligence/admin-api.test.ts lib/policy-intelligence/pipeline.test.ts` — **PASS**, 49 passed, 0 failed, 0 skipped.
+- `pnpm test:unit` — **PASS**, 478 passed, 0 failed, 0 skipped.
+- `pnpm build` — **PASS**. Next emitted the existing notice that local `baseline-browser-mapping` data is over two months old.
+- `git diff --check` — **PASS**.
+- Requested `pnpm test` (Playwright E2E) — **INCOMPLETE / FAIL**. The first two chat tests timed out after 240 seconds waiting for the home-page `multimodal-input` control; the other 46 tests were not completed. The remaining run was stopped after the repeated startup/page-load failure. The build and unit suite pass.
+
+No AWS resources were changed and no database migration was applied.
