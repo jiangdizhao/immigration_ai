@@ -535,3 +535,9 @@ Implementation is deliberately small:
 - Step C: one daily EventBridge Scheduler launch of an independent ECS operator task at 06:00 Australia/Sydney.
 
 Current active unit is **Step A only**.
+
+## 2026-10-01 automatic maintenance checkpoint
+
+Policy Intelligence Step A is accepted at `4f6b1a905698970ae8a21ede41531cfd53f2dab4`. The repository now has one all-source serial operator command while preserving the existing verifier-gated publication pipeline.
+
+Current active unit is **Step B only**: minimal authenticated admin archive/restore control plus durable suppression of archived items across future syncs. Step C scheduling remains unimplemented.
