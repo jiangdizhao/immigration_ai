@@ -65,3 +65,6 @@ artifacts/
 *.dump
 *.sql.dump
 *.jsonl.tmp
+
+# Compiled offline production workers
+chatbot/.worker-build/

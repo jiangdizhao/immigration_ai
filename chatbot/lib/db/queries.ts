@@ -26,6 +26,11 @@ import {
 import { createS3MatterDocumentStorage } from "../matter-documents/storage";
 import { generateUUID } from "../utils";
 import { calculateVipWindow } from "../vip/entitlement";
+import {
+  transitionMatterDocumentSecurityStatus as compareAndSetMatterDocumentSecurityStatus,
+  getMatterDocumentSecurityByStorageKey as lookupMatterDocumentSecurityByStorageKey,
+  getMatterDocumentSecurityStatus as readMatterDocumentSecurityStatus,
+} from "./matter-document-security-repository";
 import { getLazyDatabase } from "./runtime-client";
 import {
   type Chat,
@@ -3089,29 +3094,18 @@ export async function hardDeleteSoftDeletedMatterDocument(input: {
   return Boolean(deleted);
 }
 
-export async function getMatterDocumentSecurityStatus(documentId: string) {
-  const [record] = await db
-    .select({ securityStatus: matterDocument.securityStatus })
-    .from(matterDocument)
-    .where(eq(matterDocument.id, documentId))
-    .limit(1);
-  return record?.securityStatus ?? null;
+export function getMatterDocumentSecurityByStorageKey(storageKey: string) {
+  return lookupMatterDocumentSecurityByStorageKey(storageKey);
 }
 
-export async function transitionMatterDocumentSecurityStatus(input: {
+export function getMatterDocumentSecurityStatus(documentId: string) {
+  return readMatterDocumentSecurityStatus(documentId);
+}
+
+export function transitionMatterDocumentSecurityStatus(input: {
   documentId: string;
   expected: "pending";
   next: "clean" | "rejected" | "failed";
 }) {
-  const [record] = await db
-    .update(matterDocument)
-    .set({ securityStatus: input.next, updatedAt: new Date() })
-    .where(
-      and(
-        eq(matterDocument.id, input.documentId),
-        eq(matterDocument.securityStatus, input.expected)
-      )
-    )
-    .returning({ id: matterDocument.id });
-  return Boolean(record);
+  return compareAndSetMatterDocumentSecurityStatus(input);
 }

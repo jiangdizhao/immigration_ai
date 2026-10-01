@@ -23,5 +23,6 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/lib/matter-documents/processing/worker-runtime ./lib/matter-documents/processing/worker-runtime
 COPY --from=build /app/scripts/verify-native-runtime.mjs ./scripts/verify-native-runtime.mjs
 COPY --from=build /app/lib/production/native-runtime-verifier.mjs ./lib/production/native-runtime-verifier.mjs
+COPY --from=build /app/.worker-build/guardduty-malware-reconciler.cjs ./ops/guardduty-malware-reconciler.cjs
 EXPOSE 3000
 CMD ["node", "server.js"]

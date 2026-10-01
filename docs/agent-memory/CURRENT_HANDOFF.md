@@ -2800,3 +2800,17 @@ No task-definition, image, IAM, security-group, secret, RDS, or ECS service chan
 - `git diff --check` — **PASS**.
 
 **No ECS task, database connection, migration, or AWS runtime mutation was performed.** No image push or ECS task-definition registration was performed. ECR publication and a final corrected ECS task-definition revision remain subject to separate approval, as does any preflight retry and migration execution.
+
+### P11-009 Stage 4B GuardDuty S3 scan-result source integration — 2026-10-01
+
+Implemented a source-only SQS worker that validates GuardDuty Malware Protection S3 Object Scan Result EventBridge messages and reconciles them through the existing MatterDocument security boundary. EventBridge source/type, envelope version/time, schema/resource type, expected account and region, configured bucket, exact `matter-documents/` prefix, bounded body and required fields are validated. Verdict mapping is `NO_THREATS_FOUND` → `clean`, `THREATS_FOUND` → `rejected`, and `UNSUPPORTED`/`ACCESS_DENIED`/`FAILED` → `failed`; unknown values fail closed. Threat and status-reason payloads do not influence reconciliation.
+
+The worker resolves the document by exact unique `storageKey` via the DB query layer, independent of processing/storage status, then uses pending-to-terminal CAS. Same-result terminal deliveries are idempotent; a conflicting terminal state is observable and is never overwritten. SQS long polling receives at most 10 messages. A message is deleted only after reconciliation or an identical terminal duplicate; malformed messages, missing documents, conflicts, DB/CAS errors, or delete failures remain for SQS retry/DLQ. Logs contain only bounded event/document IDs, normalized verdicts and result codes. The worker does not start document processing.
+
+The production image keeps its normal `CMD ["node", "server.js"]`. A separate bundled worker artifact is available as `node /app/ops/guardduty-malware-reconciler.cjs`; it has no runtime tsx/pnpm/Corepack dependency. Its offline self-test makes no AWS or DB calls.
+
+**Files changed:** `.gitignore`; `chatbot/Dockerfile.production`; `chatbot/package.json`; `chatbot/pnpm-lock.yaml`; `chatbot/lib/db/matter-document-security-repository.ts`; `chatbot/lib/db/queries.ts`; `chatbot/lib/matter-documents/security-reconciliation.ts`; `chatbot/lib/matter-documents/guardduty-sqs-reconciler.ts`; `chatbot/lib/matter-documents/guardduty-sqs-reconciler.test.ts`; `chatbot/scripts/build-guardduty-malware-reconciler.mjs`; `chatbot/scripts/guardduty-malware-reconciler.ts`; and this handoff.
+
+**Validation:** `pnpm test:unit` — 463/463 passed; focused GuardDuty suite — 20/20 passed; focused Biome — passed; `pnpm build` — passed; `docker build --platform linux/amd64 -f chatbot/Dockerfile.production -t immigration-ai-chatbot:guardduty-reconciler-review .` — passed, local image ID `sha256:488910c47b8cb7118bc0ed266d0f7316525fd21aed4f6d6368870bbbf7794bd2`; `docker run --rm --read-only --user 1000:1000 --network none immigration-ai-chatbot:guardduty-reconciler-review node /app/ops/guardduty-malware-reconciler.cjs --self-test` — `guardduty_worker_self_test=passed`; `git diff --check` — passed.
+
+No AWS resource or configuration was changed; no SQS task was run, no database connection or migration occurred, and no image was pushed or deployed. No schema or migration files were changed. The worktree remains uncommitted and unpushed. Infrastructure/EventBridge/SQS configuration, image publication and worker deployment require separate approval.
