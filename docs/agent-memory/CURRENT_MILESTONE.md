@@ -967,3 +967,18 @@ Approved three-step plan:
 Manual reviewed fallbacks remain disaster-recovery content. They are not the intended day-to-day maintenance mechanism.
 
 **Current next action:** implement and independently review Step A only. No AWS mutation, scheduler creation, admin UI, schema migration or public UI redesign belongs in Step A.
+
+## 2026-10-01 Policy Intelligence automatic maintenance — STEP A ACCEPTED / STEP B ACTIVE
+
+Step A is accepted at `4f6b1a905698970ae8a21ede41531cfd53f2dab4`.
+
+Step B is now the only active implementation unit:
+
+- add a minimal authenticated admin Policy Intelligence management surface;
+- list current durable policy items;
+- allow archive/unpublish and restore/reactivate;
+- reuse existing lifecycle state where possible;
+- an archived item must remain suppressed across later automatic sync and must not be silently republished until admin restore;
+- no scheduler/AWS work yet.
+
+Step C remains planned: one daily EventBridge Scheduler -> independent ECS one-off operator at 06:00 Australia/Sydney.
