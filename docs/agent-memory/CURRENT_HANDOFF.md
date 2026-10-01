@@ -3065,3 +3065,75 @@ Focused validation was reported PASS: 53 tests, production build, and `git diff 
 - `git diff --check` — **PASS**.
 
 **Deployment boundary:** No AWS resource was inspected or mutated, no database connection/migration occurred, and no live OpenAI/provider or official-source sync was invoked. The daily EventBridge schedule does not exist yet. Next action: after source review, perform authoritative AWS inspection and separately deploy/register the dedicated ECS operator task, then conduct one bounded live task acceptance before enabling the 06:00 `Australia/Sydney` schedule.
+
+## Policy Intelligence automatic maintenance Step C — DEPLOYED / ACCEPTED — 2026-10-01
+
+Step C is complete. The dedicated Policy Intelligence operator was built, pushed by immutable digest, registered as an independent ECS/Fargate one-off task, exercised successfully against the live staging environment, and then scheduled once daily.
+
+### Accepted source/runtime checkpoint
+
+- Source commit: `dc8595d365b565c869bcc82f2f02bc9cfd8ab9ec`
+- Operator Dockerfile: `chatbot/Dockerfile.policy-sync-runner`
+- Default command: `pnpm policy:sync-all`
+- ECR repository: `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot`
+- Image tag used for deployment: `policy-sync-dc8595d`
+- Immutable image digest: `sha256:3caad29bc292b79de2508a4e0fdebb086a97824a709f45309e959b3fb369f28c`
+
+### ECS operator deployment
+
+- Cluster: `immigration-ai-staging`
+- Dedicated task-definition family: `immigration-ai-staging-policy-sync`
+- Accepted task definition: `immigration-ai-staging-policy-sync:1`
+- Runtime: Fargate / Linux / X86_64
+- Network: existing staging awsvpc subnets and security group; public IP enabled
+- No ALB/listener/inbound port
+- Secrets are injected through existing SSM references for `POSTGRES_URL` and `OPENAI_API_KEY`
+- `POLICY_INTELLIGENCE_ENABLED=true` is provided as task environment
+- Operator logs use the existing staging chatbot CloudWatch log group with `policy-sync` stream prefix
+
+### Bounded live acceptance
+
+Manual ECS task:
+
+`arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/89f58a1729724b71bf85d33cd981adb0`
+
+Result:
+
+- task reached `STOPPED`
+- stop code: `EssentialContainerExited`
+- container exit code: **0**
+- running image digest exactly matched `sha256:3caad29bc292b79de2508a4e0fdebb086a97824a709f45309e959b3fb369f28c`
+- aggregate operator result: `status=succeeded`, `exitCode=0`
+- all three configured sources succeeded:
+  - `home-affairs-guidance`
+  - `federal-register-legislation`
+  - `art-immigration-review`
+
+The AWS CLI `tasks-stopped` waiter timed out before the task completed because the live run took roughly 13.5 minutes. This was not an operator failure; authoritative ECS state later showed successful completion with exit code 0.
+
+### EventBridge Scheduler
+
+- Schedule name: `immigration-ai-staging-policy-sync-daily`
+- Schedule ARN: `arn:aws:scheduler:ap-southeast-2:747452892291:schedule/default/immigration-ai-staging-policy-sync-daily`
+- State: **ENABLED**
+- Expression: `cron(0 6 * * ? *)`
+- Timezone: `Australia/Sydney`
+- Flexible time window: OFF
+- Target: ECS cluster `immigration-ai-staging`
+- Target task definition: `immigration-ai-staging-policy-sync:1`
+- Launch type: Fargate
+- Task count: 1
+- Retry policy: maximum event age 3600 seconds; maximum retry attempts 1
+- Scheduler IAM role: `arn:aws:iam::747452892291:role/immigration-ai-staging-policy-sync-scheduler-role`
+
+The timezone-aware schedule therefore runs at 06:00 Sydney local time across daylight-saving changes.
+
+### Final operating model
+
+Policy Intelligence automatic maintenance is now operational:
+
+`daily Scheduler -> dedicated ECS one-off operator -> policy:sync-all -> official-source discovery/acquisition -> AI analysis -> verifier -> existing publication gate`
+
+Step-B admin archive/restore remains the exception-control layer. Archived items remain suppressed across future syncs until explicitly restored. Existing reviewed manual fallback content remains the public disaster-recovery path.
+
+**Automatic Policy Intelligence maintenance Steps A, B and C are complete and accepted.**
