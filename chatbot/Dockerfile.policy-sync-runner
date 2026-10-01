@@ -1,0 +1,20 @@
+# Build context: repository root.
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+
+COPY chatbot/package.json chatbot/pnpm-lock.yaml ./
+# Keep the locked dev dependency `tsx`; the existing operator executes TypeScript directly.
+RUN pnpm install --frozen-lockfile
+
+COPY chatbot/ ./
+
+ENV NODE_ENV=production
+
+# Import the operator without invoking it, checking the TypeScript runtime and
+# module graph during image build without contacting a database or source.
+RUN node --conditions=react-server --import tsx --input-type=module -e 'import("./scripts/policy-sync-all.ts").then((operator) => { if (typeof (operator.default ?? operator).runPolicySyncAll !== "function") process.exit(1); })'
+
+CMD ["pnpm", "policy:sync-all"]

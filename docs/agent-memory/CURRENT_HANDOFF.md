@@ -3043,3 +3043,25 @@ Accepted behavior:
 Focused validation was reported PASS: 53 tests, production build, and `git diff --check`.
 
 **Next active unit: Step C — deploy the independent Policy Intelligence operator and schedule one daily run at 06:00 Australia/Sydney.**
+
+
+## Policy Intelligence automatic maintenance Step C source implementation — 2026-10-01
+
+**Scope:** Step C source artifact only. Added a dedicated Node 22 operator image, separate from the long-lived Next.js web image. It installs the existing chatbot package from `pnpm-lock.yaml`, includes the existing TypeScript sync source, and defaults to `pnpm policy:sync-all`. The image has no exposed web port and does not start Next.js or run migrations. Its build-time import check and offline smoke do not invoke the sync.
+
+**Runtime configuration contract:** The future ECS task must inject `POSTGRES_URL`, `OPENAI_API_KEY`, `POLICY_INTELLIGENCE_ENABLED=true`, and any configured Policy Intelligence model/provider settings. The image contains no credentials or environment values.
+
+**Changed files:**
+
+- `chatbot/Dockerfile.policy-sync-runner`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+**Validation:**
+
+- Focused command: `pnpm exec node --import tsx --test scripts/policy-sync-all.test.ts lib/policy-intelligence/pipeline.test.ts` — **PASS**, 43 passed, 0 failed, 0 skipped. Covers serial order/partial failure, verifier-gated publication and held states, and Step-B archive/sync suppression.
+- `docker build --platform linux/amd64 -f chatbot/Dockerfile.policy-sync-runner -t immigration-ai-policy-sync:local .` — **PASS**. Image metadata confirms the default command is `pnpm policy:sync-all` and no ports are exposed.
+- Offline container smoke — **PASS**. Node 22 with tsx imported the operator module; the assertion confirmed the `runPolicySyncAll` API resolved and no web server handle started. The sync command was not invoked.
+- `pnpm build` — **PASS**. Next emitted the existing non-blocking notice that local `baseline-browser-mapping` data is over two months old.
+- `git diff --check` — **PASS**.
+
+**Deployment boundary:** No AWS resource was inspected or mutated, no database connection/migration occurred, and no live OpenAI/provider or official-source sync was invoked. The daily EventBridge schedule does not exist yet. Next action: after source review, perform authoritative AWS inspection and separately deploy/register the dedicated ECS operator task, then conduct one bounded live task acceptance before enabling the 06:00 `Australia/Sydney` schedule.
