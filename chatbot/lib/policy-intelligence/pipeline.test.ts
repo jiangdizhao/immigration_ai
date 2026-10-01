@@ -616,7 +616,7 @@ test("unsupported narrative addition blocks publication despite its supported li
   assert.equal(result.outcomes[0].outcome, "held");
 });
 
-test("truncated evidence remains marked through snapshot and cannot publish", async () => {
+test("truncated evidence stays auditable but is not a publication veto", async () => {
   let analyzerSawTruncation = false;
   const h = dependencies({
     evidenceTruncated: true,
@@ -632,36 +632,35 @@ test("truncated evidence remains marked through snapshot and cannot publish", as
   const snapshot = [...h.store.snapshots.values()][0];
   assert.equal(analyzerSawTruncation, true);
   assert.equal(snapshot.evidenceTruncated, true);
-  assert.equal(result.run.heldCount, 1);
-  assert.equal(result.run.publishedCount, 0);
-  assert.ok(
-    [...h.store.revisions.values()][0].snapshotId === snapshot.id &&
-      result.outcomes[0].reasonCode === "source_acquisition_incomplete"
-  );
-  assert.ok(
-    evaluatePublicationGate({
-      analysis: analysis(`policy-snapshot:${snapshot.id}`),
-      verification: verification(analysis(`policy-snapshot:${snapshot.id}`)),
-      evidence: [
-        {
-          evidenceRef: `policy-snapshot:${snapshot.id}`,
-          snapshotId: snapshot.id,
-          sourceConfigId: snapshot.sourceConfigId,
-          sourceId: snapshot.sourceId,
-          authority: snapshot.authority,
-          canonicalUrl: snapshot.canonicalUrl,
-          officialTitle: snapshot.officialTitle,
-          retrievedAt: snapshot.retrievedAt,
-          contentHash: snapshot.contentHash,
-          sourceDate: snapshot.sourceDate,
-          effectiveDate: snapshot.effectiveDate,
-          evidenceTruncated: snapshot.evidenceTruncated,
-          text: snapshot.normalizedEvidence,
-        },
-      ],
-      acquisitionComplete: false,
-    }).reasons.includes("source_evidence_truncated")
-  );
+  assert.equal(result.run.heldCount, 0);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.outcomes[0].outcome, "published");
+
+  const gate = evaluatePublicationGate({
+    analysis: analysis(`policy-snapshot:${snapshot.id}`),
+    verification: verification(analysis(`policy-snapshot:${snapshot.id}`)),
+    evidence: [
+      {
+        evidenceRef: `policy-snapshot:${snapshot.id}`,
+        snapshotId: snapshot.id,
+        sourceConfigId: snapshot.sourceConfigId,
+        sourceId: snapshot.sourceId,
+        authority: snapshot.authority,
+        canonicalUrl: snapshot.canonicalUrl,
+        officialTitle: snapshot.officialTitle,
+        retrievedAt: snapshot.retrievedAt,
+        contentHash: snapshot.contentHash,
+        sourceDate: snapshot.sourceDate,
+        effectiveDate: snapshot.effectiveDate,
+        evidenceTruncated: snapshot.evidenceTruncated,
+        text: snapshot.normalizedEvidence,
+      },
+    ],
+    acquisitionComplete: false,
+  });
+  assert.equal(gate.eligible, true);
+  assert.equal(gate.reasons.includes("source_acquisition_incomplete"), false);
+  assert.equal(gate.reasons.includes("source_evidence_truncated"), false);
 });
 
 test("same-current-content concurrent requests reuse one current snapshot", async () => {

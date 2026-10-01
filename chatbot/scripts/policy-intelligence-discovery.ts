@@ -10,8 +10,10 @@ export const DISCOVERY_LIMITS = {
   maxLinksPerPage: 8,
   maxCandidates: 10,
   maxAlertItems: 100,
-  maxTotalBytes: 32 * 1024 * 1024,
-  maxResponseBytes: 8 * 1024 * 1024,
+  // Transport ceilings are resource-safety bounds only, not relevance gates.
+  // 64 MiB covers the sitemap protocol's normal uncompressed ceiling.
+  maxTotalBytes: 256 * 1024 * 1024,
+  maxResponseBytes: 64 * 1024 * 1024,
   maxPreviewCharacters: 500,
   maxRedirects: 3,
   requestTimeoutMs: 15_000,
@@ -23,8 +25,8 @@ export const HOME_AFFAIRS_ALERT_LIMITS = {
   maxLinksPerPage: 1,
   maxCandidates: DISCOVERY_LIMITS.maxCandidates,
   maxAlertItems: DISCOVERY_LIMITS.maxAlertItems,
-  maxTotalBytes: 32 * 1024 * 1024,
-  maxResponseBytes: 8 * 1024 * 1024,
+  maxTotalBytes: DISCOVERY_LIMITS.maxTotalBytes,
+  maxResponseBytes: DISCOVERY_LIMITS.maxResponseBytes,
 } as const;
 
 export type DiscoveryLimits = Partial<

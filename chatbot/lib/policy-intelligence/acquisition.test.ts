@@ -71,7 +71,7 @@ test("short non-empty official evidence is accepted", async () => {
   assert.ok(result.normalizedEvidence.length < 120);
 });
 
-test("Home Affairs structured alert title and content support a short detail page", async () => {
+test("Home Affairs structured alert evidence is preserved regardless of detail length", async () => {
   const result = await acquireOfficialPolicySource({
     candidate: {
       ...candidate,
@@ -81,12 +81,16 @@ test("Home Affairs structured alert title and content support a short detail pag
     fetchOptions: fixtureFetch(
       200,
       {},
-      "<html><body><p>Brief detail.</p></body></html>"
+      `<html><body><p>${"Detailed official page text. ".repeat(20)}</p></body></html>`
     ),
   });
   assert.match(result.normalizedEvidence, /Official alert title/);
-  assert.match(result.normalizedEvidence, /Official structured alert content from siteData\./);
-  assert.match(result.normalizedEvidence, /Brief detail/);
+  assert.match(
+    result.normalizedEvidence,
+    /Official structured alert content from siteData\./
+  );
+  assert.match(result.normalizedEvidence, /Detailed official page text/);
+  assert.equal(result.officialTitle, "Official alert title");
   assert.equal(result.contentHash.length, 64);
 });
 

@@ -275,12 +275,10 @@ export function evaluatePublicationGate(input: {
   const reasons: string[] = [];
   const analysis = policyAnalysisSchema.parse(input.analysis);
   const refs = new Set(input.evidence.map((item) => item.evidenceRef));
-  if (!input.acquisitionComplete) {
-    reasons.push("source_acquisition_incomplete");
-  }
-  if (input.evidence.some((item) => item.evidenceTruncated)) {
-    reasons.push("source_evidence_truncated");
-  }
+  // Evidence truncation is a model-input/resource bound, not a policy
+  // relevance or publication veto. The analyzer and verifier assess exactly
+  // the bounded evidence packet they receive. Provenance still records
+  // evidenceTruncated for auditability.
   if (
     input.evidence.length === 0 ||
     input.evidence.some(

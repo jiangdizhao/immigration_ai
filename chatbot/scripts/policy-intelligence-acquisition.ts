@@ -140,8 +140,7 @@ export function createOfficialSourceSnapshotInput(input: {
   const pageEvidence = normalized.normalizedEvidence;
   const useStructuredAlertEvidence =
     source.strategy === "home_affairs_site_alerts" &&
-    input.candidate.discoveryStrategy === "home_affairs_site_alerts" &&
-    pageEvidence.length < 120;
+    input.candidate.discoveryStrategy === "home_affairs_site_alerts";
   const structuredAlertParts = useStructuredAlertEvidence
     ? [input.candidate.discoveredTitle, input.candidate.preview]
         .filter((part): part is string => typeof part === "string")
@@ -170,8 +169,9 @@ export function createOfficialSourceSnapshotInput(input: {
         `${normalized.fullContentHash}\n${input.candidate.contentHash}\n${completeEvidence}`
       )
     : normalized.fullContentHash;
-  const officialTitle =
-    pageCandidate.discoveredTitle ?? input.candidate.discoveredTitle;
+  const officialTitle = useStructuredAlertEvidence
+    ? (input.candidate.discoveredTitle ?? pageCandidate.discoveredTitle)
+    : (pageCandidate.discoveredTitle ?? input.candidate.discoveredTitle);
   if (!officialTitle?.trim()) {
     throw new Error("source_title_missing");
   }
