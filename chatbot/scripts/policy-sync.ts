@@ -334,9 +334,16 @@ async function main() {
     }
     idempotence = "pass";
   }
-  process.stdout.write(
-    `${JSON.stringify({ mode, sourceConfigId: options.sourceId, run: result.run, outcomes: result.outcomes.map(({ candidateId: _candidateId, ...outcome }) => outcome), idempotence })}\n`
-  );
+  await new Promise<void>((resolve) => {
+    process.stdout.write(
+      `${JSON.stringify({ mode, sourceConfigId: options.sourceId, run: result.run, outcomes: result.outcomes.map(({ candidateId: _candidateId, ...outcome }) => outcome), idempotence })}\n`,
+      () => resolve()
+    );
+  });
+  // This is a one-shot operator CLI. The live repository keeps a database
+  // client handle open, so an explicit successful exit is required after all
+  // awaited writes and output have completed.
+  process.exit(0);
 }
 
 main().catch((error: unknown) => {
@@ -344,6 +351,5 @@ main().catch((error: unknown) => {
     error instanceof Error && /^[a-z0-9_]{1,80}$/.test(error.message)
       ? error.message
       : "policy_sync_failed";
-  console.error(`Policy sync failed: ${code}`);
-  process.exitCode = 1;
+  process.stderr.write(`Policy sync failed: ${code}\n`, () => process.exit(1));
 });
