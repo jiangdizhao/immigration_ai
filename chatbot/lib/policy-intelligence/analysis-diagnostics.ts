@@ -12,6 +12,9 @@ import {
 } from "ai";
 import { ZodError } from "zod";
 
+export const POLICY_ANALYSIS_TIMEOUT_MS = 90_000;
+export const POLICY_ANALYSIS_RETRY_TIMEOUT_MS = 120_000;
+
 export type PolicyAnalysisFailureCode =
   | "provider_timeout"
   | "provider_error"
@@ -53,7 +56,7 @@ export type PolicyAnalysisFailureDiagnostic = {
   analysisTimeoutTriggered: boolean;
   retryMetadata?: {
     attemptCount: 2;
-    timeoutSeconds: 60;
+    timeoutSeconds: 120;
     retryReason: "provider_timeout";
   };
   attemptTelemetry?: PolicyAnalysisAttemptTelemetry[];
@@ -259,14 +262,14 @@ export async function withPolicyAnalysisTimeoutRetry<T>(
     throw first.failure;
   }
 
-  const second = await attemptOnce(60_000, 2);
+  const second = await attemptOnce(POLICY_ANALYSIS_RETRY_TIMEOUT_MS, 2);
   if (second.ok) {
     return { value: second.value, attempts: [first.telemetry, second.telemetry] };
   }
 
   second.failure.retryMetadata = {
     attemptCount: 2,
-    timeoutSeconds: 60,
+    timeoutSeconds: 120,
     retryReason: "provider_timeout",
   };
   second.failure.attemptTelemetry = [first.telemetry, second.telemetry];

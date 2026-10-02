@@ -109,7 +109,7 @@ export type PolicyCandidateFailureDiagnostic = {
   message: string;
   timestamp: string;
   attemptCount?: 2;
-  timeoutSeconds?: 60;
+  timeoutSeconds?: 120;
   retryReason?: "provider_timeout";
 };
 

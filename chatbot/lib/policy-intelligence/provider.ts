@@ -13,6 +13,7 @@ import {
 } from "./contracts";
 import {
   classifyPolicyAnalysisFailure,
+  POLICY_ANALYSIS_TIMEOUT_MS,
   withPolicyAnalysisTimeoutRetry,
   type PolicyAnalysisExecutionResult,
 } from "./analysis-diagnostics";
@@ -153,7 +154,7 @@ export function createOpenAIPolicyAnalyzer(
         } finally {
           clearTimeout(timer);
         }
-      }, config.timeoutMs, {
+      }, POLICY_ANALYSIS_TIMEOUT_MS, {
         evidencePacketCount: evidence.length,
         totalEvidenceChars: evidence.reduce(
           (total, packet) => total + Math.min(packet.text.length, 100_000),

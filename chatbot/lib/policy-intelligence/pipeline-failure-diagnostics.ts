@@ -96,11 +96,11 @@ export function readCandidateFailureDiagnostics(
             ? value.errorName
             : null,
         ...(value.attemptCount === 2 &&
-        value.timeoutSeconds === 60 &&
+        value.timeoutSeconds === 120 &&
         value.retryReason === "provider_timeout"
           ? {
               attemptCount: 2 as const,
-              timeoutSeconds: 60 as const,
+              timeoutSeconds: 120 as const,
               retryReason: "provider_timeout" as const,
             }
           : {}),
@@ -133,7 +133,7 @@ export function readAnalysisAttemptDiagnostics(
       typeof value.timeoutSeconds !== "number" ||
       !Number.isFinite(value.timeoutSeconds) ||
       value.timeoutSeconds <= 0 ||
-      value.timeoutSeconds > 60 ||
+      value.timeoutSeconds > 120 ||
       typeof value.elapsedMs !== "number" ||
       !Number.isFinite(value.elapsedMs) ||
       value.elapsedMs < 0 ||

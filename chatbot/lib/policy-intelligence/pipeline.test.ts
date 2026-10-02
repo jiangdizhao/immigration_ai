@@ -12,6 +12,8 @@ import { z } from "zod";
 import {
   classifyPolicyAnalysisFailure,
   PolicyAnalysisDiagnosticError,
+  POLICY_ANALYSIS_RETRY_TIMEOUT_MS,
+  POLICY_ANALYSIS_TIMEOUT_MS,
   withPolicyAnalysisTimeoutRetry,
 } from "./analysis-diagnostics";
 import type {
@@ -1209,7 +1211,7 @@ test("provider and empty-output failures are classified by AI SDK error types", 
     analyze: async () =>
       await withPolicyAnalysisTimeoutRetry(
         async () => Promise.reject(providerError),
-        45_000,
+        90_000,
         analysisAttemptContext
       ),
   });
@@ -1230,7 +1232,7 @@ test("provider and empty-output failures are classified by AI SDK error types", 
     analyze: async () =>
       await withPolicyAnalysisTimeoutRetry(
         async () => Promise.reject(new NoOutputGeneratedError()),
-        45_000,
+        90_000,
         analysisAttemptContext
       ),
   });
@@ -1244,16 +1246,17 @@ test("provider and empty-output failures are classified by AI SDK error types", 
 });
 
 test("analysis provider uses one call when the first attempt succeeds", async () => {
+  assert.equal(POLICY_ANALYSIS_TIMEOUT_MS, 90_000);
   const calls: number[] = [];
   const h = dependencies({
     analyze: async (evidence) =>
       await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
         calls.push(timeoutMs);
         return analysis(evidence[0].evidenceRef);
-      }, 45_000, analysisAttemptContext),
+      }, 90_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  assert.deepEqual(calls, [45_000]);
+  assert.deepEqual(calls, [90_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.equal(h.calls().verifyCalls, 1);
   assert.equal(result.run.analysisAttempts.length, 1);
@@ -1267,7 +1270,8 @@ test("analysis provider uses one call when the first attempt succeeds", async ()
   assert.equal(adminItem.analysisAttempts[0].modelName, "gpt-5.6-sol");
 });
 
-test("analysis timeout retries once at 60 seconds then continues the pipeline", async () => {
+test("analysis timeout retries once at 120 seconds then continues the pipeline", async () => {
+  assert.equal(POLICY_ANALYSIS_RETRY_TIMEOUT_MS, 120_000);
   const calls: number[] = [];
   const h = dependencies({
     analyze: async (evidence) =>
@@ -1280,15 +1284,15 @@ test("analysis timeout retries once at 60 seconds then continues the pipeline", 
           );
         }
         return analysis(evidence[0].evidenceRef);
-      }, 45_000, analysisAttemptContext),
+      }, 90_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  assert.deepEqual(calls, [45_000, 60_000]);
+  assert.deepEqual(calls, [90_000, 120_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.deepEqual(result.run.candidateFailures, []);
   assert.deepEqual(result.run.analysisAttempts.map(({ attemptNumber, timeoutSeconds, outcome }) => ({ attemptNumber, timeoutSeconds, outcome })), [
-    { attemptNumber: 1, timeoutSeconds: 45, outcome: "provider_timeout" },
-    { attemptNumber: 2, timeoutSeconds: 60, outcome: "success" },
+    { attemptNumber: 1, timeoutSeconds: 90, outcome: "provider_timeout" },
+    { attemptNumber: 2, timeoutSeconds: 120, outcome: "success" },
   ]);
   assert.equal(result.run.analysisAttempts[1].elapsedMs >= 0, true);
   assert.equal(h.calls().verifyCalls, 1);
@@ -1304,17 +1308,17 @@ test("second analysis timeout fails closed and records safe retry metadata", asy
           new DOMException("secret and raw provider response", "AbortError"),
           true
         );
-      }, 45_000, analysisAttemptContext),
+      }, 90_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   const failure = result.run.candidateFailures[0];
-  assert.deepEqual(calls, [45_000, 60_000]);
+  assert.deepEqual(calls, [90_000, 120_000]);
   assert.equal(result.run.publishedCount, 0);
   assert.equal(h.store.revisions.size, 0);
   assert.equal(failure.stage, "analysis");
   assert.equal(failure.errorCode, "provider_timeout");
   assert.equal(failure.attemptCount, 2);
-  assert.equal(failure.timeoutSeconds, 60);
+  assert.equal(failure.timeoutSeconds, 120);
   assert.equal(failure.retryReason, "provider_timeout");
   assert.deepEqual(result.run.analysisAttempts.map((attempt) => attempt.outcome), [
     "provider_timeout",
@@ -1324,8 +1328,8 @@ test("second analysis timeout fails closed and records safe retry metadata", asy
   assert.equal(h.store.snapshots.size, 1);
   const [adminItem] = await h.store.adminService.listItems();
   assert.equal(adminItem.pipelineFailures[0].attemptCount, 2);
-  assert.equal(adminItem.pipelineFailures[0].timeoutSeconds, 60);
-  assert.deepEqual(adminItem.analysisAttempts.map((attempt) => attempt.timeoutSeconds), [45, 60]);
+  assert.equal(adminItem.pipelineFailures[0].timeoutSeconds, 120);
+  assert.deepEqual(adminItem.analysisAttempts.map((attempt) => attempt.timeoutSeconds), [90, 120]);
 });
 
 test("source-wide timeout stays separate from a successful item's publication diagnostics", async () => {
@@ -1344,7 +1348,7 @@ test("source-wide timeout stays separate from a successful item's publication di
             new DOMException("private provider payload", "AbortError"),
             true
           );
-        }, 45_000, analysisAttemptContext);
+        }, 90_000, analysisAttemptContext);
       }
       return analysis(evidence[0].evidenceRef);
     },
@@ -1408,7 +1412,7 @@ test("only the analysis timeout retries; other failures and unrelated aborts do 
       withPolicyAnalysisTimeoutRetry(async () => {
         calls += 1;
         throw entry.error;
-      }, 45_000, analysisAttemptContext),
+      }, 90_000, analysisAttemptContext),
       (error: unknown) =>
         error instanceof PolicyAnalysisDiagnosticError &&
         error.errorCode === entry.code
