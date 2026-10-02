@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import {
+  classifyPolicyAnalysisFailure,
+  PolicyAnalysisDiagnosticError,
+} from "./analysis-diagnostics";
 import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
 import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
@@ -90,6 +94,7 @@ export type PolicyCandidateFailureDiagnostic = {
   sourceConfigId: string;
   stage: PolicyCandidateFailureStage;
   errorCode: string;
+  errorName: string | null;
   message: string;
   timestamp: string;
 };
@@ -305,6 +310,7 @@ function safeCandidateFailure(error: unknown, stage: PolicyCandidateFailureStage
   };
   return {
     errorCode,
+    errorName: null,
     message:
       errorCode === "pipeline_error"
         ? stageMessages[stage] ?? DIAGNOSTIC_ERROR_MESSAGES.pipeline_error
@@ -431,7 +437,9 @@ export async function runPolicyIntelligenceSync(
           referenced.some((ref) => !allowedRefs.has(ref)) ||
           analysis.relatedSnapshotRefs.some((ref) => ref !== snapshot.id)
         ) {
-          throw new Error("unknown_analysis_evidence_ref");
+          throw new PolicyAnalysisDiagnosticError(
+            "unknown_analysis_evidence_ref"
+          );
         }
         stage = "verification";
         const verification = validatePolicyVerification(
@@ -508,7 +516,17 @@ export async function runPolicyIntelligenceSync(
         run.failureCount += 1;
         run.heldCount += 1;
         runFailure = true;
-        const diagnostic = safeCandidateFailure(error, stage);
+        const diagnostic =
+          stage === "analysis"
+            ? (() => {
+                const failure = classifyPolicyAnalysisFailure(error);
+                return {
+                  errorCode: failure.errorCode,
+                  errorName: failure.errorName,
+                  message: failure.message,
+                };
+              })()
+            : safeCandidateFailure(error, stage);
         run.safeErrorCode ??= diagnostic.errorCode;
         run.candidateFailures.push({
           itemId,
@@ -516,6 +534,7 @@ export async function runPolicyIntelligenceSync(
           sourceConfigId,
           stage,
           errorCode: diagnostic.errorCode,
+          errorName: diagnostic.errorName,
           message: diagnostic.message,
           timestamp: now(),
         });

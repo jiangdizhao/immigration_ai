@@ -11,6 +11,7 @@ import {
   policyAnalysisSchema,
   policyVerificationSchema,
 } from "./contracts";
+import { classifyPolicyAnalysisFailure } from "./analysis-diagnostics";
 
 export type PolicyIntelligenceModelConfig = {
   enabled: boolean;
@@ -121,6 +122,8 @@ export function createOpenAIPolicyAnalyzer(
           abortSignal: controller.signal,
         });
         return policyAnalysisSchema.parse(output);
+      } catch (error) {
+        throw classifyPolicyAnalysisFailure(error, controller.signal.aborted);
       } finally {
         clearTimeout(timer);
       }

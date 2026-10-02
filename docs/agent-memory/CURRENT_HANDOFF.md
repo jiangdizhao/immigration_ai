@@ -3206,3 +3206,24 @@ No AWS resources were changed and no database migration was applied.
 - `pnpm test:unit` — **PASS**, 482 passed, 0 failed, 0 skipped.
 - `pnpm build` — **PASS**. Next emitted the existing notice that local `baseline-browser-mapping` data is over two months old.
 - `git diff --check` — **PASS**.
+
+## 2026-10-02 Policy Intelligence analysis failure classification
+
+**Scope:** Analysis-stage diagnostics only. The analyzer now classifies installed AI SDK 6 error types (`APICallError`, `RetryError`, `NoObjectGeneratedError`, `JSONParseError`, `TypeValidationError`, and related typed failures), Zod validation errors, and the provider abort signal into safe operational codes. Unknown analyzer exceptions become `analysis_internal_error`. Persisted diagnostics include an allowlisted error class name and a generic explanation; raw messages, prompts, source content, model output, provider request/response data, and stack traces are not persisted. The analyzer prompt, verifier, retry configuration, discovery, and publication behavior are unchanged. No schema/database or AWS changes were made.
+
+**Changed files:**
+
+- `chatbot/lib/policy-intelligence/analysis-diagnostics.ts`
+- `chatbot/lib/policy-intelligence/provider.ts`
+- `chatbot/lib/policy-intelligence/pipeline.ts`
+- `chatbot/lib/policy-intelligence/pipeline-failure-diagnostics.ts`
+- `chatbot/lib/policy-intelligence/pipeline.test.ts`
+- `chatbot/components/admin-policy-intelligence.tsx`
+- `docs/agent-memory/CURRENT_HANDOFF.md`
+
+**Validation:**
+
+- Focused pipeline tests — **PASS**, 48 passed, 0 failed, 0 skipped.
+- `pnpm test:unit` — **PASS**, 486 passed, 0 failed, 0 skipped.
+- `pnpm build` — **PASS**. Next emitted the existing notice that local `baseline-browser-mapping` data is over two months old.
+- `git diff --check` — **PASS**.
