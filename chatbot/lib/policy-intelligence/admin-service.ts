@@ -12,8 +12,14 @@ import type {
   AdminPolicyIntelligenceService,
 } from "./admin-api";
 import { policyAnalysisSchema } from "./contracts";
-import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
-import { readCandidateFailureDiagnostics } from "./pipeline-failure-diagnostics";
+import {
+  buildAdminPublicationDiagnostics,
+  buildAdminSourceSyncDiagnostic,
+} from "./publication-diagnostics";
+import {
+  readAnalysisAttemptDiagnostics,
+  readCandidateFailureDiagnostics,
+} from "./pipeline-failure-diagnostics";
 import { db } from "./server-db";
 
 export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
@@ -163,12 +169,19 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
           item.id,
           item.primarySourceConfigId
         ),
+        analysisAttempts: readAnalysisAttemptDiagnostics(
+          latestRunBySource.get(item.primarySourceConfigId)?.metadata,
+          item.id,
+          item.primarySourceConfigId
+        ),
+        sourceSyncDiagnostic: buildAdminSourceSyncDiagnostic(
+          latestRunBySource.get(item.primarySourceConfigId)
+        ),
         publicationDiagnostics: buildAdminPublicationDiagnostics({
           editorialStatus: item.editorialStatus,
           analysis: revision?.analysis ?? null,
           verification: revision?.verification ?? null,
           evidence,
-          latestSourceRun: latestRunBySource.get(item.primarySourceConfigId),
         }),
       };
     }) satisfies AdminPolicyIntelligenceItem[];

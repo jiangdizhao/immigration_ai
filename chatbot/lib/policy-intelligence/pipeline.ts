@@ -3,6 +3,10 @@ import {
   classifyPolicyAnalysisFailure,
   PolicyAnalysisDiagnosticError,
 } from "./analysis-diagnostics";
+import type {
+  PolicyAnalysisAttemptTelemetry,
+  PolicyAnalysisExecutionResult,
+} from "./analysis-diagnostics";
 import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
 import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
@@ -77,6 +81,13 @@ export type PolicyRunRecord = {
   failureCount: number;
   safeErrorCode: string | null;
   candidateFailures: PolicyCandidateFailureDiagnostic[];
+  analysisAttempts: PolicyCandidateAnalysisAttempt[];
+};
+
+export type PolicyCandidateAnalysisAttempt = PolicyAnalysisAttemptTelemetry & {
+  itemId: string;
+  snapshotId: string;
+  sourceConfigId: string;
 };
 
 export type PolicyCandidateFailureStage =
@@ -144,6 +155,7 @@ export interface PolicyIntelligenceRepository {
       | "failureCount"
       | "safeErrorCode"
       | "candidateFailures"
+      | "analysisAttempts"
     >
   ): MaybePromise<void>;
   finishRun(run: PolicyRunRecord): MaybePromise<void>;
@@ -344,6 +356,7 @@ export async function runPolicyIntelligenceSync(
     failureCount: 0,
     safeErrorCode: null,
     candidateFailures: [],
+    analysisAttempts: [],
   };
   await dependencies.repository.startRun(run);
   const outcomes: PolicySyncResult["outcomes"] = [];
@@ -423,9 +436,27 @@ export async function runPolicyIntelligenceSync(
         }
         const evidence = [toEvidencePacket(snapshot)];
         stage = "analysis";
-        const analysis = policyAnalysisSchema.parse(
-          await dependencies.analyzer.analyze({ evidence })
-        );
+        const analyzerOutput = await dependencies.analyzer.analyze({ evidence });
+        let analysisValue: unknown = analyzerOutput;
+        if (
+          typeof analyzerOutput === "object" &&
+          analyzerOutput !== null &&
+          "value" in analyzerOutput &&
+          "attempts" in analyzerOutput &&
+          Array.isArray(analyzerOutput.attempts)
+        ) {
+          const execution = analyzerOutput as PolicyAnalysisExecutionResult<unknown>;
+          run.analysisAttempts.push(
+            ...execution.attempts.map((attempt) => ({
+              ...attempt,
+              itemId: item.id,
+              snapshotId: snapshot.id,
+              sourceConfigId,
+            }))
+          );
+          analysisValue = execution.value;
+        }
+        const analysis = policyAnalysisSchema.parse(analysisValue);
         run.analyzedCount += 1;
         const allowedRefs = new Set(evidence.map((entry) => entry.evidenceRef));
         const referenced = [
@@ -529,6 +560,7 @@ export async function runPolicyIntelligenceSync(
                   errorName: failure.errorName,
                   message: failure.message,
                   retryMetadata: failure.retryMetadata,
+                  attemptTelemetry: failure.attemptTelemetry,
                 };
               })()
             : safeCandidateFailure(error, stage);
@@ -544,6 +576,20 @@ export async function runPolicyIntelligenceSync(
           timestamp: now(),
           ...(diagnostic.retryMetadata ?? {}),
         });
+        if (
+          stage === "analysis" &&
+          "attemptTelemetry" in diagnostic &&
+          diagnostic.attemptTelemetry
+        ) {
+          run.analysisAttempts.push(
+            ...diagnostic.attemptTelemetry.map((attempt) => ({
+              ...attempt,
+              itemId: itemId ?? "",
+              snapshotId: snapshotId ?? "",
+              sourceConfigId,
+            }))
+          );
+        }
         outcomes.push({
           candidateId: candidate.candidateId,
           outcome: "failed",

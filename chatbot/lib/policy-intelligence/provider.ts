@@ -14,6 +14,7 @@ import {
 import {
   classifyPolicyAnalysisFailure,
   withPolicyAnalysisTimeoutRetry,
+  type PolicyAnalysisExecutionResult,
 } from "./analysis-diagnostics";
 
 export type PolicyIntelligenceModelConfig = {
@@ -50,7 +51,10 @@ export function getPolicyIntelligenceModelConfig(
 export type PolicyAnalyzer = {
   analyze(input: {
     evidence: readonly PolicyEvidencePacketItem[];
-  }): PolicyAnalysis | Promise<PolicyAnalysis>;
+  }):
+    | PolicyAnalysis
+    | PolicyAnalysisExecutionResult<PolicyAnalysis>
+    | Promise<PolicyAnalysis | PolicyAnalysisExecutionResult<PolicyAnalysis>>;
 };
 
 export type PolicyAnalysisVerifier = {
@@ -92,6 +96,18 @@ function evidencePayload(evidence: readonly PolicyEvidencePacketItem[]) {
   );
 }
 
+function safeModelName(value: string): string {
+  if (
+    value.length <= 100 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/.test(value) &&
+    !/^(sk|rk|pk)-/i.test(value) &&
+    !/api[_-]?key/i.test(value)
+  ) {
+    return value;
+  }
+  return "configured_model";
+}
+
 export function createOpenAIPolicyAnalyzer(
   config: PolicyIntelligenceModelConfig
 ): PolicyAnalyzer {
@@ -112,7 +128,8 @@ export function createOpenAIPolicyAnalyzer(
         "Do not emit officialExcerpt text, lawyer commentary, advice, confidence scores, chain-of-thought, or unsupported material.",
         `Return schema ${POLICY_ANALYSIS_SCHEMA}.`,
       ].join("\n");
-      const prompt = `Analyze these official-source snapshots.\n${JSON.stringify(evidencePayload(evidence))}`;
+      const serializedEvidence = JSON.stringify(evidencePayload(evidence));
+      const prompt = `Analyze these official-source snapshots.\n${serializedEvidence}`;
 
       return await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
         const controller = new AbortController();
@@ -136,7 +153,16 @@ export function createOpenAIPolicyAnalyzer(
         } finally {
           clearTimeout(timer);
         }
-      }, config.timeoutMs);
+      }, config.timeoutMs, {
+        evidencePacketCount: evidence.length,
+        totalEvidenceChars: evidence.reduce(
+          (total, packet) => total + Math.min(packet.text.length, 100_000),
+          0
+        ),
+        approximateInputChars: system.length + prompt.length,
+        modelName: safeModelName(config.model),
+        reasoningEffort: config.reasoningEffort,
+      });
     },
   };
 }

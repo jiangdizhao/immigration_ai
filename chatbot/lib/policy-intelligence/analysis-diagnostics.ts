@@ -22,6 +22,30 @@ export type PolicyAnalysisFailureCode =
   | "unknown_analysis_evidence_ref"
   | "analysis_internal_error";
 
+export type PolicyAnalysisAttemptOutcome =
+  | "success"
+  | PolicyAnalysisFailureCode;
+
+export type PolicyAnalysisAttemptContext = {
+  evidencePacketCount: number;
+  totalEvidenceChars: number;
+  approximateInputChars: number | null;
+  modelName: string;
+  reasoningEffort: "low" | "medium" | "high";
+};
+
+export type PolicyAnalysisAttemptTelemetry = PolicyAnalysisAttemptContext & {
+  attemptNumber: 1 | 2;
+  timeoutSeconds: number;
+  elapsedMs: number;
+  outcome: PolicyAnalysisAttemptOutcome;
+};
+
+export type PolicyAnalysisExecutionResult<T> = {
+  value: T;
+  attempts: PolicyAnalysisAttemptTelemetry[];
+};
+
 export type PolicyAnalysisFailureDiagnostic = {
   errorCode: PolicyAnalysisFailureCode;
   errorName: string;
@@ -32,6 +56,7 @@ export type PolicyAnalysisFailureDiagnostic = {
     timeoutSeconds: 60;
     retryReason: "provider_timeout";
   };
+  attemptTelemetry?: PolicyAnalysisAttemptTelemetry[];
 };
 
 const messages: Record<PolicyAnalysisFailureCode, string> = {
@@ -80,6 +105,7 @@ export class PolicyAnalysisDiagnosticError extends Error {
 
   readonly analysisTimeoutTriggered: boolean;
   retryMetadata?: PolicyAnalysisFailureDiagnostic["retryMetadata"];
+  attemptTelemetry?: PolicyAnalysisAttemptTelemetry[];
 }
 
 function causeOf(error: unknown): unknown {
@@ -189,27 +215,60 @@ export function classifyPolicyAnalysisFailure(
 }
 
 export async function withPolicyAnalysisTimeoutRetry<T>(
-  attempt: (timeoutMs: number) => Promise<T>,
-  initialTimeoutMs: number
-): Promise<T> {
-  try {
-    return await attempt(initialTimeoutMs);
-  } catch (firstError) {
-    const firstFailure = classifyPolicyAnalysisFailure(firstError);
-    if (!firstFailure.analysisTimeoutTriggered) {
-      throw firstFailure;
-    }
-
+  attempt: (timeoutMs: number, attemptNumber: 1 | 2) => Promise<T>,
+  initialTimeoutMs: number,
+  context: PolicyAnalysisAttemptContext
+): Promise<PolicyAnalysisExecutionResult<T>> {
+  const attemptOnce = async (timeoutMs: number, attemptNumber: 1 | 2) => {
+    const startedAt = performance.now();
     try {
-      return await attempt(60_000);
-    } catch (secondError) {
-      const finalFailure = classifyPolicyAnalysisFailure(secondError);
-      finalFailure.retryMetadata = {
-        attemptCount: 2,
-        timeoutSeconds: 60,
-        retryReason: "provider_timeout",
+      const value = await attempt(timeoutMs, attemptNumber);
+      return {
+        ok: true as const,
+        value,
+        telemetry: {
+          ...context,
+          attemptNumber,
+          timeoutSeconds: timeoutMs / 1000,
+          elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          outcome: "success" as const,
+        },
       };
-      throw finalFailure;
+    } catch (error) {
+      const failure = classifyPolicyAnalysisFailure(error);
+      return {
+        ok: false as const,
+        failure,
+        telemetry: {
+          ...context,
+          attemptNumber,
+          timeoutSeconds: timeoutMs / 1000,
+          elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          outcome: failure.errorCode,
+        },
+      };
     }
+  };
+
+  const first = await attemptOnce(initialTimeoutMs, 1);
+  if (first.ok) {
+    return { value: first.value, attempts: [first.telemetry] };
   }
+  if (!first.failure.analysisTimeoutTriggered) {
+    first.failure.attemptTelemetry = [first.telemetry];
+    throw first.failure;
+  }
+
+  const second = await attemptOnce(60_000, 2);
+  if (second.ok) {
+    return { value: second.value, attempts: [first.telemetry, second.telemetry] };
+  }
+
+  second.failure.retryMetadata = {
+    attemptCount: 2,
+    timeoutSeconds: 60,
+    retryReason: "provider_timeout",
+  };
+  second.failure.attemptTelemetry = [first.telemetry, second.telemetry];
+  throw second.failure;
 }

@@ -14,6 +14,10 @@ import {
   PolicyAnalysisDiagnosticError,
   withPolicyAnalysisTimeoutRetry,
 } from "./analysis-diagnostics";
+import type {
+  PolicyAnalysisAttemptContext,
+  PolicyAnalysisExecutionResult,
+} from "./analysis-diagnostics";
 import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
 import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
@@ -37,6 +41,13 @@ import {
 } from "./pipeline";
 
 const now = "2026-09-30T01:00:00.000Z";
+const analysisAttemptContext: PolicyAnalysisAttemptContext = {
+  evidencePacketCount: 1,
+  totalEvidenceChars: 417,
+  approximateInputChars: 932,
+  modelName: "gpt-5.6-sol",
+  reasoningEffort: "high",
+};
 const candidate: DiscoveryCandidate = {
   schemaVersion: "policy-intelligence.discovery-candidate.v1",
   candidateId: "candidate-1",
@@ -189,7 +200,10 @@ function dependencies(
     evidenceTruncated?: boolean;
     analyze?: (
       evidence: readonly PolicyEvidencePacketItem[]
-    ) => PolicyAnalysis | Promise<PolicyAnalysis>;
+    ) =>
+      | PolicyAnalysis
+      | PolicyAnalysisExecutionResult<PolicyAnalysis>
+      | Promise<PolicyAnalysis | PolicyAnalysisExecutionResult<PolicyAnalysis>>;
     verify?: (
       analysis: PolicyAnalysis,
       evidence: readonly PolicyEvidencePacketItem[]
@@ -1192,7 +1206,12 @@ test("provider and empty-output failures are classified by AI SDK error types", 
     statusCode: 503,
   });
   const providerFailure = dependencies({
-    analyze: () => Promise.reject(providerError),
+    analyze: async () =>
+      await withPolicyAnalysisTimeoutRetry(
+        async () => Promise.reject(providerError),
+        45_000,
+        analysisAttemptContext
+      ),
   });
   const providerResult = await runPolicyIntelligenceSync(
     providerFailure.deps,
@@ -1201,10 +1220,19 @@ test("provider and empty-output failures are classified by AI SDK error types", 
   const providerJson = JSON.stringify(providerResult.run);
   assert.equal(providerResult.run.candidateFailures[0].errorCode, "provider_error");
   assert.equal(providerResult.run.candidateFailures[0].errorName, "APICallError");
-  assert.doesNotMatch(providerJson, /provider\.invalid|private prompt|private raw provider|secret/);
+  assert.equal(providerResult.run.analysisAttempts[0].outcome, "provider_error");
+  assert.doesNotMatch(
+    providerJson,
+    /provider\.invalid|private prompt|private raw provider|secret|Official evidence version|Analyze these official-source snapshots/
+  );
 
   const emptyFailure = dependencies({
-    analyze: () => Promise.reject(new NoOutputGeneratedError()),
+    analyze: async () =>
+      await withPolicyAnalysisTimeoutRetry(
+        async () => Promise.reject(new NoOutputGeneratedError()),
+        45_000,
+        analysisAttemptContext
+      ),
   });
   const emptyResult = await runPolicyIntelligenceSync(
     emptyFailure.deps,
@@ -1212,6 +1240,7 @@ test("provider and empty-output failures are classified by AI SDK error types", 
   );
   assert.equal(emptyResult.run.candidateFailures[0].errorCode, "empty_model_output");
   assert.equal(emptyResult.run.candidateFailures[0].errorName, "NoOutputGeneratedError");
+  assert.equal(emptyResult.run.analysisAttempts[0].outcome, "empty_model_output");
 });
 
 test("analysis provider uses one call when the first attempt succeeds", async () => {
@@ -1221,12 +1250,21 @@ test("analysis provider uses one call when the first attempt succeeds", async ()
       await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
         calls.push(timeoutMs);
         return analysis(evidence[0].evidenceRef);
-      }, 45_000),
+      }, 45_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   assert.deepEqual(calls, [45_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.equal(h.calls().verifyCalls, 1);
+  assert.equal(result.run.analysisAttempts.length, 1);
+  assert.equal(result.run.analysisAttempts[0].attemptNumber, 1);
+  assert.equal(result.run.analysisAttempts[0].outcome, "success");
+  assert.equal(typeof result.run.analysisAttempts[0].elapsedMs, "number");
+  assert.equal(result.run.analysisAttempts[0].totalEvidenceChars, 417);
+  assert.equal(result.run.analysisAttempts[0].approximateInputChars, 932);
+  const [adminItem] = await h.store.adminService.listItems();
+  assert.equal(adminItem.analysisAttempts.length, 1);
+  assert.equal(adminItem.analysisAttempts[0].modelName, "gpt-5.6-sol");
 });
 
 test("analysis timeout retries once at 60 seconds then continues the pipeline", async () => {
@@ -1242,12 +1280,17 @@ test("analysis timeout retries once at 60 seconds then continues the pipeline", 
           );
         }
         return analysis(evidence[0].evidenceRef);
-      }, 45_000),
+      }, 45_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   assert.deepEqual(calls, [45_000, 60_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.deepEqual(result.run.candidateFailures, []);
+  assert.deepEqual(result.run.analysisAttempts.map(({ attemptNumber, timeoutSeconds, outcome }) => ({ attemptNumber, timeoutSeconds, outcome })), [
+    { attemptNumber: 1, timeoutSeconds: 45, outcome: "provider_timeout" },
+    { attemptNumber: 2, timeoutSeconds: 60, outcome: "success" },
+  ]);
+  assert.equal(result.run.analysisAttempts[1].elapsedMs >= 0, true);
   assert.equal(h.calls().verifyCalls, 1);
 });
 
@@ -1261,7 +1304,7 @@ test("second analysis timeout fails closed and records safe retry metadata", asy
           new DOMException("secret and raw provider response", "AbortError"),
           true
         );
-      }, 45_000),
+      }, 45_000, analysisAttemptContext),
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   const failure = result.run.candidateFailures[0];
@@ -1273,11 +1316,55 @@ test("second analysis timeout fails closed and records safe retry metadata", asy
   assert.equal(failure.attemptCount, 2);
   assert.equal(failure.timeoutSeconds, 60);
   assert.equal(failure.retryReason, "provider_timeout");
+  assert.deepEqual(result.run.analysisAttempts.map((attempt) => attempt.outcome), [
+    "provider_timeout",
+    "provider_timeout",
+  ]);
   assert.doesNotMatch(JSON.stringify(result.run), /secret|raw provider response/);
   assert.equal(h.store.snapshots.size, 1);
   const [adminItem] = await h.store.adminService.listItems();
   assert.equal(adminItem.pipelineFailures[0].attemptCount, 2);
   assert.equal(adminItem.pipelineFailures[0].timeoutSeconds, 60);
+  assert.deepEqual(adminItem.analysisAttempts.map((attempt) => attempt.timeoutSeconds), [45, 60]);
+});
+
+test("source-wide timeout stays separate from a successful item's publication diagnostics", async () => {
+  const secondCandidate: DiscoveryCandidate = {
+    ...candidate,
+    candidateId: "candidate-2",
+    canonicalUrl: "https://immi.homeaffairs.gov.au/policy/another-example",
+  };
+  let analysisCount = 0;
+  const h = dependencies({
+    analyze: async (evidence) => {
+      analysisCount += 1;
+      if (analysisCount === 2) {
+        return await withPolicyAnalysisTimeoutRetry(async () => {
+          throw classifyPolicyAnalysisFailure(
+            new DOMException("private provider payload", "AbortError"),
+            true
+          );
+        }, 45_000, analysisAttemptContext);
+      }
+      return analysis(evidence[0].evidenceRef);
+    },
+  });
+  h.deps.discover = async () => [candidate, secondCandidate];
+
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.failureCount, 1);
+  const items = await h.store.adminService.listItems();
+  const publishedItem = items.find((item) => item.editorialStatus === "published");
+  assert.ok(publishedItem);
+  assert.deepEqual(publishedItem.pipelineFailures, []);
+  assert.equal(publishedItem.publicationDiagnostics.published, true);
+  assert.equal(
+    publishedItem.publicationDiagnostics.reasons.some(({ reasonCode }) => reasonCode === "provider_timeout"),
+    false
+  );
+  assert.equal(publishedItem.sourceSyncDiagnostic?.errorCode, "provider_timeout");
+  assert.doesNotMatch(JSON.stringify(result.run), /private provider payload|official-source snapshots|經來源核實/);
 });
 
 test("only the analysis timeout retries; other failures and unrelated aborts do not", async () => {
@@ -1321,7 +1408,7 @@ test("only the analysis timeout retries; other failures and unrelated aborts do 
       withPolicyAnalysisTimeoutRetry(async () => {
         calls += 1;
         throw entry.error;
-      }, 45_000),
+      }, 45_000, analysisAttemptContext),
       (error: unknown) =>
         error instanceof PolicyAnalysisDiagnosticError &&
         error.errorCode === entry.code
@@ -1335,6 +1422,7 @@ test("successful candidate retains publication behavior without failure diagnost
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   assert.equal(result.run.publishedCount, 1);
   assert.deepEqual(result.run.candidateFailures, []);
+  assert.deepEqual(result.run.analysisAttempts, []);
   const [adminItem] = await h.store.adminService.listItems();
   assert.deepEqual(adminItem.pipelineFailures, []);
 });

@@ -1,9 +1,19 @@
 import type {
+  PolicyAnalysisAttemptOutcome,
+  PolicyAnalysisAttemptTelemetry,
+} from "./analysis-diagnostics";
+import type {
   PolicyCandidateFailureDiagnostic,
   PolicyCandidateFailureStage,
 } from "./pipeline";
 
 export type AdminPipelineFailureDiagnostic = PolicyCandidateFailureDiagnostic;
+
+export type AdminPolicyAnalysisAttempt = PolicyAnalysisAttemptTelemetry & {
+  itemId: string;
+  snapshotId: string;
+  sourceConfigId: string;
+};
 
 const stages = new Set<PolicyCandidateFailureStage>([
   "discovery",
@@ -28,6 +38,17 @@ const safeErrorNames = new Set([
   "TypeValidationError",
   "ZodError",
   "Error",
+]);
+const analysisOutcomes = new Set<PolicyAnalysisAttemptOutcome>([
+  "success",
+  "provider_timeout",
+  "provider_error",
+  "structured_output_error",
+  "schema_validation_error",
+  "empty_model_output",
+  "invalid_analysis_output",
+  "unknown_analysis_evidence_ref",
+  "analysis_internal_error",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -90,5 +111,67 @@ export function readCandidateFailureDiagnostics(
         timestamp: value.timestamp.slice(0, 40),
       },
     ];
+  });
+}
+
+export function readAnalysisAttemptDiagnostics(
+  metadata: unknown,
+  itemId: string,
+  sourceConfigId: string
+): AdminPolicyAnalysisAttempt[] {
+  if (!isRecord(metadata) || !Array.isArray(metadata.analysisAttempts)) {
+    return [];
+  }
+  return metadata.analysisAttempts.flatMap((value) => {
+    if (
+      !isRecord(value) ||
+      value.itemId !== itemId ||
+      value.sourceConfigId !== sourceConfigId ||
+      typeof value.snapshotId !== "string" ||
+      value.snapshotId.length > 100 ||
+      (value.attemptNumber !== 1 && value.attemptNumber !== 2) ||
+      typeof value.timeoutSeconds !== "number" ||
+      !Number.isFinite(value.timeoutSeconds) ||
+      value.timeoutSeconds <= 0 ||
+      value.timeoutSeconds > 60 ||
+      typeof value.elapsedMs !== "number" ||
+      !Number.isFinite(value.elapsedMs) ||
+      value.elapsedMs < 0 ||
+      typeof value.evidencePacketCount !== "number" ||
+      !Number.isInteger(value.evidencePacketCount) ||
+      value.evidencePacketCount < 0 ||
+      typeof value.totalEvidenceChars !== "number" ||
+      !Number.isInteger(value.totalEvidenceChars) ||
+      value.totalEvidenceChars < 0 ||
+      (value.approximateInputChars !== null &&
+        (typeof value.approximateInputChars !== "number" ||
+          !Number.isInteger(value.approximateInputChars) ||
+          value.approximateInputChars < 0)) ||
+      typeof value.modelName !== "string" ||
+      value.modelName.length > 100 ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/.test(value.modelName) ||
+      /^(sk|rk|pk)-|api[_-]?key/i.test(value.modelName) ||
+      (value.reasoningEffort !== "low" &&
+        value.reasoningEffort !== "medium" &&
+        value.reasoningEffort !== "high") ||
+      typeof value.outcome !== "string" ||
+      !analysisOutcomes.has(value.outcome as PolicyAnalysisAttemptOutcome)
+    ) {
+      return [];
+    }
+    return [{
+      itemId,
+      snapshotId: value.snapshotId.slice(0, 100),
+      sourceConfigId,
+      attemptNumber: value.attemptNumber,
+      timeoutSeconds: value.timeoutSeconds,
+      elapsedMs: Math.round(value.elapsedMs),
+      evidencePacketCount: value.evidencePacketCount,
+      totalEvidenceChars: value.totalEvidenceChars,
+      approximateInputChars: value.approximateInputChars as number | null,
+      modelName: value.modelName,
+      reasoningEffort: value.reasoningEffort,
+      outcome: value.outcome as PolicyAnalysisAttemptOutcome,
+    }];
   });
 }

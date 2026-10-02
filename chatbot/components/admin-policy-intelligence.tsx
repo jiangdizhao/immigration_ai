@@ -112,7 +112,9 @@ export function AdminPolicyIntelligence({
                       </button>
                     </td>
                   </tr>
-                  {item.editorialStatus !== "published" ? (
+                  {item.editorialStatus !== "published" ||
+                  item.analysisAttempts.length > 0 ||
+                  item.sourceSyncDiagnostic !== null ? (
                     <tr>
                       <td
                         className="border-t border-slate-100 bg-slate-50 px-4 py-5"
@@ -202,7 +204,7 @@ export function AdminPolicyIntelligence({
                                     (reason, index) => (
                                       <li
                                         className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-                                        key={`${reason.reasonCode}-${reason.unitId ?? reason.scope ?? "item"}-${index}`}
+                                        key={`${reason.reasonCode}-${reason.unitId ?? "item"}-${index}`}
                                       >
                                         <code className="font-semibold text-slate-900">
                                           {reason.reasonCode}
@@ -210,12 +212,6 @@ export function AdminPolicyIntelligence({
                                         {reason.unitId ? (
                                           <span className="ml-2 text-xs text-slate-500">
                                             Unit: {reason.unitId}
-                                          </span>
-                                        ) : null}
-                                        {reason.scope === "source_sync" ? (
-                                          <span className="ml-2 text-xs font-medium text-amber-800">
-                                            Source sync diagnostic; not
-                                            item-specific
                                           </span>
                                         ) : null}
                                         <p className="mt-1 text-slate-700">
@@ -233,6 +229,77 @@ export function AdminPolicyIntelligence({
                               </p>
                             )}
                           </div>
+                          {item.sourceSyncDiagnostic ? (
+                            <div className="mt-4 border-t border-sky-200 pt-4">
+                              <h3 className="text-sm font-semibold text-sky-900">
+                                Source sync diagnostic (source-wide)
+                              </h3>
+                              <p className="mt-1 text-xs text-slate-600">
+                                Latest source sync status:{" "}
+                                {item.sourceSyncDiagnostic.status}
+                              </p>
+                              <p className="mt-2 font-mono text-sm text-slate-900">
+                                {item.sourceSyncDiagnostic.errorCode}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">
+                                {item.sourceSyncDiagnostic.explanation}
+                              </p>
+                            </div>
+                          ) : null}
+                          {item.analysisAttempts.length > 0 ? (
+                            <div className="mt-4 border-t border-slate-200 pt-4">
+                              <h3 className="text-sm font-semibold text-slate-900">
+                                Analysis attempt telemetry
+                              </h3>
+                              <ul className="mt-2 grid gap-3 lg:grid-cols-2">
+                                {item.analysisAttempts.map((attempt, index) => (
+                                  <li
+                                    className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm"
+                                    key={`${attempt.snapshotId}-${attempt.attemptNumber}-${index}`}
+                                  >
+                                    <p className="font-semibold text-slate-900">
+                                      Attempt {attempt.attemptNumber}:{" "}
+                                      {attempt.outcome}
+                                    </p>
+                                    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-slate-700">
+                                      <div>
+                                        <dt className="text-xs text-slate-500">Timeout</dt>
+                                        <dd>{attempt.timeoutSeconds}s</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-xs text-slate-500">Elapsed</dt>
+                                        <dd>{attempt.elapsedMs} ms</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-xs text-slate-500">Evidence packets</dt>
+                                        <dd>{attempt.evidencePacketCount}</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-xs text-slate-500">Evidence characters</dt>
+                                        <dd>{attempt.totalEvidenceChars}</dd>
+                                      </div>
+                                      {attempt.approximateInputChars !== null ? (
+                                        <div>
+                                          <dt className="text-xs text-slate-500">
+                                            Approx. input characters
+                                          </dt>
+                                          <dd>{attempt.approximateInputChars}</dd>
+                                        </div>
+                                      ) : null}
+                                      <div>
+                                        <dt className="text-xs text-slate-500">
+                                          Model / reasoning
+                                        </dt>
+                                        <dd>
+                                          {attempt.modelName} · {attempt.reasoningEffort}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                           {item.pipelineFailures.length > 0 ? (
                             <div className="mt-4 border-t border-amber-200 pt-4">
                               <h3 className="text-sm font-semibold text-amber-900">

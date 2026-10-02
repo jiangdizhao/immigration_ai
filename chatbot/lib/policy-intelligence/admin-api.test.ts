@@ -34,6 +34,8 @@ function setup() {
       editorialStatus: "published",
     },
     pipelineFailures: [],
+    analysisAttempts: [],
+    sourceSyncDiagnostic: null,
     publicationDiagnostics: { published: true, reasons: [] },
   };
   const records = new Map([[itemId, item]]);

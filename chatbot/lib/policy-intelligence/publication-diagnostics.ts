@@ -8,7 +8,6 @@ import {
 export type AdminPublicationReason = {
   reasonCode: string;
   explanation: string;
-  scope?: "item" | "source_sync";
   unitId?: string;
 };
 
@@ -46,8 +45,8 @@ const PUBLICATION_REASON_EXPLANATIONS: Record<string, string> = {
     "The verifier did not fully support the source status assessment.",
   source_status_uncertain:
     "The analysis could not determine the official source status with certainty.",
-  source_sync_failed:
-    "The most recent sync for this source recorded a failure.",
+  provider_timeout:
+    "The analysis provider exceeded its configured timeout during source sync.",
   source_not_policy_relevant:
     "The analysis did not classify this source as policy relevant.",
   unsupported_material_claim:
@@ -120,10 +119,6 @@ export function buildAdminPublicationDiagnostics(input: {
   analysis: unknown | null;
   verification: unknown | null;
   evidence: PolicyEvidencePacketItem | null;
-  latestSourceRun?: {
-    status: string;
-    safeErrorCode: string | null;
-  } | null;
 }): AdminPublicationDiagnostics {
   const published = input.editorialStatus === "published";
   if (published) {
@@ -133,7 +128,7 @@ export function buildAdminPublicationDiagnostics(input: {
   const reasons: AdminPublicationReason[] = [];
   const addReason = (
     reasonCode: string,
-    details: Pick<AdminPublicationReason, "scope" | "unitId"> = {}
+    details: Pick<AdminPublicationReason, "unitId"> = {}
   ) => {
     reasons.push({
       reasonCode,
@@ -171,13 +166,30 @@ export function buildAdminPublicationDiagnostics(input: {
     }
   }
 
-  if (
-    input.latestSourceRun &&
-    ["failed", "partial"].includes(input.latestSourceRun.status) &&
-    input.latestSourceRun.safeErrorCode
-  ) {
-    addReason(input.latestSourceRun.safeErrorCode, { scope: "source_sync" });
-  }
-
   return { published: false, reasons };
+}
+
+export type AdminSourceSyncDiagnostic = {
+  status: "failed" | "partial";
+  errorCode: string;
+  explanation: string;
+};
+
+export function buildAdminSourceSyncDiagnostic(input: {
+  status: string;
+  safeErrorCode: string | null;
+} | null | undefined): AdminSourceSyncDiagnostic | null {
+  if (
+    !input ||
+    (input.status !== "failed" && input.status !== "partial") ||
+    !input.safeErrorCode ||
+    !/^[a-z0-9_]{1,80}$/.test(input.safeErrorCode)
+  ) {
+    return null;
+  }
+  return {
+    status: input.status,
+    errorCode: input.safeErrorCode,
+    explanation: explainPublicationReason(input.safeErrorCode),
+  };
 }

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { AdminPublicationDiagnostics } from "./publication-diagnostics";
-import type { AdminPipelineFailureDiagnostic } from "./pipeline-failure-diagnostics";
+import type { AdminSourceSyncDiagnostic } from "./publication-diagnostics";
+import type {
+  AdminPipelineFailureDiagnostic,
+  AdminPolicyAnalysisAttempt,
+} from "./pipeline-failure-diagnostics";
 
 export type AdminPolicyIntelligenceSnapshot = {
   sourceUrl: string;
@@ -27,6 +31,8 @@ export type AdminPolicyIntelligenceItem = {
   latestSnapshot: AdminPolicyIntelligenceSnapshot | null;
   latestRevision: AdminPolicyIntelligenceRevision | null;
   pipelineFailures: AdminPipelineFailureDiagnostic[];
+  analysisAttempts: AdminPolicyAnalysisAttempt[];
+  sourceSyncDiagnostic: AdminSourceSyncDiagnostic | null;
   publicationDiagnostics: AdminPublicationDiagnostics;
 };
 

@@ -6,6 +6,7 @@ import {
   policyAnalysisSchema,
 } from "./contracts";
 import {
+  buildAdminSourceSyncDiagnostic,
   buildAdminPublicationDiagnostics,
   explainPublicationReason,
 } from "./publication-diagnostics";
@@ -160,26 +161,32 @@ test("unpublished item returns all gate and verifier reason codes", () => {
   );
 });
 
-test("unknown reason code is retained and receives a safe fallback explanation", () => {
+test("source sync failure is kept separate from item publication diagnostics", () => {
   const diagnostics = buildAdminPublicationDiagnostics({
     editorialStatus: "draft",
     analysis: null,
     verification: null,
     evidence: null,
-    latestSourceRun: {
-      status: "failed",
-      safeErrorCode: "new_pipeline_reason_42",
-    },
+  });
+  const sourceDiagnostic = buildAdminSourceSyncDiagnostic({
+    status: "partial",
+    safeErrorCode: "provider_timeout",
   });
 
-  assert.ok(
-    diagnostics.reasons.some(
-      ({ reasonCode, explanation, scope }) =>
-        reasonCode === "new_pipeline_reason_42" &&
-        explanation ===
-          "No explanation is registered for this diagnostic code." &&
-        scope === "source_sync"
-    )
+  assert.equal(diagnostics.reasons.some(({ reasonCode }) => reasonCode === "provider_timeout"), false);
+  assert.deepEqual(sourceDiagnostic, {
+    status: "partial",
+    errorCode: "provider_timeout",
+    explanation: "The analysis provider exceeded its configured timeout during source sync.",
+  });
+  const unknownSourceDiagnostic = buildAdminSourceSyncDiagnostic({
+    status: "failed",
+    safeErrorCode: "new_pipeline_reason_42",
+  });
+  assert.equal(unknownSourceDiagnostic?.errorCode, "new_pipeline_reason_42");
+  assert.equal(
+    unknownSourceDiagnostic?.explanation,
+    "No explanation is registered for this diagnostic code."
   );
   assert.equal(
     explainPublicationReason("unrecognized_reason"),

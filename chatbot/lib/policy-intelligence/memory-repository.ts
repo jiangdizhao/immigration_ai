@@ -1,7 +1,13 @@
 import type { AdminPolicyIntelligenceService } from "./admin-api";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
-import { buildAdminPublicationDiagnostics } from "./publication-diagnostics";
-import { readCandidateFailureDiagnostics } from "./pipeline-failure-diagnostics";
+import {
+  buildAdminPublicationDiagnostics,
+  buildAdminSourceSyncDiagnostic,
+} from "./publication-diagnostics";
+import {
+  readAnalysisAttemptDiagnostics,
+  readCandidateFailureDiagnostics,
+} from "./pipeline-failure-diagnostics";
 import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
@@ -52,6 +58,7 @@ export function createInMemoryPolicyIntelligenceRepository() {
         failureCount: 0,
         safeErrorCode: null,
         candidateFailures: [],
+        analysisAttempts: [],
       });
     },
     finishRun(run) {
@@ -303,17 +310,28 @@ export function createInMemoryPolicyIntelligenceRepository() {
             item.id,
             item.sourceConfigId
           ),
+          analysisAttempts: readAnalysisAttemptDiagnostics(
+            latestSourceRun
+              ? {
+                  analysisAttempts: latestSourceRun.analysisAttempts,
+                }
+              : null,
+            item.id,
+            item.sourceConfigId
+          ),
+          sourceSyncDiagnostic: buildAdminSourceSyncDiagnostic(
+            latestSourceRun
+              ? {
+                  status: latestSourceRun.status,
+                  safeErrorCode: latestSourceRun.safeErrorCode,
+                }
+              : null
+          ),
           publicationDiagnostics: buildAdminPublicationDiagnostics({
             editorialStatus: item.editorialStatus,
             analysis: revision?.analysis ?? null,
             verification: revision?.verification ?? null,
             evidence,
-            latestSourceRun: latestSourceRun
-              ? {
-                  status: latestSourceRun.status,
-                  safeErrorCode: latestSourceRun.safeErrorCode,
-                }
-              : null,
           }),
         };
       });

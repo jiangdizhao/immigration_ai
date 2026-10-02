@@ -74,7 +74,10 @@ function runValues(run: PolicyRunRecord) {
     heldCount: run.heldCount,
     failureCount: run.failureCount,
     safeErrorCode: run.safeErrorCode,
-    metadata: { candidateFailures: run.candidateFailures },
+    metadata: {
+      candidateFailures: run.candidateFailures,
+      analysisAttempts: run.analysisAttempts,
+    },
   };
 }
 
@@ -110,7 +113,7 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
       mode: run.mode,
       status: "running",
       startedAt: new Date(run.startedAt),
-      metadata: { candidateFailures: [] },
+      metadata: { candidateFailures: [], analysisAttempts: [] },
     });
   },
   async finishRun(run) {
