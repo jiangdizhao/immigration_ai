@@ -9,6 +9,11 @@ import {
   TypeValidationError,
 } from "ai";
 import { z } from "zod";
+import {
+  classifyPolicyAnalysisFailure,
+  PolicyAnalysisDiagnosticError,
+  withPolicyAnalysisTimeoutRetry,
+} from "./analysis-diagnostics";
 import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
 import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
@@ -1207,6 +1212,122 @@ test("provider and empty-output failures are classified by AI SDK error types", 
   );
   assert.equal(emptyResult.run.candidateFailures[0].errorCode, "empty_model_output");
   assert.equal(emptyResult.run.candidateFailures[0].errorName, "NoOutputGeneratedError");
+});
+
+test("analysis provider uses one call when the first attempt succeeds", async () => {
+  const calls: number[] = [];
+  const h = dependencies({
+    analyze: async (evidence) =>
+      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
+        calls.push(timeoutMs);
+        return analysis(evidence[0].evidenceRef);
+      }, 45_000),
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  assert.deepEqual(calls, [45_000]);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(h.calls().verifyCalls, 1);
+});
+
+test("analysis timeout retries once at 60 seconds then continues the pipeline", async () => {
+  const calls: number[] = [];
+  const h = dependencies({
+    analyze: async (evidence) =>
+      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
+        calls.push(timeoutMs);
+        if (calls.length === 1) {
+          throw classifyPolicyAnalysisFailure(
+            new DOMException("private source-related detail", "AbortError"),
+            true
+          );
+        }
+        return analysis(evidence[0].evidenceRef);
+      }, 45_000),
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  assert.deepEqual(calls, [45_000, 60_000]);
+  assert.equal(result.run.publishedCount, 1);
+  assert.deepEqual(result.run.candidateFailures, []);
+  assert.equal(h.calls().verifyCalls, 1);
+});
+
+test("second analysis timeout fails closed and records safe retry metadata", async () => {
+  const calls: number[] = [];
+  const h = dependencies({
+    analyze: async () =>
+      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
+        calls.push(timeoutMs);
+        throw classifyPolicyAnalysisFailure(
+          new DOMException("secret and raw provider response", "AbortError"),
+          true
+        );
+      }, 45_000),
+  });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const failure = result.run.candidateFailures[0];
+  assert.deepEqual(calls, [45_000, 60_000]);
+  assert.equal(result.run.publishedCount, 0);
+  assert.equal(h.store.revisions.size, 0);
+  assert.equal(failure.stage, "analysis");
+  assert.equal(failure.errorCode, "provider_timeout");
+  assert.equal(failure.attemptCount, 2);
+  assert.equal(failure.timeoutSeconds, 60);
+  assert.equal(failure.retryReason, "provider_timeout");
+  assert.doesNotMatch(JSON.stringify(result.run), /secret|raw provider response/);
+  assert.equal(h.store.snapshots.size, 1);
+  const [adminItem] = await h.store.adminService.listItems();
+  assert.equal(adminItem.pipelineFailures[0].attemptCount, 2);
+  assert.equal(adminItem.pipelineFailures[0].timeoutSeconds, 60);
+});
+
+test("only the analysis timeout retries; other failures and unrelated aborts do not", async () => {
+  let schemaError: unknown;
+  try {
+    z.object({ value: z.string() }).parse({ value: 7 });
+  } catch (error) {
+    schemaError = error;
+  }
+  const structuredError = new NoObjectGeneratedError({
+    cause: new JSONParseError({
+      text: "private model text",
+      cause: new Error("private parse detail"),
+    }),
+    text: "private model text",
+    response: {} as never,
+    usage: {} as never,
+    finishReason: "stop",
+  });
+  const providerError = new APICallError({
+    message: "private provider message",
+    url: "https://provider.invalid/secret",
+    requestBodyValues: { prompt: "private prompt" },
+    responseBody: "private provider response",
+    statusCode: 503,
+  });
+  const cases = [
+    { error: schemaError, code: "schema_validation_error" },
+    { error: structuredError, code: "structured_output_error" },
+    { error: providerError, code: "provider_error" },
+    {
+      error: new DOMException("unrelated abort", "AbortError"),
+      code: "provider_timeout",
+    },
+    { error: new Error("private unknown source content"), code: "analysis_internal_error" },
+  ] as const;
+
+  for (const entry of cases) {
+    let calls = 0;
+    await assert.rejects(
+      withPolicyAnalysisTimeoutRetry(async () => {
+        calls += 1;
+        throw entry.error;
+      }, 45_000),
+      (error: unknown) =>
+        error instanceof PolicyAnalysisDiagnosticError &&
+        error.errorCode === entry.code
+    );
+    assert.equal(calls, 1);
+  }
 });
 
 test("successful candidate retains publication behavior without failure diagnostics", async () => {

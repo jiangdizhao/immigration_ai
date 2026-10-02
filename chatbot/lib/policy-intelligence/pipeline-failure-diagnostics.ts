@@ -74,6 +74,15 @@ export function readCandidateFailureDiagnostics(
           safeErrorNames.has(value.errorName)
             ? value.errorName
             : null,
+        ...(value.attemptCount === 2 &&
+        value.timeoutSeconds === 60 &&
+        value.retryReason === "provider_timeout"
+          ? {
+              attemptCount: 2 as const,
+              timeoutSeconds: 60 as const,
+              retryReason: "provider_timeout" as const,
+            }
+          : {}),
         message:
           value.message.length <= 240
             ? value.message

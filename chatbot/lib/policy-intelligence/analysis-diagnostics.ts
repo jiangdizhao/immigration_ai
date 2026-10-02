@@ -26,6 +26,12 @@ export type PolicyAnalysisFailureDiagnostic = {
   errorCode: PolicyAnalysisFailureCode;
   errorName: string;
   message: string;
+  analysisTimeoutTriggered: boolean;
+  retryMetadata?: {
+    attemptCount: 2;
+    timeoutSeconds: 60;
+    retryReason: "provider_timeout";
+  };
 };
 
 const messages: Record<PolicyAnalysisFailureCode, string> = {
@@ -54,12 +60,26 @@ export class PolicyAnalysisDiagnosticError extends Error {
   readonly errorCode: PolicyAnalysisFailureCode;
   readonly errorName: string;
 
-  constructor(errorCode: PolicyAnalysisFailureCode, errorName?: string) {
+  constructor(
+    errorCode: PolicyAnalysisFailureCode,
+    errorName?: string,
+    options: {
+      analysisTimeoutTriggered?: boolean;
+      retryMetadata?: PolicyAnalysisFailureDiagnostic["retryMetadata"];
+    } = {}
+  ) {
     super(messages[errorCode]);
     this.name = "PolicyAnalysisDiagnosticError";
     this.errorCode = errorCode;
     this.errorName = errorName ?? errorNames[errorCode];
+    this.analysisTimeoutTriggered = options.analysisTimeoutTriggered ?? false;
+    if (options.retryMetadata) {
+      this.retryMetadata = options.retryMetadata;
+    }
   }
+
+  readonly analysisTimeoutTriggered: boolean;
+  retryMetadata?: PolicyAnalysisFailureDiagnostic["retryMetadata"];
 }
 
 function causeOf(error: unknown): unknown {
@@ -92,7 +112,12 @@ export function classifyPolicyAnalysisFailure(
   if (error instanceof PolicyAnalysisDiagnosticError) {
     return error;
   }
-  if (signalAborted || hasAbortError(error)) {
+  if (signalAborted) {
+    return new PolicyAnalysisDiagnosticError("provider_timeout", undefined, {
+      analysisTimeoutTriggered: true,
+    });
+  }
+  if (hasAbortError(error)) {
     return new PolicyAnalysisDiagnosticError("provider_timeout");
   }
   if (RetryError.isInstance(error)) {
@@ -161,4 +186,30 @@ export function classifyPolicyAnalysisFailure(
     return new PolicyAnalysisDiagnosticError("provider_error", "NoSuchModelError");
   }
   return new PolicyAnalysisDiagnosticError("analysis_internal_error");
+}
+
+export async function withPolicyAnalysisTimeoutRetry<T>(
+  attempt: (timeoutMs: number) => Promise<T>,
+  initialTimeoutMs: number
+): Promise<T> {
+  try {
+    return await attempt(initialTimeoutMs);
+  } catch (firstError) {
+    const firstFailure = classifyPolicyAnalysisFailure(firstError);
+    if (!firstFailure.analysisTimeoutTriggered) {
+      throw firstFailure;
+    }
+
+    try {
+      return await attempt(60_000);
+    } catch (secondError) {
+      const finalFailure = classifyPolicyAnalysisFailure(secondError);
+      finalFailure.retryMetadata = {
+        attemptCount: 2,
+        timeoutSeconds: 60,
+        retryReason: "provider_timeout",
+      };
+      throw finalFailure;
+    }
+  }
 }

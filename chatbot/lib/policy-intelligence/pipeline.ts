@@ -97,6 +97,9 @@ export type PolicyCandidateFailureDiagnostic = {
   errorName: string | null;
   message: string;
   timestamp: string;
+  attemptCount?: 2;
+  timeoutSeconds?: 60;
+  retryReason?: "provider_timeout";
 };
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -315,6 +318,7 @@ function safeCandidateFailure(error: unknown, stage: PolicyCandidateFailureStage
       errorCode === "pipeline_error"
         ? stageMessages[stage] ?? DIAGNOSTIC_ERROR_MESSAGES.pipeline_error
         : DIAGNOSTIC_ERROR_MESSAGES[errorCode],
+    retryMetadata: undefined,
   };
 }
 
@@ -524,6 +528,7 @@ export async function runPolicyIntelligenceSync(
                   errorCode: failure.errorCode,
                   errorName: failure.errorName,
                   message: failure.message,
+                  retryMetadata: failure.retryMetadata,
                 };
               })()
             : safeCandidateFailure(error, stage);
@@ -537,6 +542,7 @@ export async function runPolicyIntelligenceSync(
           errorName: diagnostic.errorName,
           message: diagnostic.message,
           timestamp: now(),
+          ...(diagnostic.retryMetadata ?? {}),
         });
         outcomes.push({
           candidateId: candidate.candidateId,

@@ -3227,3 +3227,11 @@ No AWS resources were changed and no database migration was applied.
 - `pnpm test:unit` — **PASS**, 486 passed, 0 failed, 0 skipped.
 - `pnpm build` — **PASS**. Next emitted the existing notice that local `baseline-browser-mapping` data is over two months old.
 - `git diff --check` — **PASS**.
+
+## 2026-10-02 Policy Intelligence analyzer timeout retry
+
+**Scope:** The analyzer/provider boundary now retries exactly once when its own first-attempt timeout aborts the request. The first attempt uses the configured timeout (normally 45 seconds); the second uses 60 seconds. Model, reasoning effort, evidence, prompt, structured-output schema, and `maxRetries: 0` remain the same. SDK AbortErrors not caused by this timeout and all other failures do not retry. If the second attempt fails, the pipeline remains fail-closed and records safe attempt metadata (`attemptCount`, `timeoutSeconds`, `retryReason`) with the classified diagnostic. A successful retry resumes the existing verifier and publication flow. No verifier/publication/discovery/schema/database/scheduler/AWS behavior changed.
+
+**Changed files:** `chatbot/lib/policy-intelligence/analysis-diagnostics.ts`, `chatbot/lib/policy-intelligence/provider.ts`, `chatbot/lib/policy-intelligence/pipeline.ts`, `chatbot/lib/policy-intelligence/pipeline-failure-diagnostics.ts`, `chatbot/lib/policy-intelligence/pipeline.test.ts`, `chatbot/components/admin-policy-intelligence.tsx`, and this handoff.
+
+**Validation:** Focused pipeline tests — **PASS**, 52 passed, 0 failed, 0 skipped; `pnpm test:unit` — **PASS**, 490 passed, 0 failed, 0 skipped; `pnpm build` — **PASS** (Next reported the existing outdated `baseline-browser-mapping` data notice); `git diff --check` — **PASS**.

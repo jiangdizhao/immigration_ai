@@ -287,6 +287,16 @@ export function AdminPolicyIntelligence({
                                           {formatDateTime(failure.timestamp)}
                                         </dd>
                                       </div>
+                                      {failure.attemptCount === 2 ? (
+                                        <div>
+                                          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                            Retry details
+                                          </dt>
+                                          <dd className="mt-1 text-slate-700">
+                                            2 attempts · final timeout {failure.timeoutSeconds}s · reason {failure.retryReason}
+                                          </dd>
+                                        </div>
+                                      ) : null}
                                     </dl>
                                   </li>
                                 ))}
