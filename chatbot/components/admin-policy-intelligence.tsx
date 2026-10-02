@@ -261,6 +261,16 @@ export function AdminPolicyIntelligence({
                                           {failure.errorCode}
                                         </dd>
                                       </div>
+                                      {failure.errorName ? (
+                                        <div>
+                                          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                            Error class
+                                          </dt>
+                                          <dd className="mt-1 font-mono text-slate-800">
+                                            {failure.errorName}
+                                          </dd>
+                                        </div>
+                                      ) : null}
                                       <div className="sm:col-span-2">
                                         <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                           Message

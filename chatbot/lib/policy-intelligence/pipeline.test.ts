@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  APICallError,
+  JSONParseError,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  RetryError,
+  TypeValidationError,
+} from "ai";
+import { z } from "zod";
 import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
 import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
@@ -1050,9 +1059,7 @@ test("verifier failure fails closed and telemetry stores only a safe code", asyn
 test("analysis failure after snapshot is persisted with item and snapshot context", async () => {
   const h = dependencies({
     analyze: () => {
-      const error = new Error("provider timeout with private response");
-      Object.assign(error, { code: "provider_timeout" });
-      throw error;
+      throw new DOMException("provider timeout with private response", "AbortError");
     },
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
@@ -1062,7 +1069,8 @@ test("analysis failure after snapshot is persisted with item and snapshot contex
   assert.equal(failure.sourceConfigId, candidate.sourceConfigId);
   assert.equal(failure.stage, "analysis");
   assert.equal(failure.errorCode, "provider_timeout");
-  assert.equal(failure.message, "The analysis provider did not return a result in time.");
+  assert.equal(failure.errorName, "AbortError");
+  assert.equal(failure.message, "The analysis provider timed out before returning a result.");
   assert.equal(failure.timestamp, now);
   assert.equal(h.store.revisions.size, 0);
   const [adminItem] = await h.store.adminService.listItems();
@@ -1091,12 +1099,114 @@ test("unknown candidate exception is sanitized and does not leak secrets", async
   });
   const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   const serialized = JSON.stringify({ run: result.run, outcomes: result.outcomes });
-  assert.equal(result.run.candidateFailures[0].errorCode, "pipeline_error");
+  assert.equal(result.run.candidateFailures[0].errorCode, "analysis_internal_error");
   assert.equal(
     result.run.candidateFailures[0].message,
-    "The source snapshot could not be analyzed."
+    "An internal error prevented policy analysis from completing."
   );
   assert.doesNotMatch(serialized, /sk-live-secret-token|private\.example|api_key/i);
+});
+
+test("analysis abort and timeout errors receive safe provider_timeout diagnostics", async () => {
+  const aborted = dependencies({
+    analyze: () => {
+      throw new DOMException("sensitive request detail", "AbortError");
+    },
+  });
+  const abortedResult = await runPolicyIntelligenceSync(
+    aborted.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(abortedResult.run.candidateFailures[0].errorCode, "provider_timeout");
+  assert.equal(abortedResult.run.candidateFailures[0].errorName, "AbortError");
+
+  const sdkAbort = new RetryError({
+    message: "private retry detail",
+    reason: "abort",
+    errors: [new Error("private provider detail")],
+  });
+  const timedOut = dependencies({ analyze: () => Promise.reject(sdkAbort) });
+  const timeoutResult = await runPolicyIntelligenceSync(
+    timedOut.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(timeoutResult.run.candidateFailures[0].errorCode, "provider_timeout");
+});
+
+test("AI SDK structured-output errors are classified without storing model text", async () => {
+  const rawModelText = "private raw model output with token sk-private-123";
+  const error = new NoObjectGeneratedError({
+    cause: new JSONParseError({ text: rawModelText, cause: new Error("parse detail") }),
+    text: rawModelText,
+    response: {} as never,
+    usage: {} as never,
+    finishReason: "stop",
+  });
+  const h = dependencies({ analyze: () => Promise.reject(error) });
+  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const failure = result.run.candidateFailures[0];
+  assert.equal(failure.errorCode, "structured_output_error");
+  assert.equal(failure.errorName, "JSONParseError");
+  assert.doesNotMatch(JSON.stringify(result.run), /private raw model output|sk-private-123/);
+});
+
+test("Zod and AI SDK type validation errors map to schema_validation_error", async () => {
+  let zodError: unknown;
+  try {
+    z.object({ title: z.string() }).parse({ title: 42 });
+  } catch (error) {
+    zodError = error;
+  }
+  const zodFailure = dependencies({ analyze: () => Promise.reject(zodError) });
+  const zodResult = await runPolicyIntelligenceSync(
+    zodFailure.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(zodResult.run.candidateFailures[0].errorCode, "schema_validation_error");
+  assert.equal(zodResult.run.candidateFailures[0].errorName, "ZodError");
+
+  const typeError = TypeValidationError.wrap({
+    value: "private model output",
+    cause: new Error("private validation detail"),
+  });
+  const typedFailure = dependencies({ analyze: () => Promise.reject(typeError) });
+  const typedResult = await runPolicyIntelligenceSync(
+    typedFailure.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(typedResult.run.candidateFailures[0].errorCode, "schema_validation_error");
+  assert.equal(typedResult.run.candidateFailures[0].errorName, "TypeValidationError");
+});
+
+test("provider and empty-output failures are classified by AI SDK error types", async () => {
+  const providerError = new APICallError({
+    message: "private response body and key=secret",
+    url: "https://provider.invalid/private",
+    requestBodyValues: { prompt: "private prompt" },
+    responseBody: "private raw provider response",
+    statusCode: 503,
+  });
+  const providerFailure = dependencies({
+    analyze: () => Promise.reject(providerError),
+  });
+  const providerResult = await runPolicyIntelligenceSync(
+    providerFailure.deps,
+    candidate.sourceConfigId
+  );
+  const providerJson = JSON.stringify(providerResult.run);
+  assert.equal(providerResult.run.candidateFailures[0].errorCode, "provider_error");
+  assert.equal(providerResult.run.candidateFailures[0].errorName, "APICallError");
+  assert.doesNotMatch(providerJson, /provider\.invalid|private prompt|private raw provider|secret/);
+
+  const emptyFailure = dependencies({
+    analyze: () => Promise.reject(new NoOutputGeneratedError()),
+  });
+  const emptyResult = await runPolicyIntelligenceSync(
+    emptyFailure.deps,
+    candidate.sourceConfigId
+  );
+  assert.equal(emptyResult.run.candidateFailures[0].errorCode, "empty_model_output");
+  assert.equal(emptyResult.run.candidateFailures[0].errorName, "NoOutputGeneratedError");
 });
 
 test("successful candidate retains publication behavior without failure diagnostics", async () => {

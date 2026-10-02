@@ -14,6 +14,21 @@ const stages = new Set<PolicyCandidateFailureStage>([
   "publication_gate",
   "persistence",
 ]);
+const safeErrorNames = new Set([
+  "AbortError",
+  "APICallError",
+  "EmptyResponseBodyError",
+  "InvalidResponseDataError",
+  "JSONParseError",
+  "LoadAPIKeyError",
+  "NoObjectGeneratedError",
+  "NoOutputGeneratedError",
+  "NoSuchModelError",
+  "PolicyAnalysisValidationError",
+  "TypeValidationError",
+  "ZodError",
+  "Error",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -35,6 +50,9 @@ export function readCandidateFailureDiagnostics(
       typeof value.stage !== "string" ||
       !stages.has(value.stage as PolicyCandidateFailureStage) ||
       typeof value.errorCode !== "string" ||
+      (value.errorName !== undefined &&
+        value.errorName !== null &&
+        typeof value.errorName !== "string") ||
       typeof value.message !== "string" ||
       typeof value.timestamp !== "string" ||
       (value.snapshotId !== null && typeof value.snapshotId !== "string")
@@ -51,6 +69,11 @@ export function readCandidateFailureDiagnostics(
           /^[a-z0-9_]{1,80}$/.test(value.errorCode)
             ? value.errorCode
             : "pipeline_error",
+        errorName:
+          typeof value.errorName === "string" &&
+          safeErrorNames.has(value.errorName)
+            ? value.errorName
+            : null,
         message:
           value.message.length <= 240
             ? value.message
