@@ -4,6 +4,7 @@ import {
   getPublicPageContent,
   getPublicServiceCatalog,
   getPublicTeamPlaceholders,
+  PUBLIC_ROUTES,
   PUBLIC_SERVICE_CATALOG,
   PUBLIC_SERVICE_IDS,
   PUBLIC_TEAM_PLACEHOLDERS,
@@ -44,6 +45,7 @@ test("home and services read the same catalogue identity", () => {
     getPublicPageContent("en").services.aiCta,
     "Start AI initial consultation"
   );
+  assert.equal(PUBLIC_ROUTES.services, "/contact");
 });
 
 test("both locales expose the public page content model", () => {
@@ -56,6 +58,10 @@ test("both locales expose the public page content model", () => {
   assert.equal(english.process.steps.length, 5);
   assert.equal(chinese.contact.readiness.length, 4);
   assert.equal(english.contact.readiness.length, 4);
+  assert.equal(chinese.contact.title, "服务与联系");
+  assert.equal(english.contact.title, "Services & Contact");
+  assert.equal(chinese.contact.howItWorks.length, 3);
+  assert.equal(english.contact.howItWorks.length, 3);
 });
 
 test("team data is generic and structurally marked as placeholder content", () => {

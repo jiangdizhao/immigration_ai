@@ -5,6 +5,7 @@ import {
   getSiteLocaleFromCookie,
   getSiteTranslation,
   normalizeSiteLocale,
+  SITE_PRIMARY_NAVIGATION,
   serializeSiteLocaleCookie,
 } from "./site-locale";
 
@@ -36,8 +37,41 @@ test("site locale cookie round-trips across request and browser formats", () => 
 });
 
 test("shared-shell translations expose safe fallback copy for both locales", () => {
-  assert.equal(getSiteTranslation("zh-CN").nav.services, "服务");
-  assert.equal(getSiteTranslation("en").nav.services, "Services");
+  const chinese = getSiteTranslation("zh-CN").nav;
+  const english = getSiteTranslation("en").nav;
+  assert.deepEqual(Object.keys(chinese), [
+    "home",
+    "workspace",
+    "services",
+    "intelligence",
+  ]);
+  assert.deepEqual(Object.keys(english), [
+    "home",
+    "workspace",
+    "services",
+    "intelligence",
+  ]);
+  assert.deepEqual(Object.values(chinese), [
+    "首页",
+    "AI 工作台",
+    "服务与联系",
+    "法律动态",
+  ]);
+  assert.deepEqual(Object.values(english), [
+    "Home",
+    "AI Workspace",
+    "Services & Contact",
+    "Legal Updates",
+  ]);
   assert.equal(getSiteTranslation("zh-CN").account.logOut, "退出登录");
   assert.equal(getSiteTranslation("en").account.logOut, "Log out");
+});
+
+test("primary public navigation has exactly the four approved destinations", () => {
+  assert.deepEqual(SITE_PRIMARY_NAVIGATION, [
+    { key: "home", href: "/" },
+    { key: "workspace", href: "/ai-workspace" },
+    { key: "services", href: "/contact" },
+    { key: "intelligence", href: "/intelligence" },
+  ]);
 });

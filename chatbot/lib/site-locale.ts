@@ -6,12 +6,17 @@ export const SUPPORTED_SITE_LOCALES = ["zh-CN", "en"] as const;
 
 export type SiteLocale = (typeof SUPPORTED_SITE_LOCALES)[number];
 
-export type SiteNavKey =
-  | "workspace"
-  | "services"
-  | "intelligence"
-  | "process"
-  | "contact";
+export type SiteNavKey = "home" | "workspace" | "services" | "intelligence";
+
+export const SITE_PRIMARY_NAVIGATION: readonly {
+  key: SiteNavKey;
+  href: string;
+}[] = [
+  { key: "home", href: "/" },
+  { key: "workspace", href: "/ai-workspace" },
+  { key: "services", href: "/contact" },
+  { key: "intelligence", href: "/intelligence" },
+];
 
 export type SiteTranslation = {
   brand: {
@@ -70,11 +75,10 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
       tagline: "AI 辅助移民初步咨询",
     },
     nav: {
+      home: "首页",
       workspace: "AI 工作台",
-      services: "服务",
-      intelligence: "最新政策解读",
-      process: "办理流程",
-      contact: "联系我们",
+      services: "服务与联系",
+      intelligence: "法律动态",
     },
     header: {
       login: "登录",
@@ -126,11 +130,10 @@ export const SITE_TRANSLATIONS: Record<SiteLocale, SiteTranslation> = {
       tagline: "AI-assisted migration intake",
     },
     nav: {
+      home: "Home",
       workspace: "AI Workspace",
-      services: "Services",
-      intelligence: "Policy Intelligence",
-      process: "Process",
-      contact: "Contact",
+      services: "Services & Contact",
+      intelligence: "Legal Updates",
     },
     header: {
       login: "Login",

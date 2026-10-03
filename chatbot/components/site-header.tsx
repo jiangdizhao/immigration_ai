@@ -14,11 +14,8 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { guestRegex } from "@/lib/constants";
-import type {
-  SiteLocale,
-  SiteNavKey,
-  SiteTranslation,
-} from "@/lib/site-locale";
+import type { SiteLocale, SiteTranslation } from "@/lib/site-locale";
+import { SITE_PRIMARY_NAVIGATION } from "@/lib/site-locale";
 import { cn } from "@/lib/utils";
 import { SiteLanguageSwitcher } from "./site-language-switcher";
 import { useSiteLocale } from "./site-locale-provider";
@@ -30,14 +27,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-
-const navItems: { key: SiteNavKey; href: string }[] = [
-  { key: "workspace", href: "/ai-workspace" },
-  { key: "services", href: "/services" },
-  { key: "intelligence", href: "/intelligence" },
-  { key: "process", href: "/process" },
-  { key: "contact", href: "/contact" },
-];
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") {
@@ -269,7 +258,7 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-2 md:flex">
-          {navItems.map((item) => {
+          {SITE_PRIMARY_NAVIGATION.map((item) => {
             const active = isActivePath(pathname, item.href);
             return (
               <Link
@@ -346,7 +335,7 @@ export function SiteHeader() {
       {mobileOpen ? (
         <div className="border-t border-white/10 bg-[#001736] px-5 py-4 md:hidden">
           <nav className="grid gap-2">
-            {navItems.map((item) => {
+            {SITE_PRIMARY_NAVIGATION.map((item) => {
               const active = isActivePath(pathname, item.href);
               return (
                 <Link

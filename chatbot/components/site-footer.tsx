@@ -26,20 +26,17 @@ export function SiteFooter() {
         <div>
           <p className="font-semibold text-slate-950">{copy.footer.pages}</p>
           <div className="mt-4 grid gap-2 text-sm text-slate-600">
+            <Link className="hover:text-[#002b5b]" href="/">
+              {copy.nav.home}
+            </Link>
             <Link className="hover:text-[#002b5b]" href="/ai-workspace">
               {copy.nav.workspace}
             </Link>
-            <Link className="hover:text-[#002b5b]" href="/services">
+            <Link className="hover:text-[#002b5b]" href="/contact">
               {copy.nav.services}
             </Link>
             <Link className="hover:text-[#002b5b]" href="/intelligence">
               {copy.nav.intelligence}
-            </Link>
-            <Link className="hover:text-[#002b5b]" href="/process">
-              {copy.nav.process}
-            </Link>
-            <Link className="hover:text-[#002b5b]" href="/contact">
-              {copy.nav.contact}
             </Link>
           </div>
         </div>

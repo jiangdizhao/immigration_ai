@@ -10,16 +10,16 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  formatPolicyDate,
-  getPolicySourceStatusLabel,
-} from "@/lib/policy-intelligence";
+import { formatPolicyDate } from "@/lib/policy-intelligence";
 import type { PolicyProductPreviewState } from "@/lib/policy-intelligence-product";
-import { getPolicyProductCopy } from "@/lib/policy-intelligence-product-copy";
+import {
+  getPolicyPresentationGroup,
+  getPolicyPresentationStatusLabel,
+  getPolicyProductCopy,
+} from "@/lib/policy-intelligence-product-copy";
 import {
   getPublicPageContent,
   getPublicServiceCatalog,
-  getPublicTeamPlaceholders,
   PUBLIC_ROUTES,
 } from "@/lib/public-content";
 import { PolicyIntelligenceAvailabilityNotice } from "./policy-intelligence-availability-notice";
@@ -43,25 +43,28 @@ export function ImmigrationServiceHome({
   const { locale } = useSiteLocale();
   const content = getPublicPageContent(locale);
   const services = getPublicServiceCatalog(locale);
-  const team = getPublicTeamPlaceholders(locale);
   const policyCopy = getPolicyProductCopy(locale);
-  const policies = policyState.policies.slice(0, 3);
+  const policies = policyState.policies
+    .filter(
+      (policy) => getPolicyPresentationGroup(policy.sourceStatus) !== null
+    )
+    .slice(0, 3);
 
   return (
     <PublicPageFrame>
       <SiteHeader />
 
-      <main>
+      <main className="flex flex-col">
         <section className="relative isolate overflow-hidden bg-[#061d3a] text-white">
           <div
             aria-hidden="true"
-            className="absolute inset-0 -z-20 bg-cover bg-[center_38%] opacity-70"
+            className="absolute inset-0 -z-20 bg-cover bg-[center_38%] opacity-85"
             style={{
               backgroundImage:
                 "url('/images/sovereign-nexus/opera-house-hero.png')",
             }}
           />
-          <div className="absolute inset-0 -z-10 bg-[linear-gradient(108deg,rgba(3,21,46,0.98)_4%,rgba(6,29,58,0.9)_45%,rgba(15,47,88,0.63)_78%,rgba(6,29,58,0.84)_100%)]" />
+          <div className="absolute inset-0 -z-10 bg-[linear-gradient(108deg,rgba(3,21,46,0.94)_4%,rgba(6,29,58,0.76)_45%,rgba(15,47,88,0.4)_78%,rgba(6,29,58,0.68)_100%)]" />
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_77%_22%,rgba(139,92,246,0.28),transparent_25%),radial-gradient(circle_at_70%_90%,rgba(56,189,248,0.16),transparent_30%)]" />
 
           <div className="mx-auto grid w-full max-w-7xl gap-12 px-5 py-16 sm:py-20 lg:grid-cols-[minmax(0,0.98fr)_minmax(22rem,0.82fr)] lg:items-center lg:gap-16 lg:px-8 lg:py-24">
@@ -162,7 +165,7 @@ export function ImmigrationServiceHome({
           </div>
         </section>
 
-        <section className="bg-[#f4f6f9] px-5 py-20 sm:py-24 lg:px-8">
+        <section className="order-4 bg-[#f4f6f9] px-5 py-14 sm:py-16 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end lg:gap-16">
               <PublicSectionHeading
@@ -189,7 +192,7 @@ export function ImmigrationServiceHome({
           </div>
         </section>
 
-        <section className="bg-white px-5 py-20 sm:py-24 lg:px-8">
+        <section className="order-2 bg-[#edf2f7] px-5 py-14 sm:py-16 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end lg:gap-16">
               <PublicSectionHeading
@@ -217,7 +220,7 @@ export function ImmigrationServiceHome({
                       <div className="flex items-center justify-between gap-3 text-xs font-semibold text-[#123f70]">
                         <span className="inline-flex items-center gap-2">
                           <BookOpenText className="size-4" />
-                          {getPolicySourceStatusLabel(
+                          {getPolicyPresentationStatusLabel(
                             policy.sourceStatus,
                             locale
                           )}
@@ -274,7 +277,7 @@ export function ImmigrationServiceHome({
           </div>
         </section>
 
-        <section className="bg-white px-5 py-20 sm:py-24 lg:px-8">
+        <section className="order-3 bg-white px-5 py-14 sm:py-16 lg:px-8">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[2.5rem] bg-[#092c52] shadow-[0_30px_90px_-48px_rgba(9,44,82,0.8)]">
             <div className="grid lg:grid-cols-[0.72fr_1.28fr]">
               <div className="relative overflow-hidden p-8 text-white sm:p-10 lg:p-12">
@@ -313,42 +316,7 @@ export function ImmigrationServiceHome({
           </div>
         </section>
 
-        <section className="bg-[#f4f6f9] px-5 py-20 sm:py-24 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <PublicSectionHeading
-              description={content.home.team.description}
-              eyebrow={content.home.team.eyebrow}
-              title={content.home.team.title}
-              tone="amber"
-            />
-            <div className="mt-10 grid gap-5 md:grid-cols-2">
-              {team.map((profile) => (
-                <article
-                  className="flex min-w-0 gap-5 rounded-[1.75rem] bg-[#fff8eb] p-6 shadow-[0_18px_50px_-38px_rgba(146,91,0,0.7)] ring-1 ring-amber-200/70 sm:p-7"
-                  key={profile.id}
-                >
-                  <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-200">
-                    <UserRound className="size-7" />
-                  </div>
-                  <div className="min-w-0">
-                    <PublicEyebrow tone="amber">{profile.status}</PublicEyebrow>
-                    <h3 className="mt-3 text-xl font-semibold tracking-tight text-slate-950">
-                      {profile.name}
-                    </h3>
-                    <p className="mt-1 text-sm font-medium text-slate-700">
-                      {profile.role}
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {profile.focus}
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-[#061d3a] px-5 py-20 text-white sm:py-24 lg:px-8">
+        <section className="order-5 bg-[#061d3a] px-5 py-14 text-white sm:py-16 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-8 rounded-[2.5rem] bg-white/[0.06] p-7 ring-1 ring-white/10 sm:p-10 lg:grid-cols-[0.76fr_1.24fr] lg:items-center lg:p-12">
             <PublicSectionHeading
               dark

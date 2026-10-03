@@ -1,5 +1,46 @@
+import {
+  getPolicySourceStatusLabel,
+  type PolicySourceStatus,
+} from "./policy-intelligence";
 import type { PolicyProductAvailability } from "./policy-intelligence-product";
 import type { SiteLocale } from "./site-locale";
+
+export type PolicyPresentationGroup = "published" | "proposed";
+
+export function getPolicyPresentationGroup(
+  status: PolicySourceStatus
+): PolicyPresentationGroup | null {
+  if (status === "in_force" || status === "announced") {
+    return "published";
+  }
+  if (status === "proposed" || status === "consultation") {
+    return "proposed";
+  }
+  return null;
+}
+
+export function getPolicyPresentationGroupLabel(
+  group: PolicyPresentationGroup,
+  locale: SiteLocale
+): string {
+  return group === "published"
+    ? locale === "zh-CN"
+      ? "已公布 / 已实施"
+      : "Published / In force"
+    : locale === "zh-CN"
+      ? "拟议 / 计划中"
+      : "Proposed / Planned";
+}
+
+export function getPolicyPresentationStatusLabel(
+  status: PolicySourceStatus,
+  locale: SiteLocale
+): string {
+  const group = getPolicyPresentationGroup(status);
+  return group
+    ? getPolicyPresentationGroupLabel(group, locale)
+    : getPolicySourceStatusLabel(status, locale);
+}
 
 const copy = {
   "zh-CN": {
@@ -31,12 +72,12 @@ const copy = {
     revision: "版本",
     search: "搜索中英文标题、摘要、来源或类别",
     allSources: "全部来源类别",
-    allStatuses: "全部来源状态",
+    allStatuses: "全部动态分组",
     latest: "最新",
     impact: "影响排序",
     noResults: "没有符合条件的内容",
     sectionSummary: "执行摘要",
-    sourceStatus: "来源状态",
+    sourceStatus: "公开分组",
     keyChanges: "主要变化",
     affectedGroups: "可能受影响的人群",
     practicalImpacts: "实际影响",
@@ -131,12 +172,12 @@ const copy = {
     revision: "Revision",
     search: "Search bilingual titles, summaries, sources or categories",
     allSources: "All source families",
-    allStatuses: "All source statuses",
+    allStatuses: "All update groups",
     latest: "Latest",
     impact: "Impact order",
     noResults: "No items match these filters",
     sectionSummary: "Executive summary",
-    sourceStatus: "Source status",
+    sourceStatus: "Public group",
     keyChanges: "Key changes",
     affectedGroups: "Potentially affected groups",
     practicalImpacts: "Practical impacts",

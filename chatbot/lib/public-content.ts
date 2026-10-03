@@ -2,7 +2,7 @@ import type { SiteLocale } from "./site-locale";
 
 export const PUBLIC_ROUTES = {
   aiWorkspace: "/ai-workspace",
-  services: "/services",
+  services: "/contact",
   intelligence: "/intelligence",
   process: "/process",
   contact: "/contact",
@@ -356,6 +356,10 @@ type PublicPageCopy = {
     lawyerCardTitle: string;
     lawyerCardDescription: string;
     lawyerCta: string;
+    howItWorksTitle: string;
+    howItWorks: readonly PublicStep[];
+    servicesTitle: string;
+    servicesDescription: string;
     readinessEyebrow: string;
     readinessTitle: string;
     readinessDescription: string;
@@ -395,13 +399,13 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         cardCta: "查看服务方向",
       },
       intelligence: {
-        eyebrow: "最新政策解读",
-        title: "先看官方来源，再理解政策信息",
+        eyebrow: "法律动态",
+        title: "查看已公布与正在拟议的政策动态",
         description:
           "政策条目会在来源和编辑状态均完成核验后显示。这里不会用未经确认的内容填补空白。",
         emptyTitle: "已发布的政策解读将在核验后显示",
         emptyDescription: "目前还没有完成来源核验和发布流程的政策条目。",
-        viewAll: "查看最新政策解读",
+        viewAll: "查看法律动态",
         sourceLabel: "官方来源",
         analysisLabel: "AI 辅助分析",
         lawyerLabel: "律师点评",
@@ -469,7 +473,7 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       consultationCta: "提交咨询需求",
     },
     intelligence: {
-      eyebrow: "最新政策解读",
+      eyebrow: "法律动态",
       title: "把政策来源、状态与实际影响分开看",
       description:
         "这里仅展示已完成编辑发布流程的条目。官方来源、AI 辅助分析和律师点评会明确区分。",
@@ -494,7 +498,7 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       lawyerEmpty: "当前条目没有已确认的律师点评。",
       impactTitle: "实际影响",
       impactEmpty: "当前条目没有提供经编辑确认的实际影响说明。",
-      backToList: "返回政策解读",
+      backToList: "返回法律动态",
     },
     process: {
       eyebrow: "服务流程",
@@ -545,10 +549,10 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       consultationCta: "了解咨询入口",
     },
     contact: {
-      eyebrow: "咨询入口",
-      title: "准备下一步咨询",
+      eyebrow: "澳洲留学与移民服务",
+      title: "服务与联系",
       description:
-        "您可以先使用 AI 工作台整理初步信息，也可以提交包含偏好时间的咨询请求，后续安排将另行确认。",
+        "了解服务方向和基本流程。您可以先用 AI 整理初步信息，也可以提交律师咨询请求；具体安排将在后续确认。",
       aiCardTitle: "开始 AI 初步咨询",
       aiCardDescription:
         "适合先说明问题、整理背景，并逐步准备后续咨询所需的信息。",
@@ -556,6 +560,30 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       lawyerCardTitle: "提交咨询请求",
       lawyerCardDescription: "提交您偏好的时间段。最终安排将在后续确认。",
       lawyerCta: "提交咨询请求",
+      howItWorksTitle: "服务如何进行",
+      howItWorks: [
+        {
+          id: "share",
+          number: "01",
+          title: "说明情况",
+          description: "从您的问题、背景和重要日期开始。",
+        },
+        {
+          id: "organise",
+          number: "02",
+          title: "整理初步信息",
+          description: "AI 协助梳理已知情况和待确认事项。",
+        },
+        {
+          id: "consult",
+          number: "03",
+          title: "选择后续服务",
+          description: "需要时提交律师咨询请求，后续安排另行确认。",
+        },
+      ],
+      servicesTitle: "服务方向",
+      servicesDescription:
+        "以下类别用于帮助您找到入口，具体服务范围需结合情况进一步确认。",
       readinessEyebrow: "咨询准备",
       readinessTitle: "可以先准备这些信息",
       readinessDescription:
@@ -608,15 +636,14 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         cardCta: "View service direction",
       },
       intelligence: {
-        eyebrow: "Policy intelligence",
-        title:
-          "Start with the official source, then understand the information",
+        eyebrow: "Legal Updates",
+        title: "Browse published and proposed policy updates",
         description:
           "Policy entries appear only after their source and editorial status have been reviewed. This space is not filled with unconfirmed material.",
         emptyTitle: "Published policy intelligence will appear after review",
         emptyDescription:
           "There are no policy entries that have completed source review and publication yet.",
-        viewAll: "View policy intelligence",
+        viewAll: "View Legal Updates",
         sourceLabel: "Official source",
         analysisLabel: "AI-assisted analysis",
         lawyerLabel: "Lawyer commentary",
@@ -689,7 +716,7 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       consultationCta: "Submit a consultation request",
     },
     intelligence: {
-      eyebrow: "Policy intelligence",
+      eyebrow: "Legal Updates",
       title: "Separate policy sources, status, and practical relevance",
       description:
         "Only entries that have completed the editorial publication process are shown. Official sources, AI-assisted analysis, and lawyer commentary are labelled separately.",
@@ -716,7 +743,7 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
         "No confirmed lawyer commentary is published for this entry.",
       impactTitle: "Practical relevance",
       impactEmpty: "No curated practical relevance is provided for this entry.",
-      backToList: "Back to policy intelligence",
+      backToList: "Back to Legal Updates",
     },
     process: {
       eyebrow: "Service journey",
@@ -773,10 +800,10 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       consultationCta: "Explore the consultation path",
     },
     contact: {
-      eyebrow: "Consultation entry point",
-      title: "Prepare for the next consultation step",
+      eyebrow: "Australian immigration and study services",
+      title: "Services & Contact",
       description:
-        "Start in the AI workspace to organise initial information. You can also submit a consultation request with preferred times for later confirmation.",
+        "Review service directions and the basic process. Start by organising information with AI, or submit a lawyer consultation request for follow-up confirmation.",
       aiCardTitle: "Start an AI initial consultation",
       aiCardDescription:
         "Explain your question, organise the background, and progressively prepare information for a later consultation.",
@@ -785,6 +812,32 @@ export const PUBLIC_PAGE_CONTENT: Record<SiteLocale, PublicPageCopy> = {
       lawyerCardDescription:
         "Submit your preferred times. The final arrangement will be confirmed later.",
       lawyerCta: "Submit a consultation request",
+      howItWorksTitle: "How the service works",
+      howItWorks: [
+        {
+          id: "share",
+          number: "01",
+          title: "Explain your situation",
+          description: "Start with your question, background, and key dates.",
+        },
+        {
+          id: "organise",
+          number: "02",
+          title: "Organise initial information",
+          description:
+            "AI helps organise known information and open questions.",
+        },
+        {
+          id: "consult",
+          number: "03",
+          title: "Choose a next step",
+          description:
+            "Submit a lawyer consultation request when useful; arrangements are confirmed later.",
+        },
+      ],
+      servicesTitle: "Service directions",
+      servicesDescription:
+        "These categories help you find an entry point; specific scope is confirmed against your situation.",
       readinessEyebrow: "Consultation preparation",
       readinessTitle: "Information you can prepare first",
       readinessDescription:

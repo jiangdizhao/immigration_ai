@@ -646,8 +646,8 @@ test("public importance labels are bounded and localized without numeric scores"
       }
     }
   }
-  assert.equal(getPolicyProductCopy("zh-CN").sourceStatus, "来源状态");
-  assert.equal(getPolicyProductCopy("en").sourceStatus, "Source status");
+  assert.equal(getPolicyProductCopy("zh-CN").sourceStatus, "公开分组");
+  assert.equal(getPolicyProductCopy("en").sourceStatus, "Public group");
   assert.throws(
     () => getPublicImportanceLabel("immediacy", 6, "en"),
     /out_of_range/
