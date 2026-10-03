@@ -1,4 +1,5 @@
 import type { AdminPolicyIntelligenceService } from "./admin-api";
+import { buildAdminPolicyRevisionDetail } from "./admin-revision-detail";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
 import {
   buildAdminPublicationDiagnostics,
@@ -334,6 +335,27 @@ export function createInMemoryPolicyIntelligenceRepository() {
             evidence,
           }),
         };
+      });
+    },
+    async getRevisionDetail(itemId) {
+      const item = items.get(itemId);
+      if (!item || !item.latestSnapshotId) {
+        return null;
+      }
+      const snapshot = snapshots.get(item.latestSnapshotId);
+      if (!snapshot) {
+        return null;
+      }
+      const revision = [...revisions.values()]
+        .filter(
+          (record) =>
+            record.itemId === item.id && record.snapshotId === snapshot.id
+        )
+        .sort((left, right) => right.revisionNumber - left.revisionNumber)[0];
+      return buildAdminPolicyRevisionDetail({
+        item,
+        snapshot,
+        revision: revision ?? null,
       });
     },
     async updateItem(itemId, action) {

@@ -11,6 +11,7 @@ import type {
   AdminPolicyIntelligenceItem,
   AdminPolicyIntelligenceService,
 } from "./admin-api";
+import { buildAdminPolicyRevisionDetail } from "./admin-revision-detail";
 import { policyAnalysisSchema } from "./contracts";
 import {
   buildAdminPublicationDiagnostics,
@@ -185,6 +186,80 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
         }),
       };
     }) satisfies AdminPolicyIntelligenceItem[];
+  },
+
+  async getRevisionDetail(itemId) {
+    const [item] = await db
+      .select({
+        id: policyIntelligenceItem.id,
+        slug: policyIntelligenceItem.slug,
+        sourceConfigId: policyIntelligenceItem.primarySourceConfigId,
+        sourceStatus: policyIntelligenceItem.sourceStatus,
+        editorialStatus: policyIntelligenceItem.editorialStatus,
+        latestSnapshotId: policyIntelligenceItem.latestSnapshotId,
+      })
+      .from(policyIntelligenceItem)
+      .where(eq(policyIntelligenceItem.id, itemId))
+      .limit(1);
+    if (!item || !item.latestSnapshotId) {
+      return null;
+    }
+
+    const [snapshot] = await db
+      .select({
+        id: policyIntelligenceSourceSnapshot.id,
+        itemId: policyIntelligenceSourceSnapshot.itemId,
+        canonicalUrl: policyIntelligenceSourceSnapshot.canonicalUrl,
+        officialTitle: policyIntelligenceSourceSnapshot.officialTitle,
+        retrievedAt: policyIntelligenceSourceSnapshot.retrievedAt,
+        sourceDate: policyIntelligenceSourceSnapshot.sourceDate,
+        effectiveDate: policyIntelligenceSourceSnapshot.effectiveDate,
+        evidenceTruncated: policyIntelligenceSourceSnapshot.evidenceTruncated,
+        sourceId: policyIntelligenceSourceSnapshot.sourceId,
+        authority: policyIntelligenceSourceSnapshot.authority,
+        contentHash: policyIntelligenceSourceSnapshot.contentHash,
+      })
+      .from(policyIntelligenceSourceSnapshot)
+      .where(
+        and(
+          eq(policyIntelligenceSourceSnapshot.id, item.latestSnapshotId),
+          eq(policyIntelligenceSourceSnapshot.itemId, item.id)
+        )
+      )
+      .limit(1);
+    if (!snapshot) {
+      return null;
+    }
+
+    const [revision] = await db
+      .select({
+        id: policyIntelligenceAnalysisRevision.id,
+        itemId: policyIntelligenceAnalysisRevision.itemId,
+        snapshotId: policyIntelligenceAnalysisRevision.snapshotId,
+        revisionNumber: policyIntelligenceAnalysisRevision.revisionNumber,
+        generatedAt: policyIntelligenceAnalysisRevision.generatedAt,
+        editorialStatus: policyIntelligenceAnalysisRevision.editorialStatus,
+        analysisFingerprint:
+          policyIntelligenceAnalysisRevision.analysisFingerprint,
+        analysis: policyIntelligenceAnalysisRevision.analysis,
+        verification: policyIntelligenceAnalysisRevision.verification,
+        modelMetadata: policyIntelligenceAnalysisRevision.modelMetadata,
+      })
+      .from(policyIntelligenceAnalysisRevision)
+      .where(
+        and(
+          eq(policyIntelligenceAnalysisRevision.itemId, item.id),
+          eq(policyIntelligenceAnalysisRevision.snapshotId, snapshot.id)
+        )
+      )
+      .orderBy(desc(policyIntelligenceAnalysisRevision.revisionNumber))
+      .limit(1);
+
+    return buildAdminPolicyRevisionDetail({
+      item,
+      snapshot,
+      revision: revision ?? null,
+    });
   },
 
   async updateItem(itemId, action) {

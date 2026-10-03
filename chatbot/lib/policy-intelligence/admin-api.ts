@@ -5,6 +5,7 @@ import type {
   AdminPipelineFailureDiagnostic,
   AdminPolicyAnalysisAttempt,
 } from "./pipeline-failure-diagnostics";
+import type { AdminPolicyRevisionDetail } from "./admin-revision-detail";
 
 export type AdminPolicyIntelligenceSnapshot = {
   sourceUrl: string;
@@ -46,6 +47,7 @@ export type AdminPolicyIntelligenceUpdate =
 
 export type AdminPolicyIntelligenceService = {
   listItems(): Promise<AdminPolicyIntelligenceItem[]>;
+  getRevisionDetail(itemId: string): Promise<AdminPolicyRevisionDetail | null>;
   updateItem(
     itemId: string,
     action: "archive" | "restore"
@@ -76,6 +78,42 @@ export async function handleAdminPolicyIntelligenceGet({
     return admin;
   }
   return Response.json({ items: await service.listItems() });
+}
+
+export async function handleAdminPolicyIntelligenceDetailGet({
+  requireAdmin,
+  service,
+  itemId,
+}: {
+  requireAdmin: PolicyAdminAuthenticator;
+  service: Pick<AdminPolicyIntelligenceService, "getRevisionDetail">;
+  itemId: string;
+}): Promise<Response> {
+  const admin = await requireAdmin();
+  if (admin instanceof Response) {
+    return admin;
+  }
+
+  const parsedItemId = itemIdSchema.safeParse(itemId);
+  if (!parsedItemId.success) {
+    return Response.json({ error: "Invalid policy item ID." }, { status: 400 });
+  }
+
+  try {
+    const detail = await service.getRevisionDetail(parsedItemId.data);
+    if (!detail) {
+      return Response.json(
+        { error: "Policy revision detail not found." },
+        { status: 404 }
+      );
+    }
+    return Response.json(detail);
+  } catch {
+    return Response.json(
+      { error: "Unable to read policy revision detail." },
+      { status: 500 }
+    );
+  }
 }
 
 export async function handleAdminPolicyIntelligenceUpdate({
