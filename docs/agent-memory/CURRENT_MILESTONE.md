@@ -1085,3 +1085,34 @@ The plan has **three development stages only**:
 After the three stages, use one consolidated final acceptance/deployment gate. Do not create micro-substages or repeated R1/R2 correction chains for non-blocking polish.
 
 **Current next action:** implement LF-01 only in an isolated UI worktree/branch. Do not modify the paused Policy Intelligence analyzer/verifier/publication architecture and do not destroy or mix the local admin-detail endpoint WIP.
+
+
+## 2026-10-04 LF-01 verified / LF-02 activated
+
+**LF-01 — VERIFIED**
+
+Remote accepted commit: `5719cee319ac022a6c6c4761820e8892779e6039` (`feat: consolidate public immigration service experience`).
+
+Acceptance evidence:
+
+- 46 focused tests passed;
+- production build passed;
+- changed-file Biome passed;
+- `git diff --check` passed;
+- desktop/mobile visual smoke passed;
+- remote commit boundary independently verified.
+
+**LF-02 — ACTIVE**
+
+Implement the AI Workspace consolidation as one bounded stage:
+
+1. desktop viewport-constrained application shell with internal pane scrolling and persistent composer;
+2. right rail reduced to all current Known information + all current To confirm requests;
+3. explicit manual case-summary snapshot generated from structured Known/To Confirm context only, with no automatic LLM/backend call;
+4. remove customer-visible confidence/current-matter/next-action/duplicate-source/generic-handoff panels;
+5. retain answer-level citations and existing guided intake/documents/modes/conversation behavior;
+6. make VIP lawyer-review and existing one-to-one consultation paths clear without changing entitlement/business-state semantics.
+
+Run one concentrated validation/visual gate after the complete implementation. Leave LF-02 uncommitted/unpushed for review and stop before LF-03.
+
+Policy Intelligence verifier/publication diagnostics remain paused.

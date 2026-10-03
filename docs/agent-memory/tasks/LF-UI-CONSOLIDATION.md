@@ -1,6 +1,6 @@
 # LF-UI-CONSOLIDATION — Lawyer Feedback UI/Product Consolidation
 
-**Status:** ACTIVE — LF-01  
+**Status:** ACTIVE — LF-02  
 **Activated:** 2026-10-04  
 **Parent branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Parent checkpoint before activation:** `8cb4ca34cb9eef698843190945ec7cf2e34d41f9`  
@@ -47,7 +47,7 @@ This task deliberately uses **three coarse development stages only**.
 - Each stage should normally produce one implementation commit and at most one necessary correction commit after review.
 - Repeated correction commits indicate the design/implementation should be reassessed instead of patched indefinitely.
 
-## 4. LF-01 — Public Experience Consolidation — ACTIVE
+## 4. LF-01 — Public Experience Consolidation — VERIFIED
 
 ### Goal
 
@@ -150,7 +150,7 @@ Leave implementation **uncommitted and unpushed** for independent review unless 
 
 Do not start LF-02.
 
-## 5. LF-02 — AI Workspace Consolidation — PLANNED
+## 5. LF-02 — AI Workspace Consolidation — ACTIVE
 
 One implementation unit:
 
@@ -200,3 +200,126 @@ After this UI consolidation is complete, resume the 2026-10-03 Policy Intelligen
 - only then decide whether verifier/publication logic needs a minimal correction.
 
 Do not relax the legal evidence gate merely to force publication.
+
+
+## 2026-10-04 LF-01 verified / LF-02 activated
+
+### LF-01 acceptance record
+
+LF-01 is closed/verified at remote commit `5719cee319ac022a6c6c4761820e8892779e6039`.
+
+Evidence:
+
+- 46 focused tests passed, 0 failed;
+- production build passed;
+- changed-file Biome passed;
+- `git diff --check` passed;
+- source review passed;
+- desktop/mobile visual smoke passed;
+- remote commit boundary verified.
+
+Do not reopen LF-01 for minor cosmetic observations.
+
+### LF-02 implementation contract
+
+#### Desktop shell
+
+- Make `/ai-workspace` an application surface on desktop.
+- Constrain the desktop workspace to the viewport below `SiteHeader`; remove/omit `SiteFooter` from the application surface if required.
+- Outer desktop page should not scroll in normal use.
+- Mode controls remain visible.
+- Left conversation history may scroll internally.
+- Central message list scrolls independently; composer remains visible.
+- Right rail may scroll internally.
+- Mobile remains stacked/naturally scrollable and usable.
+
+#### Right rail
+
+The final customer-facing right rail contains only:
+
+- **Known information**: all available entries from the latest `interactionPlan.known_facts_summary`, with localized labels and safe value rendering.
+- **To confirm**: all current `interactionPlan.requested_facts`, preserving backend prompt/label semantics and inventing nothing.
+- **Generate case summary**: explicit user action.
+
+Remove from the right rail:
+
+- current matter;
+- matter/operation type;
+- next action;
+- AI confidence/confidence note;
+- duplicate latest sources;
+- generic lawyer handoff promo;
+- the one-item-only requested-fact treatment.
+
+Provide localized empty states for Known and To Confirm.
+
+#### Manual case summary
+
+For LF-02, “Generate case summary” means a deterministic UI snapshot of the currently visible structured context, not an LLM task.
+
+- No model/provider call.
+- No new API endpoint.
+- No database write.
+- No automatic generation.
+- Clicking the button captures the current Known + To Confirm values into a visible structured summary.
+- Later chat changes do not silently mutate the already-generated snapshot.
+- User may explicitly regenerate to update it.
+- The summary must not infer legal conclusions or present itself as lawyer advice.
+- Prefer a small pure helper/data structure so snapshot behavior can be unit-tested.
+
+#### Human service paths
+
+Preserve existing `LawyerRequestAction` entitlement and persisted-answer semantics.
+
+When VIP review access is allowed, make both existing paths clear in the answer-associated human-service UI:
+
+1. request lawyer review of this answer;
+2. one-to-one lawyer consultation via existing `consultationCreateHref(chatId)`.
+
+Do not alter consultation lifecycle, consultation route availability elsewhere, billing/VIP entitlement, lawyer-request RBAC/snapshot rules, or claim real-time lawyer chat.
+
+#### Preserve
+
+Do not regress or redesign:
+
+- conversation list/create/load;
+- `chatId` continuity;
+- Fast / Legal Check / Premium mode access;
+- mode provider/routing policy;
+- political gate;
+- guided intake;
+- MatterDocuments;
+- answer-level source/citation presentation;
+- consultation continuity;
+- auth/session/RBAC;
+- backend response contracts.
+
+The backend `confidence` value may continue to exist; only its customer-facing UI is removed.
+
+#### LF-02 validation
+
+Run one concentrated batch after implementation:
+
+- workspace copy/helper tests;
+- new deterministic context-summary tests;
+- consultation customer-UI continuity tests;
+- relevant lawyer-request/VIP tests;
+- any directly affected existing tests;
+- production build;
+- changed-file Biome;
+- `git diff --check`.
+
+Visual smoke with the linked local environment:
+
+- desktop outer page does not scroll;
+- message list scrolls and composer remains visible;
+- right rail has only Known / To Confirm / manual summary;
+- all requested facts are visible, not only the first;
+- no AI confidence is customer-visible;
+- lawyer-review and one-to-one consultation paths are distinct;
+- mobile has no severe overflow and remains usable;
+- zh-CN / English switching remains intact.
+
+#### LF-02 stop boundary
+
+Leave LF-02 source uncommitted and unpushed for independent review. Do not start LF-03 or deploy.

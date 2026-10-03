@@ -3429,3 +3429,175 @@ Then run the repository-appropriate unit/focused tests, `pnpm build`, and `git d
 - A stage is interrupted only for a true blocker: broken route, build/compile failure caused by the stage, broken auth/data boundary, severe responsive overflow, incorrect bilingual semantics, or loss of an accepted workflow.
 - Each LF stage should normally require **one implementation commit and at most one necessary correction commit** after review. Reaching repeated correction commits is a signal to stop and reassess the design rather than continue patching.
 - Do not reopen the paused Policy Intelligence analyzer/verifier/publication-gate investigation as part of this task.
+
+
+## 2026-10-04 LF-01 verified / LF-02 activated
+
+### Remote verification
+
+LF-01 was source-reviewed and visually accepted, committed, pushed, and independently verified on GitHub.
+
+- branch: `phase11-lawyer-feedback-ui-consolidation`
+- verified LF-01 commit: `5719cee319ac022a6c6c4761820e8892779e6039`
+- commit message: `feat: consolidate public immigration service experience`
+- remote commit contains exactly the 15 reviewed LF-01 files.
+- local and remote branch heads matched `5719cee319ac022a6c6c4761820e8892779e6039` and the LF worktree was clean after restoring the Next.js-generated `next-env.d.ts` development-only change.
+- focused LF-01 validation: 46 passed, 0 failed.
+- production build: passed.
+- changed-file Biome validation: passed.
+- `git diff --check`: passed.
+- desktop/mobile visual smoke: passed for Home, Services & Contact, Legal Updates, and four-item mobile navigation.
+
+Accepted LF-01 behavior:
+
+- primary public navigation is Home / AI Workspace / Services & Contact / Legal Updates;
+- `/contact` is the canonical combined public service/contact surface;
+- `/services` and `/process` redirect to `/contact`;
+- Home keeps the Opera House asset with a brighter treatment and places Legal Updates directly after the hero;
+- public Legal Updates maps `in_force|announced -> published`, `proposed|consultation -> proposed`, while `superseded` is excluded from the primary public listing but underlying status/history/provenance semantics remain intact.
+
+The Next.js development overlay and technical account display observed during local smoke are not LF-01 blockers and are not authorised reasons to reopen LF-01.
+
+### Policy Intelligence WIP preservation update
+
+The previously local-only admin revision-detail WIP has now been safely preserved on a separate remote branch without merging or deploying it:
+
+- branch: `policy-intelligence-admin-detail-wip-20261004`
+- commit: `a73e3b51cb091b275f46116bad911ede445be54d`
+- focused admin API tests: 9 passed, 0 failed.
+
+Policy analyzer/verifier/publication-gate work remains paused. Do not merge that WIP into the LF branch and do not resume 494 diagnostics during LF-02.
+
+### LF-02 — AI Workspace Consolidation — ACTIVE
+
+LF-02 is one coarse implementation unit. Do not split it into shell/right-rail/summary/VIP micro-milestones.
+
+#### A. Desktop application shell
+
+The AI Workspace must behave like an application, not a long public page.
+
+- On desktop, constrain the workspace to the available viewport below the site header.
+- Remove the AI Workspace page footer from the application surface if necessary to achieve a non-scrolling desktop page.
+- The outer desktop page must not vertically scroll during normal workspace use.
+- Keep the mode selector/header controls visible.
+- Conversation history may scroll inside the left rail.
+- The central message list must remain independently scrollable while the composer stays visible.
+- The right context rail may scroll internally when its content exceeds the viewport.
+- Mobile may remain naturally stacked/scrollable; do not force the desktop three-column geometry onto narrow screens.
+- Do not change LF-03 policy-continuity behavior in this stage.
+
+#### B. Right context rail = Known + To Confirm + manual summary
+
+Remove customer-visible:
+
+- Current Matter / matter type;
+- next action;
+- AI confidence and confidence note;
+- duplicate latest-sources block;
+- generic lawyer-handoff promo card.
+
+Keep legal sources/citations where they already belong: attached to the relevant assistant answer in the central conversation.
+
+The right rail must contain only:
+
+1. **Known information**
+   - sourced from the latest assistant interaction plan's `known_facts_summary`;
+   - show the available structured facts rather than an arbitrary first-six truncation;
+   - use existing localized fact labels and safe value rendering;
+   - show a clear localized empty state when no known facts are available.
+
+2. **To confirm**
+   - sourced from the current structured `requested_facts` rather than only the first requested fact;
+   - do not invent questions or legal facts;
+   - preserve prompt/label wording from the interaction plan;
+   - show a localized empty state when there is nothing currently to confirm.
+
+3. **Generate case summary**
+   - explicit user action only;
+   - no automatic generation on answer arrival, conversation load, fact update, or mode change;
+   - LF-02 should implement this as a deterministic client-side snapshot/rendering of the already-available structured context (Known + To Confirm), not as a new LLM/model call;
+   - no new backend endpoint, DB mutation, provider call, or billing event is required for LF-02;
+   - clicking generates/replaces a visible structured summary snapshot; subsequent conversation changes must not silently rewrite an already-generated snapshot;
+   - a user may explicitly regenerate it to capture the latest structured context;
+   - this summary is not lawyer advice and must not claim legal conclusions that are absent from the structured source data.
+
+If a future product decision requires a prose/model-generated matter brief, that is a separate task and not a reason to expand LF-02.
+
+#### C. Human lawyer services
+
+Preserve the existing answer-level `LawyerRequestAction` and its VIP entitlement behavior.
+
+For an entitled VIP user, the human-service surface associated with an answer should make two distinct paths clear:
+
+- request a lawyer to review this AI answer;
+- continue to the existing P11-008 one-to-one lawyer consultation request flow using `consultationCreateHref(chatId)`.
+
+Do not:
+
+- invent real-time lawyer chat;
+- alter the consultation lifecycle/state machine;
+- globally restrict an existing consultation route that is currently available elsewhere;
+- change VIP billing/entitlement semantics;
+- change lawyer-request ownership/snapshot/RBAC semantics.
+
+Existing Guided Intake consultation continuity may remain; LF-02 should avoid duplicative large promo cards.
+
+#### D. Preserve accepted workspace behavior
+
+Do not regress:
+
+- conversation create/list/load and `chatId` continuity;
+- Fast / Legal Check / Premium mode access;
+- answer routing/provider policy;
+- political gate;
+- guided intake/fact submission;
+- document upload/selection/evidence presentation;
+- answer-level citations/sources;
+- lawyer-request persisted-message identity;
+- consultation continuity;
+- auth/session/RBAC;
+- backend response contracts, including the `confidence` field if other code still relies on it.
+
+Removing confidence from the customer UI does not authorise removing it from backend contracts.
+
+#### E. LF-02 concentrated validation
+
+After the complete LF-02 implementation, run one concentrated validation batch rather than validation after each component edit.
+
+At minimum cover:
+
+- workspace copy/helper tests;
+- consultation continuity helper tests;
+- relevant lawyer-request/VIP tests;
+- any new deterministic context-summary helper tests;
+- existing focused workspace-adjacent tests affected by the change;
+- `pnpm build`;
+- changed-file Biome/formatter validation;
+- `git diff --check`.
+
+Then perform one local visual smoke with the existing `.env.local` link:
+
+Desktop:
+- page itself does not scroll;
+- history rail scrolls internally if needed;
+- message list scrolls while composer remains visible;
+- right rail contains only Known / To Confirm / manual summary;
+- no customer-visible confidence;
+- lawyer review and one-to-one consultation paths are clear.
+
+Mobile:
+- no severe horizontal overflow;
+- stacked workspace remains usable;
+- Known / To Confirm / manual summary remain reachable;
+- bilingual switch remains usable.
+
+#### F. Stop boundary
+
+At the end of LF-02:
+
+- report exact changed files and functional behavior;
+- report focused tests/build/Biome/diff-check;
+- report any real blocker and a separate list of minor non-blocking polish observations;
+- leave the implementation uncommitted and unpushed for independent review;
+- do not start LF-03;
+- do not deploy.

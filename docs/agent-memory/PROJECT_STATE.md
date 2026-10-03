@@ -627,3 +627,25 @@ The active product plan is intentionally coarse-grained to avoid the prior micro
 - **Final acceptance/deployment:** one concentrated gate and one rollout rather than many micro-gates.
 
 Accepted backend/auth/billing/document/lawyer/consultation and Policy Intelligence provenance boundaries remain functional authority. This UI consolidation is not permission to redesign those systems.
+
+
+## 2026-10-04 LF-01 verified / LF-02 activated
+
+LF-01 is **VERIFIED** on remote commit `5719cee319ac022a6c6c4761820e8892779e6039`. Focused tests passed 46/46, production build passed, changed-file Biome passed, `git diff --check` passed, and representative desktop/mobile visual smoke passed. The public four-destination information architecture, canonical Services & Contact page, Home hierarchy, and two-group Legal Updates presentation are accepted and should not be reopened for non-blocking polish.
+
+The Policy Intelligence admin revision-detail WIP is now safely backed up on remote branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d`; it remains unmerged and undeployed. Policy verifier/publication diagnostics remain paused.
+
+**Current active stage: LF-02 — AI Workspace Consolidation.**
+
+LF-02 is intentionally one coarse implementation unit:
+
+- desktop AI Workspace becomes a viewport-constrained application shell rather than a long page;
+- central conversation scrolls independently and composer remains visible;
+- right rail is reduced to Known information, To confirm, and explicit manual Generate case summary;
+- case summary is a deterministic user-triggered snapshot of current structured context in LF-02, not a new LLM/backend workflow;
+- customer-visible AI confidence is removed while backend contracts remain intact;
+- answer-level sources/citations remain in the conversation rather than duplicated in the right rail;
+- VIP human-service presentation clearly exposes lawyer review of the AI answer plus the existing P11-008 one-to-one consultation request path;
+- no real-time lawyer chat is claimed or implemented.
+
+LF-03 remains planned and must not be pulled into LF-02.
