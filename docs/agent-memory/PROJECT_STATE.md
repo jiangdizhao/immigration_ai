@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-10-01
+**Updated:** 2026-10-03
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -586,3 +586,18 @@ Current canonical state:
 The prior AWS CLI `tasks-stopped` waiter timeout did not indicate an ECS/operator failure. The same task later stopped normally with exit code 0 and all configured sources succeeded.
 
 No source-code change is required. The next operational check is only to observe the next scheduled ECS task and confirm exit/log status.
+
+
+## 2026-10-03 Policy Intelligence diagnostics — PAUSED
+
+The owner has paused further Policy Intelligence verifier/publication-gate development because other work has priority.
+
+Canonical remote/deployed source before the pause is `047fc2f9ab2abee7ba247b00e0106019beff840a`. The 90s first analyzer attempt / 120s single timeout retry is deployed through web task definition `immigration-ai-staging-web:40` and policy-sync task definition `immigration-ai-staging-policy-sync:6`; the daily scheduler targets `:6`.
+
+Post-deployment live telemetry accepted the timeout correction: subclass 494 succeeded on the first 90-second analyzer attempt after 70,991 ms and the ART scheduled-public-hearings item succeeded after 66,721 ms. The immediate analyzer-timeout issue is therefore considered mitigated.
+
+The remaining investigation is the verifier/publication gate, especially subclass 494, which successfully reaches a stored revision but remains `review_required` because of source-status and evidence-support diagnostics. No verifier relaxation is currently authorized.
+
+A coding agent also reported a local-only, uncommitted/unpushed admin detail endpoint at `GET /api/admin/policy-intelligence/[id]` that exposes the current-snapshot revision's structured analysis and verification to authenticated admins without source bodies or provider secrets. Focused tests reportedly passed 9/9 and `git diff --check` passed; the broader sandbox retained three environment-sensitive test failures and build was blocked by Google-font network access.
+
+That endpoint is **not remote and not deployed** at this checkpoint. Preserve the local working tree. When work resumes, validate/review/commit the endpoint first, then use the 494 detail payload to determine whether the verifier or publication gate actually needs correction.

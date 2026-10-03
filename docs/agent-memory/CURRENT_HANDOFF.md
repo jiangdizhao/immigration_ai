@@ -1,6 +1,6 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-01
+**Updated:** 2026-10-03
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -3251,3 +3251,90 @@ No AWS resources were changed and no database migration was applied.
 **Changed files:** `chatbot/lib/policy-intelligence/provider.ts`, `chatbot/lib/policy-intelligence/analysis-diagnostics.ts`, `chatbot/lib/policy-intelligence/pipeline.ts`, `chatbot/lib/policy-intelligence/pipeline-failure-diagnostics.ts`, `chatbot/lib/policy-intelligence/pipeline.test.ts`, and this handoff.
 
 **Validation:** Focused Policy Intelligence tests — **PASS**, 3 files passed, 0 failed; `git diff --check` — **PASS**. `pnpm test:unit` — **PARTIAL/FAIL**, 68 passed and the same 3 unrelated sandbox-sensitive files failed (GuardDuty worker subprocess stdout, migration CLI subprocess exit code, and HTTP tests denied local bind with `EPERM`). `pnpm build` — **FAIL**, Next could not fetch Geist and Geist Mono from Google Fonts because network access was unavailable.
+
+
+## 2026-10-03 Policy Intelligence diagnostics pause checkpoint
+
+**Owner decision:** pause further Policy Intelligence verifier/publication-gate investigation because other work has priority. Preserve the current strict verifier/publication behavior while paused; no verifier threshold relaxation or publication-gate weakening is authorized by this checkpoint.
+
+### Canonical deployed checkpoint before pause
+
+- Branch/source checkpoint: `047fc2f9ab2abee7ba247b00e0106019beff840a` (`fix: extend policy analysis timeouts`).
+- Web ECS task definition: `immigration-ai-staging-web:40`.
+- Web image digest: `sha256:00a942688c7fe59ed0fba5976dc59b120a32979e3b6a5f2eef9a3789e21242a7`.
+- Policy-sync ECS task definition: `immigration-ai-staging-policy-sync:6`.
+- Policy-sync image digest: `sha256:2e634728631cec771e44c6900274ef07b3d052c01570102dcc81b9b476000188`.
+- EventBridge Scheduler `immigration-ai-staging-policy-sync-daily` remains configured to target policy-sync task definition `:6`.
+- Manual acceptance task: `arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/2e1ed8bf3eeb4217a6a44a31c547c489`.
+- Manual acceptance result: task reached `STOPPED`, container exit code `0`; runtime approximately 17:56:53 to 18:00:44 Sydney time on 2026-10-02.
+
+### 90s / 120s timeout-policy acceptance evidence
+
+The previous 45s first-attempt / 60s retry policy was too aggressive for `gpt-5.6-sol` with high reasoning. After checkpoint `047fc2f`, the first analyzer attempt is 90 seconds and exactly one retry at 120 seconds is allowed only when the analyzer's own timeout fires.
+
+Live telemetry from the post-deployment manual run showed:
+
+- subclass 494 Home Affairs item `9411bc08-97e0-4427-a25c-33ce273d153f`: first attempt used a 90-second timeout and succeeded after **70,991 ms**; evidence packet count 1, evidence chars 538, approximate input chars 2,914; no analyzer pipeline failure;
+- ART scheduled public hearings item `82a7713c-6789-4d50-8d22-2ecd46676491`: first attempt used a 90-second timeout and succeeded after **66,721 ms**; evidence packet count 1, evidence chars 7,450, approximate input chars 10,050; no analyzer pipeline failure.
+
+This is sufficient evidence to treat the immediate analyzer-timeout problem as mitigated. Do not increase timeout again without new live evidence.
+
+### Remaining substantive issue when paused
+
+The next problem is verifier/publication-gate semantics rather than analyzer liveness.
+
+The 494 item now reaches analysis and verification successfully but remains `review_required`. Its current publication diagnostics include:
+
+- `source_status_not_fully_supported`;
+- `unsupported_narrative_unit`;
+- `insufficient_support` for `group-subclass-494-applicants`;
+- `insufficient_support` for `source-status`.
+
+The ART scheduled-public-hearings item also completes analysis but remains `review_required`; among its reasons are `source_not_policy_relevant`, source-status uncertainty/support concerns, a conditional-claim uncertainty issue, and insufficient support for the source-status unit. This is not itself evidence that the verifier is wrong; the 494 item is the preferred diagnostic case because it is clearly a core Home Affairs visa page.
+
+### Local-only diagnostic endpoint work at pause boundary — NOT YET IN REMOTE SOURCE
+
+Immediately before the pause, a coding agent reported a completed **local, uncommitted and unpushed** admin-only read-only detail endpoint:
+
+`GET /api/admin/policy-intelligence/[id]`
+
+Reported behavior:
+
+- validates the item ID as UUID;
+- reuses the existing admin authentication boundary;
+- selects the highest-numbered revision tied to the item's **current latest snapshot**;
+- enforces item/snapshot/revision ownership;
+- returns the full stored, schema-validated `analysis` and `verification`;
+- returns only safe model metadata;
+- does not expose normalized evidence/source bodies, prompts, raw provider requests/responses, stack traces, credentials or secrets;
+- safely returns `revision: null` when the current snapshot has no revision;
+- does not change analyzer, verifier, publication gate, discovery, timeout policy, database schema or AWS configuration.
+
+Reported validation for that local WIP:
+
+- focused admin API tests: **9 passed, 0 failed**;
+- `git diff --check`: **PASS**;
+- `pnpm test:unit`: 68 passes plus the same three sandbox-sensitive failures already recorded for the prior diagnostics work;
+- `pnpm build`: blocked because the environment could not fetch existing Geist fonts from Google Fonts.
+
+**Important:** this endpoint is not part of remote checkpoint `047fc2f`, is not deployed, and must not be assumed available merely because this handoff records it. The local working tree must be preserved and reviewed before any reset, pull, rebase or cleanup.
+
+### Resume protocol
+
+When this work resumes:
+
+1. Inspect `git status --short` and preserve the local uncommitted admin-detail endpoint diff before any destructive Git operation.
+2. Sync this documentation checkpoint without discarding the local WIP.
+3. Re-run the focused admin tests, `pnpm test:unit`, `pnpm build` in a normal network-capable environment, and `git diff --check`.
+4. Review the exact endpoint diff; then commit/push/deploy it separately if accepted.
+5. Retrieve the 494 item through the admin-only detail endpoint and inspect the **complete stored analysis + verification assessments**.
+6. Only after that evidence review decide whether any verifier/prompt/publication-gate correction is justified. Do not weaken legal evidence gates merely to force publication.
+
+### Deferred architectural observations
+
+Two earlier observations remain deferred and are not part of the current pause checkpoint:
+
+- discovery-driven retries can leave a failed latest snapshot without a compatible revision if that URL stops being rediscovered; a future explicit retry/recovery mechanism may be warranted;
+- item-level historical `editorialStatus` can be operationally confusing when the latest snapshot has not completed analysis/revision creation; future admin UX may distinguish item lifecycle status from latest-snapshot processing state.
+
+No change is authorized for either observation while the current work is paused.

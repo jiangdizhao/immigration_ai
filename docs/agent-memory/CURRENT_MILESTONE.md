@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-10-01
+**Updated:** 2026-10-03
 
 ## Objective
 
@@ -1036,3 +1036,23 @@ Clarification to the prior COMPLETE / ACCEPTED entry:
 - The first **naturally Scheduler-triggered** run has not yet occurred/been observed because the schedule was created after the day's 06:00 trigger point.
 
 No further code implementation is active. The remaining item is one operational observation of the next scheduled invocation.
+
+
+## 2026-10-03 Policy Intelligence verifier diagnostics — PAUSED / RESUME POINT RECORDED
+
+There is no active Policy Intelligence implementation unit while the owner pause is in effect.
+
+Last accepted remote source checkpoint:
+`047fc2f9ab2abee7ba247b00e0106019beff840a`
+
+Current deployed operator checkpoint:
+
+- web: `immigration-ai-staging-web:40`;
+- policy sync: `immigration-ai-staging-policy-sync:6`;
+- daily scheduler continues to target policy-sync `:6`.
+
+The 90s/120s analyzer timeout policy passed live acceptance: 494 completed the first attempt in 70,991 ms and ART scheduled hearings completed in 66,721 ms. Do not reopen timeout tuning without new evidence.
+
+The next intended diagnostic milestone, when resumed, is to inspect full stored analyzer and verifier output for the 494 item before considering any verifier/publication-gate change. A local-only admin detail endpoint for this purpose has reportedly been implemented and focused-tested but remains uncommitted, unpushed and undeployed. Preserve that working tree; do not assume the endpoint exists in remote source.
+
+No implementation is authorized by this pause record.
