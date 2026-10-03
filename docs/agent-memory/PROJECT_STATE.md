@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-10-03
+**Updated:** 2026-10-04
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -601,3 +601,29 @@ The remaining investigation is the verifier/publication gate, especially subclas
 A coding agent also reported a local-only, uncommitted/unpushed admin detail endpoint at `GET /api/admin/policy-intelligence/[id]` that exposes the current-snapshot revision's structured analysis and verification to authenticated admins without source bodies or provider secrets. Focused tests reportedly passed 9/9 and `git diff --check` passed; the broader sandbox retained three environment-sensitive test failures and build was blocked by Google-font network access.
 
 That endpoint is **not remote and not deployed** at this checkpoint. Preserve the local working tree. When work resumes, validate/review/commit the endpoint first, then use the 494 detail payload to determine whether the verifier or publication gate actually needs correction.
+
+
+## 2026-10-04 Lawyer-feedback UI consolidation — ACTIVE PRIORITY
+
+The owner has temporarily reprioritised Phase 11 around urgent lawyer feedback on the public information architecture and AI Workspace. Policy Intelligence verifier/publication-gate diagnostics remain paused under the 2026-10-03 checkpoint; the local-only admin revision-detail WIP must remain preserved and isolated.
+
+The active product plan is intentionally coarse-grained to avoid the prior micro-fix / micro-regression loop:
+
+- **LF-01 — Public Experience Consolidation: ACTIVE**
+  - four public destinations: Home / AI Workspace / Services & Contact / Legal Updates;
+  - Home hero brightness + Legal Updates directly below hero + more coherent navy visual rhythm;
+  - consolidate Services / Process / Contact into the existing clean Contact-oriented surface while preserving legacy-route compatibility;
+  - simplify public Legal Updates into two user-facing groups without changing internal legal/source-status semantics.
+- **LF-02 — AI Workspace Consolidation: PLANNED**
+  - fixed desktop application shell;
+  - independent conversation scrolling;
+  - right rail = Known + To Confirm + manual Generate case summary;
+  - remove customer-visible AI confidence;
+  - expose lawyer answer review and one-to-one consultation as two distinct human-service paths.
+- **LF-03 — Policy-to-AI Continuity + Final Product Integration: PLANNED**
+  - selected legal update opens a new AI conversation with a topic reference;
+  - lightweight assistant opener only; no automatic analysis/model call before the user asks a question;
+  - final cross-page bilingual/mobile consistency.
+- **Final acceptance/deployment:** one concentrated gate and one rollout rather than many micro-gates.
+
+Accepted backend/auth/billing/document/lawyer/consultation and Policy Intelligence provenance boundaries remain functional authority. This UI consolidation is not permission to redesign those systems.

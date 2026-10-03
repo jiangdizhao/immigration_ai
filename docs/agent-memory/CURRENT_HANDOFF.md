@@ -1,6 +1,6 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-03
+**Updated:** 2026-10-04
 **Branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -3338,3 +3338,94 @@ Two earlier observations remain deferred and are not part of the current pause c
 - item-level historical `editorialStatus` can be operationally confusing when the latest snapshot has not completed analysis/revision creation; future admin UX may distinguish item lifecycle status from latest-snapshot processing state.
 
 No change is authorized for either observation while the current work is paused.
+
+
+## 2026-10-04 Lawyer-feedback UI consolidation — ACTIVATED
+
+**Owner priority change:** suspend further Policy Intelligence verifier/publication-gate optimisation and prioritise the lawyer-requested whole-site product/UI consolidation. The existing 2026-10-03 Policy Intelligence pause checkpoint remains authoritative. Do not resume 494 verifier/publication-gate work until this UI consolidation is complete and accepted.
+
+### Preservation boundary
+
+- Remote Phase-11 checkpoint before this record: `8cb4ca34cb9eef698843190945ec7cf2e34d41f9`.
+- Deployed Policy Intelligence runtime checkpoint remains `047fc2f9ab2abee7ba247b00e0106019beff840a`.
+- The existing local-only admin revision-detail endpoint WIP is intentionally **uncommitted/unpushed/undeployed** and must be preserved.
+- Do not reset, clean, overwrite, or mix that Policy Intelligence WIP into the lawyer-feedback UI work.
+- Preferred execution model: create a separate local worktree/branch from the updated remote Phase-11 branch for the UI consolidation.
+
+### Product interpretation of the lawyer feedback
+
+The public product should be simplified around four primary destinations:
+
+1. **首页 / Home**
+2. **AI 工作台 / AI Workspace**
+3. **服务与联系 / Services & Contact**
+4. **法律动态 / Legal Updates**
+
+The current public Services / Process / Contact split is too fragmented. Contact should become the canonical combined service/contact surface; legacy routes should remain compatible through redirects rather than being deleted.
+
+Home should keep the Sydney Opera House visual identity but use a brighter image treatment, move latest immigration/legal updates directly below the hero, reduce large white surfaces, and keep the visual system predominantly deep navy.
+
+AI Workspace is the core product surface. The desktop workspace should behave like a fixed application shell rather than a long marketing/document page. The central conversation scrolls independently. The right context rail should be simplified to **Known information**, **To confirm**, and a user-triggered **Generate case summary** action. AI confidence must not be shown to customers. Backend confidence fields may remain if required by existing contracts.
+
+VIP/human-service messaging should expose two distinct existing service paths where entitlement permits:
+
+- request a lawyer to review a specific AI answer;
+- start/book a one-to-one lawyer consultation using the accepted P11-008 consultation workflow.
+
+Do not mislabel the current bounded clarification/consultation workflow as real-time lawyer chat unless a real-time messaging product is separately implemented.
+
+The public Legal Updates experience should expose only two user-facing groups: published/in-force and proposed/planned. Internal legal/source statuses remain unchanged and retain their current provenance semantics.
+
+Policy-to-AI continuity should create a **new conversation** carrying the selected policy/topic reference, show only a lightweight opener such as “针对『…』，您有什么需要我帮忙的吗？”, and wait for the user's question. Merely opening the policy-linked workspace must not automatically call the answer model or produce a long policy analysis.
+
+### Execution model — three coarse development stages only
+
+#### LF-01 — Public Experience Consolidation — ACTIVE
+
+One implementation unit covering:
+
+- four-item public navigation;
+- Home information hierarchy and brighter Opera House treatment;
+- Services + Process + Contact consolidation into the canonical Services & Contact page;
+- legacy route compatibility;
+- public Legal Updates two-group presentation;
+- bilingual/mobile consistency required by those changes.
+
+Do not split navigation, Home, Contact, redirects, or Legal Updates presentation into separate milestones.
+
+#### LF-02 — AI Workspace Consolidation — PLANNED
+
+One implementation unit covering:
+
+- fixed desktop workspace shell;
+- central independent message scrolling;
+- right rail reduced to Known / To Confirm;
+- removal of customer-visible AI confidence;
+- explicit user-triggered case-summary generation;
+- clear lawyer-review + one-to-one consultation service paths;
+- preservation of existing conversation, document, answer-mode, legal-source, auth and entitlement behavior.
+
+#### LF-03 — Policy-to-AI Continuity + Final Product Integration — PLANNED
+
+One implementation unit covering:
+
+- policy/legal-update CTA -> **new** conversation;
+- topic reference carried into the new conversation;
+- lightweight assistant opener with no automatic analysis/model call;
+- user question then enters the normal Fast / Legal Check / Premium answer flow;
+- cross-page naming, footer/account/mobile-nav consistency;
+- final bounded bilingual/mobile polish.
+
+### Final acceptance + deployment — one consolidated gate
+
+After LF-01/LF-02/LF-03 are source-reviewed, freeze feature changes and run one concentrated acceptance pass covering Home, Legal Updates, Policy -> AI, AI Workspace, case summary, lawyer review, lawyer consultation, and Services & Contact across representative desktop/mobile and zh-CN/English states.
+
+Then run the repository-appropriate unit/focused tests, `pnpm build`, and `git diff --check`. If accepted: one commit/push sequence as appropriate, one deployment, and one production smoke/visual review.
+
+### Anti-loop operating discipline
+
+- Do not create LF-01A/LF-01B/R1/R2 micro-milestones.
+- Non-blocking visual or copy imperfections are recorded for the stage-end/final polish batch instead of interrupting implementation.
+- A stage is interrupted only for a true blocker: broken route, build/compile failure caused by the stage, broken auth/data boundary, severe responsive overflow, incorrect bilingual semantics, or loss of an accepted workflow.
+- Each LF stage should normally require **one implementation commit and at most one necessary correction commit** after review. Reaching repeated correction commits is a signal to stop and reassess the design rather than continue patching.
+- Do not reopen the paused Policy Intelligence analyzer/verifier/publication-gate investigation as part of this task.

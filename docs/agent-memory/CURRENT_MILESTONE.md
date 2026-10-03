@@ -2,7 +2,7 @@
 
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
 **Status:** IN PROGRESS  
-**Updated:** 2026-10-03
+**Updated:** 2026-10-04
 
 ## Objective
 
@@ -1056,3 +1056,32 @@ The 90s/120s analyzer timeout policy passed live acceptance: 494 completed the f
 The next intended diagnostic milestone, when resumed, is to inspect full stored analyzer and verifier output for the 494 item before considering any verifier/publication-gate change. A local-only admin detail endpoint for this purpose has reportedly been implemented and focused-tested but remains uncommitted, unpushed and undeployed. Preserve that working tree; do not assume the endpoint exists in remote source.
 
 No implementation is authorized by this pause record.
+
+
+## 2026-10-04 Lawyer-feedback UI consolidation — LF-01 ACTIVE
+
+The owner accepted a new urgent product/UI plan based on lawyer feedback. It temporarily takes precedence over the paused Policy Intelligence verifier/publication-gate investigation.
+
+The plan has **three development stages only**:
+
+1. **LF-01 — Public Experience Consolidation — ACTIVE**
+   - reduce public navigation to Home / AI Workspace / Services & Contact / Legal Updates;
+   - brighten and rebalance the Home Opera House hero;
+   - place latest legal/immigration updates immediately below the hero;
+   - merge Services + Process + Contact into one clean canonical surface while preserving legacy routes;
+   - expose only two public Legal Updates groups while retaining the existing internal status model.
+2. **LF-02 — AI Workspace Consolidation — PLANNED**
+   - fixed desktop workspace shell;
+   - Known / To Confirm context rail;
+   - remove customer-visible confidence;
+   - manual case-summary action;
+   - distinct lawyer-review and one-to-one consultation actions.
+3. **LF-03 — Policy-to-AI Continuity + Final Product Integration — PLANNED**
+   - new conversation for each legal-update -> AI handoff;
+   - topic reference + lightweight assistant opener;
+   - no automatic policy analysis until the user asks a question;
+   - cross-page bilingual/mobile polish.
+
+After the three stages, use one consolidated final acceptance/deployment gate. Do not create micro-substages or repeated R1/R2 correction chains for non-blocking polish.
+
+**Current next action:** implement LF-01 only in an isolated UI worktree/branch. Do not modify the paused Policy Intelligence analyzer/verifier/publication architecture and do not destroy or mix the local admin-detail endpoint WIP.
