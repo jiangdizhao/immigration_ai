@@ -38,26 +38,17 @@ export type WorkspaceCopy = {
     send: string;
   };
   matter: {
-    title: string;
-    currentMatter: string;
-    operation: string;
-    nextAction: string;
-    confidence: string;
-    confidenceNote: string;
-    pending: string;
     knownFacts: string;
-    intakeSummary: string;
     factsCount: (count: number) => string;
     noFacts: string;
-    sources: string;
-    latestSources: string;
-    noSources: string;
-    lawyerHandoff: string;
-    lawyerTitle: string;
-    lawyerDescription: string;
+    toConfirm: string;
+    noRequestedFacts: string;
+    whyNeeded: string;
+    generateSummary: string;
+    regenerateSummary: string;
+    summaryGenerated: string;
   };
   factLabels: Readonly<Record<string, string>>;
-  answerValues: Readonly<Record<string, string>>;
   legalDisclaimer: string;
   mode: {
     title: string;
@@ -115,6 +106,9 @@ export type WorkspaceCopy = {
     optionalNote: string;
     submitting: string;
     submit: string;
+    consultationTitle: string;
+    consultationDescription: string;
+    consultationLink: string;
   };
 };
 
@@ -165,24 +159,15 @@ const zh: WorkspaceCopy = {
     send: "发送",
   },
   matter: {
-    title: "案件与服务背景",
-    currentMatter: "当前案件",
-    operation: "事项类型",
-    nextAction: "下一步",
-    confidence: "AI 分析信心",
-    confidenceNote: "系统信号，不代表律师意见或法律确定性",
-    pending: "待评估",
-    knownFacts: "已知事实",
-    intakeSummary: "信息摘要",
+    knownFacts: "已知信息",
     factsCount: (count) => `${count} 项`,
-    noFacts: "完成首次助手答复后，整理出的信息会显示在这里。",
-    sources: "来源背景",
-    latestSources: "最近参考来源",
-    noSources: "如答复使用了相关来源，来源标题会显示在这里。",
-    lawyerHandoff: "人工律师服务",
-    lawyerTitle: "需要个案法律意见？",
-    lawyerDescription:
-      "如需进一步个案支持，可通过答复下方的律师审阅请求提交人工审阅。",
+    noFacts: "目前还没有已知信息。",
+    toConfirm: "待确认",
+    noRequestedFacts: "目前没有待确认的问题。",
+    whyNeeded: "用途",
+    generateSummary: "生成案件摘要",
+    regenerateSummary: "重新生成摘要",
+    summaryGenerated: "案件摘要快照（仅在点击生成或重新生成时更新）",
   },
   factLabels: {
     completion_date: "课程完成日期",
@@ -200,21 +185,6 @@ const zh: WorkspaceCopy = {
     age: "年龄",
     qualification: "学历或资格",
     visa_subclass: "签证类别",
-  },
-  answerValues: {
-    not_classified_yet: "尚未分类",
-    none: "暂无",
-    pending: "待评估",
-    high: "较高",
-    medium: "中等",
-    low: "较低",
-    ask_followup: "补充信息",
-    suggest_consultation: "建议咨询",
-    provide_answer: "提供答复",
-    wait_for_user: "等待补充信息",
-    primary_applicant: "主申请人",
-    student_visa: "学生签证",
-    visa_refusal: "签证拒签",
   },
   legalDisclaimer: "此处为 AI 一般信息说明；个案法律意见应由律师提供。",
   mode: {
@@ -275,6 +245,9 @@ const zh: WorkspaceCopy = {
     optionalNote: "给律师的补充说明（选填）",
     submitting: "正在提交…",
     submit: "提交审阅请求",
+    consultationTitle: "预约一对一律师咨询",
+    consultationDescription: "律师审阅此答复与一对一咨询是两项独立服务。",
+    consultationLink: "预约一对一咨询",
   },
 };
 
@@ -331,26 +304,16 @@ const en: WorkspaceCopy = {
     send: "Send",
   },
   matter: {
-    title: "Matter and service context",
-    currentMatter: "Current matter",
-    operation: "Matter type",
-    nextAction: "Next action",
-    confidence: "AI confidence",
-    confidenceNote: "A system signal, not a lawyer’s view or legal certainty",
-    pending: "Pending",
-    knownFacts: "Known facts",
-    intakeSummary: "Intake summary",
+    knownFacts: "Known information",
     factsCount: (count) => `${count} items`,
-    noFacts:
-      "Facts gathered through guided intake will appear here after the first assistant response.",
-    sources: "Source context",
-    latestSources: "Latest sources",
-    noSources:
-      "Relevant source titles will appear here when an answer uses sources.",
-    lawyerHandoff: "Human lawyer service",
-    lawyerTitle: "Need case-specific legal advice?",
-    lawyerDescription:
-      "For further case-specific support, submit a lawyer review request from an answer.",
+    noFacts: "There is no known information yet.",
+    toConfirm: "To confirm",
+    noRequestedFacts: "There are no outstanding questions to confirm.",
+    whyNeeded: "Why it matters",
+    generateSummary: "Generate case summary",
+    regenerateSummary: "Regenerate summary",
+    summaryGenerated:
+      "Case summary snapshot (updates only when generated again)",
   },
   factLabels: {
     completion_date: "Course completion date",
@@ -368,21 +331,6 @@ const en: WorkspaceCopy = {
     age: "Age",
     qualification: "Qualification",
     visa_subclass: "Visa subclass",
-  },
-  answerValues: {
-    not_classified_yet: "Not classified yet",
-    none: "None yet",
-    pending: "Pending",
-    high: "High",
-    medium: "Medium",
-    low: "Low",
-    ask_followup: "Provide more information",
-    suggest_consultation: "Consider a consultation",
-    provide_answer: "Provide an answer",
-    wait_for_user: "Waiting for information",
-    primary_applicant: "Primary applicant",
-    student_visa: "Student visa",
-    visa_refusal: "Visa refusal",
   },
   legalDisclaimer:
     "AI provides general information here; a lawyer should provide case-specific advice.",
@@ -449,6 +397,10 @@ const en: WorkspaceCopy = {
     optionalNote: "Optional note for the lawyer",
     submitting: "Submitting…",
     submit: "Submit review request",
+    consultationTitle: "Book a one-to-one lawyer consultation",
+    consultationDescription:
+      "A lawyer review of this answer and a one-to-one consultation are separate services.",
+    consultationLink: "Book a one-to-one consultation",
   },
 };
 

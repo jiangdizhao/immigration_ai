@@ -3,7 +3,6 @@
 import {
   Bot,
   CalendarDays,
-  Clock3,
   Loader2,
   Send,
   Sparkles,
@@ -28,6 +27,10 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import {
+  buildWorkspaceCaseSummary,
+  shouldClearWorkspaceCaseSummary,
+} from "@/lib/workspace-case-summary";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import {
   AssistantRichMarkdown,
@@ -133,16 +136,6 @@ function compactSourcesForMessage(message?: WidgetAssistantMessage | null) {
   return Array.from(new Set(fallback));
 }
 
-function formatKey(
-  value: string | null | undefined,
-  copy: ReturnType<typeof getWorkspaceCopy>
-) {
-  if (!value) {
-    return copy.answerValues.not_classified_yet;
-  }
-  return copy.answerValues[value] ?? value.replaceAll("_", " ");
-}
-
 function formatConversationUpdatedAt(
   updatedAt: string | null | undefined,
   createdAt: string | null | undefined,
@@ -181,35 +174,6 @@ function statusText(
     : status === "typing"
       ? copy.status.typing
       : copy.status.ready;
-}
-
-function _confidencePercent(confidence?: string | null) {
-  if (confidence === "high") {
-    return 92;
-  }
-  if (confidence === "medium") {
-    return 66;
-  }
-  if (confidence === "low") {
-    return 36;
-  }
-  return 18;
-}
-
-function valuePreview(
-  value: string | number | boolean | null | undefined,
-  locale: "zh-CN" | "en"
-) {
-  if (value === true) {
-    return locale === "zh-CN" ? "是" : "Yes";
-  }
-  if (value === false) {
-    return locale === "zh-CN" ? "否" : "No";
-  }
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-  return String(value);
 }
 
 const WORKSPACE_PROGRESS_STAGES_ZH = [
@@ -476,6 +440,7 @@ export function ImmigrationAIWorkspace({
   const copy = getWorkspaceCopy(locale);
   const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
@@ -493,6 +458,9 @@ export function ImmigrationAIWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [draftFacts, setDraftFacts] = useState<IntakeFacts>({});
   const [intakeFacts, setIntakeFacts] = useState<IntakeFacts>({});
+  const [caseSummarySnapshot, setCaseSummarySnapshot] = useState<ReturnType<
+    typeof buildWorkspaceCaseSummary
+  > | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
 
@@ -500,12 +468,20 @@ export function ImmigrationAIWorkspace({
     () => [...messages].reverse().find(isAssistantMessage) ?? null,
     [messages]
   );
-  const latestSources = compactSourcesForMessage(latestAssistant);
   const latestKnownFacts =
     latestAssistant?.interactionPlan?.known_facts_summary ?? {};
-  const latestRequestedFact =
-    latestAssistant?.interactionPlan?.requested_facts?.[0] ?? null;
-  const confidence = latestAssistant?.confidence ?? null;
+  const latestRequestedFacts =
+    latestAssistant?.interactionPlan?.requested_facts ?? [];
+  const latestWorkspaceCaseSummary = useMemo(
+    () =>
+      buildWorkspaceCaseSummary(
+        latestKnownFacts,
+        latestRequestedFacts,
+        copy.factLabels,
+        locale
+      ),
+    [latestKnownFacts, latestRequestedFacts, copy.factLabels, locale]
+  );
 
   const isNearBottom = () => {
     const container = listRef.current;
@@ -578,6 +554,15 @@ export function ImmigrationAIWorkspace({
           { method: "GET" }
         );
         const data = (await response.json()) as ImmigrationConversationDetail;
+        if (
+          shouldClearWorkspaceCaseSummary(
+            conversationIdRef.current,
+            data.chatId
+          )
+        ) {
+          setCaseSummarySnapshot(null);
+        }
+        conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
         setSelectedDocumentIds([]);
         setWorkspaceChatParam(data.chatId);
@@ -610,6 +595,8 @@ export function ImmigrationAIWorkspace({
         }
       );
       const data = (await response.json()) as ImmigrationConversationSummary;
+      setCaseSummarySnapshot(null);
+      conversationIdRef.current = data.chatId;
       setConversationId(data.chatId);
       setSelectedDocumentIds([]);
       setWorkspaceChatParam(data.chatId);
@@ -1021,7 +1008,7 @@ export function ImmigrationAIWorkspace({
 
   return (
     <section
-      className="mx-auto w-full max-w-[1600px] px-3 pb-4 pt-3 sm:px-6 lg:px-8"
+      className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-col px-3 pb-4 pt-3 sm:px-6 lg:px-8 xl:h-full"
       id="ai-workspace"
     >
       <header className="mb-3 flex flex-col gap-3 rounded-2xl bg-[#001736] px-4 py-3 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -1062,7 +1049,7 @@ export function ImmigrationAIWorkspace({
         </div>
       </header>
 
-      <div className="grid min-w-0 grid-cols-1 gap-3 xl:h-[calc(100dvh-176px)] xl:min-h-[620px] xl:max-h-[860px] xl:grid-cols-[250px_minmax(0,1fr)_290px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[250px_minmax(0,1fr)_290px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
         <aside className="order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -1091,7 +1078,7 @@ export function ImmigrationAIWorkspace({
             </button>
           </div>
 
-          <div className="space-y-2 xl:max-h-none xl:overflow-visible">
+          <div className="space-y-2">
             {conversationLoading ? (
               <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
                 {copy.history.loading}
@@ -1476,130 +1463,142 @@ export function ImmigrationAIWorkspace({
 
         <aside className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
           <section className="rounded-xl bg-white p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {copy.matter.title}
-                </p>
-                <h3 className="mt-1 font-semibold text-slate-950">
-                  {copy.matter.currentMatter}
-                </h3>
-              </div>
-              <div className="rounded-xl bg-cyan-50 p-2 text-[#002b5b]">
-                <Clock3 className="size-4" />
-              </div>
-            </div>
-            <dl className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">{copy.matter.operation}</dt>
-                <dd className="max-w-[150px] truncate text-right font-medium capitalize text-slate-800">
-                  {formatKey(
-                    latestAssistant?.caseHypothesis?.primary_operation_type,
-                    copy
-                  )}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">{copy.matter.nextAction}</dt>
-                <dd className="font-medium capitalize text-slate-800">
-                  {formatKey(latestAssistant?.nextAction, copy)}
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className="text-slate-500">{copy.matter.confidence}</dt>
-                <dd className="text-right font-medium capitalize text-slate-800">
-                  {confidence
-                    ? formatKey(confidence, copy)
-                    : copy.matter.pending}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-3 text-[11px] leading-5 text-slate-500">
-              {copy.matter.confidenceNote}
-            </p>
-          </section>
-
-          <section className="rounded-xl bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {copy.matter.knownFacts}
-                </p>
                 <h3 className="mt-1 font-semibold text-slate-950">
-                  {copy.matter.intakeSummary}
+                  {copy.matter.knownFacts}
                 </h3>
               </div>
               <Badge
                 className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
                 variant="secondary"
               >
-                {copy.matter.factsCount(Object.keys(latestKnownFacts).length)}
+                {copy.matter.factsCount(
+                  latestWorkspaceCaseSummary.knownFacts.length
+                )}
               </Badge>
             </div>
-            {Object.keys(latestKnownFacts).length ? (
+            {latestWorkspaceCaseSummary.knownFacts.length ? (
               <div className="space-y-2">
-                {Object.entries(latestKnownFacts)
-                  .slice(0, 6)
-                  .map(([key, value]) => (
-                    <div
-                      className="rounded-lg bg-slate-50 p-3 text-sm"
-                      key={key}
-                    >
-                      <p className="text-xs text-slate-500">
-                        {copy.factLabels[key] ?? key.replaceAll("_", " ")}
-                      </p>
-                      <p className="mt-1 font-medium text-slate-800">
-                        {valuePreview(value, locale)}
-                      </p>
-                    </div>
-                  ))}
+                {latestWorkspaceCaseSummary.knownFacts.map((fact) => (
+                  <div
+                    className="rounded-lg bg-slate-50 p-3 text-sm"
+                    key={fact.key}
+                  >
+                    <p className="text-xs text-slate-500">{fact.label}</p>
+                    <p className="mt-1 font-medium text-slate-800">
+                      {fact.value}
+                    </p>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm leading-6 text-slate-500">
                 {copy.matter.noFacts}
               </p>
             )}
-          </section>
-
-          <section className="rounded-xl bg-white p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {copy.matter.sources}
-            </p>
-            <h3 className="mt-1 font-semibold text-slate-950">
-              {copy.matter.latestSources}
-            </h3>
-            {latestSources.length ? (
-              <CollapsibleSourceList
-                className="mt-3 rounded-lg bg-slate-50 p-2"
-                items={latestSources}
-                label={copy.matter.latestSources}
-              />
+            <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {copy.matter.toConfirm}
+            </h4>
+            {latestWorkspaceCaseSummary.requestedFacts.length ? (
+              <div className="space-y-2">
+                {latestWorkspaceCaseSummary.requestedFacts.map((fact) => (
+                  <div
+                    className="rounded-lg bg-cyan-50 p-3 text-sm"
+                    key={fact.key}
+                  >
+                    <p className="font-medium text-cyan-950">{fact.prompt}</p>
+                    {fact.prompt !== fact.label ? (
+                      <p className="mt-1 text-xs text-cyan-900">{fact.label}</p>
+                    ) : null}
+                    {fact.whyNeeded ? (
+                      <p className="mt-2 text-xs leading-5 text-cyan-900">
+                        <span className="font-medium">
+                          {copy.matter.whyNeeded}:{" "}
+                        </span>
+                        {fact.whyNeeded}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : (
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                {copy.matter.noSources}
+              <p className="text-sm leading-6 text-slate-500">
+                {copy.matter.noRequestedFacts}
               </p>
             )}
+            <Button
+              className="mt-4 w-full"
+              onClick={() => setCaseSummarySnapshot(latestWorkspaceCaseSummary)}
+              type="button"
+              variant="outline"
+            >
+              {caseSummarySnapshot
+                ? copy.matter.regenerateSummary
+                : copy.matter.generateSummary}
+            </Button>
           </section>
 
-          <section className="rounded-xl bg-[#001736] p-4 text-white">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
-              {copy.matter.lawyerHandoff}
-            </p>
-            <h3 className="mt-2 text-base font-semibold">
-              {copy.matter.lawyerTitle}
-            </h3>
-            <p className="mt-2 text-xs leading-5 text-slate-200">
-              {copy.matter.lawyerDescription}
-            </p>
-          </section>
-
-          {latestRequestedFact ? (
-            <div className="rounded-xl bg-cyan-50 p-4 text-sm leading-6 text-cyan-900">
-              <p className="font-medium">{copy.consultation.requestedFact}</p>
-              <p className="mt-1">
-                {latestRequestedFact.prompt ?? latestRequestedFact.label}
-              </p>
-            </div>
+          {caseSummarySnapshot ? (
+            <section
+              className="rounded-xl border border-slate-200 bg-white p-4"
+              data-testid="workspace-case-summary-snapshot"
+            >
+              <h3 className="text-sm font-semibold text-slate-950">
+                {copy.matter.summaryGenerated}
+              </h3>
+              <div className="mt-3 space-y-3 text-sm">
+                <div>
+                  <h4 className="font-medium text-slate-700">
+                    {copy.matter.knownFacts}
+                  </h4>
+                  {caseSummarySnapshot.knownFacts.length ? (
+                    <dl className="mt-2 space-y-2">
+                      {caseSummarySnapshot.knownFacts.map((fact) => (
+                        <div key={fact.key}>
+                          <dt className="text-xs text-slate-500">
+                            {fact.label}
+                          </dt>
+                          <dd className="text-slate-800">{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="mt-1 text-slate-500">{copy.matter.noFacts}</p>
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-medium text-slate-700">
+                    {copy.matter.toConfirm}
+                  </h4>
+                  {caseSummarySnapshot.requestedFacts.length ? (
+                    <ul className="mt-2 space-y-2">
+                      {caseSummarySnapshot.requestedFacts.map((fact) => (
+                        <li key={fact.key}>
+                          <p className="font-medium text-slate-800">
+                            {fact.prompt}
+                          </p>
+                          {fact.prompt !== fact.label ? (
+                            <p className="text-xs text-slate-500">
+                              {fact.label}
+                            </p>
+                          ) : null}
+                          {fact.whyNeeded ? (
+                            <p className="mt-1 text-xs text-slate-600">
+                              {copy.matter.whyNeeded}: {fact.whyNeeded}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-slate-500">
+                      {copy.matter.noRequestedFacts}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
           ) : null}
         </aside>
       </div>

@@ -86,10 +86,10 @@ export function PremiumAnswerModeWorkspace({
         : hydratedAccessPolicy.premiumAllowed;
 
   return (
-    <>
+    <div className="flex min-h-0 flex-col xl:h-full">
       {policyReference ? (
         <section
-          className="mx-auto w-full max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8"
+          className="mx-auto w-full shrink-0 max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8"
           data-policy-continuity="topic-reference-only"
         >
           <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 sm:p-5">
@@ -121,7 +121,7 @@ export function PremiumAnswerModeWorkspace({
           </div>
         </section>
       ) : null}
-      <section className="mx-auto w-full max-w-[1600px] px-4 pt-3 sm:px-6 lg:px-8">
+      <section className="mx-auto w-full shrink-0 max-w-[1600px] px-4 pt-3 sm:px-6 lg:px-8">
         <button
           aria-controls="assistant-mode-panel"
           aria-expanded={mobileModeOpen}
@@ -217,6 +217,6 @@ export function PremiumAnswerModeWorkspace({
       </section>
 
       <ImmigrationAIWorkspace assistantMode={assistantMode} />
-    </>
+    </div>
   );
 }

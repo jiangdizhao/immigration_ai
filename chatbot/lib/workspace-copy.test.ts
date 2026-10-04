@@ -23,7 +23,17 @@ test("quick questions are localized and make no outcome guarantees", () => {
   );
 });
 
-test("AI confidence is distinct from legal certainty", () => {
-  assert.match(getWorkspaceCopy("zh-CN").matter.confidenceNote, /不代表律师/);
-  assert.match(getWorkspaceCopy("en").matter.confidenceNote, /not a lawyer/);
+test("workspace context and human-service actions have localized copy", () => {
+  assert.equal(getWorkspaceCopy("zh-CN").matter.knownFacts, "已知信息");
+  assert.equal(getWorkspaceCopy("en").matter.knownFacts, "Known information");
+  assert.equal(getWorkspaceCopy("zh-CN").matter.toConfirm, "待确认");
+  assert.equal(getWorkspaceCopy("en").matter.toConfirm, "To confirm");
+  assert.match(
+    getWorkspaceCopy("zh-CN").lawyerRequest.consultationDescription,
+    /独立服务/
+  );
+  assert.match(
+    getWorkspaceCopy("en").lawyerRequest.consultationDescription,
+    /separate services/
+  );
 });

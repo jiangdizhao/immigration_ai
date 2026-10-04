@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { consultationCreateHref } from "@/lib/consultations/customer-ui";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import { useSiteLocale } from "./site-locale-provider";
 
@@ -87,12 +88,15 @@ export function LawyerRequestAction({
 
   if (submitted) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        {copy.submitted}{" "}
-        <Link className="font-semibold underline" href="/lawyer-requests">
-          {copy.viewStatus}
-        </Link>
-        .
+      <div className="space-y-3">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {copy.submitted}{" "}
+          <Link className="font-semibold underline" href="/lawyer-requests">
+            {copy.viewStatus}
+          </Link>
+          .
+        </div>
+        <ConsultationLink chatId={chatId} copy={copy} />
       </div>
     );
   }
@@ -130,44 +134,70 @@ export function LawyerRequestAction({
   }
 
   return (
-    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 sm:p-4">
-      <p className="mb-2 font-semibold">{copy.reviewPrompt}</p>
-      <button
-        className="inline-flex min-h-10 items-center rounded-lg bg-sky-800 px-3 py-2 font-semibold text-white underline-offset-2 hover:bg-sky-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-        data-testid="ask-lawyer-review"
-        onClick={() => setOpen((current) => !current)}
-        type="button"
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 sm:p-4">
+        <p className="mb-2 font-semibold">{copy.reviewPrompt}</p>
+        <button
+          className="inline-flex min-h-10 items-center rounded-lg bg-sky-800 px-3 py-2 font-semibold text-white underline-offset-2 hover:bg-sky-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+          data-testid="ask-lawyer-review"
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          {copy.askReview}
+        </button>
+        {open ? (
+          <div className="mt-3 space-y-3">
+            <p className="rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-600">
+              {copy.details}
+              <br />
+              <span className="text-slate-500">
+                {copy.answerPreview}
+                {answerPreview.slice(0, 240)}
+              </span>
+            </p>
+            <textarea
+              className="min-h-20 w-full rounded-xl border border-sky-200 bg-white p-3 text-sm outline-none focus:border-sky-500"
+              maxLength={4000}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={copy.optionalNote}
+              value={note}
+            />
+            {error ? <p className="text-red-700">{error}</p> : null}
+            <button
+              className="rounded-xl bg-sky-700 px-4 py-2 font-semibold text-white disabled:opacity-50"
+              disabled={submitting}
+              onClick={submit}
+              type="button"
+            >
+              {submitting ? copy.submitting : copy.submit}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <ConsultationLink chatId={chatId} copy={copy} />
+    </div>
+  );
+}
+
+function ConsultationLink({
+  chatId,
+  copy,
+}: {
+  chatId: string;
+  copy: ReturnType<typeof getWorkspaceCopy>["lawyerRequest"];
+}) {
+  return (
+    <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950 sm:p-4">
+      <p className="font-semibold">{copy.consultationTitle}</p>
+      <p className="mt-1 text-xs leading-5 text-violet-900">
+        {copy.consultationDescription}
+      </p>
+      <Link
+        className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-violet-300 bg-white px-3 py-2 font-semibold text-violet-900 underline-offset-2 hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        href={consultationCreateHref(chatId)}
       >
-        {copy.askReview}
-      </button>
-      {open ? (
-        <div className="mt-3 space-y-3">
-          <p className="rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-600">
-            {copy.details}
-            <br />
-            <span className="text-slate-500">
-              {copy.answerPreview}
-              {answerPreview.slice(0, 240)}
-            </span>
-          </p>
-          <textarea
-            className="min-h-20 w-full rounded-xl border border-sky-200 bg-white p-3 text-sm outline-none focus:border-sky-500"
-            maxLength={4000}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder={copy.optionalNote}
-            value={note}
-          />
-          {error ? <p className="text-red-700">{error}</p> : null}
-          <button
-            className="rounded-xl bg-sky-700 px-4 py-2 font-semibold text-white disabled:opacity-50"
-            disabled={submitting}
-            onClick={submit}
-            type="button"
-          >
-            {submitting ? copy.submitting : copy.submit}
-          </button>
-        </div>
-      ) : null}
+        {copy.consultationLink}
+      </Link>
     </div>
   );
 }

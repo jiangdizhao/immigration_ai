@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
-import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { workspaceGuestRedirectUrl } from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
@@ -24,12 +23,11 @@ export default async function AIWorkspacePage({
     : null;
 
   return (
-    <div className="min-h-dvh bg-[#f3f5f7] text-slate-900">
+    <div className="min-h-dvh bg-[#f3f5f7] text-slate-900 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
       <SiteHeader />
-      <div className="min-h-[calc(100dvh-8rem)] pb-8">
+      <main className="min-h-[calc(100dvh-72px)] xl:min-h-0 xl:flex-1 xl:overflow-hidden">
         <PremiumAnswerModeWorkspace policyReference={policyReference} />
-      </div>
-      <SiteFooter />
+      </main>
     </div>
   );
 }
