@@ -649,3 +649,24 @@ LF-02 is intentionally one coarse implementation unit:
 - no real-time lawyer chat is claimed or implemented.
 
 LF-03 remains planned and must not be pulled into LF-02.
+
+
+## 2026-10-04 LF-02 verified / LF-03 activated
+
+LF-02 is **VERIFIED** at remote commit `1fab2376fb72dc02587b46b1f6b9157379a5b3ee`.
+
+Final evidence: 23/23 focused tests, 497/497 standard unit tests with no skips, production build, changed-file Biome, `git diff --check`, desktop application-shell smoke, and 390px mobile smoke all passed. The one substantive review defect—case-summary leakage across conversation boundaries—was corrected before acceptance.
+
+Accepted LF-02 product state:
+
+- viewport-constrained desktop workspace with internal pane scrolling and no workspace footer;
+- right rail = all Known information + all To confirm + explicit manual frozen summary snapshot;
+- no customer-visible AI confidence/current-matter/next-action/duplicate-source/generic-lawyer-promo panels;
+- answer-level citations remain attached to answers;
+- VIP lawyer review and existing one-to-one consultation remain separate human-service paths.
+
+**Current active stage: LF-03 — Policy-to-AI Continuity + Final Product Integration.**
+
+LF-03 must make the Legal Update -> AI handoff create exactly one new conversation, carry only a bounded server-resolved policy topic reference, show a deterministic lightweight opener without automatic model invocation, and then let the user's question enter the unchanged Fast / Legal Check / Premium answer flow. Policy context must not leak when the user switches/creates another conversation.
+
+No Policy Intelligence verifier/publication-gate work is reactivated by LF-03.

@@ -3601,3 +3601,174 @@ At the end of LF-02:
 - leave the implementation uncommitted and unpushed for independent review;
 - do not start LF-03;
 - do not deploy.
+
+
+## 2026-10-04 LF-02 verified / LF-03 activated
+
+### Remote verification
+
+LF-02 was independently source-reviewed, corrected once for a real conversation-isolation defect, revalidated, committed, pushed, and independently verified on GitHub.
+
+- branch: `phase11-lawyer-feedback-ui-consolidation`
+- verified LF-02 commit: `1fab2376fb72dc02587b46b1f6b9157379a5b3ee`
+- commit message: `feat: consolidate AI workspace experience`
+- remote commit contains exactly the nine reviewed LF-02 files.
+- local and remote branch heads matched `1fab2376fb72dc02587b46b1f6b9157379a5b3ee`; working tree was clean.
+- final focused tests: 23 passed, 0 failed.
+- final standard unit suite: 497 passed, 0 failed, 0 skipped.
+- production build: passed.
+- changed-file Biome: passed.
+- `git diff --check`: passed.
+- desktop visual smoke: passed; outer workspace did not scroll and manual case-summary generation worked.
+- mobile 390px smoke: passed with no horizontal overflow.
+- VIP-entitled visual state was not directly inspected; source-level entitlement/consultation boundaries were reviewed and no guard was bypassed.
+
+Accepted LF-02 behavior:
+
+- desktop AI Workspace is a viewport-constrained application shell without the public SiteFooter;
+- conversation/history/context panes use internal scrolling and the composer remains visible;
+- right rail is Known information + To confirm + explicit manual summary;
+- all current structured known/requested facts are shown;
+- customer-visible AI confidence/current matter/next-action/duplicate-source/generic-handoff panels are removed;
+- case summary is a deterministic user-triggered frozen snapshot and does not call a model/backend;
+- the snapshot is cleared when creating or switching to a different conversation and preserved when reloading the same chat;
+- lawyer review and existing P11-008 one-to-one consultation remain distinct paths.
+
+
+### LF-03 — Policy-to-AI Continuity + Final Product Integration — ACTIVE
+
+LF-03 is the final feature stage before the consolidated acceptance/deployment gate. Keep it as one bounded implementation unit.
+
+#### A. Policy -> AI must create exactly one fresh conversation
+
+The Legal Updates detail CTA remains the entry point, but it must carry an explicit one-time launch intent in addition to the validated policy slug.
+
+Recommended bounded contract:
+
+- `policyWorkspaceHref(slug)` includes a one-time launch marker, e.g. `/ai-workspace?policy=<slug>&launch=policy`;
+- guest-auth redirect preserves both the policy slug and launch marker;
+- after the server resolves a valid published `PolicyWorkspaceReference`, the workspace creates one new conversation through the existing immigration-conversation POST path;
+- use a bounded localized policy-derived conversation title where practical;
+- after successful creation, replace the URL with `policy=<slug>&chatId=<new id>` and remove the launch marker;
+- reload of that consumed URL must load the same conversation and must not create another conversation;
+- invalid/unpublished policy slugs degrade safely to the ordinary AI Workspace and must not create a policy-linked conversation.
+
+Do not use a random/timestamp launch token and do not create multiple conversations from React rerenders.
+
+#### B. Topic reference and lightweight opener
+
+The selected published policy reference is a topic pointer, not legal evidence.
+
+The linked conversation should show one concise deterministic opener/reference derived from the existing server-resolved public `PolicyWorkspaceReference`:
+
+- localized policy title;
+- official title/source identity;
+- optional official-source link;
+- a short bilingual instruction inviting the user to ask a question.
+
+Opening the policy handoff must not call Fast, Legal Check, Premium, the legal-service backend, or another model.
+
+Prefer a deterministic UI opener over persisting a fake assistant answer. It must not become a lawyer-reviewable AI answer or claim that legal analysis has already occurred.
+
+Avoid showing both a large policy banner and a second large opener; consolidate the continuity presentation into one clear compact surface.
+
+#### C. Policy context enters the normal answer flow only after the user asks
+
+A question such as “Does this affect me?” must retain the selected topic context without treating the policy-page AI interpretation as verified legal evidence.
+
+Use the existing published policy slug/reference as a bounded topic hint only.
+
+Recommended safe path:
+
+- while the current `chatId` is the policy-linked chat, include the policy slug as an optional bounded request field;
+- after the normal political gate/auth/ownership checks, server-side code resolves that slug through the existing published-policy resolver before using it;
+- if resolution succeeds, include a small system/topic-context entry in the legal-service `frontend_messages` (or the closest existing shared context mechanism) containing only the published topic identity needed for continuity;
+- do not replace or rewrite the user's visible question;
+- do not persist the topic hint as a fake user/assistant message;
+- do not use the policy-page AI summary as authoritative evidence;
+- normal Fast / Legal Check / Premium research/source behavior remains responsible for the actual answer;
+- if server-side resolution fails, answer the user's question normally without policy context rather than trusting client-supplied title/source text.
+
+Keep the implementation shared/bounded where practical rather than copy-pasting divergent policy-context logic across three answer routes.
+
+#### D. Conversation-boundary isolation
+
+Policy continuity must belong only to the launched chat.
+
+- Switching to another existing conversation must stop applying the policy context.
+- Clicking the normal New Conversation button must create an ordinary conversation and clear the active policy continuity from client URL/state.
+- Reloading the policy-linked chat URL keeps the policy reference for that chat.
+- Do not allow one policy handoff to leak into another conversation.
+- LF-03 does not require a new DB column or migration unless current source proves a durable server field already exists and is clearly safer to reuse. Do not invent a schema migration merely for this UI handoff.
+
+This stage guarantees immediate/reload continuity for the launched policy chat; cross-device archival policy linkage is not being introduced here.
+
+#### E. Preserve LF-01 / LF-02 accepted behavior
+
+Do not regress:
+
+- four-item primary public navigation;
+- canonical Services & Contact surface and legacy redirects;
+- Home hierarchy and two-group Legal Updates presentation;
+- fixed desktop AI Workspace shell and internal scrolling;
+- Known / To Confirm rail;
+- manual frozen case-summary snapshot semantics and conversation isolation;
+- Fast / Legal Check / Premium access/routing;
+- political gate;
+- guided intake;
+- documents and evidence provenance;
+- answer-level citations/sources;
+- lawyer-review persisted message identity/RBAC;
+- P11-008 consultation continuity;
+- auth/session/VIP billing boundaries;
+- Policy Intelligence provenance/publication semantics.
+
+Do not resume verifier/publication-gate diagnostics or merge the separate Policy WIP branch.
+
+#### F. Final product integration polish
+
+Within the same LF-03 stage, perform only bounded integration polish directly related to the lawyer feedback:
+
+- consistent Home / AI Workspace / Services & Contact / Legal Updates naming in zh-CN and English;
+- consistent CTA wording between Legal Updates and AI Workspace;
+- no duplicate policy-continuity cards;
+- no obvious desktop/mobile overflow introduced by LF-03;
+- account/header/footer behavior remains consistent with the accepted LF-01 information architecture;
+- do not launch unrelated design rewrites.
+
+Minor unrelated polish remains deferred to the final acceptance batch.
+
+#### G. LF-03 concentrated validation
+
+At minimum cover:
+
+- policy workspace href + guest redirect helper tests;
+- published-policy reference resolver tests;
+- one-time launch/idempotence pure helper tests;
+- policy-chat boundary/URL-state helper tests;
+- any new bounded policy-topic request-context helper tests;
+- relevant workspace/conversation tests;
+- all three answer-mode request-schema/context tests if they are touched;
+- existing political-gate tests affected by request-context handling;
+- `pnpm test:unit` once after final LF-03 source changes;
+- production build;
+- changed-file Biome;
+- `git diff --check`.
+
+Visual smoke should verify:
+
+- clicking Ask AI from a policy detail creates one new conversation;
+- the linked topic/opener is visible without an automatic answer/model call;
+- refreshing does not create a second conversation;
+- user question then receives a normal answer through the selected mode;
+- switching conversation/new conversation clears policy context;
+- desktop application shell remains non-scrolling;
+- mobile remains usable;
+- zh-CN / English copy remains coherent.
+
+#### H. Stop boundary
+
+Leave LF-03 source uncommitted and unpushed for independent review.
+
+Do not deploy yet. After LF-03 source review/commit/push, enter one consolidated final acceptance/deployment gate across LF-01/LF-02/LF-03.
+

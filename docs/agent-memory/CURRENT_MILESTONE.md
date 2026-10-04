@@ -1116,3 +1116,34 @@ Implement the AI Workspace consolidation as one bounded stage:
 Run one concentrated validation/visual gate after the complete implementation. Leave LF-02 uncommitted/unpushed for review and stop before LF-03.
 
 Policy Intelligence verifier/publication diagnostics remain paused.
+
+
+## 2026-10-04 LF-02 verified / LF-03 activated
+
+**LF-02 — VERIFIED**
+
+Remote accepted commit: `1fab2376fb72dc02587b46b1f6b9157379a5b3ee` (`feat: consolidate AI workspace experience`).
+
+Acceptance evidence:
+
+- 23 focused tests passed;
+- 497 standard unit tests passed with no skips;
+- production build passed;
+- changed-file Biome passed;
+- `git diff --check` passed;
+- desktop/mobile visual smoke passed;
+- cross-conversation summary leakage found during review was corrected and covered before acceptance.
+
+**LF-03 — ACTIVE**
+
+Implement the final feature stage as one bounded unit:
+
+1. Legal Update “Ask AI” carries explicit one-time policy launch intent.
+2. Valid published policy handoff creates exactly one fresh conversation; consumed URL keeps `policy + chatId` and removes the launch marker so reload is idempotent.
+3. Show one compact deterministic policy-topic opener/reference; no model call occurs on page open.
+4. When the user actually asks a question, the active policy slug may be server-resolved and supplied as bounded topic context to the normal answer path; never treat page AI interpretation as evidence and never rewrite the visible user question.
+5. Switching/new conversation clears the active policy context so it cannot leak across chats.
+6. Preserve LF-01/LF-02 and P11-006/007/008 boundaries.
+7. Finish only bounded cross-page bilingual/mobile integration polish.
+
+Leave LF-03 uncommitted/unpushed for review. Deployment remains blocked until the consolidated final acceptance gate.
