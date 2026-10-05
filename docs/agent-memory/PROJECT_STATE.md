@@ -760,3 +760,35 @@ The lawyer-feedback consolidation feature set is accepted. There is no LF-04.
 **Current state: RELEASE PREPARATION / DEPLOYMENT PENDING EXPLICIT OWNER AUTHORISATION.**
 
 Do not resume the paused Policy Intelligence verifier/publication investigation until the accepted LF release is merged/deployed and production smoke is complete.
+
+
+
+## 2026-10-06 Owner visual sign-off required
+
+The automated/technical Final Acceptance run reported PASS, but **release acceptance is not yet complete**. The owner explicitly requires a manual visual review before any merge, release preparation, or deployment step.
+
+Current release status:
+
+- LF-01 source review: VERIFIED
+- LF-02 source review: VERIFIED
+- LF-03 source review: VERIFIED
+- automated/integration acceptance: PASS
+- **owner visual sign-off: PENDING**
+- canonical-branch merge: BLOCKED pending owner visual sign-off
+- deployment: BLOCKED pending owner visual sign-off
+
+Do not treat the previous “Final Acceptance PASS” record as owner approval to merge or deploy. It records technical acceptance evidence only.
+
+The visual review should cover the accepted public and workspace surfaces, especially:
+
+- Home desktop/mobile, zh-CN/English;
+- Services & Contact desktop/mobile;
+- Legal Updates list/detail and Ask AI CTA;
+- ordinary AI Workspace desktop/mobile;
+- policy-linked AI Workspace opener and topic continuity;
+- Known / To Confirm / manual case-summary presentation;
+- answer citations/sources;
+- lawyer-review and one-to-one consultation presentation where legitimately accessible;
+- header/navigation/account presentation and any obvious overflow, hierarchy, spacing, clipping, or misleading copy.
+
+Only after the owner explicitly approves the visual result may release merge/deployment preparation resume.
