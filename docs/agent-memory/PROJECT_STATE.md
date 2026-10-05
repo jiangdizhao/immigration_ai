@@ -808,3 +808,26 @@ Owner decision:
 - deployment remains a separate later step
 
 This visual sign-off supersedes the immediately preceding “owner visual sign-off pending” release hold. Preserve the accepted LF-01/LF-02/LF-03 behavior during merge. Do not resume Policy Intelligence verifier/publication work as part of the merge.
+
+
+## 2026-10-06 Canonical LF merge complete / Policy Intelligence Refresh Reliability ACTIVE
+
+The accepted lawyer-feedback consolidation is now on the canonical branch. The canonical and former LF branch were verified at `dfb845de5ce2ffb9862000b6c7bedaa7312255b7`; the local canonical worktree was clean after the fast-forward merge/push. The LF UI/product modification cycle remains closed and deployment remains a separate action.
+
+Policy Intelligence reliability work is now explicitly resumed as a new bounded task: `docs/agent-memory/tasks/PI-REFRESH-RELIABILITY.md`.
+
+Read-only AWS/RDS evidence collected on 2026-10-06 changes the immediate diagnosis:
+
+- the EventBridge Scheduler is enabled and natural 06:00 Australia/Sydney runs occurred across 3–6 October;
+- recent runs for Home Affairs, Federal Register and ART completed but all discovered candidates were unchanged, so no new snapshots/analyzer/publication work ran;
+- Federal Register live dry-run exposed a structural discovery defect: the effective candidate set is dominated by the sitemap seed/static homepage/Terms/Glossary rather than current legislation;
+- Home Affairs exposes 70 alert items and its first ten are currently the newest; there were no hidden 3–6 October alerts below the ten-item cutoff, so the recent inactivity is not caused by the ten-candidate limit alone;
+- earlier verifier/publication holds remain a separate issue and must not be used to explain recent discovery-stage inactivity.
+
+**Active implementation unit: RR-01 — Discovery reliability + operator observability.**
+
+RR-01 must repair source-aware candidate selection/ranking for Federal Register, harden Home Affairs date ordering/multi-URL coverage, make ART selection source-aware, and expose safe recent sync-run timestamps/counters through the authenticated admin/operator surface. It must preserve existing SSRF/resource bounds and must not change analyzer/verifier/publication-gate strictness.
+
+The protected branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d` remains separate. Do not merge, reset, delete or silently fold it into RR-01.
+
+RR-02 publication-gate diagnosis is planned only after RR-01 is accepted and current discovery evidence is improved. No AWS mutation/deployment is authorized by this documentation checkpoint.
