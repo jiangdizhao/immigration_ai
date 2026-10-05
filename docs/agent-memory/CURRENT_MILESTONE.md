@@ -1147,3 +1147,30 @@ Implement the final feature stage as one bounded unit:
 7. Finish only bounded cross-page bilingual/mobile integration polish.
 
 Leave LF-03 uncommitted/unpushed for review. Deployment remains blocked until the consolidated final acceptance gate.
+
+
+## 2026-10-05 LF-03 verified / Final Acceptance activated
+
+**LF-03 — VERIFIED**
+
+Remote accepted commit: `02b8b254ebc5d44b68ac24a1597a7ce6333a1d13` (`feat: complete policy to AI continuity`).
+
+Acceptance evidence:
+
+- 58 focused TypeScript tests passed;
+- 42 focused legal-service tests passed;
+- 499 chatbot standard unit tests passed;
+- production build passed;
+- changed-file Biome passed;
+- `git diff --check` passed;
+- browser smoke passed for one-time launch, refresh idempotence, no automatic model call, bilingual opener, chat-boundary clearing, desktop shell and 390px mobile width.
+
+**FINAL ACCEPTANCE — ACTIVE**
+
+Freeze feature work. Run one consolidated product gate across LF-01/LF-02/LF-03.
+
+The first mandatory item is to start the real local legal-service and close the remaining policy-linked E2E gap: submit a real user question from a policy-launched chat and verify the normal answer path and answer-associated citations/source behavior.
+
+Then validate the whole customer matrix, full automated checks, responsive/bilingual presentation, human-service continuity, and security/provenance invariants.
+
+Deployment is not yet authorised by this milestone. Record a PASS decision first; only then use the current canonical repository deployment procedure and perform one production smoke.

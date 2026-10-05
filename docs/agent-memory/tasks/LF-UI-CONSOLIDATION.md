@@ -1,6 +1,6 @@
 # LF-UI-CONSOLIDATION — Lawyer Feedback UI/Product Consolidation
 
-**Status:** ACTIVE — LF-03  
+**Status:** ACTIVE — FINAL ACCEPTANCE  
 **Activated:** 2026-10-04  
 **Parent branch:** `phase11-chinese-service-platform-ui-rebase`  
 **Parent checkpoint before activation:** `8cb4ca34cb9eef698843190945ec7cf2e34d41f9`  
@@ -166,7 +166,7 @@ One implementation unit:
 - expose lawyer answer review and P11-008 one-to-one consultation as distinct VIP/human-service paths;
 - do not call the consultation path “real-time lawyer chat” unless that product is separately built.
 
-## 6. LF-03 — Policy-to-AI Continuity + Final Product Integration — ACTIVE
+## 6. LF-03 — Policy-to-AI Continuity + Final Product Integration — VERIFIED
 
 One implementation unit:
 
@@ -481,4 +481,195 @@ Visual smoke should verify:
 Leave LF-03 source uncommitted and unpushed for independent review.
 
 Do not deploy yet. After LF-03 source review/commit/push, enter one consolidated final acceptance/deployment gate across LF-01/LF-02/LF-03.
+
+
+
+## 2026-10-05 LF-03 verified / Final Acceptance activated
+
+### LF-03 acceptance record
+
+LF-03 is closed/verified at remote commit `02b8b254ebc5d44b68ac24a1597a7ce6333a1d13`.
+
+Evidence:
+
+- focused TypeScript: 58 passed;
+- focused legal-service: 42 passed;
+- chatbot unit suite: 499 passed, 0 failed;
+- production build passed;
+- changed-file Biome passed;
+- `git diff --check` passed;
+- browser smoke passed for one-time launch, refresh idempotence, no model call on handoff, compact bilingual opener, conversation-boundary clearing, desktop application shell, and 390px mobile width;
+- independent source review passed with no further correction.
+
+Remaining coverage limitation: the policy-linked request reached the local widget route, but the local legal-service was not running, so the real model-answer/citation portion must be exercised during Final Acceptance.
+
+
+### Consolidated Final Acceptance + Deployment Gate — ACTIVE
+
+There is no LF-04. Feature development is frozen unless this gate finds a true release blocker.
+
+#### A. Gate objective
+
+Validate LF-01 + LF-02 + LF-03 as one product flow, including the one integration gap that could not be completed during LF-03 local smoke: a real legal-service/model answer with citations from a policy-linked conversation.
+
+This gate is acceptance first, deployment second. Do not deploy merely because unit/build checks are green.
+
+#### B. Source/state preflight
+
+Before running acceptance:
+
+- work only in `~/immigration_ai_lf` on `phase11-lawyer-feedback-ui-consolidation`;
+- require a clean worktree at the latest docs checkpoint;
+- preserve the separate `policy-intelligence-admin-detail-wip-20261004` branch at `a73e3b51cb091b275f46116bad911ede445be54d`;
+- do not merge or resume Policy Intelligence verifier/publication diagnostics;
+- do not modify AWS during the acceptance run;
+- verify the local legal-service can start with the existing private environment without printing secrets.
+
+#### C. Automated acceptance
+
+Run one consolidated automated batch after source freeze:
+
+Chatbot:
+- `pnpm test:unit`;
+- production build;
+- repository-established lint/Biome check on the accepted product surface;
+- `git diff --check`.
+
+Legal service:
+- the full repository-appropriate pytest suite if runtime is practical;
+- otherwise, at minimum all policy-context, conversation-memory, Fast direct, Premium direct, query/routing, political-gate integration, and document/provenance suites touched by LF-03.
+
+A test failure is a blocker only if attributable to the accepted LF work or an existing release-critical defect. Do not launch unrelated cleanup.
+
+#### D. Real local end-to-end policy -> AI acceptance
+
+Start the real local legal-service and chatbot using the existing private local environment. Do not expose secrets.
+
+Run at least one valid published Legal Update through the complete path:
+
+1. open policy detail;
+2. click Ask AI;
+3. verify exactly one new conversation is created;
+4. verify URL becomes `policy=<slug>&chatId=<id>` with no launch marker;
+5. verify compact deterministic opener and official-source link appear;
+6. verify no widget/model request occurs before user submission;
+7. refresh and confirm the same chat is loaded with no duplicate conversation;
+8. submit a natural policy-dependent question;
+9. verify the selected Fast or Legal Check lane reaches the live local legal-service;
+10. verify the user-visible/persisted question is unchanged;
+11. verify the resulting answer is a normal answer, not the policy-page AI summary;
+12. when the answer uses sources, verify citations/source links are present and remain answer-associated;
+13. verify the policy topic hint is not visible as a fake chat message and is not persisted as user/assistant history;
+14. switch to another conversation and verify policy context clears;
+15. create New Conversation and verify policy context clears.
+
+Also exercise Premium if local entitlement/test data permits it without modifying billing state. If Premium cannot be exercised safely, record it as a coverage limitation rather than bypassing entitlement.
+
+#### E. Whole-product functional matrix
+
+Validate representative customer flows:
+
+Public experience:
+- Home;
+- Services & Contact;
+- legacy `/services` and `/process` redirects;
+- Legal Updates list/detail;
+- four-item primary navigation;
+- zh-CN default and English switch.
+
+AI Workspace:
+- new/list/load conversation;
+- Fast;
+- Legal Check;
+- Premium where legitimately entitled;
+- fixed desktop shell / internal scrolling;
+- mobile stacked behavior;
+- Known information;
+- To confirm;
+- manual Generate case summary;
+- frozen snapshot + explicit regenerate;
+- snapshot clear on chat boundary;
+- document panel remains usable;
+- answer citations/sources remain attached to answers.
+
+Human services:
+- lawyer review action on an eligible persisted assistant answer;
+- existing request/status continuity;
+- one-to-one consultation entry and existing P11-008 continuity;
+- no claim of real-time lawyer chat;
+- no RBAC/ownership regression.
+
+Policy continuity:
+- launch once;
+- refresh idempotence;
+- no auto model call;
+- bounded server-resolved topic hint;
+- no context leakage across chats.
+
+#### F. Visual/responsive matrix
+
+Use representative desktop and 390px mobile views for:
+
+- Home;
+- Services & Contact;
+- Legal Updates list;
+- Legal Update detail;
+- AI Workspace ordinary conversation;
+- policy-linked AI Workspace;
+- manual case summary;
+- lawyer-review/consultation actions where legitimately available.
+
+Check both zh-CN and English for the critical Policy -> AI and AI Workspace flows.
+
+Do not reopen source for minor spacing/cosmetic preferences unless they cause clipped content, severe overflow, unreadable controls, broken hierarchy, or misleading semantics.
+
+#### G. Security/provenance invariants
+
+Acceptance must confirm:
+
+- policy slug is validated and server-resolved;
+- unpublished/private policy data is not exposed through the public handoff;
+- policy AI interpretation is not treated as legal evidence;
+- political gate still applies to the real user submission;
+- conversation ownership remains server-authoritative;
+- policy topic context does not become persisted fake user/assistant content;
+- document evidence/provenance boundaries remain intact;
+- lawyer review and consultation keep existing ownership/RBAC;
+- backend confidence may exist but remains absent from the customer right rail.
+
+#### H. Acceptance decision
+
+PASS requires:
+
+- no release-blocking automated failure;
+- real policy-linked question reaches the running legal-service;
+- no duplicate launch/chat-context leakage;
+- core public/workspace/human-service flows remain usable;
+- no security/provenance regression;
+- production build remains green.
+
+If a true blocker is found:
+- stop;
+- document one bounded release correction;
+- do not create LF-04 or a broad new milestone.
+
+If only non-blocking polish remains:
+- record it;
+- accept the feature set without reopening implementation.
+
+#### I. Deployment gate after acceptance PASS
+
+Deployment is a separate explicit action after acceptance evidence is recorded.
+
+Before deployment:
+- commit/push any accepted release correction if one was required;
+- verify remote branch and clean worktree;
+- update project-state docs with final acceptance evidence;
+- identify the currently authoritative staging/production deployment procedure from repo docs rather than relying on stale commands;
+- confirm no paused Policy Intelligence WIP is included;
+- confirm required environment/config is already present without printing secrets.
+
+Then perform one reviewed deployment according to the repository's current canonical procedure, followed by production smoke of Home, Legal Updates, Policy -> AI, AI Workspace, lawyer review/consultation entry, and Services & Contact.
+
+Do not resume the paused Policy Intelligence verifier/publication investigation until this product release has been accepted and the deployment smoke is complete.
 

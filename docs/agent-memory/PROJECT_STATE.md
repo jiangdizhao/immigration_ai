@@ -670,3 +670,27 @@ Accepted LF-02 product state:
 LF-03 must make the Legal Update -> AI handoff create exactly one new conversation, carry only a bounded server-resolved policy topic reference, show a deterministic lightweight opener without automatic model invocation, and then let the user's question enter the unchanged Fast / Legal Check / Premium answer flow. Policy context must not leak when the user switches/creates another conversation.
 
 No Policy Intelligence verifier/publication-gate work is reactivated by LF-03.
+
+
+## 2026-10-05 LF-03 verified / Final Acceptance activated
+
+LF-03 is **VERIFIED** at remote commit `02b8b254ebc5d44b68ac24a1597a7ce6333a1d13`.
+
+Evidence: 58 focused TypeScript tests, 42 focused legal-service tests, 499 chatbot standard unit tests, production build, changed-file Biome, `git diff --check`, and browser behavior smoke all passed. Independent source review found no additional release correction requirement.
+
+Accepted LF-03 invariants:
+
+- one-time policy launch creates exactly one fresh conversation;
+- refresh is idempotent after `launch=policy` is consumed;
+- no automatic model call occurs on policy handoff;
+- only a bounded server-resolved published-policy topic hint reaches the answer context after the user asks;
+- the original user question is unchanged;
+- policy interpretation is not legal evidence;
+- topic context is excluded from normal conversation-history persistence;
+- policy continuity clears across conversation boundaries.
+
+**Current active stage: Consolidated Final Acceptance + Deployment Gate.**
+
+There is no LF-04. Feature development is frozen unless the acceptance gate identifies a true release blocker.
+
+The remaining mandatory integration evidence is a real local legal-service/model response from a policy-linked conversation, including normal answer/citation behavior when sources are used. Deployment remains blocked until the consolidated acceptance decision is PASS.
