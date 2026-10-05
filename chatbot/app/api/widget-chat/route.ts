@@ -22,6 +22,7 @@ import {
 } from "@/lib/matter-documents/ai-evidence";
 import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
 import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
+import { getPolicyTopicContextEntry } from "@/lib/policy-intelligence-server";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -56,6 +57,10 @@ const messageSchema = z.object({
 const widgetRequestBodySchema = z.object({
   id: z.string().uuid(),
   frontendChatId: z.string().uuid().optional(),
+  policySlug: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,119}$/u)
+    .optional(),
   matterId: z.string().uuid().nullable().optional(),
   messages: z.array(messageSchema).min(1),
   selectedChatModel: z.string(),
@@ -732,6 +737,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     const {
       id,
       frontendChatId,
+      policySlug,
       messages,
       selectedChatModel,
       assistantMode: requestedAssistantMode,
@@ -867,6 +873,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
+    const policyTopicContext = await getPolicyTopicContextEntry(policySlug);
 
     const legalServiceUrl =
       process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
@@ -902,7 +909,10 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         political_gate_version: gateDecision.policyVersion,
         political_gate_decision_id: gateDecision.decisionId,
         current_intake_facts: currentIntakeFacts ?? null,
-        frontend_messages: serializeFrontendMessages(safeMessages),
+        frontend_messages: [
+          ...serializeFrontendMessages(safeMessages),
+          ...(policyTopicContext ? [policyTopicContext] : []),
+        ],
         customer_document_evidence: customerDocumentEvidence,
       },
     });

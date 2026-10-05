@@ -11,19 +11,21 @@ import {
   resolveAllowedAssistantMode,
 } from "@/lib/assistant-mode";
 import type { PolicyWorkspaceReference } from "@/lib/policy-intelligence-product";
-import { getPolicyProductCopy } from "@/lib/policy-intelligence-product-copy";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
 import { useSiteLocale } from "./site-locale-provider";
 
 export function PremiumAnswerModeWorkspace({
   policyReference = null,
+  policyLaunch = false,
+  initialChatId = null,
 }: {
   policyReference?: PolicyWorkspaceReference | null;
+  policyLaunch?: boolean;
+  initialChatId?: string | null;
 }) {
   const { locale } = useSiteLocale();
   const copy = getWorkspaceCopy(locale).mode;
-  const policyCopy = getPolicyProductCopy(locale);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("fast");
   const [modeHydrated, setModeHydrated] = useState(false);
   const [mobileModeOpen, setMobileModeOpen] = useState(false);
@@ -87,40 +89,6 @@ export function PremiumAnswerModeWorkspace({
 
   return (
     <div className="flex min-h-0 flex-col xl:h-full">
-      {policyReference ? (
-        <section
-          className="mx-auto w-full shrink-0 max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8"
-          data-policy-continuity="topic-reference-only"
-        >
-          <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">
-                  {policyCopy.askAi}
-                </p>
-                <h2 className="mt-1 break-words text-base font-semibold text-slate-950">
-                  {policyReference.title[locale]}
-                </h2>
-                <p className="mt-1 break-words text-sm text-slate-600">
-                  {policyReference.officialTitle}
-                </p>
-                <p className="mt-2 text-xs leading-5 text-slate-600">
-                  {policyCopy.continuityNotice}
-                </p>
-              </div>
-              <a
-                className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-violet-900 underline"
-                href={policyReference.officialUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {policyCopy.officialSource}
-                <ChevronDown aria-hidden="true" className="size-3 -rotate-90" />
-              </a>
-            </div>
-          </div>
-        </section>
-      ) : null}
       <section className="mx-auto w-full shrink-0 max-w-[1600px] px-4 pt-3 sm:px-6 lg:px-8">
         <button
           aria-controls="assistant-mode-panel"
@@ -216,7 +184,12 @@ export function PremiumAnswerModeWorkspace({
         </div>
       </section>
 
-      <ImmigrationAIWorkspace assistantMode={assistantMode} />
+      <ImmigrationAIWorkspace
+        assistantMode={assistantMode}
+        initialChatId={initialChatId}
+        policyLaunch={policyLaunch}
+        policyReference={policyReference}
+      />
     </div>
   );
 }

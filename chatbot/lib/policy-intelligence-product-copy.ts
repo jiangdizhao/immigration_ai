@@ -137,6 +137,8 @@ const copy = {
     changed: "已更改",
     askAi: "就这项政策向 AI 提问",
     continuityNotice: "仅用于延续话题；AI 将根据你的问题另行核查来源。",
+    workspaceOpener:
+      "你已从这项法律或政策动态开始新的咨询。你可以询问它是否与你的情况有关；AI 会在回答时重新核对相关来源。",
     viewDetails: "查看政策简报",
   },
   en: {
@@ -238,6 +240,8 @@ const copy = {
     askAi: "Ask AI about this policy",
     continuityNotice:
       "Topic continuity only; AI will research sources for your question independently.",
+    workspaceOpener:
+      "You started a new consultation from this legal or policy update. Ask how it may relate to your circumstances; the AI will check relevant sources when answering.",
     viewDetails: "View policy brief",
   },
 } as const;

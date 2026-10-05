@@ -21,6 +21,12 @@ import { ChatbotError } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import { customerDocumentSelectionAfterSubmission } from "@/lib/matter-documents/customer-document-provenance";
 import {
+  isPolicyLinkedConversation,
+  type PolicyWorkspaceReference,
+  shouldCreatePolicyWorkspaceConversation,
+} from "@/lib/policy-intelligence-product";
+import { getPolicyProductCopy } from "@/lib/policy-intelligence-product-copy";
+import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
   type PoliticalGateResult,
@@ -362,12 +368,21 @@ function widgetMessageFromStoredMessage(
   };
 }
 
-function setWorkspaceChatParam(chatId: string) {
+function setWorkspaceChatParam(
+  chatId: string,
+  policySlug: string | null = null
+) {
   if (typeof window === "undefined") {
     return;
   }
   const url = new URL(window.location.href);
   url.searchParams.set("chatId", chatId);
+  url.searchParams.delete("launch");
+  if (policySlug) {
+    url.searchParams.set("policy", policySlug);
+  } else {
+    url.searchParams.delete("policy");
+  }
   window.history.replaceState(null, "", url.toString());
 }
 
@@ -432,15 +447,31 @@ function WorkspaceProcessingCard({
 
 export function ImmigrationAIWorkspace({
   assistantMode = "default",
+  policyReference = null,
+  policyLaunch = false,
+  initialChatId = null,
 }: {
   assistantMode?: AssistantMode;
+  policyReference?: PolicyWorkspaceReference | null;
+  policyLaunch?: boolean;
+  initialChatId?: string | null;
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
   const copy = getWorkspaceCopy(locale);
+  const policyCopy = getPolicyProductCopy(locale);
   const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const [linkedPolicyReference, setLinkedPolicyReference] =
+    useState<PolicyWorkspaceReference | null>(
+      initialChatId && !policyLaunch ? policyReference : null
+    );
+  const linkedPolicyChatIdRef = useRef<string | null>(
+    initialChatId && !policyLaunch && policyReference ? initialChatId : null
+  );
+  const policyLaunchStartedRef = useRef(false);
+  const initializationStartedRef = useRef(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
@@ -565,7 +596,19 @@ export function ImmigrationAIWorkspace({
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
         setSelectedDocumentIds([]);
-        setWorkspaceChatParam(data.chatId);
+        const keepPolicy = isPolicyLinkedConversation(
+          data.chatId,
+          linkedPolicyChatIdRef.current,
+          linkedPolicyReference
+        );
+        if (!keepPolicy) {
+          linkedPolicyChatIdRef.current = null;
+          setLinkedPolicyReference(null);
+        }
+        setWorkspaceChatParam(
+          data.chatId,
+          keepPolicy ? (linkedPolicyReference?.slug ?? null) : null
+        );
         setMatterId(data.legalMatterId ?? null);
         setMessages(
           sanitizePoliticalHistory(
@@ -580,54 +623,96 @@ export function ImmigrationAIWorkspace({
         setConversationLoading(false);
       }
     },
+    [linkedPolicyReference, refreshConversationList]
+  );
+
+  const createConversation = useCallback(
+    async (options?: {
+      title?: string;
+      policyReference?: PolicyWorkspaceReference | null;
+    }) => {
+      setConversationLoading(true);
+      try {
+        const response = await fetchWithErrorHandlers(
+          "/api/immigration-conversations",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: options?.title ?? "New immigration conversation",
+            }),
+          }
+        );
+        const data = (await response.json()) as ImmigrationConversationSummary;
+        setCaseSummarySnapshot(null);
+        linkedPolicyChatIdRef.current = options?.policyReference
+          ? data.chatId
+          : null;
+        setLinkedPolicyReference(options?.policyReference ?? null);
+        conversationIdRef.current = data.chatId;
+        setConversationId(data.chatId);
+        setSelectedDocumentIds([]);
+        setWorkspaceChatParam(
+          data.chatId,
+          options?.policyReference?.slug ?? null
+        );
+        setMatterId(data.legalMatterId ?? null);
+        setMessages([]);
+        setDraftFacts({});
+        setIntakeFacts({});
+        setConversationReady(true);
+        await refreshConversationList();
+        return data.chatId;
+      } finally {
+        setConversationLoading(false);
+      }
+    },
     [refreshConversationList]
   );
 
-  const createConversation = useCallback(async () => {
-    setConversationLoading(true);
-    try {
-      const response = await fetchWithErrorHandlers(
-        "/api/immigration-conversations",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: "New immigration conversation" }),
-        }
-      );
-      const data = (await response.json()) as ImmigrationConversationSummary;
-      setCaseSummarySnapshot(null);
-      conversationIdRef.current = data.chatId;
-      setConversationId(data.chatId);
-      setSelectedDocumentIds([]);
-      setWorkspaceChatParam(data.chatId);
-      setMatterId(data.legalMatterId ?? null);
-      setMessages([]);
-      setDraftFacts({});
-      setIntakeFacts({});
-      setConversationReady(true);
-      await refreshConversationList();
-      return data.chatId;
-    } finally {
-      setConversationLoading(false);
-    }
-  }, [refreshConversationList]);
-
   useEffect(() => {
-    let cancelled = false;
+    if (initializationStartedRef.current) {
+      return;
+    }
+    initializationStartedRef.current = true;
 
     async function initializeConversation() {
       try {
         const conversationsFromApi = await refreshConversationList();
-        if (cancelled) {
+        const url = new URL(window.location.href);
+        const requestedChatId = initialChatId ?? url.searchParams.get("chatId");
+        if (
+          shouldCreatePolicyWorkspaceConversation({
+            policyReference,
+            launchIntent: policyLaunch ? "policy" : null,
+            chatId: requestedChatId,
+          }) &&
+          !policyLaunchStartedRef.current
+        ) {
+          policyLaunchStartedRef.current = true;
+          try {
+            const titleBase = policyReference?.title[locale]
+              .trim()
+              .slice(0, 90);
+            const title =
+              locale === "zh-CN"
+                ? `政策咨询：${titleBase}`
+                : `Policy question: ${titleBase}`;
+            await createConversation({
+              title: title.slice(0, 120),
+              policyReference,
+            });
+          } catch (launchError) {
+            policyLaunchStartedRef.current = false;
+            throw launchError;
+          }
           return;
         }
-        const url = new URL(window.location.href);
-        const requestedChatId = url.searchParams.get("chatId");
         const target =
           requestedChatId ||
           conversationsFromApi[0]?.chatId ||
           (await createConversation());
-        if (!cancelled && target) {
+        if (target) {
           await loadConversation(target);
         }
       } catch (error) {
@@ -642,11 +727,15 @@ export function ImmigrationAIWorkspace({
     }
 
     initializeConversation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [createConversation, loadConversation, refreshConversationList]);
+  }, [
+    createConversation,
+    initialChatId,
+    loadConversation,
+    locale,
+    policyLaunch,
+    policyReference,
+    refreshConversationList,
+  ]);
 
   const appendAssistantMessage = async (
     data: WidgetRouteResponse,
@@ -784,6 +873,13 @@ export function ImmigrationAIWorkspace({
           answerPreference,
           selectedChatModel: DEFAULT_CHAT_MODEL,
           assistantMode,
+          policySlug: isPolicyLinkedConversation(
+            stableConversationId,
+            linkedPolicyChatIdRef.current,
+            linkedPolicyReference
+          )
+            ? linkedPolicyReference?.slug
+            : undefined,
           selectedDocumentIds: selectedIds,
           messages: nextMessages.map((message) => ({
             id: message.id,
@@ -1184,6 +1280,40 @@ export function ImmigrationAIWorkspace({
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
+            {linkedPolicyReference &&
+            isPolicyLinkedConversation(
+              conversationId,
+              linkedPolicyChatIdRef.current,
+              linkedPolicyReference
+            ) ? (
+              <section
+                className="mb-5 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3"
+                data-policy-continuity="topic-reference-only"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-violet-800">
+                      {policyCopy.askAi}
+                    </p>
+                    <h2 className="mt-1 break-words text-sm font-semibold text-slate-900">
+                      {linkedPolicyReference.title[locale]}
+                    </h2>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      {policyCopy.workspaceOpener}
+                    </p>
+                  </div>
+                  <a
+                    className="shrink-0 text-xs font-semibold text-violet-900 underline"
+                    href={linkedPolicyReference.officialUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {policyCopy.officialSource}:{" "}
+                    {linkedPolicyReference.officialTitle}
+                  </a>
+                </div>
+              </section>
+            ) : null}
             {messages.length === 0 ? (
               <div className="flex min-h-full items-center justify-center py-8">
                 <div className="mx-auto max-w-2xl text-center">

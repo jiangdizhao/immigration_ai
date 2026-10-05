@@ -14,6 +14,7 @@ import {
   type PolicyProductState,
   type PublicPolicyDetail,
   type PublicPolicyHistoryEntry,
+  policyTopicContextEntry,
   projectLivePolicy,
   projectPublicPolicyHistoryEntry,
   resolvePublishedWorkspaceReference,
@@ -97,4 +98,13 @@ export async function getPolicyWorkspaceReference(slug: string) {
       );
     }
   );
+}
+
+export async function getPolicyTopicContextEntry(
+  slug: string | undefined
+): Promise<ReturnType<typeof policyTopicContextEntry>> {
+  if (!slug) {
+    return null;
+  }
+  return policyTopicContextEntry(await getPolicyWorkspaceReference(slug));
 }

@@ -509,11 +509,104 @@ export type PolicyWorkspaceReference = {
   officialUrl: string;
 };
 
+export const POLICY_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,119}$/;
+
+export function shouldCreatePolicyWorkspaceConversation(input: {
+  policyReference: PolicyWorkspaceReference | null;
+  launchIntent: string | null;
+  chatId: string | null;
+}): boolean {
+  return Boolean(
+    input.policyReference && input.launchIntent === "policy" && !input.chatId
+  );
+}
+
+export function isPolicyLinkedConversation(
+  activeChatId: string | null,
+  policyChatId: string | null,
+  policyReference: PolicyWorkspaceReference | null
+): boolean {
+  return Boolean(
+    activeChatId &&
+      policyChatId &&
+      activeChatId === policyChatId &&
+      policyReference
+  );
+}
+
+export function buildPolicyTopicContext(
+  reference: PolicyWorkspaceReference | null
+): string | null {
+  if (!reference || !POLICY_SLUG_PATTERN.test(reference.slug)) {
+    return null;
+  }
+  let sourceUrl: URL;
+  try {
+    sourceUrl = new URL(reference.officialUrl);
+  } catch {
+    return null;
+  }
+  if (
+    sourceUrl.protocol !== "https:" ||
+    sourceUrl.username ||
+    sourceUrl.password
+  ) {
+    return null;
+  }
+  const serializedSourceUrl = sourceUrl.toString();
+  if (serializedSourceUrl.length > 500) {
+    return null;
+  }
+  const bounded = (value: string, limit: number) =>
+    [...value]
+      .filter((character) => {
+        const code = character.charCodeAt(0);
+        return code >= 32 && code !== 127;
+      })
+      .join("")
+      .replace(/\s+/gu, " ")
+      .trim()
+      .slice(0, limit);
+  const titleZh = bounded(reference.title["zh-CN"], 180);
+  const titleEn = bounded(reference.title.en, 180);
+  const officialTitle = bounded(reference.officialTitle, 240);
+  const officialUrl = serializedSourceUrl;
+  if (!titleZh || !titleEn || !officialTitle) {
+    return null;
+  }
+  return [
+    "Topic reference only. This is not legal evidence. Independently verify current sources when answering.",
+    `Published policy title (English): ${titleEn}`,
+    `Published policy title (Chinese): ${titleZh}`,
+    `Official source title: ${officialTitle}`,
+    `Official source URL: ${officialUrl}`,
+  ].join("\n");
+}
+
+export function policyTopicContextEntry(
+  reference: PolicyWorkspaceReference | null
+): {
+  id: string;
+  role: "system";
+  policy_topic_reference: true;
+  text: string;
+} | null {
+  const text = buildPolicyTopicContext(reference);
+  return text
+    ? {
+        id: "policy-topic-reference",
+        role: "system",
+        policy_topic_reference: true,
+        text,
+      }
+    : null;
+}
+
 export async function resolvePublishedWorkspaceReference(
   slug: string,
   lookup: (slug: string) => Promise<PublicPolicyProduct | null>
 ): Promise<PolicyWorkspaceReference | null> {
-  if (!/^[a-z0-9][a-z0-9-]{0,119}$/.test(slug)) {
+  if (!POLICY_SLUG_PATTERN.test(slug)) {
     return null;
   }
   const policy = await lookup(slug);
@@ -533,14 +626,29 @@ export async function resolvePublishedWorkspaceReference(
 }
 
 export function policyWorkspaceHref(slug: string): string {
-  return `/ai-workspace?policy=${encodeURIComponent(slug)}`;
-}
-
-export function workspaceGuestRedirectUrl(slug: string | null): string {
-  if (!slug || !/^[a-z0-9][a-z0-9-]{0,119}$/.test(slug)) {
+  if (!POLICY_SLUG_PATTERN.test(slug)) {
     return "/ai-workspace";
   }
-  return `/ai-workspace?policy=${encodeURIComponent(slug)}`;
+  const params = new URLSearchParams({ policy: slug, launch: "policy" });
+  return `/ai-workspace?${params.toString()}`;
+}
+
+export function workspaceGuestRedirectUrl(
+  slug: string | null,
+  launchIntent: string | null = "policy",
+  chatId: string | null = null
+): string {
+  if (!slug || !POLICY_SLUG_PATTERN.test(slug)) {
+    return "/ai-workspace";
+  }
+  const params = new URLSearchParams({ policy: slug });
+  if (launchIntent === "policy" && !chatId) {
+    params.set("launch", "policy");
+  }
+  if (chatId && /^[0-9a-f-]{36}$/iu.test(chatId)) {
+    params.set("chatId", chatId);
+  }
+  return `/ai-workspace?${params.toString()}`;
 }
 
 export type PublicHistoryJoin = {

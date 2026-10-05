@@ -8,18 +8,22 @@ import {
 import { policySchemaAvailableFromCatalogRows } from "./policy-intelligence/schema-availability-policy";
 import {
   boundedPolicyPreview,
+  buildPolicyTopicContext,
   currentPublicHistoryRows,
   diffPublishedPolicies,
   impactPolicyOrder,
+  isPolicyLinkedConversation,
   type LivePolicyRecord,
   latestPolicyOrder,
   loadPolicyProductState,
   type PublicPolicyProduct,
+  policyTopicContextEntry,
   policyWorkspaceHref,
   projectLivePolicy,
   projectPublicPolicyHistoryEntry,
   publicSourceFamily,
   resolvePublishedWorkspaceReference,
+  shouldCreatePolicyWorkspaceConversation,
   workspaceGuestRedirectUrl,
 } from "./policy-intelligence-product";
 import {
@@ -675,6 +679,7 @@ test("both locales contain labels for every new section and feed state", () => {
       copy.diff,
       copy.askAi,
       copy.continuityNotice,
+      copy.workspaceOpener,
     ]) {
       assert.ok(value.trim().length > 0);
     }
@@ -690,17 +695,107 @@ test("both locales contain labels for every new section and feed state", () => {
     }
   }
 });
-test("workspace continuity transports only the stable slug in the URL", () => {
+test("policy workspace URL carries a one-time launch marker through guest auth", () => {
   const href = policyWorkspaceHref("policy-update-one");
-  assert.equal(href, "/ai-workspace?policy=policy-update-one");
+  assert.equal(href, "/ai-workspace?policy=policy-update-one&launch=policy");
   assert.deepEqual(
     [...new URL(href, "https://example.test").searchParams.keys()],
-    ["policy"]
+    ["policy", "launch"]
   );
   assert.equal(workspaceGuestRedirectUrl("policy-update-one"), href);
   assert.equal(
+    workspaceGuestRedirectUrl(
+      "policy-update-one",
+      null,
+      "01234567-89ab-cdef-0123-456789abcdef"
+    ),
+    "/ai-workspace?policy=policy-update-one&chatId=01234567-89ab-cdef-0123-456789abcdef"
+  );
+  assert.equal(policyWorkspaceHref("../title?analysis=x"), "/ai-workspace");
+  assert.equal(
     workspaceGuestRedirectUrl("../title?analysis=x"),
     "/ai-workspace"
+  );
+});
+test("policy launch creates once only for a resolved launch without chatId", () => {
+  const policyReference = {
+    slug: "policy-update-one",
+    title: { "zh-CN": "政策标题", en: "Policy title" },
+    officialTitle: "Official page title",
+    officialUrl: "https://example.gov.au/policy",
+  };
+  assert.equal(
+    shouldCreatePolicyWorkspaceConversation({
+      policyReference,
+      launchIntent: "policy",
+      chatId: null,
+    }),
+    true
+  );
+  assert.equal(
+    shouldCreatePolicyWorkspaceConversation({
+      policyReference,
+      launchIntent: null,
+      chatId: "chat-1",
+    }),
+    false
+  );
+  assert.equal(
+    shouldCreatePolicyWorkspaceConversation({
+      policyReference: null,
+      launchIntent: "policy",
+      chatId: null,
+    }),
+    false
+  );
+  assert.equal(
+    shouldCreatePolicyWorkspaceConversation({
+      policyReference,
+      launchIntent: "policy",
+      chatId: "chat-1",
+    }),
+    false
+  );
+  assert.equal(
+    isPolicyLinkedConversation("chat-1", "chat-1", policyReference),
+    true
+  );
+  assert.equal(
+    isPolicyLinkedConversation("chat-2", "chat-1", policyReference),
+    false
+  );
+  assert.equal(isPolicyLinkedConversation("chat-1", "chat-1", null), false);
+});
+test("policy topic context contains only bounded public reference fields", () => {
+  const reference = {
+    slug: "policy-update-one",
+    title: {
+      "zh-CN": `中文${"标".repeat(250)}`,
+      en: `Policy ${"title ".repeat(40)}`,
+    },
+    officialTitle: `Official ${"title ".repeat(50)}`,
+    officialUrl: "https://example.gov.au/policy",
+  };
+  const context = buildPolicyTopicContext(reference);
+  assert.ok(context);
+  assert.ok(context.includes("Topic reference only"));
+  assert.ok(context.includes("https://example.gov.au/policy"));
+  assert.ok(context.length < 1400);
+  assert.equal(
+    policyTopicContextEntry(reference)?.policy_topic_reference,
+    true
+  );
+  assert.equal(buildPolicyTopicContext(null), null);
+  assert.equal(
+    buildPolicyTopicContext({
+      ...reference,
+      officialUrl: "http://example.gov.au",
+    }),
+    null
+  );
+  assert.equal(
+    buildPolicyTopicContext({ ...reference, slug: "../private" }),
+    null
   );
 });
 test("server resolution accepts only a current published policy returned for the requested slug", async () => {

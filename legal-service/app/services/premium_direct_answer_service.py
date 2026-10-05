@@ -1095,6 +1095,14 @@ class PremiumDirectAnswerService:
         latest_question: str = "",
     ) -> str:
         rows: list[str] = []
+        topic_context = [
+            " ".join(str(item.get("text") or "").split())[:1200]
+            for item in frontend_messages
+            if isinstance(item, dict)
+            and item.get("policy_topic_reference") is True
+            and str(item.get("role") or "").strip().lower() == "system"
+            and str(item.get("text") or "").strip()
+        ][:1]
         total_chars = 0
         latest_history_item_seen = False
 
@@ -1139,6 +1147,8 @@ class PremiumDirectAnswerService:
             total_chars += len(row)
 
         rows.reverse()
+        if topic_context:
+            rows.insert(0, topic_context[0])
         return "\n".join(rows)
 
     @staticmethod

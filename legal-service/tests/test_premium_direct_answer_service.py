@@ -253,6 +253,38 @@ def test_model_input_removes_duplicate_optimistic_user_message_and_keeps_history
     assert "stop researching once the material issues are sufficiently supported" in captured["instructions"]
 
 
+def test_premium_model_input_includes_marked_policy_topic_context(monkeypatch) -> None:
+    service = _service(monkeypatch)
+    captured: dict[str, str] = {}
+
+    def fake_call(**kwargs):
+        captured["input"] = kwargs["model_input"]
+        return "answer", [], {}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    question = "Does this affect me?"
+    service.answer(
+        payload=QueryRequest(
+            question=question,
+            frontend_messages=[
+                {
+                    "role": "system",
+                    "policy_topic_reference": True,
+                    "text": "Topic reference only. Policy title: Example update.",
+                },
+                {"role": "user", "text": question},
+            ],
+        ),
+        original_question=question,
+        effective_question=question,
+        response_language="en",
+        matter_id=None,
+    )
+
+    assert "Policy title: Example update." in captured["input"]
+    assert question in captured["input"]
+
+
 def test_instructions_are_separate_from_lightweight_input(monkeypatch) -> None:
     service = _service(monkeypatch)
     calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))

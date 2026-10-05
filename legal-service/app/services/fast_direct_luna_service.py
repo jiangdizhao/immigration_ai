@@ -413,11 +413,21 @@ class FastDirectLunaService:
     @staticmethod
     def _model_input(payload: QueryRequest, question: str) -> str:
         lines: list[str] = []
+        topic_context = [
+            " ".join(str(message.get("text") or "").split())[:1200]
+            for message in (payload.frontend_messages or [])
+            if isinstance(message, dict)
+            and message.get("policy_topic_reference") is True
+            and message.get("role") == "system"
+            and str(message.get("text") or "").strip()
+        ][:1]
         total = 0
         latest_question_included = False
         for message in (payload.frontend_messages or [])[-8:]:
             role = message.get("role")
             text = message.get("text")
+            if message.get("policy_topic_reference") is True:
+                continue
             if role not in {"user", "assistant"} or not isinstance(text, str):
                 continue
             clean = " ".join(text.split())[:900]
@@ -433,6 +443,8 @@ class FastDirectLunaService:
             )
         if not latest_question_included:
             lines.append(f"User: {question[:4000]}")
+        if topic_context:
+            lines.insert(0, topic_context[0])
         evidence = format_customer_document_context(payload.customer_document_evidence)
         if evidence:
             lines.extend(["", evidence])
