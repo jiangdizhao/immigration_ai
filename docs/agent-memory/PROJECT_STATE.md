@@ -694,3 +694,69 @@ Accepted LF-03 invariants:
 There is no LF-04. Feature development is frozen unless the acceptance gate identifies a true release blocker.
 
 The remaining mandatory integration evidence is a real local legal-service/model response from a policy-linked conversation, including normal answer/citation behavior when sources are used. Deployment remains blocked until the consolidated acceptance decision is PASS.
+
+
+
+## 2026-10-06 Final Acceptance PASS / Release preparation
+
+The consolidated Final Acceptance completed with **FINAL ACCEPTANCE: PASS**. No source changes, release correction, commit, or push were required during the acceptance run.
+
+Acceptance checkpoint:
+
+- branch: `phase11-lawyer-feedback-ui-consolidation`
+- accepted feature/docs HEAD entering acceptance: `6decd118efaf2d864f98e0c94400c270399f250a`
+- worktree remained clean; Next.js-generated `chatbot/next-env.d.ts` was restored to HEAD;
+- no LF migration diff;
+- preserved Policy Intelligence WIP remained unmerged.
+
+Real local services were exercised with legal-service on port 8000 and chatbot on port 3000, then stopped.
+
+### Closed LF-03 E2E gap
+
+Published policy tested: `evisitor-application-arrangements-lin-26-061` (LIN 26/061), with official source on legislation.gov.au.
+
+Observed end-to-end behavior:
+
+- Ask AI created exactly one conversation: `077d4c85-db78-4e5b-90b6-2b5e09c5d7b8`;
+- `launch=policy` was consumed after successful conversation creation;
+- resulting URL retained `policy + chatId`;
+- opener was visible before user input;
+- no widget/model request occurred before the user submitted a question;
+- refresh reused the same conversation and did not create a second POST/model call;
+- exact question `How might this affect someone in my situation?` remained unchanged;
+- Fast sent the policy slug, local legal-service returned HTTP 200, and provider returned HTTP 200;
+- the answer was distinct from the policy title and exposed two answer-associated citations;
+- the policy topic reference was not stored as a fake chat message;
+- switching/new conversation cleared policy continuity and later ordinary Fast requests omitted `policySlug`.
+
+### Consolidated validation evidence
+
+- chatbot `pnpm test:unit`: 499 passed, 0 failed, 0 skipped;
+- chatbot production build: passed;
+- focused Biome across 23 accepted-surface files: passed;
+- `git diff --check`: passed;
+- focused legal-service suites: 270 passed, 2 warnings;
+- full legal-service pytest: 1,230 passed, 4 failed, 2 warnings.
+
+The four full-suite failures were assessed as existing non-LF backend expectation mismatches involving Flat-RAG tool exposure, reasoning-effort defaults, and native-search-context defaults. Relevant focused LF suites passed and no LF release blocker was identified.
+
+Repository-wide `pnpm lint` remains a known baseline failure with 15,182 diagnostics across 557 files. Focused accepted-surface Biome passed. This is not treated as an LF-caused release blocker.
+
+### Coverage limits accepted for this release gate
+
+- local guest entitlement exposed Fast only; Legal Check and Premium were not exercised interactively;
+- guest access prevented live document-record, lawyer-review, and consultation submission flows;
+- no entitlement/RBAC bypass was used;
+- the existing focused ownership/RBAC/consultation/document-provenance tests passed;
+- the local live Legal Updates dataset had no proposed item, so Proposed / Planned presentation was not exercised with live data;
+- the manual case-summary snapshot behavior was exercised, but the tested answer returned no structured known/requested facts to demonstrate a visibly changed regenerated fact set.
+
+These limits are recorded as coverage limitations, not release blockers.
+
+### Decision
+
+The lawyer-feedback consolidation feature set is accepted. There is no LF-04.
+
+**Current state: RELEASE PREPARATION / DEPLOYMENT PENDING EXPLICIT OWNER AUTHORISATION.**
+
+Do not resume the paused Policy Intelligence verifier/publication investigation until the accepted LF release is merged/deployed and production smoke is complete.
