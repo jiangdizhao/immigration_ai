@@ -4122,23 +4122,21 @@ then deployed to staging. The staging web rollout completed with `/ping` HTTP
 scheduler; and a manual sync completed. Its real staging evidence informed
 RR-02 diagnosis.
 
-## 2026-10-06 RR-02 guidance contract — SOURCE REVIEW ACCEPTED; LOCAL VALIDATION PASS
+## 2026-10-06 RR-02 guidance contract — FULLY ACCEPTED; STAGING REVALIDATION PASS
 
-The owner explicitly activated RR-02 on a separate approved implementation
-branch in the existing worktree:
-`policy-intelligence-rr02-guidance-contract`, starting at
-`199ad837bc417682b2257c3a95462fe8a1514bdf`. RR-01 is already accepted and
-staging-deployed as recorded above. RR-02 source review is ACCEPTED and the
-owner's full local validation is PASS. RR-02 code is frozen; no further source
-correction is planned. RR-02 remains uncommitted, unpushed and undeployed, with
-staging revalidation pending. The protected Policy WIP branch remains
-untouched.
+RR-02 source review is ACCEPTED, owner full local validation is PASS, and
+staging revalidation is PASS. The accepted implementation is canonical commit
+`9461efbe14b22936e6a7311eaadbff413d02070f`
+(`fix: align policy guidance publication contract`) on
+`phase11-chinese-service-platform-ui-rebase`. RR-02 is committed, pushed and
+staging-deployed. RR-01 remains the accepted/deployed predecessor recorded
+above. The protected Policy WIP branch remains untouched.
 
-RR-02 is correcting Home Affairs structured-alert normalization/truncation
-provenance, adding the `published_guidance` source status without implying
-legislative force, and tightening general subject/scope instructions while
+RR-02 corrected Home Affairs structured-alert normalization/truncation
+provenance, added the `published_guidance` source status without implying
+legislative force, and tightened general subject/scope instructions while
 preserving the strict publication gate. Analyzer/verifier implementation
-versions move to v2.2; analysis schema remains v2. The database status field
+versions are v2.2; analysis schema remains v2. The database status field
 is a varchar, so no migration is planned. Alert fingerprints use full
 normalized semantic content and a fixed bounded metadata fallback for empty
 alerts; preview bounds remain independent.
@@ -4146,13 +4144,20 @@ alerts; preview bounds remain independent.
 Final owner-local validation passed: focused Policy Intelligence tests 106/106;
 full unit suite 522/522 with zero failures and zero skips; Next.js production
 build passed and generated the production route manifest; and
-`git diff --check` passed. The source review is accepted and implementation
-code is frozen. No further source correction is planned. RR-02 remains
-uncommitted, unpushed and undeployed; staging revalidation is pending. The
-analysis schema remains v2, analyzer/verifier remain v2.2, and the strict
-publication gate is unchanged. No database migration was added, Federal
-Register RR-01 discovery/ranking remains unchanged, and the protected WIP
-remains untouched. No AWS/database mutation or RR-02 deployment is claimed.
-See
+`git diff --check` passed. The implementation is frozen. Staging acceptance
+deployed chatbot image digest
+`sha256:7381056fc38d4f116bbb4c55ab62818c586c0aefa9503f9ad8700b8066f2c3f3` as
+web task definition `:42`; legal-service image was unchanged. The policy-sync
+runner uses task definition `:10` and image digest
+`sha256:58c5382a83f92a339f38af43e6a3f6fed47a9000988ea06aac5ac2f7c37354fa`.
+The existing enabled daily scheduler retained its cron/timezone and now targets
+`:10`. The one-shot sync task exited with policy-sync `exitCode 0` and is a
+successful completion. The complete staging record is in
+`docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
+
+The analysis schema remains v2, analyzer/verifier remain v2.2, and the strict
+publication gate is unchanged. No database migration was added; Federal
+Register RR-01 discovery/ranking remains unchanged; and the protected WIP
+remains untouched. See
 `docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md` for exact scope and
 validation details.

@@ -151,19 +151,21 @@ RR-01 source review, commit, push, remote verification, staging rollout and
 manual sync are complete as recorded above. The protected Policy WIP branch
 remains untouched.
 
-### RR-02 — Guidance status + subject/scope contract — SOURCE ACCEPTED; VALIDATION PASS; STAGING PENDING
+### RR-02 — Guidance status + subject/scope contract — FULLY ACCEPTED; STAGING PASS
 
 Owner instruction on 2026-10-06 explicitly activated RR-02 on branch
 `policy-intelligence-rr02-guidance-contract` at baseline
 `199ad837bc417682b2257c3a95462fe8a1514bdf` in the existing
-`/home/rico/immigration_ai` worktree. RR-01 is already accepted and staged as
-documented above. RR-02 source review is ACCEPTED and owner full local
-validation is PASS: focused tests 106/106; full unit suite 522/522 with zero
-failures and zero skips; production build PASS with route manifest generated;
-and `git diff --check` PASS. RR-02 code is frozen and no further source
-correction is planned. It remains uncommitted, unpushed and undeployed, with
-staging revalidation pending. No AWS/database mutation occurred. The protected
-Policy WIP branch remains untouched.
+`/home/rico/immigration_ai` worktree. RR-01 is already accepted and
+staging-deployed as
+documented above. RR-02 status is **SOURCE REVIEW ACCEPTED; OWNER FULL LOCAL
+VALIDATION PASS; STAGING REVALIDATION PASS** at canonical commit
+`9461efbe14b22936e6a7311eaadbff413d02070f`
+(`fix: align policy guidance publication contract`) on
+`phase11-chinese-service-platform-ui-rebase`. Local validation: focused tests
+106/106; full unit suite 522/522 with zero failures and zero skips; production
+build PASS with route manifest generated; and `git diff --check` PASS. RR-02
+code is frozen. The protected Policy WIP branch remains untouched.
 
 RR-02 addresses the frozen evidence that official Home Affairs guidance was
 misrepresented as `in_force`, that “visa applications prioritized” was widened
@@ -180,18 +182,34 @@ unchanged. Add regression coverage for status preservation, actor/scope
 precision, conditional practical interpretation, Federal Register `in_force`,
 non-policy holds, alert normalization/provenance, and fingerprint invalidation.
 
-The current handoff, milestone and project-state notes record the accepted
-source review and final owner validation. `POLICY_ANALYSIS_SCHEMA` remains v2,
-analyzer/verifier remain v2.2, and the strict publication gate remains
-unchanged. No database migration was added because the status is stored in an
-existing varchar. Federal Register RR-01 discovery/ranking remains unchanged.
-Do not claim RR-02 deployment; staging revalidation is pending.
+The current handoff, milestone and project-state notes record RR-02 acceptance.
+`POLICY_ANALYSIS_SCHEMA` remains v2, analyzer/verifier remain v2.2, and the
+strict publication gate remains unchanged. No database migration was added
+because the status is stored in an existing varchar. Federal Register RR-01
+discovery/ranking remains unchanged.
 
-### RR-01 rollout / acceptance record
+### RR-02 staging revalidation — PASS
 
-The owner reports the staging rollout and manual sync as complete. Those facts
-belong to RR-01 and are not evidence that RR-02 has been deployed or revalidated
-in staging.
+AWS account `747452892291`, region `ap-southeast-2`, cluster
+`immigration-ai-staging`:
+
+- Web task definition `immigration-ai-staging-web:42` is running one task with
+  zero pending tasks and rollout `COMPLETED`. Chatbot image:
+  `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot@sha256:7381056fc38d4f116bbb4c55ab62818c586c0aefa9503f9ad8700b8066f2c3f3`.
+  The legal-service image was unchanged. `/ping` returned HTTP 200.
+- Policy-sync task definition is
+  `immigration-ai-staging-policy-sync:10`, using image
+  `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot@sha256:58c5382a83f92a339f38af43e6a3f6fed47a9000988ea06aac5ac2f7c37354fa`.
+- Scheduler `immigration-ai-staging-policy-sync-daily` remains enabled on
+  `cron(0 6 * * ? *)` in `Australia/Sydney`; only its target task revision
+  changed to `:10`.
+- Manual sync task ARN:
+  `arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/04abea5e5a444f87a09fb57595e2e7ff`.
+  Its final status was `STOPPED`, stop code `EssentialContainerExited`, and
+  policy-sync exit code `0`, which is successful one-shot runner completion.
+
+RR-01 remains the accepted and staging-deployed predecessor. The protected
+`policy-intelligence-admin-detail-wip-20261004` branch remains untouched.
 
 ## Success criteria
 

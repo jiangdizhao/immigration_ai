@@ -85,7 +85,7 @@ Any AWS rollout requires separate explicit authorization and current topology ve
 
 The accepted Phase 11 target is a Chinese-first Australian immigration and study service platform.
 
-## Policy Intelligence RR-02 — SOURCE REVIEW ACCEPTED; LOCAL VALIDATION PASS — 2026-10-06
+## Policy Intelligence RR-02 — FULLY ACCEPTED; STAGING REVALIDATION PASS — 2026-10-06
 
 RR-01 was accepted at implementation commit
 `199ad837bc417682b2257c3a95462fe8a1514bdf`, fast-forwarded into
@@ -95,19 +95,23 @@ and deployed to staging. The staging web rollout completed with `/ping` HTTP
 scheduler; and a manual sync completed. Its real staging evidence informed
 RR-02 diagnosis.
 
-RR-02 source review is ACCEPTED and owner full local validation is PASS on
-branch `policy-intelligence-rr02-guidance-contract` in the existing worktree.
-It adds `published_guidance`, normalizes and safely fingerprints Home Affairs
-structured alert content, and sharpens analyzer/verifier subject and scope
-instructions. Focused Policy Intelligence tests passed 106/106; the full unit
-suite passed 522/522 with zero failures and zero skips; the local Next.js
-production build passed and generated the production route manifest; and
-`git diff --check` passed. RR-02 code is frozen, with no further source
-correction planned. It remains uncommitted, unpushed and undeployed; staging
-revalidation is pending. The analysis schema remains v2, analyzer/verifier
-remain v2.2, and the strict publication gate is unchanged. No database
-migration was added; Federal Register RR-01 discovery/ranking remains
-unchanged; the protected WIP remains untouched. Details:
+RR-02 status is **SOURCE REVIEW ACCEPTED; OWNER FULL LOCAL VALIDATION PASS;
+STAGING REVALIDATION PASS** at canonical commit
+`9461efbe14b22936e6a7311eaadbff413d02070f`
+(`fix: align policy guidance publication contract`) on
+`phase11-chinese-service-platform-ui-rebase`. It adds `published_guidance`,
+normalizes and safely fingerprints Home Affairs structured alert content, and
+sharpens analyzer/verifier subject and scope instructions. Focused Policy
+Intelligence tests passed 106/106; the full unit suite passed 522/522 with zero
+failures and zero skips; the local Next.js production build passed and
+generated the production route manifest; and `git diff --check` passed.
+Staging validation passed on web task `:42` and policy-sync task `:10`; the
+complete immutable image, scheduler and manual-sync evidence is recorded in
+the task file. The scheduler retained its enabled state, cron and timezone;
+only the target task revision changed. The analysis schema remains v2,
+analyzer/verifier remain v2.2, and the strict publication gate is unchanged.
+No database migration was added; Federal Register RR-01 discovery/ranking
+remains unchanged; and the protected WIP remains untouched. Details:
 `docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
 
 The temporary repository `jiangdizhao/immigration_temporal_ui` at `codex/fidelity-completion-v4@8abbba2` is a design/journey reference. The main repository remains the functional authority.
@@ -855,6 +859,7 @@ RR-01 implemented source-aware Federal Register selection, Home Affairs date ord
 
 The protected branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d` remains separate. Do not merge, reset, delete or silently fold it into RR-01.
 
-RR-01 is accepted and staging-deployed as recorded above. RR-02 source review
-and owner local validation are accepted/passed; its code is frozen and remains
-uncommitted, unpushed and undeployed pending staging revalidation.
+RR-01 is accepted and staging-deployed as recorded above. RR-02 is accepted at
+canonical commit `9461efbe14b22936e6a7311eaadbff413d02070f`; source review,
+owner local validation and staging revalidation all PASS. See the detailed
+staging record in `docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.

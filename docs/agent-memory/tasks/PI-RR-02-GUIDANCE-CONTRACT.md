@@ -1,9 +1,10 @@
 # PI-RR-02 — Guidance status and subject/scope contract
 
-**Status:** SOURCE REVIEW ACCEPTED; OWNER FULL LOCAL VALIDATION PASS; STAGING REVALIDATION PENDING  
+**Status:** SOURCE REVIEW ACCEPTED; OWNER FULL LOCAL VALIDATION PASS; STAGING REVALIDATION PASS
 **Activated:** 2026-10-06 by explicit owner instruction  
-**Branch:** `policy-intelligence-rr02-guidance-contract`  
-**Starting commit:** `199ad837bc417682b2257c3a95462fe8a1514bdf`
+**Canonical branch:** `phase11-chinese-service-platform-ui-rebase`
+**Accepted canonical commit:** `9461efbe14b22936e6a7311eaadbff413d02070f` (`fix: align policy guidance publication contract`)
+**Implementation starting commit:** `199ad837bc417682b2257c3a95462fe8a1514bdf`
 
 RR-01 was accepted at the starting commit, fast-forwarded into the canonical
 `phase11-chinese-service-platform-ui-rebase` branch, pushed and remotely
@@ -11,8 +12,9 @@ verified, and deployed to staging. The established staging record includes a
 successful web rollout with `/ping` HTTP 200, policy-sync task definition `:7`
 deployed with the scheduler switched to `:7`, and a completed manual policy
 sync whose real staging evidence informed RR-02 diagnosis. RR-02 source review
-is accepted and owner full local validation passed. RR-02 itself has not been
-committed, pushed, or deployed; staging revalidation remains pending.
+is accepted, owner full local validation passed, and staging revalidation
+passed. RR-02 is committed and pushed at the accepted canonical commit above
+and has been deployed to staging.
 
 ## Frozen failure evidence
 
@@ -73,6 +75,34 @@ correction is planned. The final validation record is:
 - Next.js production build: **PASS**; production route manifest generated.
 - `git diff --check`: **PASS**.
 
+## AWS staging revalidation — PASS
+
+Environment: AWS account `747452892291`, region `ap-southeast-2`, cluster
+`immigration-ai-staging`.
+
+### Web rollout
+
+- Task definition: `immigration-ai-staging-web:42`.
+- Chatbot image:
+  `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot@sha256:7381056fc38d4f116bbb4c55ab62818c586c0aefa9503f9ad8700b8066f2c3f3`.
+- Legal-service image was not changed.
+- Running tasks: 1; pending tasks: 0; rollout: `COMPLETED`.
+- `https://staging.aulawyers.au/ping` returned HTTP 200.
+
+### Policy-sync runner and scheduler
+
+- Task definition: `immigration-ai-staging-policy-sync:10`.
+- Image:
+  `747452892291.dkr.ecr.ap-southeast-2.amazonaws.com/immigration-ai/chatbot@sha256:58c5382a83f92a339f38af43e6a3f6fed47a9000988ea06aac5ac2f7c37354fa`.
+- Scheduler `immigration-ai-staging-policy-sync-daily` remains `ENABLED` with
+  `cron(0 6 * * ? *)` in `Australia/Sydney`; its target now uses task
+  definition `:10`. Schedule and timezone are unchanged.
+- Manual RR-02 sync task:
+  `arn:aws:ecs:ap-southeast-2:747452892291:task/immigration-ai-staging/04abea5e5a444f87a09fb57595e2e7ff`.
+  It reached `STOPPED` with stop code `EssentialContainerExited`; the
+  `policy-sync` container exit code was `0`, indicating successful one-shot
+  runner completion.
+
 ## Preserved architecture and rollout state
 
 - `POLICY_ANALYSIS_SCHEMA` remains `policy-intelligence.analysis.v2`;
@@ -82,5 +112,5 @@ correction is planned. The final validation record is:
 - Federal Register RR-01 discovery/ranking remains unchanged.
 - RR-01 remains accepted and staging-deployed. The protected
   `policy-intelligence-admin-detail-wip-20261004` branch remains untouched.
-- RR-02 has not been committed, pushed, or deployed. Staging revalidation is
-  pending. No AWS or database mutation was performed.
+- RR-02 staging revalidation passed as recorded above. No database migration
+  was added; the described AWS deployment was the accepted staging rollout.
