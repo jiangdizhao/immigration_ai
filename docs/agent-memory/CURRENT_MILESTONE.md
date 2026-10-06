@@ -61,6 +61,27 @@ P11-004 is **VERIFIED** at implementation commit `f2d941734d256c9e0a0e42988cd67c
 
 P11-004 remains **VERIFIED**. The roadmap has now been rebaselined so P11-005 is **Secure Matter Documents & AI File Intake**. P11-005 is **IN PROGRESS**. Stage 1 is accepted at `df5335356ac7c7fc908236a270e78f280e5387e6`; Stage 2 at `38e19c75bc131cc372c8c2682ec21e72834f8fb7`; Stage 3 matter/AI/lawyer integration is accepted after direct GitHub review at `b29816c56255762998d8fa55b56df64436a0b3c3`. P11-005 is not yet VERIFIED because production-readiness gates remain open. The former Client Portal milestone moves to P11-006; Lawyer Workspace to P11-007; Appointment / Consultation to P11-008; final bilingual/responsive/accessibility/E2E + staging acceptance to P11-009.
 
+## Policy Intelligence RR-02 — SOURCE REVIEW ACCEPTED; LOCAL VALIDATION PASS — 2026-10-06
+
+RR-01 was accepted at `199ad837bc417682b2257c3a95462fe8a1514bdf`,
+fast-forwarded into `phase11-chinese-service-platform-ui-rebase`, pushed and
+remotely verified, and deployed to staging. The staging web rollout completed
+with `/ping` HTTP 200; policy-sync task definition `:7` was deployed and
+selected by the scheduler; and a manual sync completed. Its staging evidence
+informed RR-02 diagnosis.
+
+RR-02 implementation source review is ACCEPTED. Owner full local validation is
+PASS: focused Policy Intelligence tests 106/106; full unit suite 522/522 with
+zero failures and zero skips; Next.js production build passed and generated
+the production route manifest; and `git diff --check` passed. RR-02 code is
+frozen and no further source correction is planned. It remains uncommitted,
+unpushed and undeployed; staging revalidation is pending. The analysis schema
+remains v2, analyzer/verifier remain v2.2, and the strict publication gate is
+unchanged. No database migration was added; Federal Register RR-01
+discovery/ranking remains unchanged; and the protected WIP remains untouched.
+See
+`docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
+
 ## Evidence that triggered R2
 
 A live operator smoke against:
@@ -1304,10 +1325,12 @@ Read-only AWS/RDS evidence collected on 2026-10-06 changes the immediate diagnos
 - Home Affairs exposes 70 alert items and its first ten are currently the newest; there were no hidden 3–6 October alerts below the ten-item cutoff, so the recent inactivity is not caused by the ten-candidate limit alone;
 - earlier verifier/publication holds remain a separate issue and must not be used to explain recent discovery-stage inactivity.
 
-**Active implementation unit: RR-01 — Discovery reliability + operator observability.**
+**Accepted implementation: RR-01 — Discovery reliability + operator observability — ACCEPTED; STAGING DEPLOYED.**
 
-RR-01 must repair source-aware candidate selection/ranking for Federal Register, harden Home Affairs date ordering/multi-URL coverage, make ART selection source-aware, and expose safe recent sync-run timestamps/counters through the authenticated admin/operator surface. It must preserve existing SSRF/resource bounds and must not change analyzer/verifier/publication-gate strictness.
+RR-01 implemented source-aware Federal Register selection, Home Affairs date ordering/multi-URL coverage, ART selection, and bounded authenticated sync-run observability while preserving SSRF/resource bounds and analyzer/verifier/publication-gate strictness.
 
 The protected branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d` remains separate. Do not merge, reset, delete or silently fold it into RR-01.
 
-RR-02 publication-gate diagnosis is planned only after RR-01 is accepted and current discovery evidence is improved. No AWS mutation/deployment is authorized by this documentation checkpoint.
+RR-01 is accepted and staging-deployed as recorded above. RR-02 source review
+and owner local validation are accepted/passed; its code is frozen and remains
+uncommitted, unpushed and undeployed pending staging revalidation.

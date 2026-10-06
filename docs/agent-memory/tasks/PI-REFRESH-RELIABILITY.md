@@ -33,9 +33,20 @@ The publication gate remains a separate known issue for earlier items that were 
 
 ## Implementation plan
 
-### RR-01 — Discovery reliability + operator observability — ACTIVE
+### RR-01 — Discovery reliability + operator observability — ACCEPTED; STAGING DEPLOYED
 
-Implement this as one concentrated coding/review unit.
+RR-01 implementation commit `199ad837bc417682b2257c3a95462fe8a1514bdf` was
+fast-forwarded into `phase11-chinese-service-platform-ui-rebase`, pushed and
+remotely verified. RR-01 is accepted and deployed to staging. Established
+staging facts:
+
+- staging web rollout completed successfully and `/ping` returned HTTP 200;
+- policy-sync task definition `:7` was deployed and the scheduler was switched
+  to task definition `:7`;
+- an authorized manual policy sync completed;
+- resulting real staging evidence informed RR-02 diagnosis.
+
+The following records the implemented RR-01 scope and acceptance contract.
 
 #### 1. Federal Register discovery must become source-aware
 
@@ -136,33 +147,51 @@ Do not change analyzer prompts, verifier semantics, publication-gate strictness,
 
 Do not merge, overwrite or delete `policy-intelligence-admin-detail-wip-20261004`.
 
-Leave RR-01 source uncommitted/unpushed for independent review. After review, use one implementation commit/push rather than a chain of cosmetic micro-fixes.
+RR-01 source review, commit, push, remote verification, staging rollout and
+manual sync are complete as recorded above. The protected Policy WIP branch
+remains untouched.
 
-### RR-02 — Publication-gate diagnosis/correction — PLANNED AFTER RR-01
+### RR-02 — Guidance status + subject/scope contract — SOURCE ACCEPTED; VALIDATION PASS; STAGING PENDING
 
-Only after RR-01 is accepted and discovery is producing useful current candidates:
+Owner instruction on 2026-10-06 explicitly activated RR-02 on branch
+`policy-intelligence-rr02-guidance-contract` at baseline
+`199ad837bc417682b2257c3a95462fe8a1514bdf` in the existing
+`/home/rico/immigration_ai` worktree. RR-01 is already accepted and staged as
+documented above. RR-02 source review is ACCEPTED and owner full local
+validation is PASS: focused tests 106/106; full unit suite 522/522 with zero
+failures and zero skips; production build PASS with route manifest generated;
+and `git diff --check` PASS. RR-02 code is frozen and no further source
+correction is planned. It remains uncommitted, unpushed and undeployed, with
+staging revalidation pending. No AWS/database mutation occurred. The protected
+Policy WIP branch remains untouched.
 
-- inspect full stored analyzer + verifier assessments for representative held Home Affairs items such as 186/482/494;
-- use/review the protected admin-detail WIP separately if it remains the safest diagnostic path;
-- determine whether holds come from unsupported model narrative, source-status modeling, verifier structural mismatch or a genuinely unsupported claim;
-- preserve fail-closed legal/source facts;
-- if appropriate, allow a publication revision to contain only fully supported core factual material while omitting/holding optional unsupported interpretation, rather than weakening evidence requirements globally;
-- do not optimize for publication rate.
+RR-02 addresses the frozen evidence that official Home Affairs guidance was
+misrepresented as `in_force`, that “visa applications prioritized” was widened
+to “applicants are priority recipients,” and that structured alert HTML could
+be sliced before normalization.
 
-RR-02 requires its own evidence-based implementation decision; this task file does not pre-authorize a verifier relaxation.
+Bounded correction: normalize structured alert title/content to plain text
+before applying deterministic bounds and carry truncation provenance through
+acquisition; add `published_guidance` as a publication/provenance status that
+does not imply legislative force; sharpen analyzer/verifier status and
+subject/scope instructions; bump analyzer and verifier implementation versions
+to v2.2 while retaining analysis schema v2. The strict publication gate remains
+unchanged. Add regression coverage for status preservation, actor/scope
+precision, conditional practical interpretation, Federal Register `in_force`,
+non-policy holds, alert normalization/provenance, and fingerprint invalidation.
 
-### Rollout / acceptance after source review
+The current handoff, milestone and project-state notes record the accepted
+source review and final owner validation. `POLICY_ANALYSIS_SCHEMA` remains v2,
+analyzer/verifier remain v2.2, and the strict publication gate remains
+unchanged. No database migration was added because the status is stored in an
+existing varchar. Federal Register RR-01 discovery/ranking remains unchanged.
+Do not claim RR-02 deployment; staging revalidation is pending.
 
-AWS mutation remains owner-authorized separately.
+### RR-01 rollout / acceptance record
 
-When RR-01 is source-reviewed and committed:
-
-1. deploy only the required web/policy-runner artifacts using the current canonical AWS procedure;
-2. run bounded dry-runs for Home Affairs, Federal Register and ART;
-3. verify Federal Register no longer returns homepage/terms/glossary as the effective legal candidate set;
-4. execute one owner-authorized manual all-source sync and inspect the recorded sync funnel;
-5. observe at least the next natural 06:00 Scheduler run;
-6. verify public content remains fail-closed and existing published/reviewed content is not retracted by a failed sync.
+The owner reports the staging rollout and manual sync as complete. Those facts
+belong to RR-01 and are not evidence that RR-02 has been deployed or revalidated
+in staging.
 
 ## Success criteria
 

@@ -10,7 +10,11 @@ export type PolicyPresentationGroup = "published" | "proposed";
 export function getPolicyPresentationGroup(
   status: PolicySourceStatus
 ): PolicyPresentationGroup | null {
-  if (status === "in_force" || status === "announced") {
+  if (
+    status === "in_force" ||
+    status === "published_guidance" ||
+    status === "announced"
+  ) {
     return "published";
   }
   if (status === "proposed" || status === "consultation") {
@@ -25,8 +29,8 @@ export function getPolicyPresentationGroupLabel(
 ): string {
   return group === "published"
     ? locale === "zh-CN"
-      ? "已公布 / 已实施"
-      : "Published / In force"
+      ? "已发布或现行"
+      : "Published or in force"
     : locale === "zh-CN"
       ? "拟议 / 计划中"
       : "Proposed / Planned";

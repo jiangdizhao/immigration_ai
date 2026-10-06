@@ -37,6 +37,7 @@ import { Button } from "./ui/button";
 
 const sourceStatusClasses: Record<PolicySourceStatus, string> = {
   in_force: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  published_guidance: "bg-sky-50 text-sky-800 ring-sky-200",
   announced: "bg-sky-50 text-sky-800 ring-sky-200",
   proposed: "bg-amber-50 text-amber-800 ring-amber-200",
   consultation: "bg-violet-50 text-violet-800 ring-violet-200",

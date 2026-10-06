@@ -4108,10 +4108,51 @@ Read-only AWS/RDS evidence collected on 2026-10-06 changes the immediate diagnos
 - Home Affairs exposes 70 alert items and its first ten are currently the newest; there were no hidden 3–6 October alerts below the ten-item cutoff, so the recent inactivity is not caused by the ten-candidate limit alone;
 - earlier verifier/publication holds remain a separate issue and must not be used to explain recent discovery-stage inactivity.
 
-**Active implementation unit: RR-01 — Discovery reliability + operator observability.**
+**Accepted implementation: RR-01 — Discovery reliability + operator observability — ACCEPTED; STAGING DEPLOYED.**
 
-RR-01 must repair source-aware candidate selection/ranking for Federal Register, harden Home Affairs date ordering/multi-URL coverage, make ART selection source-aware, and expose safe recent sync-run timestamps/counters through the authenticated admin/operator surface. It must preserve existing SSRF/resource bounds and must not change analyzer/verifier/publication-gate strictness.
+RR-01 implemented source-aware Federal Register selection, Home Affairs date ordering/multi-URL coverage, ART selection, and bounded authenticated sync-run observability while preserving SSRF/resource bounds and analyzer/verifier/publication-gate strictness.
 
 The protected branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d` remains separate. Do not merge, reset, delete or silently fold it into RR-01.
 
-RR-02 publication-gate diagnosis is planned only after RR-01 is accepted and current discovery evidence is improved. No AWS mutation/deployment is authorized by this documentation checkpoint.
+RR-01 was accepted at implementation commit
+`199ad837bc417682b2257c3a95462fe8a1514bdf`, fast-forwarded into
+`phase11-chinese-service-platform-ui-rebase`, pushed and remotely verified,
+then deployed to staging. The staging web rollout completed with `/ping` HTTP
+200; policy-sync task definition `:7` was deployed and selected by the
+scheduler; and a manual sync completed. Its real staging evidence informed
+RR-02 diagnosis.
+
+## 2026-10-06 RR-02 guidance contract — SOURCE REVIEW ACCEPTED; LOCAL VALIDATION PASS
+
+The owner explicitly activated RR-02 on a separate approved implementation
+branch in the existing worktree:
+`policy-intelligence-rr02-guidance-contract`, starting at
+`199ad837bc417682b2257c3a95462fe8a1514bdf`. RR-01 is already accepted and
+staging-deployed as recorded above. RR-02 source review is ACCEPTED and the
+owner's full local validation is PASS. RR-02 code is frozen; no further source
+correction is planned. RR-02 remains uncommitted, unpushed and undeployed, with
+staging revalidation pending. The protected Policy WIP branch remains
+untouched.
+
+RR-02 is correcting Home Affairs structured-alert normalization/truncation
+provenance, adding the `published_guidance` source status without implying
+legislative force, and tightening general subject/scope instructions while
+preserving the strict publication gate. Analyzer/verifier implementation
+versions move to v2.2; analysis schema remains v2. The database status field
+is a varchar, so no migration is planned. Alert fingerprints use full
+normalized semantic content and a fixed bounded metadata fallback for empty
+alerts; preview bounds remain independent.
+
+Final owner-local validation passed: focused Policy Intelligence tests 106/106;
+full unit suite 522/522 with zero failures and zero skips; Next.js production
+build passed and generated the production route manifest; and
+`git diff --check` passed. The source review is accepted and implementation
+code is frozen. No further source correction is planned. RR-02 remains
+uncommitted, unpushed and undeployed; staging revalidation is pending. The
+analysis schema remains v2, analyzer/verifier remain v2.2, and the strict
+publication gate is unchanged. No database migration was added, Federal
+Register RR-01 discovery/ranking remains unchanged, and the protected WIP
+remains untouched. No AWS/database mutation or RR-02 deployment is claimed.
+See
+`docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md` for exact scope and
+validation details.

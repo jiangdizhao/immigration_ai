@@ -85,6 +85,31 @@ Any AWS rollout requires separate explicit authorization and current topology ve
 
 The accepted Phase 11 target is a Chinese-first Australian immigration and study service platform.
 
+## Policy Intelligence RR-02 — SOURCE REVIEW ACCEPTED; LOCAL VALIDATION PASS — 2026-10-06
+
+RR-01 was accepted at implementation commit
+`199ad837bc417682b2257c3a95462fe8a1514bdf`, fast-forwarded into
+`phase11-chinese-service-platform-ui-rebase`, pushed and remotely verified,
+and deployed to staging. The staging web rollout completed with `/ping` HTTP
+200; policy-sync task definition `:7` was deployed and selected by the
+scheduler; and a manual sync completed. Its real staging evidence informed
+RR-02 diagnosis.
+
+RR-02 source review is ACCEPTED and owner full local validation is PASS on
+branch `policy-intelligence-rr02-guidance-contract` in the existing worktree.
+It adds `published_guidance`, normalizes and safely fingerprints Home Affairs
+structured alert content, and sharpens analyzer/verifier subject and scope
+instructions. Focused Policy Intelligence tests passed 106/106; the full unit
+suite passed 522/522 with zero failures and zero skips; the local Next.js
+production build passed and generated the production route manifest; and
+`git diff --check` passed. RR-02 code is frozen, with no further source
+correction planned. It remains uncommitted, unpushed and undeployed; staging
+revalidation is pending. The analysis schema remains v2, analyzer/verifier
+remain v2.2, and the strict publication gate is unchanged. No database
+migration was added; Federal Register RR-01 discovery/ranking remains
+unchanged; the protected WIP remains untouched. Details:
+`docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
+
 The temporary repository `jiangdizhao/immigration_temporal_ui` at `codex/fidelity-completion-v4@8abbba2` is a design/journey reference. The main repository remains the functional authority.
 
 Matter continuity is the central UX concept:
@@ -824,10 +849,12 @@ Read-only AWS/RDS evidence collected on 2026-10-06 changes the immediate diagnos
 - Home Affairs exposes 70 alert items and its first ten are currently the newest; there were no hidden 3–6 October alerts below the ten-item cutoff, so the recent inactivity is not caused by the ten-candidate limit alone;
 - earlier verifier/publication holds remain a separate issue and must not be used to explain recent discovery-stage inactivity.
 
-**Active implementation unit: RR-01 — Discovery reliability + operator observability.**
+**Accepted implementation: RR-01 — Discovery reliability + operator observability — ACCEPTED; STAGING DEPLOYED.**
 
-RR-01 must repair source-aware candidate selection/ranking for Federal Register, harden Home Affairs date ordering/multi-URL coverage, make ART selection source-aware, and expose safe recent sync-run timestamps/counters through the authenticated admin/operator surface. It must preserve existing SSRF/resource bounds and must not change analyzer/verifier/publication-gate strictness.
+RR-01 implemented source-aware Federal Register selection, Home Affairs date ordering/multi-URL coverage, ART selection, and bounded authenticated sync-run observability while preserving SSRF/resource bounds and analyzer/verifier/publication-gate strictness.
 
 The protected branch `policy-intelligence-admin-detail-wip-20261004` at `a73e3b51cb091b275f46116bad911ede445be54d` remains separate. Do not merge, reset, delete or silently fold it into RR-01.
 
-RR-02 publication-gate diagnosis is planned only after RR-01 is accepted and current discovery evidence is improved. No AWS mutation/deployment is authorized by this documentation checkpoint.
+RR-01 is accepted and staging-deployed as recorded above. RR-02 source review
+and owner local validation are accepted/passed; its code is frozen and remains
+uncommitted, unpushed and undeployed pending staging revalidation.

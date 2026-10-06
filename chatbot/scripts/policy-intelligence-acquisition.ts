@@ -141,15 +141,17 @@ export function createOfficialSourceSnapshotInput(input: {
   const useStructuredAlertEvidence =
     source.strategy === "home_affairs_site_alerts" &&
     input.candidate.discoveryStrategy === "home_affairs_site_alerts";
-  const structuredAlertParts = useStructuredAlertEvidence
+  const structuredAlertPartDetails = useStructuredAlertEvidence
     ? [input.candidate.discoveredTitle, input.candidate.preview]
         .filter((part): part is string => typeof part === "string")
-        .map((part) =>
-          normalizeOfficialHtmlEvidenceDetails(part.slice(0, 500))
-            .normalizedEvidence
-        )
-        .filter(Boolean)
+        .map((part) => normalizeOfficialHtmlEvidenceDetails(part))
     : [];
+  const structuredAlertParts = structuredAlertPartDetails
+    .map((part) => part.normalizedEvidence.slice(0, 500))
+    .filter(Boolean);
+  const structuredAlertTruncated = structuredAlertPartDetails.some(
+    (part) => part.evidenceTruncated || part.normalizedEvidence.length > 500
+  );
   const completeEvidence = [
     ...structuredAlertParts,
     ...(pageEvidence ? [pageEvidence] : []),
@@ -163,6 +165,8 @@ export function createOfficialSourceSnapshotInput(input: {
   );
   const evidenceTruncated =
     normalized.evidenceTruncated ||
+    structuredAlertTruncated ||
+    Boolean(input.candidate.sourceMetadata.alertPreviewTruncated) ||
     completeEvidence.length > POLICY_ACQUISITION_LIMITS.maxEvidenceCharacters;
   const contentHash = useStructuredAlertEvidence
     ? fingerprintContent(

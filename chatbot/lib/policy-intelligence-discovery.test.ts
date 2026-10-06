@@ -320,6 +320,11 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
   );
   assert.equal(result.candidates[3].sourceMetadata.urlProvenance, "alert");
+  assert.equal(
+    result.candidates.filter((item) => item.canonicalUrl === source.seedUrls[0])
+      .length,
+    1
+  );
   assert.equal(result.candidates[0].sourceMetadata.alertCategory, "fixture");
   assert.equal(result.candidates[0].sourceMetadata.alertType, "synthetic");
   assert.equal(
@@ -344,6 +349,176 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
     parseHomeAffairsAlertItems(fixture, 1).length,
     1,
     "alert examination is bounded"
+  );
+});
+
+test("Home Affairs alert HTML is normalized before preview truncation with provenance", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const content = `<p>${"Applicants are not stated as recipients. &amp; ".repeat(30)}</p>`;
+  const html = `<script id="siteData" type="application/json">${JSON.stringify({
+    alertItems: [
+      {
+        title: "<strong>Published guidance</strong>",
+        content,
+        urls: ["/discovery-fixture/guidance"],
+      },
+    ],
+  })}</script>`;
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-10-06T00:00:00.000Z",
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(html)),
+    },
+  });
+
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].discoveredTitle, "Published guidance");
+  assert.equal(result.candidates[0].preview?.length, 500);
+  assert.doesNotMatch(result.candidates[0].preview ?? "", /<\/?\w/);
+  assert.match(result.candidates[0].preview ?? "", /&/);
+  assert.equal(result.candidates[0].sourceMetadata.alertPreviewTruncated, true);
+});
+
+test("Home Affairs strips raw, encoded, and numeric-encoded alert markup", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const cases = [
+    "<strong>Published guidance</strong>",
+    "&lt;strong&gt;Published guidance&lt;/strong&gt;",
+    "&#60;strong&#62;Published guidance&#60;/strong&#62;",
+  ];
+  const html = `<script id="siteData" type="application/json">${JSON.stringify({
+    alertItems: cases.map((title, index) => ({
+      title,
+      content: `${title} &amp; updates`,
+      url: `https://immi.homeaffairs.gov.au/markup-${index}`,
+    })),
+  })}</script>`;
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-10-06T00:00:00.000Z",
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(html)),
+    },
+  });
+
+  assert.equal(result.candidates.length, 3);
+  for (const candidate of result.candidates) {
+    assert.equal(candidate.discoveredTitle, "Published guidance");
+    assert.equal(candidate.preview, "Published guidance & updates");
+    assert.doesNotMatch(candidate.discoveredTitle ?? "", /<[^>]*>/);
+    assert.doesNotMatch(candidate.preview ?? "", /<[^>]*>/);
+  }
+});
+
+test("Home Affairs fingerprints safe fallback metadata across deterministic discovery runs", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const discoverAlerts = (alertItems: Record<string, unknown>[]) => {
+    const html = `<script id="siteData" type="application/json">${JSON.stringify(
+      { alertItems }
+    )}</script>`;
+    return discoverPolicyCandidates({
+      sourceId: source.id,
+      now: () => "2026-10-06T00:00:00.000Z",
+      fetchOptions: {
+        lookupHost: publicLookup,
+        fetchImpl: () => Promise.resolve(response(html)),
+      },
+    });
+  };
+
+  const emptyAlert = (category: string) => ({
+    category,
+    type: "notice",
+    urls: ["https://untrusted.example/one"],
+  });
+  const fallbackA = await discoverAlerts([emptyAlert("visa")]);
+  const fallbackB = await discoverAlerts([emptyAlert("study")]);
+  const repeatedFallbackA = await discoverAlerts([emptyAlert("visa")]);
+  assert.equal(fallbackA.candidates.length, 1);
+  assert.equal(fallbackB.candidates.length, 1);
+  assert.equal(fallbackA.candidates[0].canonicalUrl, source.seedUrls[0]);
+  assert.notEqual(
+    fallbackA.candidates[0].contentHash,
+    fallbackB.candidates[0].contentHash
+  );
+  assert.equal(
+    fallbackA.candidates[0].contentHash,
+    repeatedFallbackA.candidates[0].contentHash
+  );
+
+  const common = "x".repeat(700);
+  const makeLongAlert = (suffix: string) => ({
+    title: "<strong>Same normalized title</strong>",
+    content: `<p>${common} ${suffix}</p>`,
+    urls: ["https://untrusted.example/one"],
+  });
+  const longResultA = await discoverAlerts([makeLongAlert("first")]);
+  const longResultB = await discoverAlerts([makeLongAlert("second")]);
+  assert.equal(longResultA.candidates.length, 1);
+  assert.equal(longResultB.candidates.length, 1);
+  assert.notEqual(
+    longResultA.candidates[0].contentHash,
+    longResultB.candidates[0].contentHash
+  );
+  assert.equal(
+    longResultA.candidates[0].preview,
+    longResultB.candidates[0].preview
+  );
+  assert.ok(
+    longResultA.candidates.every((entry) => (entry.preview?.length ?? 0) <= 500)
+  );
+  assert.ok(
+    longResultA.candidates.every((entry) => !/<\/?\w/.test(entry.preview ?? ""))
+  );
+});
+
+test("Home Affairs canonical URL selection dedupe preserves alert URL slots", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const html = `<script id="siteData" type="application/json">${JSON.stringify({
+    alertItems: [
+      {
+        category: "visa",
+        updateDate: "2026-10-05",
+        urls: ["https://untrusted.example/one"],
+      },
+      {
+        category: "study",
+        updateDate: "2026-10-04",
+        urls: ["https://untrusted.example/two"],
+      },
+      {
+        category: "policy",
+        updateDate: "2026-10-03",
+        title: "Valid alert URL",
+        urls: ["/discovery-fixture/valid-alert"],
+      },
+    ],
+  })}</script>`;
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-10-06T00:00:00.000Z",
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(html)),
+    },
+    limits: { maxCandidates: 2 },
+  });
+
+  assert.equal(result.candidates.length, 2);
+  assert.equal(
+    result.candidates.filter((item) => item.canonicalUrl === source.seedUrls[0])
+      .length,
+    1
+  );
+  assert.ok(
+    result.candidates.some(
+      (item) =>
+        item.canonicalUrl ===
+        "https://immi.homeaffairs.gov.au/discovery-fixture/valid-alert"
+    )
   );
 });
 

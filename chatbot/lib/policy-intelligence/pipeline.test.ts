@@ -671,6 +671,86 @@ test("unsupported narrative addition blocks publication despite its supported li
   assert.equal(result.outcomes[0].outcome, "held");
 });
 
+test("applications-to-applicants scope shift remains held by narrative verification", async () => {
+  const h = dependencies({
+    analyze: (e) => {
+      const draft = analysis(e[0].evidenceRef);
+      return {
+        ...draft,
+        keyChanges: [
+          {
+            ...draft.keyChanges[0],
+            text: {
+              ...draft.keyChanges[0].text,
+              en: "Visa applications are prioritized; applicants are priority recipients.",
+            },
+          },
+        ],
+      };
+    },
+    verify: (draft) => verification(draft, { "change-1": "unsupported" }),
+  });
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+
+  assert.equal(result.run.publishedCount, 0);
+  assert.equal(result.run.heldCount, 1);
+  assert.equal(result.outcomes[0].outcome, "held");
+});
+
+test("inferred applicant impact can publish only as a qualified practical interpretation", async () => {
+  const uncertainty = {
+    "zh-CN": "来源没有明确说明相关申请人都会获得优先处理。",
+    en: "The source does not establish that associated applicants will receive priority.",
+  };
+  const h = dependencies({
+    analyze: (e) => {
+      const draft = analysis(e[0].evidenceRef);
+      return {
+        ...draft,
+        keyChanges: [
+          {
+            ...draft.keyChanges[0],
+            kind: "practical_interpretation",
+            text: {
+              "zh-CN": "优先处理这些申请可能影响相关申请人的等待时间。",
+              en: "Prioritizing these applications may affect associated applicants' waiting times.",
+              claimRefs: ["claim-2"],
+              uncertainty,
+            },
+          },
+        ],
+        materialClaims: [
+          ...draft.materialClaims,
+          {
+            id: "claim-2",
+            kind: "practical_interpretation",
+            decisive: false,
+            conditional: true,
+            text: {
+              "zh-CN": "优先处理这些申请可能影响相关申请人的等待时间。",
+              en: "Prioritizing these applications may affect associated applicants' waiting times.",
+            },
+            uncertainty,
+            evidenceRefs: [e[0].evidenceRef],
+          },
+        ],
+      };
+    },
+    verify: (draft) =>
+      verification(draft, { "claim-2": "partial", "change-1": "partial" }),
+  });
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.heldCount, 0);
+});
+
 test("truncated evidence stays auditable but is not a publication veto", async () => {
   let analyzerSawTruncation = false;
   const h = dependencies({
@@ -1493,6 +1573,84 @@ test("source status is independently assessed and announced status may publish",
   );
 });
 
+test("official published guidance may publish without asserting legislative force", async () => {
+  const h = dependencies({
+    analyze: (evidence) => {
+      const draft = analysis(evidence[0].evidenceRef);
+      return {
+        ...draft,
+        sourceStatus: { ...draft.sourceStatus, value: "published_guidance" },
+        materialClaims: draft.materialClaims.map((claim) => ({
+          ...claim,
+          text: {
+            "zh-CN": "移民局已发布此官方指引。",
+            en: "The Department has published this official guidance.",
+          },
+        })),
+      };
+    },
+  });
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  const revision = [...h.store.revisions.values()][0];
+
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(revision.analysis.sourceStatus.value, "published_guidance");
+  assert.equal(revision.analysis.sourceStatus.certain, true);
+  assert.equal(revision.analysis.sourceStatus.claimRef, "claim-1");
+  assert.equal(POLICY_ANALYSIS_SCHEMA, "policy-intelligence.analysis.v2");
+});
+
+test("directly supported Federal Register in-force status remains publishable", async () => {
+  const federalCandidate: DiscoveryCandidate = {
+    ...candidate,
+    candidateId: "federal-register-candidate",
+    sourceConfigId: "federal-register-legislation",
+    authority: "Federal Register of Legislation",
+    canonicalUrl: "https://www.legislation.gov.au/C2026A00001/latest/text",
+    discoveryStrategy: "federal_register_api",
+  };
+  const h = dependencies({
+    discoveredCandidate: federalCandidate,
+    acquire: async (selected) => ({
+      ...acquisition("federal-register-hash", false, selected.canonicalUrl),
+      sourceConfigId: selected.sourceConfigId,
+      authority: selected.authority,
+      normalizedEvidence: "The Act is in force.",
+    }),
+    analyze: (evidence) => {
+      const draft = analysis(evidence[0].evidenceRef);
+      return {
+        ...draft,
+        sourceStatus: { ...draft.sourceStatus, value: "in_force" },
+        materialClaims: draft.materialClaims.map((claim) => ({
+          ...claim,
+          text: {
+            "zh-CN": "该法案现已生效。",
+            en: "The Act is in force.",
+          },
+        })),
+      };
+    },
+  });
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    federalCandidate.sourceConfigId
+  );
+  const revision = [...h.store.revisions.values()][0];
+
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(revision.analysis.sourceStatus.value, "in_force");
+  assert.equal(
+    revision.verification.assessments.find(
+      (assessment) => assessment.unitId === "source-status"
+    )?.verdict,
+    "supported"
+  );
+});
+
 test("current published read requires revision snapshot and joined snapshot ownership to match", async () => {
   const h = dependencies();
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
@@ -1616,8 +1774,8 @@ test("audit model metadata is derived from the v2 analysis and verification cont
     POLICY_VERIFICATION_SCHEMA,
     "policy-intelligence.verification.v2"
   );
-  assert.equal(metadata.analyzerVersion, "policy-intelligence.analyzer.v2.1");
-  assert.equal(metadata.verifierVersion, "policy-intelligence.verifier.v2.1");
+  assert.equal(metadata.analyzerVersion, "policy-intelligence.analyzer.v2.2");
+  assert.equal(metadata.verifierVersion, "policy-intelligence.verifier.v2.2");
   assert.notEqual(metadata.analyzerVersion, POLICY_ANALYSIS_SCHEMA);
   assert.notEqual(metadata.verifierVersion, POLICY_VERIFICATION_SCHEMA);
   assert.equal(metadata.model, "unchanged-selected-model");
@@ -1631,15 +1789,27 @@ test("analysis fingerprint changes with implementation versions independently of
     timeoutMs: 0,
     maxOutputTokens: 0,
   });
-  const changedAnalyzer = {
+  const previousMetadata = {
     ...metadata,
+    analyzerVersion: "policy-intelligence.analyzer.v2.1",
+    verifierVersion: "policy-intelligence.verifier.v2.1",
+  };
+  const changedAnalyzer = {
+    ...previousMetadata,
     analyzerVersion: "policy-intelligence.analyzer.v2.2",
   };
   const changedVerifier = {
-    ...metadata,
+    ...previousMetadata,
     verifierVersion: "policy-intelligence.verifier.v2.2",
   };
-  const base = computePolicyAnalysisFingerprint("same-snapshot", metadata);
+  const base = computePolicyAnalysisFingerprint(
+    "same-snapshot",
+    previousMetadata
+  );
+  assert.notEqual(
+    computePolicyAnalysisFingerprint("same-snapshot", metadata),
+    base
+  );
   assert.notEqual(
     computePolicyAnalysisFingerprint("same-snapshot", changedAnalyzer),
     base
@@ -1703,6 +1873,65 @@ test("changed analysis configuration permits a new revision from the same snapsh
   );
   assert.equal(revisions[0].editorialStatus, "superseded");
   assert.notEqual(revisions[1].analysisFingerprint, oldFingerprint);
+});
+
+test("v2.2 reanalyzes the same snapshot captured under v2.1", async () => {
+  const h = dependencies();
+  const currentMetadata = h.deps.modelMetadata;
+  h.deps.modelMetadata = {
+    ...currentMetadata,
+    analyzerVersion: "policy-intelligence.analyzer.v2.1",
+    verifierVersion: "policy-intelligence.verifier.v2.1",
+  };
+
+  const first = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  const oldRevision = [...h.store.revisions.values()][0];
+  const snapshotId = oldRevision.snapshotId;
+  assert.equal(first.run.publishedCount, 1);
+  assert.equal(h.store.snapshots.size, 1);
+  assert.deepEqual(h.calls(), { analyzeCalls: 1, verifyCalls: 1 });
+
+  h.deps.modelMetadata = currentMetadata;
+  const second = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  const revisions = [...h.store.revisions.values()].sort(
+    (left, right) => left.revisionNumber - right.revisionNumber
+  );
+
+  assert.equal(second.run.publishedCount, 1);
+  assert.equal(second.run.snapshottedCount, 0);
+  assert.equal(second.run.unchangedCount, 1);
+  assert.equal(h.store.snapshots.size, 1);
+  assert.equal([...h.store.snapshots.values()][0].contentHash, "same-hash");
+  assert.equal(h.store.revisions.size, 2);
+  assert.equal(revisions[0].snapshotId, snapshotId);
+  assert.equal(revisions[1].snapshotId, snapshotId);
+  assert.notEqual(
+    revisions[0].analysisFingerprint,
+    revisions[1].analysisFingerprint
+  );
+  assert.equal(
+    revisions[0].modelMetadata.analyzerVersion,
+    "policy-intelligence.analyzer.v2.1"
+  );
+  assert.equal(
+    revisions[0].modelMetadata.verifierVersion,
+    "policy-intelligence.verifier.v2.1"
+  );
+  assert.equal(
+    revisions[1].modelMetadata.analyzerVersion,
+    "policy-intelligence.analyzer.v2.2"
+  );
+  assert.equal(
+    revisions[1].modelMetadata.verifierVersion,
+    "policy-intelligence.verifier.v2.2"
+  );
+  assert.deepEqual(h.calls(), { analyzeCalls: 2, verifyCalls: 2 });
 });
 
 test("safe redirect final URL becomes item identity and later direct discovery reuses it", async () => {

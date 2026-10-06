@@ -88,6 +88,7 @@ export type DiscoveryCandidate = {
     alertType?: string;
     alertUpdateDate?: string;
     alertUrl?: string;
+    alertPreviewTruncated?: boolean;
     urlProvenance: "alert" | "seed" | "fetched_page";
   };
 };
@@ -604,6 +605,27 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&gt;/g, ">");
 }
 
+function decodeAlertHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_match, decimal: string) => {
+      const point = Number(decimal);
+      return Number.isInteger(point) && point > 0 && point <= 0x10_ff_ff
+        ? String.fromCodePoint(point)
+        : " ";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => {
+      const point = Number.parseInt(hex, 16);
+      return Number.isInteger(point) && point > 0 && point <= 0x10_ff_ff
+        ? String.fromCodePoint(point)
+        : " ";
+    });
+}
+
 function stripMarkup(value: string): string {
   return decodeHtmlEntities(value.replace(/<[^>]*>/g, " "))
     .replace(/\s+/g, " ")
@@ -955,6 +977,49 @@ function boundedRawMetadata(
   return normalized ? normalized.slice(0, maxCharacters) : undefined;
 }
 
+function normalizedAlertText(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  let normalized = value;
+  // Decode before stripping, then repeat a small fixed number of times so
+  // nested entity-encoded tags cannot be reintroduced after markup removal.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const decoded = decodeAlertHtmlEntities(normalized);
+    const stripped = decoded.replace(/<[^>]*>/g, " ");
+    if (stripped === normalized) {
+      normalized = stripped;
+      break;
+    }
+    normalized = stripped;
+  }
+  normalized = normalized.replace(/\s+/g, " ").trim();
+  return normalized || undefined;
+}
+
+function alertFingerprintContent(
+  title: string | undefined,
+  content: string | undefined,
+  item: Record<string, unknown>
+): string {
+  if (title || content) {
+    return JSON.stringify(["content", title ?? "", content ?? ""]);
+  }
+
+  const safeMetadata = [
+    "id",
+    "alertId",
+    "identifier",
+    "category",
+    "type",
+    "updateDate",
+  ].flatMap((field) => {
+    const value = normalizedAlertText(item[field])?.slice(0, 200);
+    return value ? [[field, value]] : [];
+  });
+  return JSON.stringify(["metadata", safeMetadata]);
+}
+
 function alertUrlValues(item: Record<string, unknown>): string[] {
   const values = item.urls ?? item.url;
   const candidates = Array.isArray(values) ? values : [values];
@@ -976,11 +1041,19 @@ function candidateFromHomeAffairsAlert(
   retrievedAt: string,
   maxPreviewCharacters: number
 ): DiscoveryCandidate {
-  const title = boundedRawMetadata(item.title, 500);
-  const content = boundedRawMetadata(item.content, 4096);
-  const normalizedContent = [title, content].filter(Boolean).join("\n");
-  const contentForFingerprint =
-    normalizedContent || JSON.stringify(item, Object.keys(item).sort());
+  const normalizedTitle = normalizedAlertText(item.title);
+  const normalizedContent = normalizedAlertText(item.content);
+  const title = normalizedTitle?.slice(0, 500);
+  const content = normalizedContent?.slice(0, 4096);
+  const alertPreviewTruncated =
+    (normalizedContent?.length ?? 0) > maxPreviewCharacters ||
+    (normalizedContent?.length ?? 0) > 4096 ||
+    (normalizedTitle?.length ?? 0) > 500;
+  const contentForFingerprint = alertFingerprintContent(
+    normalizedTitle,
+    normalizedContent,
+    item
+  );
   let canonicalUrl = assertOfficialUrlAllowed(source.seedUrls[0], source);
   let urlProvenance: "alert" | "seed" = "seed";
   let alertUrl: string | undefined;
@@ -1025,6 +1098,7 @@ function candidateFromHomeAffairsAlert(
       alertType: boundedRawMetadata(item.type),
       alertUpdateDate: boundedRawMetadata(item.updateDate),
       alertUrl,
+      alertPreviewTruncated,
       urlProvenance,
     },
   };
@@ -1714,7 +1788,10 @@ export async function discoverPolicyCandidates(
       ) {
         for (const group of rankedGroups) {
           const item = group[urlIndex];
-          if (!item || seenAlertUrls.has(item.canonicalUrl)) {
+          if (!item) {
+            continue;
+          }
+          if (seenAlertUrls.has(item.canonicalUrl)) {
             continue;
           }
           seenAlertUrls.add(item.canonicalUrl);

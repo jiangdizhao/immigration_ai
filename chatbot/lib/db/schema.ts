@@ -946,7 +946,14 @@ export const policyIntelligenceItem = pgTable(
     primarySourceId: varchar("primarySourceId", { length: 255 }).notNull(),
     canonicalOfficialUrl: text("canonicalOfficialUrl").notNull(),
     sourceStatus: varchar("sourceStatus", {
-      enum: ["in_force", "announced", "proposed", "consultation", "superseded"],
+      enum: [
+        "in_force",
+        "published_guidance",
+        "announced",
+        "proposed",
+        "consultation",
+        "superseded",
+      ],
     })
       .notNull()
       .default("announced"),

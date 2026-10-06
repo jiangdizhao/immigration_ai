@@ -57,7 +57,6 @@ test("acquisition reuses allowlist and stores normalized bounded evidence rather
   assert.equal(result.sourceMetadata.evidenceTruncated, false);
 });
 
-
 test("short non-empty official evidence is accepted", async () => {
   const result = await acquireOfficialPolicySource({
     candidate: { ...candidate, discoveredTitle: "Official page title" },
@@ -92,6 +91,36 @@ test("Home Affairs structured alert evidence is preserved regardless of detail l
   assert.match(result.normalizedEvidence, /Detailed official page text/);
   assert.equal(result.officialTitle, "Official alert title");
   assert.equal(result.contentHash.length, 64);
+});
+
+test("structured alert HTML is normalized before slicing and truncation is carried into snapshot metadata", async () => {
+  const alertText = "Official alert content. &amp; ".repeat(30);
+  const result = await acquireOfficialPolicySource({
+    candidate: {
+      ...candidate,
+      discoveredTitle: "<strong>Official alert title</strong>",
+      preview: `<p>${alertText}</p>`,
+      sourceMetadata: {
+        ...candidate.sourceMetadata,
+        alertPreviewTruncated: true,
+      },
+    },
+    fetchOptions: fixtureFetch(
+      200,
+      {},
+      "<html><body>Detail page.</body></html>"
+    ),
+  });
+
+  assert.equal(result.evidenceTruncated, true);
+  assert.equal(result.sourceMetadata.evidenceTruncated, true);
+  assert.match(result.normalizedEvidence, /Official alert title/);
+  assert.match(result.normalizedEvidence, /Official alert content\. &/);
+  assert.doesNotMatch(result.normalizedEvidence, /<\/?\w/);
+  assert.equal(
+    result.sourceMetadata.discoveryMetadata?.alertPreviewTruncated,
+    true
+  );
 });
 
 test("genuinely empty official evidence is still rejected", async () => {

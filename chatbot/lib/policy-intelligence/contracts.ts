@@ -5,9 +5,9 @@ export const POLICY_ANALYSIS_SCHEMA =
 export const POLICY_VERIFICATION_SCHEMA =
   "policy-intelligence.verification.v2" as const;
 export const POLICY_ANALYZER_VERSION =
-  "policy-intelligence.analyzer.v2.1" as const;
+  "policy-intelligence.analyzer.v2.2" as const;
 export const POLICY_VERIFIER_VERSION =
-  "policy-intelligence.verifier.v2.1" as const;
+  "policy-intelligence.verifier.v2.2" as const;
 
 const localizedText = z
   .object({
@@ -83,6 +83,7 @@ export const policyAnalysisSchema = z
         id: z.literal("source-status"),
         value: z.enum([
           "in_force",
+          "published_guidance",
           "announced",
           "proposed",
           "consultation",

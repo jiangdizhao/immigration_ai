@@ -2,6 +2,7 @@ import type { SiteLocale } from "./site-locale";
 
 export const POLICY_SOURCE_STATUSES = [
   "in_force",
+  "published_guidance",
   "announced",
   "proposed",
   "consultation",
@@ -100,6 +101,7 @@ const sourceStatusLabels: Record<
 > = {
   "zh-CN": {
     in_force: "现行",
+    published_guidance: "官方指引已发布",
     announced: "已公布",
     proposed: "拟议",
     consultation: "咨询中",
@@ -107,6 +109,7 @@ const sourceStatusLabels: Record<
   },
   en: {
     in_force: "In force",
+    published_guidance: "Published guidance",
     announced: "Announced",
     proposed: "Proposed",
     consultation: "Consultation",
