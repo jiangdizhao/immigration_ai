@@ -1,8 +1,9 @@
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
 import { AdminPolicyIntelligence } from "@/components/admin-policy-intelligence";
-import { adminPolicyIntelligenceService } from "@/lib/policy-intelligence/admin-service";
+import { AdminPolicySyncRuns } from "@/components/admin-policy-sync-runs";
+import { SiteHeader } from "@/components/site-header";
 import { requireVerifiedConsultationStaffPage } from "@/lib/consultations/page-access";
+import { adminPolicyIntelligenceService } from "@/lib/policy-intelligence/admin-service";
 
 export default function AdminPolicyIntelligencePage() {
   return (
@@ -14,7 +15,10 @@ export default function AdminPolicyIntelligencePage() {
 
 async function AdminPolicyIntelligenceContent() {
   await requireVerifiedConsultationStaffPage(["admin"]);
-  const items = await adminPolicyIntelligenceService.listItems();
+  const [items, sourceSyncRuns] = await Promise.all([
+    adminPolicyIntelligenceService.listItems(),
+    adminPolicyIntelligenceService.listSourceSyncRuns(),
+  ]);
 
   return (
     <div className="min-h-dvh bg-slate-50 text-slate-950">
@@ -31,7 +35,10 @@ async function AdminPolicyIntelligenceContent() {
           archived item to its current verified publication when available.
         </p>
         <div className="mt-8">
-          <AdminPolicyIntelligence initialItems={items} />
+          <AdminPolicySyncRuns runs={sourceSyncRuns} />
+          <div className="mt-8">
+            <AdminPolicyIntelligence initialItems={items} />
+          </div>
         </div>
       </main>
     </div>

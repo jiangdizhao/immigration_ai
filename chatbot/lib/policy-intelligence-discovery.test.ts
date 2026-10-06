@@ -18,6 +18,7 @@ import {
   fingerprintContent,
   getPolicyDiscoverySource,
   HOME_AFFAIRS_ALERT_LIMITS,
+  parseArtNewsUpdateLinks,
   parseHomeAffairsAlertItems,
   parseListingLinks,
   parseSitemapLinks,
@@ -96,6 +97,31 @@ test("HTTPS and exact allowlisted hostnames are required", () => {
   assert.throws(
     () => assertOfficialUrlAllowed("https://localhost/path", source),
     /not allowlisted|Local or IP-literal/
+  );
+  const federalSource = getPolicyDiscoverySource(
+    "federal-register-legislation"
+  );
+  assert.equal(
+    assertOfficialUrlAllowed(
+      "https://api.prod.legislation.gov.au/v1/titles/search",
+      federalSource
+    ),
+    "https://api.prod.legislation.gov.au/v1/titles/search"
+  );
+  assert.equal(
+    assertOfficialUrlAllowed(
+      "https://www.legislation.gov.au/F2026L00001/latest",
+      federalSource
+    ),
+    "https://www.legislation.gov.au/F2026L00001/latest"
+  );
+  assert.throws(
+    () =>
+      assertOfficialUrlAllowed(
+        "https://api.prod.legislation.gov.au.attacker.example/v1/titles/search",
+        federalSource
+      ),
+    /not allowlisted/
   );
 });
 
@@ -255,7 +281,7 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
 
   assert.equal(requestCount, 1);
   assert.deepEqual(requestedUrls, [source.seedUrls[0]]);
-  assert.equal(result.candidates.length, 5);
+  assert.equal(result.candidates.length, 4);
   assert.ok(largeFixture.length > 1_400_000);
   assert.ok(
     result.candidates.every(
@@ -267,29 +293,33 @@ test("Home Affairs uses one bounded structured-alert seed fetch", async () => {
       (item) => !item.canonicalUrl.includes("untrusted.example")
     )
   );
-  assert.equal(
-    result.candidates[0].canonicalUrl,
-    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
-  );
+  assert.equal(result.candidates[0].canonicalUrl, source.seedUrls[0]);
   assert.equal(
     result.candidates[0].sourceMetadata.alertUpdateDate,
-    "2026-09-01"
+    "2026-09-05"
   );
   assert.equal(result.candidates[0].explicitSourceDate, undefined);
-  assert.equal(result.candidates[0].sourceMetadata.urlProvenance, "alert");
+  assert.equal(result.candidates[0].sourceMetadata.urlProvenance, "seed");
+  assert.equal(result.candidates[0].sourceMetadata.alertUrl, undefined);
   assert.equal(
     result.candidates[1].canonicalUrl,
-    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-two"
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-three"
+  );
+  assert.equal(
+    result.candidates[1].sourceMetadata.alertUpdateDate,
+    "2026-09-03"
   );
   assert.equal(result.candidates[1].sourceMetadata.urlProvenance, "alert");
   assert.equal(
     result.candidates[2].canonicalUrl,
-    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-three"
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-two"
   );
   assert.equal(result.candidates[2].sourceMetadata.urlProvenance, "alert");
-  assert.equal(result.candidates[3].sourceMetadata.urlProvenance, "seed");
-  assert.equal(result.candidates[3].sourceMetadata.alertUrl, undefined);
-  assert.equal(result.candidates[4].sourceMetadata.urlProvenance, "seed");
+  assert.equal(
+    result.candidates[3].canonicalUrl,
+    "https://immi.homeaffairs.gov.au/discovery-fixture/alert-one"
+  );
+  assert.equal(result.candidates[3].sourceMetadata.urlProvenance, "alert");
   assert.equal(result.candidates[0].sourceMetadata.alertCategory, "fixture");
   assert.equal(result.candidates[0].sourceMetadata.alertType, "synthetic");
   assert.equal(
@@ -372,9 +402,7 @@ test("production discovery limits allow normal official pages and stay bounded",
   assert.ok(DISCOVERY_LIMITS.maxTotalBytes >= 32 * 1024 * 1024);
   assert.equal(DISCOVERY_LIMITS.requestTimeoutMs, 15_000);
   assert.equal(DISCOVERY_LIMITS.maxRuntimeMs, 60_000);
-  assert.ok(
-    HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes >= 8 * 1024 * 1024
-  );
+  assert.ok(HOME_AFFAIRS_ALERT_LIMITS.maxResponseBytes >= 8 * 1024 * 1024);
   assert.ok(HOME_AFFAIRS_ALERT_LIMITS.maxTotalBytes >= 32 * 1024 * 1024);
   assert.equal(DISCOVERY_LIMITS.maxPages, 4);
   assert.equal(DISCOVERY_LIMITS.maxLinksPerPage, 8);
@@ -432,11 +460,13 @@ test("URL, candidate ID, and content fingerprint canonicalisation is determinist
   );
 });
 
-test("local sitemap, listing, and detail fixtures parse without network access", () => {
+test("generic sitemap, listing, and detail fixtures parse without network access", () => {
   const source = getPolicyDiscoverySource("home-affairs-guidance");
-  const sitemapSource = getPolicyDiscoverySource(
-    "federal-register-legislation"
-  );
+  const sitemapSource = {
+    ...source,
+    allowedHostnames: ["www.legislation.gov.au"],
+    seedUrls: ["https://www.legislation.gov.au/sitemap.xml"],
+  };
   const sitemap = readFileSync(
     resolve(fixtureDirectory, "sitemap.xml"),
     "utf8"
@@ -478,17 +508,596 @@ test("local sitemap, listing, and detail fixtures parse without network access",
   assert.equal(parsed.sourceMetadata.urlProvenance, "seed");
 });
 
+function federalRecord(
+  id: string,
+  name: string,
+  collection: "Act" | "LegislativeInstrument" | "NotifiableInstrument",
+  asMadeRegisteredAt: string,
+  departments: { name?: string; portfolio?: string }[] = [],
+  isInForce = true
+) {
+  return {
+    id,
+    name,
+    collection,
+    status: isInForce ? "InForce" : "Registered",
+    isInForce,
+    asMadeRegisteredAt,
+    administeringDepartments: departments,
+  };
+}
+
+function federalApiFixture(
+  records: ReturnType<typeof federalRecord>[],
+  detailBodies: Record<string, string> = {}
+) {
+  const requested: string[] = [];
+  const detailUrls: string[] = [];
+  const fetchOptions: DiscoveryFetchOptions = {
+    lookupHost: publicLookup,
+    fetchImpl: (input) => {
+      const url = new URL(String(input));
+      requested.push(url.toString());
+      if (url.hostname === "api.prod.legislation.gov.au") {
+        const collection = url.pathname.match(
+          /collection\((Act|LegislativeInstrument|NotifiableInstrument)\)/
+        )?.[1];
+        return Promise.resolve(
+          response(
+            JSON.stringify({
+              value: records.filter(
+                (record) => record.collection === collection
+              ),
+            }),
+            "application/json"
+          )
+        );
+      }
+      detailUrls.push(url.toString());
+      const registerId = url.pathname.split("/")[1];
+      return Promise.resolve(
+        response(
+          detailBodies[registerId] ??
+            "<html><head><title>Official Register detail</title></head><body><main>Official detail fixture.</main></body></html>"
+        )
+      );
+    },
+  };
+  return { fetchOptions, requested, detailUrls };
+}
+
+test("Federal API retains Migration records at positions 13-15 behind newer unrelated records", async () => {
+  const unrelated = Array.from({ length: 12 }, (_, index) =>
+    federalRecord(
+      `F2026L${String(10_000 + index).slice(-5)}`,
+      `${["Health", "Treasury", "Defence"][index % 3]} Administration Instrument ${index}`,
+      "LegislativeInstrument",
+      new Date(Date.UTC(2026, 9, 6, 0, 0, 12 - index)).toISOString(),
+      [{ name: "Department of Health", portfolio: "Health" }]
+    )
+  );
+  const records = [
+    ...unrelated,
+    federalRecord(
+      "F2026L01349",
+      "Migration (Student Visa Applications) Amendment Instrument 2026",
+      "LegislativeInstrument",
+      "2026-10-05T23:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }],
+      false
+    ),
+    federalRecord(
+      "F2026L01348",
+      "Migration Student Visa Applications Instrument 2026",
+      "LegislativeInstrument",
+      "2026-10-05T22:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    ),
+    federalRecord(
+      "F2026L01347",
+      "Migration Amendment Regulations 2026",
+      "LegislativeInstrument",
+      "2026-10-05T21:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    ),
+  ];
+  const fixture = federalApiFixture(records);
+  const result = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    now: () => "2026-10-06T00:00:00Z",
+    fetchOptions: fixture.fetchOptions,
+  });
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.canonicalUrl),
+    [
+      "https://www.legislation.gov.au/F2026L01349/latest",
+      "https://www.legislation.gov.au/F2026L01348/latest",
+      "https://www.legislation.gov.au/F2026L01347/latest",
+    ]
+  );
+  assert.equal(
+    result.candidates[0].sourceMetadata.federalRegisteredAt,
+    "2026-10-05T23:00:00Z"
+  );
+  assert.equal(result.candidates[0].explicitSourceDate, undefined);
+  assert.equal(result.candidates[0].discoveryStrategy, "federal_register_api");
+  assert.equal(
+    fixture.requested.filter((url) => url.includes("/titles/search")).length,
+    3
+  );
+  const apiRequests = fixture.requested.filter((url) =>
+    url.includes("/titles/search")
+  );
+  assert.deepEqual(
+    apiRequests
+      .map((url) => new URL(url).pathname.match(/collection\(([^)]+)\)/)?.[1])
+      .sort(),
+    ["Act", "LegislativeInstrument", "NotifiableInstrument"].sort()
+  );
+  for (const requestUrl of apiRequests) {
+    const query = new URL(requestUrl).searchParams;
+    assert.equal(query.get("$orderby"), "asMadeRegisteredAt desc");
+    assert.equal(query.get("$expand"), "administeringDepartments");
+    assert.equal(
+      query.get("$select"),
+      "id,name,collection,status,isInForce,asMadeRegisteredAt,administeringDepartments"
+    );
+    assert.equal(query.get("$top"), "64");
+  }
+  assert.ok(fixture.requested.every((url) => !url.includes("sitemap")));
+});
+
+test("Federal API admits cross-portfolio adjacent titles but not generic Home Affairs alone", async () => {
+  const records = [
+    federalRecord(
+      "F2026L01340",
+      "Overseas Student Transfers Instrument 2026",
+      "LegislativeInstrument",
+      "2026-10-06T02:00:00Z",
+      [{ name: "Department of Education", portfolio: "Education" }]
+    ),
+    federalRecord(
+      "F2026L01341",
+      "Administrative Amendment Instrument 2026",
+      "LegislativeInstrument",
+      "2026-10-06T01:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    ),
+    federalRecord(
+      "F2026L01342",
+      "Migration Review Instrument 2026",
+      "LegislativeInstrument",
+      "2026-10-06T00:00:00Z",
+      [{ name: "Department of Education", portfolio: "Education" }]
+    ),
+  ];
+  const fixture = federalApiFixture(records);
+  const result = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    fetchOptions: fixture.fetchOptions,
+  });
+  assert.deepEqual(
+    result.candidates.map((item) => new URL(item.canonicalUrl).pathname),
+    ["/F2026L01342/latest", "/F2026L01340/latest"]
+  );
+  assert.ok(
+    fixture.detailUrls.includes(
+      "https://www.legislation.gov.au/F2026L01341/latest"
+    )
+  );
+});
+
+test("Federal API rejects unrelated protection titles and generic Home Affairs records", async () => {
+  const records = [
+    federalRecord(
+      "F2026A00010",
+      "Environment Protection Amendment Act 2026",
+      "Act",
+      "2026-10-06T04:00:00Z"
+    ),
+    federalRecord(
+      "F2026A00011",
+      "Major Sporting Events (Indicia and Images) Protection Amendment Act 2026",
+      "Act",
+      "2026-10-06T03:00:00Z"
+    ),
+    federalRecord(
+      "F2026N00012",
+      "Social Security Nepal Flash Floods Assistance Determination 2026",
+      "NotifiableInstrument",
+      "2026-10-06T02:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    ),
+    federalRecord(
+      "F2026N00013",
+      "Home Affairs (Status of Forces Agreement—Fiji—Entry into Force) Notice 2026",
+      "NotifiableInstrument",
+      "2026-10-06T01:00:00Z",
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    ),
+  ];
+  const fixture = federalApiFixture(records);
+  const result = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    fetchOptions: fixture.fetchOptions,
+  });
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(fixture.detailUrls, [
+    "https://www.legislation.gov.au/F2026N00012/latest",
+    "https://www.legislation.gov.au/F2026N00013/latest",
+  ]);
+});
+
+test("Federal API retains generic Home Affairs titles confirmed by official parent authority", async () => {
+  const authorities = [
+    "Migration Act 1958",
+    "Migration Regulations 1994",
+    "Australian Citizenship Act 2007",
+  ];
+  const records = authorities.map((_, index) =>
+    federalRecord(
+      `F2026L${String(20_001 + index)}`,
+      `Administrative Amendment Notice ${index}`,
+      "LegislativeInstrument",
+      new Date(Date.UTC(2026, 9, 6, 3 - index)).toISOString(),
+      [{ name: "Department of Home Affairs", portfolio: "Home Affairs" }]
+    )
+  );
+  const details = Object.fromEntries(
+    authorities.map((authority, index) => [
+      records[index].id,
+      `<html><head><title>Administrative Amendment Notice ${index}</title></head><body><dl><dt>Authorised by</dt><dd>${authority}</dd></dl></body></html>`,
+    ])
+  );
+  const fixture = federalApiFixture(records, details);
+  const result = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    fetchOptions: fixture.fetchOptions,
+  });
+  assert.equal(result.candidates.length, 3);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.discoveredTitle),
+    [
+      "Administrative Amendment Notice 0",
+      "Administrative Amendment Notice 1",
+      "Administrative Amendment Notice 2",
+    ]
+  );
+});
+
+test("Federal API merges all collections and retains relevant not-in-force records", async () => {
+  const records = [
+    federalRecord(
+      "F2026A00001",
+      "Australian Citizenship Amendment Act 2026",
+      "Act",
+      "2026-10-06T03:00:00Z"
+    ),
+    federalRecord(
+      "F2026L00001",
+      "Migration Regulations Amendment 2026",
+      "LegislativeInstrument",
+      "2026-10-06T02:00:00Z",
+      [],
+      false
+    ),
+    federalRecord(
+      "F2026N00001",
+      "Refugee Protection Instrument 2026",
+      "NotifiableInstrument",
+      "2026-10-06T01:00:00Z"
+    ),
+  ];
+  const fixture = federalApiFixture(records);
+  const result = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    fetchOptions: fixture.fetchOptions,
+  });
+  assert.deepEqual(
+    result.candidates.map((item) => new URL(item.canonicalUrl).pathname),
+    ["/F2026A00001/latest", "/F2026L00001/latest", "/F2026N00001/latest"]
+  );
+  assert.equal(
+    result.candidates[1].sourceMetadata.federalRegisteredAt,
+    "2026-10-06T02:00:00Z"
+  );
+});
+
+test("Federal API enforces per-collection, merged-frontier, detail, and candidate bounds", async () => {
+  const records = [
+    "Act",
+    "LegislativeInstrument",
+    "NotifiableInstrument",
+  ].flatMap((collection, group) =>
+    Array.from({ length: 8 }, (_, index) =>
+      federalRecord(
+        `F2026L${String(group * 100 + index + 1).padStart(5, "0")}`,
+        `Migration Bound Fixture ${group}-${index}`,
+        collection as "Act" | "LegislativeInstrument" | "NotifiableInstrument",
+        new Date(
+          Date.UTC(2026, 9, 6, 0, 0, 24 - group * 8 - index)
+        ).toISOString()
+      )
+    )
+  );
+  const frontierFixture = federalApiFixture(records);
+  const bounded = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    limits: {
+      maxFederalRegisterApiResultsPerCollection: 5,
+      maxFederalRegisterRecordFrontier: 4,
+      maxFederalRegisterDetailPages: 20,
+      maxCandidates: 10,
+    },
+    fetchOptions: frontierFixture.fetchOptions,
+  });
+  assert.equal(
+    frontierFixture.requested.filter(
+      (url) => new URL(url).searchParams.get("$top") === "5"
+    ).length,
+    3
+  );
+  assert.equal(frontierFixture.detailUrls.length, 4);
+  assert.equal(bounded.candidates.length, 4);
+
+  const detailFixture = federalApiFixture(records);
+  await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    limits: { maxFederalRegisterDetailPages: 2, maxCandidates: 10 },
+    fetchOptions: detailFixture.fetchOptions,
+  });
+  assert.equal(detailFixture.detailUrls.length, 2);
+  const candidateFixture = federalApiFixture(records);
+  const candidateBounded = await discoverPolicyCandidates({
+    sourceId: "federal-register-legislation",
+    limits: { maxFederalRegisterDetailPages: 5, maxCandidates: 1 },
+    fetchOptions: candidateFixture.fetchOptions,
+  });
+  assert.ok(candidateFixture.detailUrls.length <= 5);
+  assert.equal(candidateBounded.candidates.length, 1);
+});
+
+test("Federal API malformed JSON and invalid schema fail with safe discovery errors", async () => {
+  for (const body of [
+    "{bad json",
+    JSON.stringify({ value: [{ id: "F2026L00001" }] }),
+  ]) {
+    const fetchOptions: DiscoveryFetchOptions = {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(body, "application/json")),
+    };
+    await assert.rejects(
+      discoverPolicyCandidates({
+        sourceId: "federal-register-legislation",
+        fetchOptions,
+      }),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes("Federal Register API") &&
+        !error.message.includes(body)
+    );
+  }
+});
+
+test("Home Affairs ranks more than ten bounded alerts by safe updateDate parsing before applying the cap", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const alertItems = Array.from({ length: 12 }, (_, index) => {
+    const day = index + 1;
+    const dayText = String(day).padStart(2, "0");
+    return {
+      title: `Fixture update day ${dayText}`,
+      content: "Non-public deterministic fixture.",
+      updateDate: day === 12 ? "12/10/2026 12:03:28 AM" : `2026-10-${dayText}`,
+      urls: [`/discovery-fixture/ranked/day-${dayText}`],
+    };
+  });
+  const body =
+    '<html><script id="siteData" type="application/json">' +
+    JSON.stringify({ alertItems }) +
+    "</script></html>";
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    limits: { maxCandidates: 10 },
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(body)),
+    },
+  });
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.discoveredTitle),
+    Array.from({ length: 10 }, (_, index) => {
+      const dayText = String(12 - index).padStart(2, "0");
+      return `Fixture update day ${dayText}`;
+    })
+  );
+  assert.equal(result.candidates.length, 10);
+});
+
+test("Home Affairs allocates one URL per ranked alert before filling spare capacity with secondary URLs", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const discoverAlerts = (count: number) => {
+    const alertItems = Array.from({ length: count }, (_, index) => {
+      const day = count - index;
+      const dayText = String(day).padStart(2, "0");
+      return {
+        title: `Topic ${dayText}`,
+        updateDate: `2026-10-${dayText}`,
+        urls: [
+          `/discovery-fixture/topic-${dayText}/primary`,
+          `/discovery-fixture/topic-${dayText}/secondary`,
+          `/discovery-fixture/topic-${dayText}/tertiary`,
+        ],
+      };
+    });
+    const body =
+      '<html><script id="siteData" type="application/json">' +
+      JSON.stringify({ alertItems }) +
+      "</script></html>";
+    return discoverPolicyCandidates({
+      sourceId: source.id,
+      limits: { maxCandidates: 10 },
+      fetchOptions: {
+        lookupHost: publicLookup,
+        fetchImpl: () => Promise.resolve(response(body)),
+      },
+    });
+  };
+
+  const tenTopicResult = await discoverAlerts(12);
+  assert.deepEqual(
+    tenTopicResult.candidates.map((candidate) => candidate.discoveredTitle),
+    Array.from(
+      { length: 10 },
+      (_, index) => `Topic ${String(12 - index).padStart(2, "0")}`
+    )
+  );
+  assert.ok(
+    tenTopicResult.candidates.every((candidate) =>
+      candidate.canonicalUrl.endsWith("/primary")
+    )
+  );
+
+  const spareCapacityResult = await discoverAlerts(6);
+  assert.deepEqual(
+    spareCapacityResult.candidates.map((candidate) => candidate.canonicalUrl),
+    [
+      ...Array.from({ length: 6 }, (_, index) => {
+        const day = String(6 - index).padStart(2, "0");
+        return `https://immi.homeaffairs.gov.au/discovery-fixture/topic-${day}/primary`;
+      }),
+      ...Array.from({ length: 4 }, (_, index) => {
+        const day = String(6 - index).padStart(2, "0");
+        return `https://immi.homeaffairs.gov.au/discovery-fixture/topic-${day}/secondary`;
+      }),
+    ]
+  );
+});
+
+test("Home Affairs preserves stable ties and invalid dates, deduplicates URLs, and retains distinct URLs from one alert", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const alertItems = [
+    {
+      title: "Undated first",
+      updateDate: "not-a-date",
+      urls: ["/discovery-fixture/undated-first"],
+    },
+    {
+      title: "Tie first",
+      updateDate: "2026-10-02",
+      urls: ["/discovery-fixture/tie-first"],
+    },
+    {
+      title: "Newest multi-url alert",
+      updateDate: "2026-10-03",
+      urls: [
+        "/discovery-fixture/shared?utm_source=fixture",
+        "/discovery-fixture/second-page",
+        "/discovery-fixture/shared#duplicate",
+      ],
+    },
+    {
+      title: "Tie second",
+      updateDate: "2026-10-02",
+      urls: ["/discovery-fixture/tie-second"],
+    },
+    {
+      title: "Undated second",
+      updateDate: "31/02/2026",
+      urls: ["/discovery-fixture/undated-second"],
+    },
+    {
+      title: "Older duplicate URL",
+      updateDate: "2026-10-01",
+      urls: ["/discovery-fixture/shared"],
+    },
+  ];
+  const body =
+    '<html><script id="siteData" type="application/json">' +
+    JSON.stringify({ alertItems }) +
+    "</script></html>";
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(body)),
+    },
+  });
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.canonicalUrl),
+    [
+      "https://immi.homeaffairs.gov.au/discovery-fixture/shared",
+      "https://immi.homeaffairs.gov.au/discovery-fixture/tie-first",
+      "https://immi.homeaffairs.gov.au/discovery-fixture/tie-second",
+      "https://immi.homeaffairs.gov.au/discovery-fixture/undated-first",
+      "https://immi.homeaffairs.gov.au/discovery-fixture/undated-second",
+      "https://immi.homeaffairs.gov.au/discovery-fixture/second-page",
+    ]
+  );
+  assert.equal(result.candidates[0]?.discoveredTitle, "Newest multi-url alert");
+  assert.equal(result.candidates[5]?.discoveredTitle, "Newest multi-url alert");
+  assert.equal(
+    new Set(result.candidates.map((candidate) => candidate.canonicalUrl)).size,
+    result.candidates.length
+  );
+});
+
+test("ART news listing ranks strong topics first and retains dated news with unfamiliar titles", () => {
+  const source = getPolicyDiscoverySource("art-immigration-review");
+  const listing = readFileSync(
+    resolve(fixtureDirectory, "art-news-updates.html"),
+    "utf8"
+  );
+  const firstPass = parseArtNewsUpdateLinks(
+    listing,
+    source.seedUrls[0],
+    source,
+    3
+  );
+  const secondPass = parseArtNewsUpdateLinks(
+    listing,
+    source.seedUrls[0],
+    source,
+    3
+  );
+  assert.deepEqual(firstPass, secondPass);
+  assert.deepEqual(
+    firstPass.map((link) => link.canonicalUrl),
+    [
+      "https://www.art.gov.au/about-us/news-and-updates/student-review-process",
+      "https://www.art.gov.au/about-us/news-and-updates/case-file-guidance",
+      "https://www.art.gov.au/about-us/news-and-updates/practice-direction",
+    ]
+  );
+  assert.deepEqual(
+    firstPass.map((link) => link.sourceDate),
+    ["2026-06-01", "2026-08-25", "2026-08-24"]
+  );
+  assert.equal(firstPass[1]?.title, "Keeping a complete case record");
+  const fullBoundedSet = parseArtNewsUpdateLinks(
+    listing,
+    source.seedUrls[0],
+    source,
+    8
+  );
+  assert.ok(
+    fullBoundedSet.some((link) => link.canonicalUrl.endsWith("/corporate-plan"))
+  );
+  assert.equal(
+    fullBoundedSet.some((link) =>
+      /contact-us|outside\.example/i.test(link.canonicalUrl)
+    ),
+    false
+  );
+});
+
 test("discovery is bounded, deduplicated, and produces non-public provenance candidates", async () => {
   const source = getPolicyDiscoverySource("art-immigration-review");
   const listing = readFileSync(
-    resolve(fixtureDirectory, "listing.html"),
+    resolve(fixtureDirectory, "art-news-updates.html"),
     "utf8"
   );
-  const artListing = listing.replaceAll(
-    "immi.homeaffairs.gov.au",
-    "www.art.gov.au"
-  );
-  const detail = readFileSync(resolve(fixtureDirectory, "detail.html"), "utf8");
+  const detail =
+    "<html><head><title>Fixture ART update detail</title></head><body></body></html>";
   let requestCount = 0;
   const result = await discoverPolicyCandidates({
     sourceId: source.id,
@@ -497,19 +1106,29 @@ test("discovery is bounded, deduplicated, and produces non-public provenance can
       lookupHost: publicLookup,
       fetchImpl: () => {
         requestCount += 1;
-        return Promise.resolve(
-          response(requestCount === 1 ? artListing : detail)
-        );
+        return Promise.resolve(response(requestCount === 1 ? listing : detail));
       },
     },
-    limits: { maxPages: 3, maxCandidates: 3 },
+    limits: { maxPages: 4, maxCandidates: 3 },
   });
 
-  assert.equal(requestCount, 3);
+  assert.equal(requestCount, 4);
   assert.equal(result.candidates.length, 3);
   assert.deepEqual(
     result.candidates.map((item) => item.sourceMetadata.urlProvenance),
-    ["seed", "fetched_page", "fetched_page"]
+    ["fetched_page", "fetched_page", "fetched_page"]
+  );
+  assert.deepEqual(
+    result.candidates.map((item) => item.canonicalUrl),
+    [
+      "https://www.art.gov.au/about-us/news-and-updates/student-review-process",
+      "https://www.art.gov.au/about-us/news-and-updates/case-file-guidance",
+      "https://www.art.gov.au/about-us/news-and-updates/practice-direction",
+    ]
+  );
+  assert.deepEqual(
+    result.candidates.map((item) => item.explicitSourceDate),
+    ["2026-06-01", "2026-08-25", "2026-08-24"]
   );
   for (const item of result.candidates) {
     assert.equal(item.schemaVersion, DISCOVERY_CANDIDATE_SCHEMA);
@@ -531,10 +1150,7 @@ test("production editorial registry contains reviewed official fallback and publ
     resolve(testDirectory, "../content/policy-intelligence/registry.ts"),
     "utf8"
   );
-  assert.match(
-    registry,
-    /manual-skilled-processing-priorities-2026-09-19/
-  );
+  assert.match(registry, /manual-skilled-processing-priorities-2026-09-19/);
   assert.match(registry, /Department of Home Affairs/);
   assert.doesNotMatch(registry, /Synthetic policy source fixture/);
   assert.doesNotThrow(() => validatePolicyEntries([]));

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   policyIntelligenceAnalysisRevision,
   policyIntelligenceItem,
@@ -11,18 +11,78 @@ import type {
   AdminPolicyIntelligenceItem,
   AdminPolicyIntelligenceService,
 } from "./admin-api";
-import { policyAnalysisSchema } from "./contracts";
 import {
-  buildAdminPublicationDiagnostics,
-  buildAdminSourceSyncDiagnostic,
-} from "./publication-diagnostics";
+  ADMIN_SYNC_RUNS_PER_SOURCE,
+  ADMIN_SYNC_SOURCE_LIMIT,
+  projectAdminPolicyIntelligenceSyncRun,
+} from "./admin-api";
+import { policyAnalysisSchema } from "./contracts";
 import {
   readAnalysisAttemptDiagnostics,
   readCandidateFailureDiagnostics,
 } from "./pipeline-failure-diagnostics";
+import {
+  buildAdminPublicationDiagnostics,
+  buildAdminSourceSyncDiagnostic,
+} from "./publication-diagnostics";
 import { db } from "./server-db";
 
 export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
+  async listSourceSyncRuns() {
+    const sources = await db
+      .selectDistinct({
+        sourceConfigId: policyIntelligenceSyncRun.sourceConfigId,
+      })
+      .from(policyIntelligenceSyncRun)
+      .orderBy(asc(policyIntelligenceSyncRun.sourceConfigId))
+      .limit(ADMIN_SYNC_SOURCE_LIMIT);
+    const runsBySource = await Promise.all(
+      sources.map(
+        async ({ sourceConfigId }) =>
+          await db
+            .select({
+              sourceConfigId: policyIntelligenceSyncRun.sourceConfigId,
+              status: policyIntelligenceSyncRun.status,
+              startedAt: policyIntelligenceSyncRun.startedAt,
+              completedAt: policyIntelligenceSyncRun.completedAt,
+              discoveredCount: policyIntelligenceSyncRun.discoveredCount,
+              snapshottedCount: policyIntelligenceSyncRun.snapshottedCount,
+              unchangedCount: policyIntelligenceSyncRun.unchangedCount,
+              analyzedCount: policyIntelligenceSyncRun.analyzedCount,
+              publishedCount: policyIntelligenceSyncRun.publishedCount,
+              heldCount: policyIntelligenceSyncRun.heldCount,
+              failureCount: policyIntelligenceSyncRun.failureCount,
+              safeErrorCode: policyIntelligenceSyncRun.safeErrorCode,
+            })
+            .from(policyIntelligenceSyncRun)
+            .where(eq(policyIntelligenceSyncRun.sourceConfigId, sourceConfigId))
+            .orderBy(
+              desc(policyIntelligenceSyncRun.startedAt),
+              desc(policyIntelligenceSyncRun.id)
+            )
+            .limit(ADMIN_SYNC_RUNS_PER_SOURCE)
+      )
+    );
+    return runsBySource.flatMap((runs) =>
+      runs.map((run) =>
+        projectAdminPolicyIntelligenceSyncRun({
+          sourceConfigId: run.sourceConfigId,
+          status: run.status,
+          startedAt: run.startedAt.toISOString(),
+          completedAt: run.completedAt?.toISOString() ?? null,
+          discoveredCount: run.discoveredCount,
+          snapshottedCount: run.snapshottedCount,
+          unchangedCount: run.unchangedCount,
+          analyzedCount: run.analyzedCount,
+          publishedCount: run.publishedCount,
+          heldCount: run.heldCount,
+          failureCount: run.failureCount,
+          safeErrorCode: run.safeErrorCode,
+        })
+      )
+    );
+  },
+
   async listItems() {
     const rows = await db
       .select({
@@ -105,7 +165,10 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
           })
           .from(policyIntelligenceSyncRun)
           .where(eq(policyIntelligenceSyncRun.sourceConfigId, sourceConfigId))
-          .orderBy(desc(policyIntelligenceSyncRun.startedAt))
+          .orderBy(
+            desc(policyIntelligenceSyncRun.startedAt),
+            desc(policyIntelligenceSyncRun.id)
+          )
           .limit(1);
         return [sourceConfigId, run] as const;
       })

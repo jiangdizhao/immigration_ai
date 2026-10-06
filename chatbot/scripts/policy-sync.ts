@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
-import type { PolicyDiscoverySource } from "./policy-intelligence-discovery";
 
 loadDotenv({ path: resolve(process.cwd(), ".env.local") });
 
@@ -48,11 +47,15 @@ function parseArgs(args: string[]) {
 
 const detailHtml =
   "<!doctype html><html><head><title>Synthetic policy source fixture</title></head><body><main><h1>Synthetic policy source fixture</h1><p>This document is a deterministic fictional fixture for testing the Immigration AI Policy Intelligence pipeline. It is not an official government rule, not Australian law, and must never be used as legal advice. The example page describes a hypothetical administrative update solely to exercise source acquisition, normalized evidence capture, bilingual analysis, evidence reference verification, and publication gating. No actual visa subclass, person, policy change, commencement date, eligibility criterion, or legal consequence is represented here.</p></main></body></html>";
+const federalRegisterDetailHtml = detailHtml.replaceAll(
+  "Synthetic policy source fixture",
+  "Synthetic Migration legislation fixture"
+);
 
-function fixtureIndex(
-  sourceId: SourceId,
-  source: PolicyDiscoverySource
-): { body: string; contentType: string } {
+function fixtureIndex(sourceId: SourceId): {
+  body: string;
+  contentType: string;
+} {
   if (sourceId === "home-affairs-guidance") {
     return {
       body: `<html><script id="siteData" type="application/json">${JSON.stringify({ alertItems: [{ title: "Synthetic policy source fixture", content: "Fictional fixture only", urls: [{ url: "/policy-intelligence-fixture" }] }] })}</script></html>`,
@@ -61,12 +64,26 @@ function fixtureIndex(
   }
   if (sourceId === "federal-register-legislation") {
     return {
-      body: `<urlset><url><loc>${new URL("/policy-intelligence-fixture", source.seedUrls[0]).toString()}</loc></url></urlset>`,
-      contentType: "application/xml",
+      body: JSON.stringify({
+        value: [
+          {
+            id: "F2099L00001",
+            name: "Migration Regulations Fixture 2099",
+            collection: "LegislativeInstrument",
+            status: "Registered",
+            isInForce: false,
+            asMadeRegisteredAt: "2099-01-01T00:00:00Z",
+            administeringDepartments: [
+              { name: "Department of Home Affairs", portfolio: "Home Affairs" },
+            ],
+          },
+        ],
+      }),
+      contentType: "application/json",
     };
   }
   return {
-    body: `<html><a href="/policy-intelligence-fixture">Synthetic policy source fixture</a></html>`,
+    body: '<html><ul><li><a href="/policy-intelligence-fixture">Synthetic immigration review procedure update</a><time datetime="2099-01-01">1/01/2099</time></li></ul></html>',
     contentType: "text/html",
   };
 }
@@ -74,7 +91,7 @@ function fixtureIndex(
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const [
-    { discoverPolicyCandidates, getPolicyDiscoverySource },
+    { discoverPolicyCandidates },
     { acquireOfficialPolicySource },
     { runPolicyIntelligenceSync, createPolicyModelMetadata },
     { createInMemoryPolicyIntelligenceRepository },
@@ -88,7 +105,6 @@ async function main() {
     import("../lib/policy-intelligence/contracts"),
     import("../lib/policy-intelligence/provider"),
   ]);
-  const source = getPolicyDiscoverySource(options.sourceId);
   let repository: import("../lib/policy-intelligence/pipeline").PolicyIntelligenceRepository;
   let analyzer: import("../lib/policy-intelligence/provider").PolicyAnalyzer;
   let verifier: import("../lib/policy-intelligence/provider").PolicyAnalysisVerifier;
@@ -106,18 +122,24 @@ async function main() {
   if (options.fixture) {
     const memory = createInMemoryPolicyIntelligenceRepository();
     repository = memory.repository;
-    const index = fixtureIndex(options.sourceId, source);
+    const index = fixtureIndex(options.sourceId);
     const fixtureFetch: import("./policy-intelligence-discovery").DiscoveryFetchOptions =
       {
         lookupHost: () => Promise.resolve(["203.0.113.10"]),
         fetchImpl: (input) => {
           const url = new URL(String(input));
-          const isSeed = source.seedUrls.some(
-            (seed) => new URL(seed).pathname === url.pathname
-          );
-          const selected = isSeed
+          const isFederalApi =
+            options.sourceId === "federal-register-legislation" &&
+            url.hostname === "api.prod.legislation.gov.au";
+          const selected = isFederalApi
             ? index
-            : { body: detailHtml, contentType: "text/html" };
+            : {
+                body:
+                  options.sourceId === "federal-register-legislation"
+                    ? federalRegisterDetailHtml
+                    : detailHtml,
+                contentType: "text/html",
+              };
           return Promise.resolve(
             new Response(selected.body, {
               status: 200,

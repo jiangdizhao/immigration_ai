@@ -1,10 +1,12 @@
 import { z } from "zod";
-import type { AdminPublicationDiagnostics } from "./publication-diagnostics";
-import type { AdminSourceSyncDiagnostic } from "./publication-diagnostics";
 import type {
   AdminPipelineFailureDiagnostic,
   AdminPolicyAnalysisAttempt,
 } from "./pipeline-failure-diagnostics";
+import type {
+  AdminPublicationDiagnostics,
+  AdminSourceSyncDiagnostic,
+} from "./publication-diagnostics";
 
 export type AdminPolicyIntelligenceSnapshot = {
   sourceUrl: string;
@@ -36,6 +38,47 @@ export type AdminPolicyIntelligenceItem = {
   publicationDiagnostics: AdminPublicationDiagnostics;
 };
 
+export type AdminPolicyIntelligenceSyncRun = {
+  sourceConfigId: string;
+  status: "running" | "complete" | "partial" | "failed";
+  startedAt: string;
+  completedAt: string | null;
+  discoveredCount: number;
+  snapshottedCount: number;
+  unchangedCount: number;
+  analyzedCount: number;
+  publishedCount: number;
+  heldCount: number;
+  failureCount: number;
+  safeErrorCode: string | null;
+};
+
+export const ADMIN_SYNC_RUNS_PER_SOURCE = 5;
+export const ADMIN_SYNC_SOURCE_LIMIT = 20;
+
+export function projectAdminPolicyIntelligenceSyncRun(
+  run: AdminPolicyIntelligenceSyncRun
+): AdminPolicyIntelligenceSyncRun {
+  return {
+    sourceConfigId: run.sourceConfigId,
+    status: run.status,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    discoveredCount: run.discoveredCount,
+    snapshottedCount: run.snapshottedCount,
+    unchangedCount: run.unchangedCount,
+    analyzedCount: run.analyzedCount,
+    publishedCount: run.publishedCount,
+    heldCount: run.heldCount,
+    failureCount: run.failureCount,
+    safeErrorCode:
+      run.safeErrorCode &&
+      /^[a-z0-9][a-z0-9._-]{0,99}$/i.test(run.safeErrorCode)
+        ? run.safeErrorCode
+        : null,
+  };
+}
+
 export type AdminPolicyIntelligenceUpdate =
   | {
       status: "updated";
@@ -46,6 +89,7 @@ export type AdminPolicyIntelligenceUpdate =
 
 export type AdminPolicyIntelligenceService = {
   listItems(): Promise<AdminPolicyIntelligenceItem[]>;
+  listSourceSyncRuns(): Promise<AdminPolicyIntelligenceSyncRun[]>;
   updateItem(
     itemId: string,
     action: "archive" | "restore"
@@ -69,13 +113,23 @@ export async function handleAdminPolicyIntelligenceGet({
   service,
 }: {
   requireAdmin: PolicyAdminAuthenticator;
-  service: Pick<AdminPolicyIntelligenceService, "listItems">;
+  service: Pick<
+    AdminPolicyIntelligenceService,
+    "listItems" | "listSourceSyncRuns"
+  >;
 }): Promise<Response> {
   const admin = await requireAdmin();
   if (admin instanceof Response) {
     return admin;
   }
-  return Response.json({ items: await service.listItems() });
+  const [items, sourceSyncRuns] = await Promise.all([
+    service.listItems(),
+    service.listSourceSyncRuns(),
+  ]);
+  return Response.json({
+    items,
+    sourceSyncRuns: sourceSyncRuns.map(projectAdminPolicyIntelligenceSyncRun),
+  });
 }
 
 export async function handleAdminPolicyIntelligenceUpdate({

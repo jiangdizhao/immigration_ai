@@ -1,14 +1,10 @@
-import type { AdminPolicyIntelligenceService } from "./admin-api";
+import {
+  ADMIN_SYNC_RUNS_PER_SOURCE,
+  ADMIN_SYNC_SOURCE_LIMIT,
+  type AdminPolicyIntelligenceService,
+  projectAdminPolicyIntelligenceSyncRun,
+} from "./admin-api";
 import { isCurrentPublishedPolicyRevision } from "./currentness";
-import {
-  buildAdminPublicationDiagnostics,
-  buildAdminSourceSyncDiagnostic,
-} from "./publication-diagnostics";
-import {
-  readAnalysisAttemptDiagnostics,
-  readCandidateFailureDiagnostics,
-} from "./pipeline-failure-diagnostics";
-import { PolicyItemArchivedError } from "./pipeline";
 import type {
   PolicyIntelligenceRepository,
   PolicyItemRecord,
@@ -17,6 +13,15 @@ import type {
   PolicyRunRecord,
   PolicySnapshotRecord,
 } from "./pipeline";
+import { PolicyItemArchivedError } from "./pipeline";
+import {
+  readAnalysisAttemptDiagnostics,
+  readCandidateFailureDiagnostics,
+} from "./pipeline-failure-diagnostics";
+import {
+  buildAdminPublicationDiagnostics,
+  buildAdminSourceSyncDiagnostic,
+} from "./publication-diagnostics";
 
 export function createInMemoryPolicyIntelligenceRepository() {
   const items = new Map<string, PolicyItemRecord>();
@@ -238,6 +243,49 @@ export function createInMemoryPolicyIntelligenceRepository() {
   };
 
   const adminService: AdminPolicyIntelligenceService = {
+    listSourceSyncRuns() {
+      const sourceIds = new Set<string>();
+      const countsBySource = new Map<string, number>();
+      const projected: Awaited<
+        ReturnType<AdminPolicyIntelligenceService["listSourceSyncRuns"]>
+      > = [];
+      const sortedRuns = [...runs.values()].sort((left, right) => {
+        const dateOrder =
+          Date.parse(right.startedAt) - Date.parse(left.startedAt);
+        return dateOrder || right.id.localeCompare(left.id);
+      });
+      for (const run of sortedRuns) {
+        if (!sourceIds.has(run.sourceConfigId)) {
+          if (sourceIds.size >= ADMIN_SYNC_SOURCE_LIMIT) {
+            continue;
+          }
+          sourceIds.add(run.sourceConfigId);
+        }
+        const sourceCount = countsBySource.get(run.sourceConfigId) ?? 0;
+        if (sourceCount >= ADMIN_SYNC_RUNS_PER_SOURCE) {
+          continue;
+        }
+        countsBySource.set(run.sourceConfigId, sourceCount + 1);
+        projected.push(
+          projectAdminPolicyIntelligenceSyncRun({
+            sourceConfigId: run.sourceConfigId,
+            status: run.status,
+            startedAt: run.startedAt,
+            completedAt: run.completedAt,
+            discoveredCount: run.discoveredCount,
+            snapshottedCount: run.snapshottedCount,
+            unchangedCount: run.unchangedCount,
+            analyzedCount: run.analyzedCount,
+            publishedCount: run.publishedCount,
+            heldCount: run.heldCount,
+            failureCount: run.failureCount,
+            safeErrorCode: run.safeErrorCode,
+          })
+        );
+      }
+      return Promise.resolve(projected);
+    },
+
     async listItems() {
       return [...items.values()].map((item) => {
         const snapshot = item.latestSnapshotId

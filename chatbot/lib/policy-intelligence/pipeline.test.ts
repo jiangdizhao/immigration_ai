@@ -9,19 +9,19 @@ import {
   TypeValidationError,
 } from "ai";
 import { z } from "zod";
-import {
-  classifyPolicyAnalysisFailure,
-  PolicyAnalysisDiagnosticError,
-  POLICY_ANALYSIS_RETRY_TIMEOUT_MS,
-  POLICY_ANALYSIS_TIMEOUT_MS,
-  withPolicyAnalysisTimeoutRetry,
-} from "./analysis-diagnostics";
+import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
+import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import type {
   PolicyAnalysisAttemptContext,
   PolicyAnalysisExecutionResult,
 } from "./analysis-diagnostics";
-import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
-import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
+import {
+  classifyPolicyAnalysisFailure,
+  POLICY_ANALYSIS_RETRY_TIMEOUT_MS,
+  POLICY_ANALYSIS_TIMEOUT_MS,
+  PolicyAnalysisDiagnosticError,
+  withPolicyAnalysisTimeoutRetry,
+} from "./analysis-diagnostics";
 import {
   evaluatePublicationGate,
   POLICY_ANALYSIS_SCHEMA,
@@ -288,6 +288,31 @@ test("unchanged source hash skips duplicate snapshot, analysis and publication",
   assert.equal(h.store.revisions.size, 1);
   assert.deepEqual(h.calls(), { analyzeCalls: 1, verifyCalls: 1 });
 });
+
+test("successful unchanged sync runs remain visible in the bounded admin projection", async () => {
+  const h = dependencies();
+  await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+
+  const [latestRun] = await h.store.adminService.listSourceSyncRuns();
+  assert.deepEqual(latestRun, {
+    sourceConfigId: candidate.sourceConfigId,
+    status: "complete",
+    startedAt: now,
+    completedAt: now,
+    discoveredCount: 1,
+    snapshottedCount: 0,
+    unchangedCount: 1,
+    analyzedCount: 0,
+    publishedCount: 0,
+    heldCount: 0,
+    failureCount: 0,
+    safeErrorCode: null,
+  });
+  const [adminItem] = await h.store.adminService.listItems();
+  assert.equal(adminItem?.sourceSyncDiagnostic, null);
+});
+
 test("changed source hash creates immutable snapshot and superseding revision", async () => {
   const h = dependencies({ hashes: ["hash-one", "hash-two"] });
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);

@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   type AdminPolicyIntelligenceItem,
   type AdminPolicyIntelligenceService,
+  type AdminPolicyIntelligenceSyncRun,
   handleAdminPolicyIntelligenceGet,
   handleAdminPolicyIntelligenceUpdate,
 } from "./admin-api";
+import { createInMemoryPolicyIntelligenceRepository } from "./memory-repository";
 
 const itemId = "8f924f1d-c64d-4489-8d98-2c13a55608e2";
 const adminAuth = async () => ({ userId: "admin-1" });
@@ -39,9 +41,29 @@ function setup() {
     publicationDiagnostics: { published: true, reasons: [] },
   };
   const records = new Map([[itemId, item]]);
+  const syncRun: AdminPolicyIntelligenceSyncRun & {
+    metadata?: { sourceBody: string };
+  } = {
+    sourceConfigId: "home-affairs-guidance",
+    status: "complete",
+    startedAt: "2026-10-06T06:00:00.000Z",
+    completedAt: "2026-10-06T06:00:01.000Z",
+    discoveredCount: 10,
+    snapshottedCount: 0,
+    unchangedCount: 10,
+    analyzedCount: 0,
+    publishedCount: 0,
+    heldCount: 0,
+    failureCount: 0,
+    safeErrorCode: "unsafe raw diagnostic text",
+    metadata: { sourceBody: "must not be returned" },
+  };
   const service: AdminPolicyIntelligenceService = {
     async listItems() {
       return [...records.values()];
+    },
+    listSourceSyncRuns() {
+      return Promise.resolve([syncRun]);
     },
     async updateItem(id, action) {
       const current = records.get(id);
@@ -58,7 +80,7 @@ function setup() {
       };
     },
   };
-  return { item, records, service };
+  return { item, records, service, syncRun };
 }
 
 function actionRequest(action: "archive" | "restore") {
@@ -93,6 +115,14 @@ test("non-admin cannot archive or restore and the service is not called", async 
   let calls = 0;
   const guardedService: AdminPolicyIntelligenceService = {
     ...service,
+    async listItems() {
+      calls++;
+      return await service.listItems();
+    },
+    async listSourceSyncRuns() {
+      calls++;
+      return await service.listSourceSyncRuns();
+    },
     async updateItem(...args) {
       calls++;
       return await service.updateItem(...args);
@@ -111,21 +141,95 @@ test("non-admin cannot archive or restore and the service is not called", async 
 });
 
 test("admin listing is authenticated and returns only management fields", async () => {
-  const { service } = setup();
+  const { service, syncRun } = setup();
+  let calls = 0;
+  const guardedService: AdminPolicyIntelligenceService = {
+    ...service,
+    async listItems() {
+      calls++;
+      return await service.listItems();
+    },
+    async listSourceSyncRuns() {
+      calls++;
+      return await service.listSourceSyncRuns();
+    },
+  };
   const denied = await handleAdminPolicyIntelligenceGet({
     requireAdmin: deniedAuth(403),
-    service,
+    service: guardedService,
   });
   assert.equal(denied.status, 403);
+  assert.equal(calls, 0);
 
   const allowed = await handleAdminPolicyIntelligenceGet({
     requireAdmin: adminAuth,
-    service,
+    service: guardedService,
   });
   assert.equal(allowed.status, 200);
-  assert.deepEqual(await allowed.json(), {
+  const body = await allowed.json();
+  assert.deepEqual(body, {
     items: [await service.listItems().then(([item]) => item)],
+    sourceSyncRuns: [
+      {
+        sourceConfigId: syncRun.sourceConfigId,
+        status: syncRun.status,
+        startedAt: syncRun.startedAt,
+        completedAt: syncRun.completedAt,
+        discoveredCount: syncRun.discoveredCount,
+        snapshottedCount: syncRun.snapshottedCount,
+        unchangedCount: syncRun.unchangedCount,
+        analyzedCount: syncRun.analyzedCount,
+        publishedCount: syncRun.publishedCount,
+        heldCount: syncRun.heldCount,
+        failureCount: syncRun.failureCount,
+        safeErrorCode: null,
+      },
+    ],
   });
+  assert.equal(syncRun.status, "complete");
+  assert.equal(body.sourceSyncRuns[0].safeErrorCode, null);
+  assert.equal(body.items[0].sourceSyncDiagnostic, null);
+  assert.equal(Object.hasOwn(body.sourceSyncRuns[0], "metadata"), false);
+});
+
+test("direct admin service projection sanitizes error codes before page consumption", async () => {
+  const store = createInMemoryPolicyIntelligenceRepository();
+  store.runs.set("unsafe-run", {
+    id: "unsafe-run",
+    sourceConfigId: "home-affairs-guidance",
+    mode: "fixture",
+    status: "complete",
+    startedAt: "2026-10-06T06:00:00.000Z",
+    completedAt: "2026-10-06T06:00:01.000Z",
+    discoveredCount: 10,
+    snapshottedCount: 0,
+    unchangedCount: 10,
+    analyzedCount: 0,
+    publishedCount: 0,
+    heldCount: 0,
+    failureCount: 0,
+    safeErrorCode: "unsafe raw diagnostic text",
+    candidateFailures: [],
+    analysisAttempts: [],
+  });
+
+  const [run] = await store.adminService.listSourceSyncRuns();
+  assert.equal(run?.safeErrorCode, null);
+  assert.equal(Object.hasOwn(run ?? {}, "metadata"), false);
+  assert.deepEqual(Object.keys(run ?? {}).sort(), [
+    "analyzedCount",
+    "completedAt",
+    "discoveredCount",
+    "failureCount",
+    "heldCount",
+    "publishedCount",
+    "safeErrorCode",
+    "snapshottedCount",
+    "sourceConfigId",
+    "startedAt",
+    "status",
+    "unchangedCount",
+  ]);
 });
 
 test("invalid action request is rejected without changing item state", async () => {

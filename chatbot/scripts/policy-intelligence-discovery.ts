@@ -10,8 +10,12 @@ export const DISCOVERY_LIMITS = {
   maxLinksPerPage: 8,
   maxCandidates: 10,
   maxAlertItems: 100,
+  maxAlertUrlsPerItem: 4,
+  maxFederalRegisterApiResultsPerCollection: 64,
+  maxFederalRegisterDetailPages: 20,
+  maxFederalRegisterRecordFrontier: 128,
   // Transport ceilings are resource-safety bounds only, not relevance gates.
-  // 64 MiB covers the sitemap protocol's normal uncompressed ceiling.
+  // Transport ceilings apply equally to bounded API and page responses.
   maxTotalBytes: 256 * 1024 * 1024,
   maxResponseBytes: 64 * 1024 * 1024,
   maxPreviewCharacters: 500,
@@ -34,6 +38,7 @@ export type DiscoveryLimits = Partial<
 >;
 
 const ACCEPTED_CONTENT_TYPES = new Set([
+  "application/json",
   "application/xhtml+xml",
   "application/xml",
   "text/html",
@@ -46,6 +51,7 @@ export type DiscoveryStrategy =
   | "direct_page"
   | "listing_links"
   | "sitemap_links"
+  | "federal_register_api"
   | "home_affairs_site_alerts";
 
 export type PolicyDiscoverySource = {
@@ -76,7 +82,8 @@ export type DiscoveryCandidate = {
     httpStatus: number;
     redirectChain: readonly string[];
     titleSource?: "title" | "og:title" | "h1";
-    dateSource?: "time" | "meta";
+    dateSource?: "time" | "meta" | "listing";
+    federalRegisteredAt?: string;
     alertCategory?: string;
     alertType?: string;
     alertUpdateDate?: string;
@@ -102,6 +109,7 @@ export type DiscoveryFetchErrorCode =
   | "unsupported_content_type"
   | "response_too_large"
   | "runtime_limit"
+  | "invalid_response"
   | "invalid_source";
 
 export class DiscoveryError extends Error {
@@ -128,18 +136,20 @@ export const POLICY_DISCOVERY_SOURCES: readonly PolicyDiscoverySource[] = [
   {
     id: "federal-register-legislation",
     authority: "Federal Register of Legislation",
-    allowedHostnames: ["legislation.gov.au", "www.legislation.gov.au"],
-    seedUrls: ["https://www.legislation.gov.au/sitemap.xml"],
-    strategy: "sitemap_links",
+    allowedHostnames: [
+      "legislation.gov.au",
+      "www.legislation.gov.au",
+      "api.prod.legislation.gov.au",
+    ],
+    seedUrls: ["https://api.prod.legislation.gov.au/v1/titles/search"],
+    strategy: "federal_register_api",
     topicHint: "legislation",
   },
   {
     id: "art-immigration-review",
     authority: "Administrative Review Tribunal",
     allowedHostnames: ["art.gov.au", "www.art.gov.au"],
-    seedUrls: [
-      "https://www.art.gov.au/applying-review/immigration-and-citizenship",
-    ],
+    seedUrls: ["https://www.art.gov.au/about-us/news-and-updates"],
     strategy: "listing_links",
     topicHint: "review_procedure",
   },
@@ -469,6 +479,9 @@ export async function fetchOfficialPage(
       redirectCount += 1
     ) {
       const parsed = new URL(currentUrl);
+      const allowsJson =
+        source.strategy === "federal_register_api" &&
+        parsed.hostname === "api.prod.legislation.gov.au";
       const resolvedAddresses = await withAbortDeadline(
         Promise.resolve().then(() => lookupHost(parsed.hostname)),
         controller.signal
@@ -487,8 +500,9 @@ export async function fetchOfficialPage(
             redirect: "manual",
             credentials: "omit",
             headers: {
-              Accept:
-                "text/html, application/xhtml+xml, application/xml, text/xml",
+              Accept: allowsJson
+                ? "application/json"
+                : "text/html, application/xhtml+xml, application/xml, text/xml",
               "User-Agent": "ImmigrationAI-PolicyDiscovery/1.0",
             },
             signal: controller.signal,
@@ -537,7 +551,10 @@ export async function fetchOfficialPage(
       const contentType = contentTypeWithoutParameters(
         response.headers.get("content-type")
       );
-      if (!ACCEPTED_CONTENT_TYPES.has(contentType)) {
+      if (
+        !ACCEPTED_CONTENT_TYPES.has(contentType) ||
+        (contentType === "application/json" && !allowsJson)
+      ) {
         throw new DiscoveryError(
           "unsupported_content_type",
           `Unsupported content type ${contentType || "(missing)"}: ${currentUrl}`
@@ -635,8 +652,7 @@ export function parseSitemapLinks(
         links.push(canonicalUrl);
       }
     } catch {
-      // Ignore malformed or out-of-scope links; the configured source remains
-      // the authority boundary for this operator run.
+      // Ignore malformed or out-of-scope links.
     }
   }
   return links;
@@ -745,6 +761,189 @@ export function parseHomeAffairsAlertItems(
   }
 }
 
+function parseAlertUpdateTimestamp(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const dayFirst =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i.exec(
+      normalized
+    );
+  if (dayFirst) {
+    const day = Number(dayFirst[1]);
+    const month = Number(dayFirst[2]);
+    const year = Number(dayFirst[3]);
+    let hour = Number(dayFirst[4] ?? 0);
+    const minute = Number(dayFirst[5] ?? 0);
+    const second = Number(dayFirst[6] ?? 0);
+    const meridiem = dayFirst[7]?.toUpperCase();
+    if (
+      year < 1000 ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31 ||
+      minute > 59 ||
+      second > 59 ||
+      (meridiem ? hour < 1 || hour > 12 : hour > 23)
+    ) {
+      return null;
+    }
+    if (meridiem) {
+      hour = (hour % 12) + (meridiem === "PM" ? 12 : 0);
+    }
+    const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+    const parsed = new Date(timestamp);
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return timestamp;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function rankHomeAffairsAlerts(
+  items: readonly Record<string, unknown>[]
+): Record<string, unknown>[] {
+  return items
+    .map((item, order) => ({
+      item,
+      order,
+      timestamp: parseAlertUpdateTimestamp(item.updateDate),
+    }))
+    .sort((left, right) => {
+      if (left.timestamp !== null && right.timestamp !== null) {
+        return right.timestamp - left.timestamp || left.order - right.order;
+      }
+      if (left.timestamp !== null) {
+        return -1;
+      }
+      if (right.timestamp !== null) {
+        return 1;
+      }
+      return left.order - right.order;
+    })
+    .map(({ item }) => item);
+}
+
+export type ArtUpdateLink = {
+  canonicalUrl: string;
+  title: string;
+  sourceDate?: string;
+  relevance: number;
+  order: number;
+};
+
+function artUpdateRelevance(value: string): number {
+  const normalized = value.toLowerCase();
+  const immigrationSignal =
+    /\b(?:immigration|migration|visa|citizenship|refugee|protection)\b/.test(
+      normalized
+    );
+  const procedureSignal =
+    /\b(?:practice direction|review|hearing|application fee|application fees|procedure|proceedings|tribunal)\b/.test(
+      normalized
+    );
+  return immigrationSignal ? 3 : procedureSignal ? 2 : 1;
+}
+
+export function parseArtNewsUpdateLinks(
+  html: string,
+  baseUrl: string,
+  source: PolicyDiscoverySource,
+  maxLinks: number = DISCOVERY_LIMITS.maxLinksPerPage
+): ArtUpdateLink[] {
+  const links: ArtUpdateLink[] = [];
+  const listingHtml = html.replace(/<nav\b[^>]*>[\s\S]*?<\/nav\s*>/gi, " ");
+  const cardPattern =
+    /<(?:article|li)\b[^>]*>([\s\S]*?)<\/(?:article|li)\s*>/gi;
+  for (const [order, card] of [
+    ...listingHtml.matchAll(cardPattern),
+  ].entries()) {
+    const anchor = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i.exec(card[1]);
+    if (!anchor) {
+      continue;
+    }
+    const attributes = parseTagAttributes(anchor[1]);
+    if (!attributes.href) {
+      continue;
+    }
+    const title = stripMarkup(anchor[2]);
+    try {
+      const canonicalUrl = assertOfficialUrlAllowed(
+        new URL(decodeHtmlEntities(attributes.href), baseUrl).toString(),
+        source
+      );
+      if (/\.(?:pdf|docx?|xlsx?|pptx?)(?:$|[?#])/i.test(canonicalUrl)) {
+        continue;
+      }
+      const articleUrl = new URL(canonicalUrl);
+      const listingPath = new URL(source.seedUrls[0]).pathname.replace(
+        /\/$/,
+        ""
+      );
+      if (!articleUrl.pathname.startsWith(`${listingPath}/`)) {
+        continue;
+      }
+      const rawDate =
+        firstMatch(card[1], /<time\b[^>]*datetime\s*=\s*["']([^"']+)["']/i) ??
+        stripMarkup(card[1]).match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)?.[0];
+      const timestamp = parseAlertUpdateTimestamp(rawDate);
+      if (timestamp === null) {
+        continue;
+      }
+      const relevance = artUpdateRelevance(
+        `${title} ${stripMarkup(card[1])} ${canonicalUrl}`
+      );
+      links.push({
+        canonicalUrl,
+        title,
+        sourceDate: new Date(timestamp).toISOString().slice(0, 10),
+        relevance,
+        order,
+      });
+    } catch {
+      // Ignore malformed or out-of-scope links.
+    }
+  }
+  const uniqueLinks = new Map<string, ArtUpdateLink>();
+  for (const link of links) {
+    if (!uniqueLinks.has(link.canonicalUrl)) {
+      uniqueLinks.set(link.canonicalUrl, link);
+    }
+  }
+  return [...uniqueLinks.values()]
+    .sort((left, right) => {
+      if (left.relevance !== right.relevance) {
+        return right.relevance - left.relevance;
+      }
+      const leftDate = parseAlertUpdateTimestamp(left.sourceDate);
+      const rightDate = parseAlertUpdateTimestamp(right.sourceDate);
+      if (leftDate !== null && rightDate !== null && leftDate !== rightDate) {
+        return rightDate - leftDate;
+      }
+      if (leftDate !== null && rightDate === null) {
+        return -1;
+      }
+      if (leftDate === null && rightDate !== null) {
+        return 1;
+      }
+      return left.order - right.order;
+    })
+    .slice(0, Math.max(0, maxLinks));
+}
+
 function boundedRawMetadata(
   value: unknown,
   maxCharacters = 200
@@ -831,6 +1030,50 @@ function candidateFromHomeAffairsAlert(
   };
 }
 
+function candidatesFromHomeAffairsAlert(
+  item: Record<string, unknown>,
+  page: FetchedOfficialPage,
+  source: PolicyDiscoverySource,
+  retrievedAt: string,
+  maxPreviewCharacters: number,
+  maxUrls: number
+): DiscoveryCandidate[] {
+  const validUrls: string[] = [];
+  for (const rawUrl of alertUrlValues(item)) {
+    const canonicalUrl = resolveHomeAffairsAlertUrl(
+      rawUrl,
+      page.finalUrl,
+      source
+    );
+    if (canonicalUrl && !validUrls.includes(canonicalUrl)) {
+      validUrls.push(canonicalUrl);
+      if (validUrls.length >= maxUrls) {
+        break;
+      }
+    }
+  }
+  if (validUrls.length === 0) {
+    return [
+      candidateFromHomeAffairsAlert(
+        item,
+        page,
+        source,
+        retrievedAt,
+        maxPreviewCharacters
+      ),
+    ];
+  }
+  return validUrls.map((canonicalUrl) =>
+    candidateFromHomeAffairsAlert(
+      { ...item, urls: [canonicalUrl] },
+      page,
+      source,
+      retrievedAt,
+      maxPreviewCharacters
+    )
+  );
+}
+
 type ParsedPageMetadata = {
   title?: string;
   titleSource?: "title" | "og:title" | "h1";
@@ -906,7 +1149,12 @@ export function candidateFromPage(
   page: FetchedOfficialPage,
   source: PolicyDiscoverySource,
   retrievedAt: string,
-  strategy: DiscoveryStrategy
+  strategy: DiscoveryStrategy,
+  sourceMetadata: {
+    listingSourceDate?: string;
+    listingTitle?: string;
+    federalRegisteredAt?: string;
+  } = {}
 ): DiscoveryCandidate {
   const metadata = parsePageMetadata(page.body);
   const canonicalUrl = canonicalizeOfficialUrl(page.finalUrl);
@@ -925,8 +1173,8 @@ export function candidateFromPage(
     sourceConfigId: source.id,
     authority: source.authority,
     canonicalUrl,
-    discoveredTitle: metadata.title,
-    explicitSourceDate: metadata.sourceDate,
+    discoveredTitle: metadata.title ?? sourceMetadata.listingTitle,
+    explicitSourceDate: metadata.sourceDate ?? sourceMetadata.listingSourceDate,
     retrievedAt,
     contentType: page.contentType,
     preview: boundedPreview(metadata.preview),
@@ -938,7 +1186,10 @@ export function candidateFromPage(
       httpStatus: page.status,
       redirectChain: page.redirectChain,
       titleSource: metadata.titleSource,
-      dateSource: metadata.dateSource,
+      dateSource:
+        metadata.dateSource ??
+        (sourceMetadata.listingSourceDate ? "listing" : undefined),
+      federalRegisteredAt: sourceMetadata.federalRegisteredAt,
       urlProvenance,
     },
   };
@@ -990,6 +1241,37 @@ function boundedLimits(
       defaults.maxAlertItems,
       Math.max(1, overrides.maxAlertItems ?? defaults.maxAlertItems)
     ),
+    maxAlertUrlsPerItem: Math.min(
+      DISCOVERY_LIMITS.maxAlertUrlsPerItem,
+      Math.max(
+        1,
+        overrides.maxAlertUrlsPerItem ?? DISCOVERY_LIMITS.maxAlertUrlsPerItem
+      )
+    ),
+    maxFederalRegisterApiResultsPerCollection: Math.min(
+      DISCOVERY_LIMITS.maxFederalRegisterApiResultsPerCollection,
+      Math.max(
+        1,
+        overrides.maxFederalRegisterApiResultsPerCollection ??
+          DISCOVERY_LIMITS.maxFederalRegisterApiResultsPerCollection
+      )
+    ),
+    maxFederalRegisterDetailPages: Math.min(
+      DISCOVERY_LIMITS.maxFederalRegisterDetailPages,
+      Math.max(
+        1,
+        overrides.maxFederalRegisterDetailPages ??
+          DISCOVERY_LIMITS.maxFederalRegisterDetailPages
+      )
+    ),
+    maxFederalRegisterRecordFrontier: Math.min(
+      DISCOVERY_LIMITS.maxFederalRegisterRecordFrontier,
+      Math.max(
+        1,
+        overrides.maxFederalRegisterRecordFrontier ??
+          DISCOVERY_LIMITS.maxFederalRegisterRecordFrontier
+      )
+    ),
     maxTotalBytes: Math.min(
       defaults.maxTotalBytes,
       Math.max(1, overrides.maxTotalBytes ?? defaults.maxTotalBytes)
@@ -1023,14 +1305,330 @@ function boundedLimits(
   };
 }
 
+type FederalRegisterRecord = {
+  id: string;
+  name: string;
+  collection: "Act" | "LegislativeInstrument" | "NotifiableInstrument";
+  status: string;
+  isInForce: boolean;
+  asMadeRegisteredAt: string;
+  administeringDepartments: { name?: string; portfolio?: string }[];
+};
+
+const FEDERAL_REGISTER_COLLECTIONS = [
+  "Act",
+  "LegislativeInstrument",
+  "NotifiableInstrument",
+] as const;
+
+function federalRegisterSearchUrl(
+  seedUrl: string,
+  collection: FederalRegisterRecord["collection"],
+  top: number
+): string {
+  const url = new URL(seedUrl);
+  url.pathname = `/v1/titles/search(criteria='collection(${collection})')`;
+  url.search = "";
+  url.searchParams.set(
+    "$select",
+    "id,name,collection,status,isInForce,asMadeRegisteredAt,administeringDepartments"
+  );
+  url.searchParams.set("$expand", "administeringDepartments");
+  url.searchParams.set("$orderby", "asMadeRegisteredAt desc");
+  url.searchParams.set("$top", String(top));
+  return url.toString();
+}
+
+function parseFederalRegisterResponse(
+  body: string,
+  expectedCollection: FederalRegisterRecord["collection"],
+  limit: number
+): FederalRegisterRecord[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new DiscoveryError(
+      "invalid_response",
+      "Federal Register API returned invalid JSON"
+    );
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as { value?: unknown }).value)
+  ) {
+    throw new DiscoveryError(
+      "invalid_response",
+      "Federal Register API returned an invalid response shape"
+    );
+  }
+  const values = (parsed as { value: unknown[] }).value;
+  const records: FederalRegisterRecord[] = [];
+  for (const value of values.slice(0, limit)) {
+    if (!value || typeof value !== "object") {
+      throw new DiscoveryError(
+        "invalid_response",
+        "Federal Register API returned an invalid title record"
+      );
+    }
+    const item = value as Record<string, unknown>;
+    const departments = item.administeringDepartments;
+    if (
+      typeof item.id !== "string" ||
+      !/^[A-Z]\d{4}[A-Z]\d{5}$/.test(item.id) ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      item.collection !== expectedCollection ||
+      typeof item.status !== "string" ||
+      !item.status ||
+      typeof item.isInForce !== "boolean" ||
+      typeof item.asMadeRegisteredAt !== "string" ||
+      !Number.isFinite(Date.parse(item.asMadeRegisteredAt)) ||
+      !Array.isArray(departments)
+    ) {
+      throw new DiscoveryError(
+        "invalid_response",
+        "Federal Register API returned an incomplete title record"
+      );
+    }
+    const administeringDepartments = departments.map((department) => {
+      if (!department || typeof department !== "object") {
+        throw new DiscoveryError(
+          "invalid_response",
+          "Federal Register API returned invalid department metadata"
+        );
+      }
+      const fields = department as Record<string, unknown>;
+      return {
+        name: typeof fields.name === "string" ? fields.name : undefined,
+        portfolio:
+          typeof fields.portfolio === "string" ? fields.portfolio : undefined,
+      };
+    });
+    records.push({
+      id: item.id,
+      name: item.name.trim(),
+      collection: expectedCollection,
+      status: item.status,
+      isInForce: item.isInForce,
+      asMadeRegisteredAt: item.asMadeRegisteredAt,
+      administeringDepartments,
+    });
+  }
+  return records;
+}
+
+function federalRegisterTitleRelevanceTier(title: string): number {
+  if (
+    /\b(migration|visa|citizenship|refugee)\b/i.test(title) ||
+    /\b(protection\s+visa|refugee\s+protection|humanitarian\s+protection)\b/i.test(
+      title
+    )
+  ) {
+    return 3;
+  }
+  return /\boverseas students?\b/i.test(title) ? 1 : 0;
+}
+
+function federalRegisterHasHomeAffairsDepartment(
+  record: FederalRegisterRecord
+): boolean {
+  return record.administeringDepartments.some(
+    (department) =>
+      /^department of home affairs$/i.test(department.name?.trim() ?? "") ||
+      /\bhome affairs\b/i.test(department.portfolio ?? "")
+  );
+}
+
+function federalRegisterDetailConfirmsImmigration(body: string): boolean {
+  const withoutExecutableText = body.replace(
+    /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    " "
+  );
+  const title =
+    metaContent(withoutExecutableText, /^og:title$/i) ??
+    firstMatch(withoutExecutableText, /<h1\b[^>]*>([\s\S]*?)<\/h1>/i) ??
+    firstMatch(withoutExecutableText, /<title\b[^>]*>([\s\S]*?)<\/title>/i) ??
+    "";
+  if (federalRegisterTitleRelevanceTier(stripMarkup(title)) > 0) {
+    return true;
+  }
+
+  const text = stripMarkup(withoutExecutableText);
+  const authorityRelations = text.matchAll(
+    /\b(?:authori[sz]ed\s+(?:by|under)|made\s+under|parent\s+title|principal\s+act)\b\s*:?\s*([^.;]{0,240})/gi
+  );
+  for (const relation of authorityRelations) {
+    if (
+      /\b(?:Migration Act 1958|Migration Regulations 1994|Australian Citizenship Act 2007)\b/i.test(
+        relation[1]
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function compareFederalRegisteredAt(
+  left: FederalRegisterRecord,
+  right: FederalRegisterRecord
+) {
+  return (
+    Date.parse(right.asMadeRegisteredAt) -
+      Date.parse(left.asMadeRegisteredAt) || left.id.localeCompare(right.id)
+  );
+}
+
+async function discoverFederalRegisterCandidates(
+  options: DiscoveryRunOptions,
+  source: PolicyDiscoverySource,
+  limits: ReturnType<typeof boundedLimits>,
+  now: () => string
+): Promise<DiscoveryRunResult> {
+  const startedAt = Date.now();
+  let totalBytes = 0;
+  const recordsById = new Map<string, FederalRegisterRecord>();
+  const fetchPage = async (url: string) => {
+    const elapsed = Date.now() - startedAt;
+    const remaining = limits.maxRuntimeMs - elapsed;
+    if (remaining <= 0) {
+      throw new DiscoveryError(
+        "runtime_limit",
+        "Discovery runtime limit exceeded"
+      );
+    }
+    const page = await fetchOfficialPage(url, source, {
+      ...options.fetchOptions,
+      maxResponseBytes: Math.min(
+        options.fetchOptions?.maxResponseBytes ?? limits.maxResponseBytes,
+        limits.maxResponseBytes
+      ),
+      maxRedirects: limits.maxRedirects,
+      timeoutMs: Math.min(
+        options.fetchOptions?.timeoutMs ?? limits.requestTimeoutMs,
+        remaining
+      ),
+    });
+    if (Date.now() - startedAt > limits.maxRuntimeMs) {
+      throw new DiscoveryError(
+        "runtime_limit",
+        "Discovery runtime limit exceeded"
+      );
+    }
+    totalBytes += page.bytes;
+    if (totalBytes > limits.maxTotalBytes) {
+      throw new DiscoveryError(
+        "response_too_large",
+        `Discovery run exceeds ${limits.maxTotalBytes} total bytes`
+      );
+    }
+    return page;
+  };
+
+  for (const collection of FEDERAL_REGISTER_COLLECTIONS) {
+    const url = federalRegisterSearchUrl(
+      source.seedUrls[0],
+      collection,
+      limits.maxFederalRegisterApiResultsPerCollection
+    );
+    const page = await fetchPage(url);
+    const collectionRecords = parseFederalRegisterResponse(
+      page.body,
+      collection,
+      limits.maxFederalRegisterApiResultsPerCollection
+    );
+    for (const record of collectionRecords) {
+      const existing = recordsById.get(record.id);
+      if (!existing || compareFederalRegisteredAt(record, existing) < 0) {
+        recordsById.set(record.id, record);
+      }
+    }
+  }
+
+  const frontier = [...recordsById.values()]
+    .sort(compareFederalRegisteredAt)
+    .slice(0, limits.maxFederalRegisterRecordFrontier)
+    .map((record) => ({
+      record,
+      titleTier: federalRegisterTitleRelevanceTier(record.name),
+      homeAffairs: federalRegisterHasHomeAffairsDepartment(record),
+    }))
+    .filter((entry) => entry.titleTier > 0 || entry.homeAffairs)
+    .sort(
+      (left, right) =>
+        right.titleTier - left.titleTier ||
+        compareFederalRegisteredAt(left.record, right.record)
+    );
+
+  const inspected: {
+    candidate: DiscoveryCandidate;
+    relevanceTier: number;
+    record: FederalRegisterRecord;
+  }[] = [];
+  for (const { record, titleTier, homeAffairs } of frontier.slice(
+    0,
+    limits.maxFederalRegisterDetailPages
+  )) {
+    const detailUrl = assertOfficialUrlAllowed(
+      `https://www.legislation.gov.au/${record.id}/latest`,
+      source
+    );
+    const page = await fetchPage(detailUrl);
+    const candidate = candidateFromPage(page, source, now(), source.strategy, {
+      federalRegisteredAt: record.asMadeRegisteredAt,
+    });
+    const detailConfirmed =
+      homeAffairs && federalRegisterDetailConfirmsImmigration(page.body);
+    const relevanceTier = titleTier || (detailConfirmed ? 2 : 0);
+    if (relevanceTier > 0) {
+      inspected.push({ candidate, relevanceTier, record });
+    }
+  }
+  const candidates = inspected
+    .sort(
+      (left, right) =>
+        right.relevanceTier - left.relevanceTier ||
+        compareFederalRegisteredAt(left.record, right.record)
+    )
+    .slice(0, limits.maxCandidates)
+    .map((entry) => entry.candidate);
+  return {
+    schemaVersion: DISCOVERY_CANDIDATE_SCHEMA,
+    sourceConfigId: source.id,
+    candidates: deduplicateCandidates(candidates).slice(
+      0,
+      limits.maxCandidates
+    ),
+  };
+}
+
 export async function discoverPolicyCandidates(
   options: DiscoveryRunOptions
 ): Promise<DiscoveryRunResult> {
   const source = getPolicyDiscoverySource(options.sourceId);
   const limits = boundedLimits(source, options.limits);
-  const startedAt = Date.now();
   const now = options.now ?? (() => new Date().toISOString());
-  const queue = [...source.seedUrls];
+  if (source.strategy === "federal_register_api") {
+    return discoverFederalRegisterCandidates(options, source, limits, now);
+  }
+
+  const startedAt = Date.now();
+  const queue: {
+    url: string;
+    kind: "sitemap" | "listing" | "candidate";
+    listingSourceDate?: string;
+    listingTitle?: string;
+  }[] = source.seedUrls.map((url) => ({
+    url,
+    kind:
+      source.strategy === "sitemap_links"
+        ? "sitemap"
+        : source.strategy === "listing_links"
+          ? "listing"
+          : "candidate",
+  }));
   const seenUrls = new Set<string>();
   const candidates: DiscoveryCandidate[] = [];
   let totalBytes = 0;
@@ -1046,29 +1644,23 @@ export async function discoverPolicyCandidates(
         "Discovery runtime limit exceeded"
       );
     }
-    const nextUrl = queue.shift();
-    if (!nextUrl) {
+    const next = queue.shift();
+    if (!next) {
       break;
     }
-    const canonicalUrl = assertOfficialUrlAllowed(nextUrl, source);
+    const canonicalUrl = assertOfficialUrlAllowed(next.url, source);
     if (seenUrls.has(canonicalUrl)) {
       continue;
     }
     seenUrls.add(canonicalUrl);
-
     const remainingRuntimeMs = limits.maxRuntimeMs - (Date.now() - startedAt);
-    if (remainingRuntimeMs <= 0) {
-      throw new DiscoveryError(
-        "runtime_limit",
-        "Discovery runtime limit exceeded"
-      );
-    }
     const page = await fetchOfficialPage(canonicalUrl, source, {
       ...options.fetchOptions,
       maxResponseBytes: Math.min(
         options.fetchOptions?.maxResponseBytes ?? limits.maxResponseBytes,
         limits.maxResponseBytes
       ),
+      maxRedirects: limits.maxRedirects,
       timeoutMs: Math.min(
         options.fetchOptions?.timeoutMs ?? limits.requestTimeoutMs,
         remainingRuntimeMs
@@ -1087,29 +1679,105 @@ export async function discoverPolicyCandidates(
         `Discovery run exceeds ${limits.maxTotalBytes} total bytes`
       );
     }
+
     if (source.strategy === "home_affairs_site_alerts") {
-      for (const item of parseHomeAffairsAlertItems(
-        page.body,
-        limits.maxAlertItems
-      )) {
-        if (candidates.length >= limits.maxCandidates) {
-          break;
+      const rankedGroups = rankHomeAffairsAlerts(
+        parseHomeAffairsAlertItems(page.body, limits.maxAlertItems)
+      ).map((item) =>
+        candidatesFromHomeAffairsAlert(
+          item,
+          page,
+          source,
+          now(),
+          limits.maxPreviewCharacters,
+          limits.maxAlertUrlsPerItem
+        )
+      );
+      const seenAlertUrls = new Set<string>();
+      const selected: DiscoveryCandidate[] = [];
+      for (const group of rankedGroups) {
+        const primary = group[0];
+        if (
+          primary &&
+          !seenAlertUrls.has(primary.canonicalUrl) &&
+          selected.length < limits.maxCandidates
+        ) {
+          seenAlertUrls.add(primary.canonicalUrl);
+          selected.push(primary);
         }
-        candidates.push(
-          candidateFromHomeAffairsAlert(
-            item,
-            page,
-            source,
-            now(),
-            limits.maxPreviewCharacters
-          )
-        );
       }
+      for (
+        let urlIndex = 1;
+        urlIndex < limits.maxAlertUrlsPerItem &&
+        selected.length < limits.maxCandidates;
+        urlIndex += 1
+      ) {
+        for (const group of rankedGroups) {
+          const item = group[urlIndex];
+          if (!item || seenAlertUrls.has(item.canonicalUrl)) {
+            continue;
+          }
+          seenAlertUrls.add(item.canonicalUrl);
+          selected.push(item);
+          if (selected.length >= limits.maxCandidates) {
+            break;
+          }
+        }
+      }
+      candidates.push(...selected);
       break;
     }
 
-    candidates.push(candidateFromPage(page, source, now(), source.strategy));
+    if (next.kind === "candidate") {
+      candidates.push(
+        candidateFromPage(page, source, now(), source.strategy, {
+          listingSourceDate: next.listingSourceDate,
+          listingTitle: next.listingTitle,
+        })
+      );
+      continue;
+    }
 
+    if (next.kind === "sitemap") {
+      for (const link of parseSitemapLinks(
+        page.body,
+        page.finalUrl,
+        source,
+        limits.maxLinksPerPage
+      )) {
+        if (!seenUrls.has(link) && !queue.some((entry) => entry.url === link)) {
+          queue.push({ url: link, kind: "candidate" });
+        }
+      }
+      continue;
+    }
+
+    if (
+      source.id === "art-immigration-review" &&
+      source.strategy === "listing_links"
+    ) {
+      for (const link of parseArtNewsUpdateLinks(
+        page.body,
+        page.finalUrl,
+        source,
+        limits.maxLinksPerPage
+      )) {
+        if (
+          !seenUrls.has(link.canonicalUrl) &&
+          !queue.some((entry) => entry.url === link.canonicalUrl)
+        ) {
+          queue.push({
+            url: link.canonicalUrl,
+            kind: "candidate",
+            listingSourceDate: link.sourceDate,
+            listingTitle: link.title,
+          });
+        }
+      }
+      continue;
+    }
+
+    candidates.push(candidateFromPage(page, source, now(), source.strategy));
     if (source.strategy === "listing_links") {
       for (const link of parseListingLinks(
         page.body,
@@ -1117,19 +1785,8 @@ export async function discoverPolicyCandidates(
         source,
         limits.maxLinksPerPage
       )) {
-        if (!seenUrls.has(link) && !queue.includes(link)) {
-          queue.push(link);
-        }
-      }
-    } else if (source.strategy === "sitemap_links") {
-      for (const link of parseSitemapLinks(
-        page.body,
-        page.finalUrl,
-        source,
-        limits.maxLinksPerPage
-      )) {
-        if (!seenUrls.has(link) && !queue.includes(link)) {
-          queue.push(link);
+        if (!seenUrls.has(link) && !queue.some((entry) => entry.url === link)) {
+          queue.push({ url: link, kind: "candidate" });
         }
       }
     }
