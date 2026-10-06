@@ -2,88 +2,120 @@
 
 **Status:** ACTIVE  
 **Canonical branch:** `phase11-chinese-service-platform-ui-rebase`  
-**Runtime base:** `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`  
-**Priority:** emergency / small / fast
+**Runtime application base:** `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`  
+**Priority:** emergency / small / fast / one-pass
 
-## Goal
+## Objective
 
-Fix exactly two owner-observed defects without reopening the wider Phase 11 or Policy Intelligence architecture.
+Fix exactly two owner-observed defects in one bounded implementation pass. Do not reopen the broader Phase 11, RR-01, RR-02, upload architecture, or Policy Intelligence architecture.
 
-### Bug 1 — conversation area is squeezed by the document panel
+## Bug 1 — reclaim workspace height for the AI conversation
 
-Owner correction to the screenshot:
+Owner-confirmed screenshot semantics:
 
-- **A = AI conversation display** and should be larger;
-- **B = message composer** and should remain intact;
-- the area **above A** (case-file/document upload panel) is consuming too much vertical space.
+- **A = AI conversation display** and must become materially taller;
+- **B = message composer** should remain functionally and visually compact;
+- the old document/upload block above A is expendable UI chrome.
 
-Current source confirms `MatterDocumentsPanel` sits immediately above the flexing message list. Therefore reducing its idle height directly gives A more space without redesigning B.
+Current layout already gives A `flex-1`, so the correct solution is **not** to hard-code a larger A height. Reclaim vertical space from the always-visible document panel and let the existing flex layout assign that space to A.
 
-Small fix:
+### Approved UI direction
 
-- keep the case-file title and Upload button;
-- when there are no documents, collapse the panel to a compact row;
-- remove the always-visible supported-format list from the workspace surface;
-- remove the idle `文件：— / Documents: —` line;
-- do not show generic unverified-file explanatory copy before a document exists;
-- preserve real document cards, processing/security status, selection, retry/reprocess/download/delete, and concise actionable errors when relevant;
-- do not change accepted file types, size limits, upload APIs, processing, security, or database behavior.
+Use a ChatGPT-style attachment affordance:
 
-Primary file expected: `chatbot/components/matter-documents-panel.tsx`.
+- remove the standalone idle `MatterDocumentsPanel` block above A;
+- place a compact `+` attachment/upload control at the lower-left of the composer;
+- do **not** permanently display supported types, the 25 MiB limit, generic “customer access required” copy, or an empty `Documents: — / 文件：—` state in the main workspace;
+- when there are no documents, the document feature should consume essentially no additional vertical space beyond the `+` control;
+- when actual documents exist, expose them as a compact attachment/status row or chips near/above the composer;
+- preserve actionable states and existing behavior: upload, processing/security status, selection, retry/reprocess/download/delete/manage as currently supported;
+- put format/size explanatory text inside the attachment/upload/manage interaction if it is still needed;
+- do not change accepted file types, size limits, upload APIs, document processing, provenance/security rules, or database behavior;
+- do not increase composer B merely to host the attachment control.
 
-Acceptance: on desktop the visible conversation region A is materially taller, the composer B is unchanged, and upload still works as before.
+Expected files: primarily `chatbot/components/immigration-ai-workspace.tsx` and `chatbot/components/matter-documents-panel.tsx`, with the smallest supporting test change if needed.
 
-## Bug 2 — Ask AI from a policy detail loses the policy before first-turn routing
+### UI acceptance
 
-The existing handoff already carries the correct policy slug/reference:
+- With zero documents, the old multi-row “案件文件” block is gone.
+- A is visibly taller because reclaimed space flows to the existing `flex-1` message list.
+- B remains compact and usable.
+- The `+` control can still initiate the existing upload flow.
+- Existing real document state remains accessible without recreating a large permanent panel.
+- Desktop is the primary acceptance surface; do a quick narrow/mobile sanity check only, not a separate redesign cycle.
+
+## Bug 2 — policy-linked first turn loses topic before semantic routing
+
+The existing frontend/server handoff is already mostly correct:
 
 `policyWorkspaceHref -> /ai-workspace?policy=<slug>&launch=policy -> policyReference -> policySlug -> getPolicyTopicContextEntry()`.
 
-The request routes already append a bounded server-resolved `policy_topic_reference` system entry to `frontend_messages`. Premium direct history and `ConversationMemoryService` already know how to consume that entry without persisting it as normal chat history.
+The request routes append a bounded, server-resolved `role=system, policy_topic_reference=true` entry to `frontend_messages`. Premium direct history and `ConversationMemoryService` already understand that entry and keep it out of normal persisted user/assistant history.
 
-The observed defect is earlier in the normal Fast/Legal pipeline: `QueryService._analyze_semantic_turn()` currently sends only backend `current_state.conversation_history` to semantic analysis. On a fresh policy-linked conversation that history is empty, so a first question such as “请详细介绍一下这项政策” can be routed before the policy topic hint is available.
+The observed gap is earlier in the normal Fast/Legal path: `QueryService._analyze_semantic_turn()` currently gives semantic analysis only backend `current_state.conversation_history`. In a fresh policy-linked conversation that history is empty, so “请详细介绍一下这项政策” can be classified before the selected policy hint exists in router context.
 
-Small fix:
+### Approved minimal backend fix
 
-- before semantic analysis, extract at most the existing validated/bounded `role=system && policy_topic_reference=true` entry from `payload.frontend_messages`;
-- include that topic hint in semantic-turn context for the first turn;
-- keep the user's actual question unchanged;
-- do not copy the whole policy brief into the prompt;
-- do not treat the topic reference as legal evidence;
-- do not persist it as a fake user/assistant chat message;
-- do not relax source verification;
-- do not redesign `ConversationMemoryService`, PFVD, AgentRuntime, Fast, Legal Check, or Premium.
+- before calling `semantic_turn_service.analyze()`, inspect `payload.frontend_messages`;
+- take **at most one** entry that is both `role=system` and `policy_topic_reference=true`, with non-empty bounded text;
+- include that existing topic hint in the semantic-turn context used for routing;
+- keep the actual user question byte-for-byte/semantically unchanged;
+- do not inject the whole public policy detail or raw source body;
+- do not treat the topic hint as legal evidence;
+- do not persist it as a fake user or assistant message;
+- do not weaken source verification or publication rules;
+- do not redesign `ConversationMemoryService`, PFVD, AgentRuntime, Fast, Legal Check, or Premium;
+- ordinary conversations without a policy topic reference must behave exactly as before.
 
-Primary backend file expected: `legal-service/app/services/query_service.py`, with the smallest targeted regression test needed.
+Expected backend file: `legal-service/app/services/query_service.py`, plus one focused regression test in the nearest existing query/semantic-turn test file.
 
-Acceptance:
+### Context acceptance
 
-1. From a real Legal Update detail, click **就这项政策向 AI 提问**.
+1. Open a real Legal Update detail and click **就这项政策向 AI 提问**.
 2. Ask **“请详细介绍一下这项政策”**.
-3. AI must understand which policy is referenced and answer it instead of asking the user to name the policy.
-4. A follow-up such as **“这个变化对学生有什么影响？”** should retain the same policy topic.
-5. An ordinary new conversation with no policy link must not invent a policy context.
+3. AI identifies/uses the selected policy context and does **not** ask the user to specify which policy.
+4. A follow-up such as **“这个变化对学生有什么影响？”** retains the same selected topic.
+5. A normal new conversation with no policy link receives no synthetic policy context.
+6. Existing guarantees remain: no automatic model call on handoff, no fake persisted policy chat message, no policy-context leakage after switching/creating another conversation.
 
-## Scope / stop rule
+## Hard scope boundaries
 
-Target production change: approximately **2–4 source/test files**.
+Target roughly **3–6 source/test files total**. Prefer the smallest coherent implementation over abstraction work.
 
 Do not touch:
 
 - Policy Intelligence discovery/analyzer/verifier/publication gate;
-- RR-01/RR-02 behavior;
+- RR-01/RR-02 semantics;
 - database schema or migrations;
-- AWS resources;
+- AWS resources/deployment;
 - upload formats/limits/security pipeline;
-- consultation/lawyer-review/billing code;
+- consultation/lawyer-review/billing;
 - protected branch `policy-intelligence-admin-detail-wip-20261004`;
-- unrelated lint/format/refactor work.
+- unrelated lint, formatting, dependency upgrades, refactors, or copy polish.
 
-Validation should be concentrated, not iterative:
+## One-pass execution and validation
 
-- focused tests for policy-topic semantic routing and any lightweight UI regression test already natural to the codebase;
+Implement both bugs together, then run a concentrated gate:
+
+- focused frontend tests naturally covering the attachment/workspace behavior if an existing test surface supports it;
+- focused legal-service regression test for policy topic availability during semantic routing;
+- relevant existing policy-continuity tests;
 - chatbot production build;
 - `git diff --check`;
-- one local browser smoke covering the two acceptance scenarios.
+- one local browser smoke covering:
+  - zero-document workspace height and `+` upload affordance;
+  - one policy-detail -> Ask AI first-turn question and one follow-up;
+  - one ordinary conversation without policy context.
 
-If those pass and no core regression is visible, **STOP**. Do not start another broad review or polishing loop.
+If these pass and no core correctness regression is visible, **STOP and report the patch for owner review.** Do not start broad review, cosmetic polishing, or a chain of micro-fixes.
+
+## Deliverable discipline
+
+Leave the completed patch uncommitted/unpushed for owner review unless explicitly told otherwise. Report:
+
+- exact changed files;
+- concise explanation of both fixes;
+- focused test results;
+- build/diff-check result;
+- smoke result or exact blocker;
+- any genuine remaining release blocker only.

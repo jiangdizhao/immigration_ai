@@ -1341,16 +1341,18 @@ canonical commit `9461efbe14b22936e6a7311eaadbff413d02070f`; source review,
 owner local validation and staging revalidation all PASS. Its detailed staging
 record is in `docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
 
-## 2026-10-06 Emergency AI Workspace hotfix — ACTIVE
+## 2026-10-06 Emergency AI Workspace hotfix — ACTIVE / one-pass scope
 
-A small, fast hotfix is now the active task after RR-02 closure. The owner clarified the screenshot layout: **A is the AI conversation display and must gain vertical space; B is the composer and should remain intact; the document/upload area above A is what should be compressed.**
+The owner has approved the final UI direction. Screenshot semantics are fixed: **A is the AI conversation display and must gain space; B is the composer and should remain intact.** The old always-visible case-file panel above A should no longer occupy its own block.
 
-The hotfix has exactly two product fixes:
+The hotfix has exactly two product fixes and should be implemented **in one pass**, not split into micro-subtasks:
 
-- compress the idle case-file/document area above the conversation so it no longer spends multiple rows listing supported formats, unverified-file copy, or an empty “file: —” state; preserve upload and real document/status controls when they are actually needed;
-- fix Policy Update -> Ask AI continuity so first-turn references such as “这项政策 / this policy” reach semantic routing with the already-existing bounded, server-resolved policy topic reference instead of reaching the router context-free.
+- **Composer attachment redesign:** remove the standalone idle `MatterDocumentsPanel` block above A. Put the existing upload action behind a compact `+` attachment control in the lower-left of the composer, ChatGPT-style. With no documents, document UI should consume essentially no extra vertical space. When real documents exist, show only a compact attachment/status row or chips near the composer, while preserving the existing upload/processing/security/selection/manage behavior. Supported-format/25 MiB explanatory copy belongs in the upload/manage affordance when needed, not permanently in the main workspace. Do not enlarge B; the reclaimed height should flow automatically to A through the existing flex layout.
+- **Policy-to-AI first-turn context:** preserve the existing bounded server-resolved `policy_topic_reference`, but make it available to semantic-turn routing before a fresh policy-linked first question is classified. Questions such as “请详细介绍一下这项政策” or “这个变化对学生有什么影响？” must resolve against the selected Legal Update instead of asking which policy the user means.
 
-This is intentionally **not** a redesign. Runtime base is canonical commit `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`. No database migration, Policy Intelligence analyzer/verifier/publication-gate change, answer-architecture rewrite, upload-backend redesign, or unrelated cleanup is authorised. Keep the production patch small (target roughly 2–4 source/test files), run focused regression tests plus build/diff-check, perform one local visual/behavior smoke, and stop when the two acceptance checks pass.
+This is intentionally **not** a redesign. Runtime application source remains based on canonical runtime commit `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`; planning-doc commits may advance HEAD. No database migration, Policy Intelligence analyzer/verifier/publication-gate change, answer-architecture rewrite, upload backend/security redesign, AWS change, or unrelated cleanup is authorised.
 
-Detailed bounded plan: `docs/agent-memory/tasks/AI-WORKSPACE-EMERGENCY-HOTFIX-2026-10-06.md`.
+**Execution rule:** one implementation pass, concentrated validation, then STOP. Target a small patch (roughly 3–6 source/test files). Do not create a sequence of tiny repair tasks unless a validation result exposes a real correctness blocker.
+
+Detailed plan: `docs/agent-memory/tasks/AI-WORKSPACE-EMERGENCY-HOTFIX-2026-10-06.md`.
 
