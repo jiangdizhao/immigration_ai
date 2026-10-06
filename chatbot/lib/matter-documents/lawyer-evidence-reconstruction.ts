@@ -3,6 +3,10 @@ import type {
   CustomerDocumentLocator,
   CustomerDocumentManifest,
 } from "./ai-evidence-packet";
+import {
+  MAX_EVIDENCE_UNITS_PER_DOCUMENT,
+  MAX_TEXT_CHARS_PER_UNIT_IN_AI_PACKET,
+} from "./ai-evidence-packet";
 
 type PersistedIncludedUnit = {
   ordinal: number;
@@ -49,7 +53,7 @@ function isIncludedUnit(value: unknown): value is PersistedIncludedUnit {
     typeof item.includedTextChars === "number" &&
     Number.isInteger(item.includedTextChars) &&
     item.includedTextChars > 0 &&
-    item.includedTextChars <= 4000 &&
+    item.includedTextChars <= MAX_TEXT_CHARS_PER_UNIT_IN_AI_PACKET &&
     typeof item.extractionMethod === "string" &&
     item.extractionMethod.length <= 32 &&
     typeof item.textSha256 === "string" &&
@@ -94,7 +98,7 @@ export function reconstructExactLawyerDocumentEvidence(input: {
     !Array.isArray(manifest.includedUnitOrdinals) ||
     !Array.isArray(manifest.locators) ||
     manifest.includedUnits.length === 0 ||
-    manifest.includedUnits.length > 8 ||
+    manifest.includedUnits.length > MAX_EVIDENCE_UNITS_PER_DOCUMENT ||
     manifest.includedUnits.length !== manifest.includedUnitOrdinals.length ||
     manifest.includedUnits.length !== manifest.locators.length ||
     manifest.includedUnits.length !== input.exact.units.length

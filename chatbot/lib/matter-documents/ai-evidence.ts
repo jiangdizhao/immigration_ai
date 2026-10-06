@@ -1,67 +1,44 @@
 import "server-only";
 
 import {
+  getLatestMatterDocumentProcessingAttempt,
   getMatterDocumentProcessingEvidence,
-  getMatterDocumentRecordForOwner,
+  listMatterDocumentRecordsForOwner,
 } from "@/lib/db/queries";
 import type {
   CustomerDocumentEvidence,
   CustomerDocumentManifest,
-  MatterDocumentEvidenceInput,
 } from "./ai-evidence-packet";
-import {
-  assertMatterDocumentEvidenceReady,
-  assertSelectedMatterDocumentAccess,
-  buildBoundedMatterDocumentEvidence,
-  MAX_SELECTED_DOCUMENTS,
-  SelectedMatterDocumentError,
-} from "./ai-evidence-packet";
+import { resolveConversationMatterDocumentEvidence } from "./ai-evidence-packet";
 
 export * from "./ai-evidence-packet";
 
-export async function buildSelectedMatterDocumentEvidence(input: {
+export async function buildConversationMatterDocumentEvidence(input: {
   userId: string;
   chatId: string;
-  selectedDocumentIds: string[];
 }): Promise<{
   evidence: CustomerDocumentEvidence;
   manifest: CustomerDocumentManifest[];
 }> {
-  if (
-    input.selectedDocumentIds.length > MAX_SELECTED_DOCUMENTS ||
-    new Set(input.selectedDocumentIds).size !== input.selectedDocumentIds.length
-  ) {
-    throw new SelectedMatterDocumentError("not_ready");
-  }
-  const documents: MatterDocumentEvidenceInput["documents"] = [];
-  for (const documentId of input.selectedDocumentIds) {
-    const document = await getMatterDocumentRecordForOwner({
-      documentId,
-      userId: input.userId,
-    });
-    assertSelectedMatterDocumentAccess(document, {
-      userId: input.userId,
-      chatId: input.chatId,
-    });
-    const result = await getMatterDocumentProcessingEvidence({
-      documentId,
-      userId: input.userId,
-    });
-    if (!result) {
-      throw new SelectedMatterDocumentError("not_ready");
-    }
-    const run = result.run;
-    assertMatterDocumentEvidenceReady(run, result.units.length);
-    documents.push({
-      document,
-      run: {
-        ...run,
-        status: run.status as "complete" | "partial" | "needs_review",
-      },
-      units: result.units,
-    });
-  }
-  return buildBoundedMatterDocumentEvidence({ documents });
+  const records = await listMatterDocumentRecordsForOwner(input);
+  const documents = records.map(({ matterDocument }) => matterDocument);
+  return resolveConversationMatterDocumentEvidence({
+    ...input,
+    documents,
+    getLatestAttempt: (documentId) =>
+      getLatestMatterDocumentProcessingAttempt({
+        documentId,
+        userId: input.userId,
+      }),
+    getEvidence: async (documentId, runId) => {
+      const result = await getMatterDocumentProcessingEvidence({
+        documentId,
+        userId: input.userId,
+        runId,
+      });
+      return result?.units ?? null;
+    },
+  });
 }
 
 export function customerDocumentSources(manifest: CustomerDocumentManifest[]) {

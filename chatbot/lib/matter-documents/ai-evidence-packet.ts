@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-export const MAX_SELECTED_DOCUMENTS = 4;
-export const MAX_EVIDENCE_UNITS_PER_DOCUMENT = 8;
-export const MAX_EVIDENCE_UNITS_TOTAL = 24;
-export const MAX_TEXT_CHARS_PER_UNIT_IN_AI_PACKET = 4000;
-export const MAX_TEXT_CHARS_PER_DOCUMENT_IN_AI_PACKET = 8000;
-export const MAX_TEXT_CHARS_TOTAL_IN_AI_PACKET = 24_000;
+export const MAX_CONVERSATION_DOCUMENTS = 8;
+export const MAX_EVIDENCE_UNITS_PER_DOCUMENT = 16;
+export const MAX_EVIDENCE_UNITS_TOTAL = 64;
+export const MAX_TEXT_CHARS_PER_UNIT_IN_AI_PACKET = 6000;
+export const MAX_TEXT_CHARS_PER_DOCUMENT_IN_AI_PACKET = 20_000;
+export const MAX_TEXT_CHARS_TOTAL_IN_AI_PACKET = 64_000;
 
 export type CustomerDocumentLocator = Record<string, string | number>;
 export type CustomerDocumentUnit = {
@@ -58,52 +58,90 @@ export type MatterDocumentEvidenceInput = {
   }>;
 };
 
-export class SelectedMatterDocumentError extends Error {
-  readonly kind: "not_found" | "not_ready";
+type ConversationDocumentCandidate = {
+  id: string;
+  userId: string;
+  chatId: string;
+  storageStatus: string;
+  securityStatus: string;
+  deletedAt: Date | null;
+  createdAt: Date;
+  originalFilename: string;
+  mimeType: string;
+};
 
-  constructor(kind: "not_found" | "not_ready") {
-    super(
-      kind === "not_found"
-        ? "Selected document not found."
-        : "Selected document is not ready for AI use."
+type ConversationDocumentRun = {
+  id: string;
+  status: string;
+  extractionMethod: string | null;
+  truncated: boolean;
+};
+
+export async function resolveConversationMatterDocumentEvidence(input: {
+  userId: string;
+  chatId: string;
+  documents: ConversationDocumentCandidate[];
+  getLatestAttempt: (
+    documentId: string
+  ) => Promise<ConversationDocumentRun | null>;
+  getEvidence: (
+    documentId: string,
+    runId: string
+  ) => Promise<Array<{
+    ordinal: number;
+    locator: CustomerDocumentLocator;
+    extractedText: string;
+    extractionMethod: string;
+  }> | null>;
+}): Promise<{
+  evidence: CustomerDocumentEvidence;
+  manifest: CustomerDocumentManifest[];
+}> {
+  const documents = [...input.documents]
+    .filter(
+      (document) =>
+        document.userId === input.userId &&
+        document.chatId === input.chatId &&
+        document.storageStatus === "stored" &&
+        document.securityStatus === "clean" &&
+        document.deletedAt === null
+    )
+    .sort(
+      (left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() ||
+        left.id.localeCompare(right.id)
     );
-    this.kind = kind;
-  }
-}
+  const usable: MatterDocumentEvidenceInput["documents"] = [];
 
-export function assertSelectedMatterDocumentAccess(
-  document: {
-    userId: string;
-    chatId: string;
-    storageStatus: string;
-    securityStatus: string;
-    deletedAt: Date | null;
-  } | null,
-  expected: { userId: string; chatId: string }
-): asserts document is NonNullable<typeof document> {
-  if (
-    !document ||
-    document.userId !== expected.userId ||
-    document.chatId !== expected.chatId ||
-    document.storageStatus !== "stored" ||
-    document.securityStatus !== "clean" ||
-    document.deletedAt
-  ) {
-    throw new SelectedMatterDocumentError("not_found");
+  for (const document of documents) {
+    if (usable.length >= MAX_CONVERSATION_DOCUMENTS) {
+      break;
+    }
+    const run = await input.getLatestAttempt(document.id);
+    if (!run || !["complete", "partial", "needs_review"].includes(run.status)) {
+      continue;
+    }
+    const units = await input.getEvidence(document.id, run.id);
+    if (!units?.length) {
+      continue;
+    }
+    usable.push({
+      document: {
+        id: document.id,
+        originalFilename: document.originalFilename,
+        mimeType: document.mimeType,
+      },
+      run: {
+        id: run.id,
+        status: run.status as "complete" | "partial" | "needs_review",
+        extractionMethod: run.extractionMethod,
+        truncated: run.truncated,
+      },
+      units,
+    });
   }
-}
 
-export function assertMatterDocumentEvidenceReady(
-  run: { status: string } | null | undefined,
-  unitCount: number
-): asserts run is { status: "complete" | "partial" | "needs_review" } {
-  if (
-    !run ||
-    !["complete", "partial", "needs_review"].includes(run.status) ||
-    unitCount === 0
-  ) {
-    throw new SelectedMatterDocumentError("not_ready");
-  }
+  return buildBoundedMatterDocumentEvidence({ documents: usable });
 }
 
 export function buildBoundedMatterDocumentEvidence(
@@ -114,7 +152,10 @@ export function buildBoundedMatterDocumentEvidence(
 } {
   const evidence: CustomerDocumentEvidence = { documents: [] };
   const manifest: CustomerDocumentManifest[] = [];
-  const selectedCount = input.documents.length;
+  const selectedCount = Math.min(
+    input.documents.length,
+    MAX_CONVERSATION_DOCUMENTS
+  );
   const perDocumentUnitLimit = selectedCount
     ? Math.min(
         MAX_EVIDENCE_UNITS_PER_DOCUMENT,
@@ -129,7 +170,7 @@ export function buildBoundedMatterDocumentEvidence(
     : MAX_TEXT_CHARS_PER_DOCUMENT_IN_AI_PACKET;
   let totalUnits = 0;
   let totalChars = 0;
-  for (const item of input.documents) {
+  for (const item of input.documents.slice(0, MAX_CONVERSATION_DOCUMENTS)) {
     const units: CustomerDocumentUnit[] = [];
     let documentChars = 0;
     const orderedUnits = [...item.units].sort((a, b) => a.ordinal - b.ordinal);
@@ -171,7 +212,7 @@ export function buildBoundedMatterDocumentEvidence(
       totalUnits += 1;
     }
     if (!units.length) {
-      throw new SelectedMatterDocumentError("not_ready");
+      continue;
     }
     const includedUnits = units.map((unit) => ({
       ordinal: unit.ordinal,

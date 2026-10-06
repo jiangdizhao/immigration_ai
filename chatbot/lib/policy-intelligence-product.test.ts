@@ -15,6 +15,7 @@ import {
   isPolicyLinkedConversation,
   type LivePolicyRecord,
   latestPolicyOrder,
+  linkedPolicySlugForConversation,
   loadPolicyProductState,
   type PublicPolicyProduct,
   policyTopicContextEntry,
@@ -765,6 +766,14 @@ test("policy launch creates once only for a resolved launch without chatId", () 
     false
   );
   assert.equal(isPolicyLinkedConversation("chat-1", "chat-1", null), false);
+  assert.equal(
+    linkedPolicySlugForConversation("chat-1", "chat-1", policyReference),
+    "policy-update-one"
+  );
+  assert.equal(
+    linkedPolicySlugForConversation("chat-2", "chat-1", policyReference),
+    undefined
+  );
 });
 test("policy topic context contains only bounded public reference fields", () => {
   const reference = {
@@ -778,7 +787,7 @@ test("policy topic context contains only bounded public reference fields", () =>
   };
   const context = buildPolicyTopicContext(reference);
   assert.ok(context);
-  assert.ok(context.includes("Topic reference only"));
+  assert.ok(context.includes("Resolve references such as 'this policy'"));
   assert.ok(context.includes("https://example.gov.au/policy"));
   assert.ok(context.length < 1400);
   assert.equal(

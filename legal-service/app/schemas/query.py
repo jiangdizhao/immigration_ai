@@ -13,7 +13,7 @@ settings = get_settings()
 class CustomerDocumentUnit(BaseSchema):
     ordinal: int = Field(ge=0)
     locator: dict[str, str | int] = Field(default_factory=dict, max_length=16)
-    text: str = Field(min_length=1, max_length=4000)
+    text: str = Field(min_length=1, max_length=6000)
     extractionMethod: str = Field(max_length=32)
 
     @field_validator("locator")
@@ -32,9 +32,9 @@ class CustomerDocumentEvidenceItem(BaseSchema):
     runStatus: Literal["complete", "partial", "needs_review"]
     extractionMethod: str = Field(max_length=32)
     truncated: bool
-    includedUnitOrdinals: list[int] = Field(max_length=8)
-    locators: list[dict[str, str | int]] = Field(max_length=8)
-    units: list[CustomerDocumentUnit] = Field(min_length=1, max_length=8)
+    includedUnitOrdinals: list[int] = Field(max_length=16)
+    locators: list[dict[str, str | int]] = Field(max_length=16)
+    units: list[CustomerDocumentUnit] = Field(min_length=1, max_length=16)
 
     @field_validator("locators")
     @classmethod
@@ -49,15 +49,15 @@ class CustomerDocumentEvidenceItem(BaseSchema):
 
 
 class CustomerDocumentEvidence(BaseSchema):
-    documents: list[CustomerDocumentEvidenceItem] = Field(default_factory=list, max_length=4)
+    documents: list[CustomerDocumentEvidenceItem] = Field(default_factory=list, max_length=8)
 
     @model_validator(mode="after")
     def bounded_packet(self):
         units = [unit for document in self.documents for unit in document.units]
-        if len(units) > 24 or sum(len(unit.text) for unit in units) > 24000:
+        if len(units) > 64 or sum(len(unit.text) for unit in units) > 64000:
             raise ValueError("customer document evidence exceeds packet limits")
         for document in self.documents:
-            if sum(len(unit.text) for unit in document.units) > 8000:
+            if sum(len(unit.text) for unit in document.units) > 20000:
                 raise ValueError("customer document exceeds packet limits")
             if len(document.includedUnitOrdinals) != len(document.units) or len(document.locators) != len(document.units):
                 raise ValueError("customer document provenance must match included units")

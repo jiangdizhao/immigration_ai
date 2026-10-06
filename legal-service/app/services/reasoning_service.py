@@ -595,7 +595,7 @@ class ReasoningService:
                 return text, True
         except Exception:
             pass
-        return "I could not assess the selected document evidence right now.", False
+        return "I could not assess the supplied document evidence right now.", False
 
     def _answer_general_question_directly(self, question: str) -> str:
         system_prompt = (

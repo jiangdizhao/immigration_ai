@@ -242,6 +242,33 @@ export async function getLatestMatterDocumentProcessing(input: {
   return run?.run ?? null;
 }
 
+export async function getLatestMatterDocumentProcessingAttempt(input: {
+  documentId: string;
+  userId: string;
+}) {
+  const [run] = await db
+    .select({ run: matterDocumentProcessingRun })
+    .from(matterDocumentProcessingRun)
+    .innerJoin(
+      matterDocument,
+      eq(matterDocumentProcessingRun.documentId, matterDocument.id)
+    )
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(
+      and(
+        eq(matterDocument.id, input.documentId),
+        eq(matterDocument.userId, input.userId),
+        eq(chat.userId, input.userId),
+        eq(matterDocument.storageStatus, "stored"),
+        eq(matterDocument.securityStatus, "clean"),
+        isNull(matterDocument.deletedAt)
+      )
+    )
+    .orderBy(desc(matterDocumentProcessingRun.startedAt))
+    .limit(1);
+  return run?.run ?? null;
+}
+
 export function finalizeMatterDocumentProcessing(input: {
   runId: string;
   documentId: string;
@@ -2287,7 +2314,11 @@ export async function transitionMatterDocumentStorageStatus({
   }
   const [record] = await db
     .update(matterDocument)
-    .set({ storageStatus: next, updatedAt: new Date() })
+    .set({
+      storageStatus: next,
+      ...(next === "stored" ? { securityStatus: "clean" } : {}),
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(matterDocument.id, documentId),

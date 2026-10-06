@@ -100,7 +100,11 @@ function makeHarness(
       if (next === "stored" && options.failStoredTransition) {
         return null;
       }
-      const updated = { ...record, storageStatus: next };
+      const updated = {
+        ...record,
+        storageStatus: next,
+        ...(next === "stored" ? { securityStatus: "clean" as const } : {}),
+      };
       records.set(documentId, updated);
       return updated;
     },
@@ -220,7 +224,7 @@ test("authenticated owner uploads PDF and only safe metadata is returned", async
     body.document.sha256,
     createHash("sha256").update(PDF).digest("hex")
   );
-  assert.equal(body.document.securityStatus, "pending");
+  assert.equal(body.document.securityStatus, "clean");
   assert.equal(body.document.processingStatus, "not_started");
   assert.equal("storageKey" in body.document, false);
   assert.equal("url" in body.document, false);

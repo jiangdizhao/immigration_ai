@@ -19,9 +19,9 @@ import {
 import { consultationCreateHref } from "@/lib/consultations/customer-ui";
 import { ChatbotError } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
-import { customerDocumentSelectionAfterSubmission } from "@/lib/matter-documents/customer-document-provenance";
 import {
   isPolicyLinkedConversation,
+  linkedPolicySlugForConversation,
   type PolicyWorkspaceReference,
   shouldCreatePolicyWorkspaceConversation,
 } from "@/lib/policy-intelligence-product";
@@ -472,7 +472,6 @@ export function ImmigrationAIWorkspace({
   );
   const policyLaunchStartedRef = useRef(false);
   const initializationStartedRef = useRef(false);
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
   >([]);
@@ -595,7 +594,6 @@ export function ImmigrationAIWorkspace({
         }
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
-        setSelectedDocumentIds([]);
         const keepPolicy = isPolicyLinkedConversation(
           data.chatId,
           linkedPolicyChatIdRef.current,
@@ -651,7 +649,6 @@ export function ImmigrationAIWorkspace({
         setLinkedPolicyReference(options?.policyReference ?? null);
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
-        setSelectedDocumentIds([]);
         setWorkspaceChatParam(
           data.chatId,
           options?.policyReference?.slug ?? null
@@ -852,8 +849,7 @@ export function ImmigrationAIWorkspace({
     facts: IntakeFacts,
     currentFacts: IntakeFacts = {},
     answerPreference: AnswerPreference = "answer_first",
-    activeConversationId: string | null = conversationId,
-    selectedIds: string[] = selectedDocumentIds
+    activeConversationId: string | null = conversationId
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
@@ -873,14 +869,11 @@ export function ImmigrationAIWorkspace({
           answerPreference,
           selectedChatModel: DEFAULT_CHAT_MODEL,
           assistantMode,
-          policySlug: isPolicyLinkedConversation(
+          policySlug: linkedPolicySlugForConversation(
             stableConversationId,
             linkedPolicyChatIdRef.current,
             linkedPolicyReference
-          )
-            ? linkedPolicyReference?.slug
-            : undefined,
-          selectedDocumentIds: selectedIds,
+          ),
           messages: nextMessages.map((message) => ({
             id: message.id,
             role: message.role,
@@ -893,24 +886,6 @@ export function ImmigrationAIWorkspace({
     return (await response.json()) as WidgetRouteResponse;
   };
 
-  const handleDocumentSelectionAfterSubmission = (
-    submittedDocumentIds: string[],
-    customerDocumentEvidenceUsed: unknown,
-    submissionKind: "message" | "guided_intake" | "political_block"
-  ) => {
-    const result = customerDocumentSelectionAfterSubmission({
-      selectedCount: submittedDocumentIds.length,
-      customerDocumentEvidenceUsed,
-      submissionKind,
-    });
-    if (result.clearSelection) {
-      setSelectedDocumentIds([]);
-    } else if (result.warnUnused) {
-      setSelectedDocumentIds(submittedDocumentIds);
-      toast.warning(copy.documents.notUsed);
-    }
-  };
-
   const submitMessage = async (
     messageText: string,
     answerPreference: AnswerPreference = "answer_first"
@@ -920,7 +895,6 @@ export function ImmigrationAIWorkspace({
       return;
     }
 
-    const submittedDocumentIds = [...selectedDocumentIds];
     const nextUserMessage: WidgetMessage = {
       id: generateUUID(),
       role: "user",
@@ -937,11 +911,6 @@ export function ImmigrationAIWorkspace({
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
-      handleDocumentSelectionAfterSubmission(
-        [...selectedDocumentIds],
-        false,
-        "political_block"
-      );
       setStatus("ready");
       return;
     }
@@ -968,15 +937,9 @@ export function ImmigrationAIWorkspace({
         intakeFacts,
         {},
         answerPreference,
-        activeConversationId,
-        submittedDocumentIds
+        activeConversationId
       );
       await appendAssistantMessage(data, nextUserMessage.id);
-      handleDocumentSelectionAfterSubmission(
-        submittedDocumentIds,
-        data.customerDocumentEvidenceUsed,
-        "message"
-      );
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -1004,7 +967,6 @@ export function ImmigrationAIWorkspace({
       return;
     }
 
-    const submittedDocumentIds = [...selectedDocumentIds];
     const mergedFacts = { ...intakeFacts, ...draftFacts };
     const syntheticText = buildGuidedIntakeSummary(draftFacts);
     const visibleText = buildGuidedIntakeDisplaySummary(
@@ -1034,11 +996,6 @@ export function ImmigrationAIWorkspace({
     });
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
-      handleDocumentSelectionAfterSubmission(
-        submittedDocumentIds,
-        false,
-        "political_block"
-      );
       setStatus("ready");
       return;
     }
@@ -1066,15 +1023,9 @@ export function ImmigrationAIWorkspace({
         mergedFacts,
         draftFacts,
         "answer_first",
-        activeConversationId,
-        submittedDocumentIds
+        activeConversationId
       );
       await appendAssistantMessage(data, visibleUserMessage.id);
-      handleDocumentSelectionAfterSubmission(
-        submittedDocumentIds,
-        data.customerDocumentEvidenceUsed,
-        "guided_intake"
-      );
     } catch (requestError) {
       const message =
         requestError instanceof ChatbotError
@@ -1267,13 +1218,6 @@ export function ImmigrationAIWorkspace({
             </div>
           </div>
 
-          <MatterDocumentsPanel
-            chatId={conversationId}
-            copy={copy}
-            disabled={status !== "ready" || !conversationReady}
-            onSelectionChange={setSelectedDocumentIds}
-            selectedDocumentIds={selectedDocumentIds}
-          />
           <div
             className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5"
             data-testid="workspace-message-list"
@@ -1566,10 +1510,18 @@ export function ImmigrationAIWorkspace({
                 placeholder={copy.consultation.placeholder}
                 value={input}
               />
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-5 text-slate-500">
-                  {copy.consultation.composerHelp}
-                </p>
+              <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <MatterDocumentsPanel
+                    chatId={conversationId}
+                    compact
+                    copy={copy}
+                    disabled={status !== "ready" || !conversationReady}
+                  />
+                  <p className="min-w-0 text-xs leading-5 text-slate-500">
+                    {copy.consultation.composerHelp}
+                  </p>
+                </div>
                 <Button
                   className="rounded-xl bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
                   data-testid="workspace-send"

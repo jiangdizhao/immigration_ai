@@ -75,19 +75,15 @@ export type WorkspaceCopy = {
     needsReview: string;
     failed: string;
     notStarted: string;
-    select: string;
-    selected: string;
-    notUsed: string;
+    availableToAI: string;
     delete: string;
     download: string;
     retry: string;
     reprocess: string;
-    limit: string;
     unverified: string;
     formats: string;
     uploadError: string;
     incomplete: string;
-    noUsableEvidence: string;
     customerEvidence: string;
     warning: string;
     visionUnavailable: string;
@@ -207,25 +203,21 @@ const zh: WorkspaceCopy = {
     upload: "上传文件",
     documents: "文件",
     processing: "处理中",
-    ready: "可用于本次 AI 答复",
+    ready: "处理完成",
     partial: "部分提取",
     needsReview: "需要检查",
     failed: "处理失败",
     notStarted: "尚未处理",
-    select: "用于下一个问题",
-    selected: "已选择",
-    notUsed: "所选文件未纳入本次答复，请保留选择后重试。",
+    availableToAI: "可供 AI 使用",
     delete: "删除",
     download: "下载",
     retry: "重试",
     reprocess: "重新处理",
-    limit: "每次最多选择 4 个文件。",
-    unverified: "客户文件尚未完成安全验证。",
+    unverified: "客户文件由您提供，不属于官方法律来源。",
     formats:
       "PDF、JPG/JPEG、PNG、DOC/DOCX、TXT、MD、JSON、CSV、XLS/XLSX；最多 25 MiB。",
     uploadError: "文件操作失败。",
     incomplete: "提取内容可能不完整。",
-    noUsableEvidence: "完成处理并包含可用提取内容后，文件才可用于 AI 答复。",
     customerEvidence: "客户文件证据",
     visionUnavailable: "需要视觉提取服务",
     warning: "仅向 AI 提供了文件中有界的提取内容。文件可能还包含其他信息。",
@@ -355,27 +347,22 @@ const en: WorkspaceCopy = {
     upload: "Upload file",
     documents: "Documents",
     processing: "Processing",
-    ready: "Ready for this AI answer",
+    ready: "Processing complete",
     partial: "Partial extraction",
     needsReview: "Needs review",
     failed: "Processing failed",
     notStarted: "Not processed",
-    select: "Use for next question",
-    selected: "Selected",
-    notUsed:
-      "The selected files were not included in this answer. They remain selected so you can retry.",
+    availableToAI: "Available to AI",
     delete: "Delete",
     download: "Download",
     retry: "Retry",
     reprocess: "Reprocess",
-    limit: "Select up to 4 files per question.",
-    unverified: "Customer file has not completed security verification.",
+    unverified:
+      "Customer files are provided by you and are not official legal sources.",
     formats:
       "PDF, JPG/JPEG, PNG, DOC/DOCX, TXT, MD, JSON, CSV, XLS/XLSX; up to 25 MiB.",
     uploadError: "Document action failed.",
     incomplete: "Extracted content may be incomplete.",
-    noUsableEvidence:
-      "Documents become selectable when processing yields usable extracted text.",
     customerEvidence: "Customer document evidence",
     visionUnavailable: "Vision extraction unavailable",
     warning:

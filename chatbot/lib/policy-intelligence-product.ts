@@ -534,6 +534,16 @@ export function isPolicyLinkedConversation(
   );
 }
 
+export function linkedPolicySlugForConversation(
+  activeChatId: string | null,
+  policyChatId: string | null,
+  policyReference: PolicyWorkspaceReference | null
+): string | undefined {
+  return isPolicyLinkedConversation(activeChatId, policyChatId, policyReference)
+    ? policyReference?.slug
+    : undefined;
+}
+
 export function buildPolicyTopicContext(
   reference: PolicyWorkspaceReference | null
 ): string | null {
@@ -575,7 +585,7 @@ export function buildPolicyTopicContext(
     return null;
   }
   return [
-    "Topic reference only. This is not legal evidence. Independently verify current sources when answering.",
+    "The user opened a Legal Update to ask about this selected policy. Resolve references such as 'this policy' to the title below. This is a topic hint, not legal evidence; independently verify current sources when answering.",
     `Published policy title (English): ${titleEn}`,
     `Published policy title (Chinese): ${titleZh}`,
     `Official source title: ${officialTitle}`,

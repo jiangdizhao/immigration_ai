@@ -14,14 +14,12 @@ import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service"
 import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
 import { requestLegalService } from "@/lib/legal-service-transport";
 import {
-  buildSelectedMatterDocumentEvidence,
+  buildConversationMatterDocumentEvidence,
   type CustomerDocumentEvidence,
   type CustomerDocumentManifest,
   customerDocumentSources,
-  SelectedMatterDocumentError,
 } from "@/lib/matter-documents/ai-evidence";
 import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
-import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
 import { getPolicyTopicContextEntry } from "@/lib/policy-intelligence-server";
 import {
   blockedResponseForLocale,
@@ -66,7 +64,6 @@ const requestSchema = z.object({
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
-  selectedDocumentIds: selectedDocumentIdsSchema,
   answerPreference: z
     .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
     .optional()
@@ -264,36 +261,13 @@ export async function POST(request: Request) {
     }
     let customerDocumentEvidence: CustomerDocumentEvidence = { documents: [] };
     let customerDocumentManifest: CustomerDocumentManifest[] = [];
-    if (parsed.selectedDocumentIds.length) {
-      if (!parsed.frontendChatId) {
-        return finish(
-          Response.json({ error: "Conversation not found" }, { status: 404 })
-        );
-      }
-      try {
-        const built = await buildSelectedMatterDocumentEvidence({
-          userId: session.user.id,
-          chatId: parsed.frontendChatId,
-          selectedDocumentIds: parsed.selectedDocumentIds,
-        });
-        customerDocumentEvidence = built.evidence;
-        customerDocumentManifest = built.manifest;
-      } catch (error) {
-        if (error instanceof SelectedMatterDocumentError) {
-          return finish(
-            Response.json(
-              {
-                error:
-                  error.kind === "not_found"
-                    ? "Selected document not found."
-                    : "A selected document is not ready for AI use.",
-              },
-              { status: error.kind === "not_found" ? 404 : 409 }
-            )
-          );
-        }
-        throw error;
-      }
+    if (ownedConversation) {
+      const built = await buildConversationMatterDocumentEvidence({
+        userId: session.user.id,
+        chatId: ownedConversation.chatId,
+      });
+      customerDocumentEvidence = built.evidence;
+      customerDocumentManifest = built.manifest;
     }
     const responseLanguage =
       parsed.responseLanguage ?? detectLanguage(question);

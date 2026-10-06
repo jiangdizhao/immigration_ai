@@ -122,6 +122,7 @@ def test_fast_uses_one_luna_request_with_only_optional_native_web_search(monkeyp
     assert calls[0]["tool_choice"] == "auto"
     assert calls[0]["max_tool_calls"] == 2
     assert "must not be sent" not in calls[0]["input"]
+    assert "Topic reference only" not in calls[0]["input"]
 
 
 def test_fast_provider_failure_is_neutral_and_does_not_retry_or_enter_slow(monkeypatch):
@@ -267,25 +268,42 @@ def test_fast_api_dispatches_before_query_service_construction(monkeypatch):
     monkeypatch.setattr(query_route, "QueryService", _UnexpectedQueryService)
     from app.services.fast_direct_luna_service import FastDirectLunaService
 
-    monkeypatch.setattr(
-        FastDirectLunaService,
-        "answer",
-        lambda self, **kwargs: QueryResponse(
+    received: list[QueryRequest] = []
+
+    def answer(self, **kwargs):
+        received.append(kwargs["payload"])
+        return QueryResponse(
             answer="fast answer",
             confidence="medium",
             next_action="answer",
             architecture_version="fast.direct_luna",
-        ),
+        )
+
+    monkeypatch.setattr(FastDirectLunaService, "answer", answer)
+
+    topic = {
+        "role": "system",
+        "policy_topic_reference": True,
+        "text": "Topic reference only. Policy title: Example policy.",
+    }
+    payload = QueryRequest(
+        question="请详细介绍一下这项政策",
+        assistant_mode="fast",
+        frontend_messages=[
+            {"role": "user", "text": "请详细介绍一下这项政策"},
+            topic,
+        ],
     )
 
     response = query_route.run_query(
-        QueryRequest(question="hi", assistant_mode="fast"),
+        payload,
         db=object(),
         request=None,
     )
 
     assert response.answer == "fast answer"
     assert response.architecture_version == "fast.direct_luna"
+    assert received[0].frontend_messages[-1] == topic
 
 
 def test_fast_model_input_keeps_customer_document_as_untrusted_separate_context():
@@ -327,6 +345,9 @@ def test_fast_model_input_uses_server_topic_context_without_rewriting_question()
 
     assert "Policy title: Example update." in model_input
     assert f"User: {question}" in model_input
+    assert model_input.index("Policy title: Example update.") < model_input.index(
+        f"User: {question}"
+    )
     assert question == payload.question
 
 

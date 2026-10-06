@@ -5,11 +5,12 @@ import {
   FileText,
   Loader2,
   Paperclip,
+  Plus,
   RefreshCw,
   Trash2,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
@@ -28,7 +29,6 @@ type RunState = {
   truncated: boolean;
   errorCode?: string | null;
 };
-const MAX_SELECTION = 4;
 const MIME_BY_EXTENSION: Record<string, string> = {
   pdf: "application/pdf",
   jpg: "image/jpeg",
@@ -48,15 +48,13 @@ const ACCEPT = ".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt,.md,.json,.csv,.xls,.xlsx";
 export function MatterDocumentsPanel({
   chatId,
   copy,
-  selectedDocumentIds,
-  onSelectionChange,
   disabled = false,
+  compact = false,
 }: {
   chatId: string | null;
   copy: WorkspaceCopy;
-  selectedDocumentIds: string[];
-  onSelectionChange: (ids: string[]) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const labels = copy.documents;
   const _zh = copy.identity.title === "AI 工作台";
@@ -65,17 +63,6 @@ export function MatterDocumentsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const canSelect = useCallback(
-    (doc: DocumentRecord) => {
-      const run = runs[doc.id];
-      return Boolean(
-        run &&
-          ["complete", "partial", "needs_review"].includes(run.status ?? "") &&
-          run.unitCount > 0
-      );
-    },
-    [runs]
-  );
   const load = useCallback(async () => {
     if (!chatId) {
       setDocuments([]);
@@ -126,15 +113,10 @@ export function MatterDocumentsPanel({
     setDocuments([]);
     setRuns({});
     setError(null);
-    onSelectionChange([]);
     load().catch((e) =>
       setError(e instanceof Error ? e.message : labels.uploadError)
     );
-  }, [load, onSelectionChange, labels.uploadError]);
-  const selectableCount = useMemo(
-    () => documents.filter(canSelect).length,
-    [documents, canSelect]
-  );
+  }, [load, labels.uploadError]);
   const process = async (
     doc: DocumentRecord,
     mode?: "retryFailed" | "reprocessIncomplete"
@@ -202,7 +184,6 @@ export function MatterDocumentsPanel({
       if (!res.ok) {
         throw new Error(labels.uploadError);
       }
-      onSelectionChange(selectedDocumentIds.filter((id) => id !== doc.id));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : labels.uploadError);
@@ -230,18 +211,16 @@ export function MatterDocumentsPanel({
       setBusy(null);
     }
   };
-  const toggle = (id: string) => {
-    if (selectedDocumentIds.includes(id)) {
-      onSelectionChange(selectedDocumentIds.filter((value) => value !== id));
-    } else if (selectedDocumentIds.length < MAX_SELECTION) {
-      onSelectionChange([...selectedDocumentIds, id]);
-    } else {
-      setError(labels.limit);
-    }
-  };
   const statusLabel = (doc: DocumentRecord) => {
+    const run = runs[doc.id];
+    if (
+      run?.unitCount &&
+      ["complete", "partial", "needs_review"].includes(run.status ?? "")
+    ) {
+      return labels.availableToAI;
+    }
     const status =
-      runs[doc.id]?.status ??
+      run?.status ??
       (doc.processingStatus === "processing"
         ? "processing"
         : doc.processingStatus);
@@ -261,77 +240,123 @@ export function MatterDocumentsPanel({
   };
   return (
     <section
-      className="border-b border-slate-100 px-4 py-3 sm:px-5"
+      className={
+        compact
+          ? "flex min-w-0 max-w-[52%] flex-wrap items-center gap-1"
+          : "border-b border-slate-100 px-4 py-3 sm:px-5"
+      }
       data-testid="matter-documents-panel"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
-          <Paperclip className="size-4" />
-          {labels.title}
-        </h3>
+      <div
+        className={
+          compact
+            ? "contents"
+            : "flex flex-wrap items-center justify-between gap-2"
+        }
+      >
+        {compact ? null : (
+          <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <Paperclip className="size-4" />
+            {labels.title}
+          </h3>
+        )}
         <Button
+          aria-label={labels.upload}
+          className={compact ? "size-8 shrink-0 rounded-full" : undefined}
           disabled={!chatId || disabled || busy !== null}
           onClick={() => inputRef.current?.click()}
-          size="sm"
+          size={compact ? "icon" : "sm"}
+          title={compact ? labels.upload : undefined}
           type="button"
-          variant="outline"
+          variant={compact ? "ghost" : "outline"}
         >
-          <Upload className="mr-1 size-4" />
-          {labels.upload}
+          {compact ? (
+            <Plus className="size-5" />
+          ) : (
+            <>
+              <Upload className="mr-1 size-4" />
+              {labels.upload}
+            </>
+          )}
         </Button>
         <input
           accept={ACCEPT}
           className="hidden"
           onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              await upload(file);
+            const input = event.currentTarget;
+            try {
+              const file = input.files?.[0];
+              if (file) {
+                await upload(file);
+              }
+            } finally {
+              input.value = "";
             }
-            event.currentTarget.value = "";
           }}
           ref={inputRef}
           type="file"
         />
       </div>
-      <p className="mt-1 text-xs text-slate-500">
-        {labels.formats} {labels.unverified}
-      </p>
-      {selectedDocumentIds.length ? (
-        <p className="mt-2 text-xs text-cyan-900">
-          {labels.selected}: {selectedDocumentIds.length}/4 · {labels.limit}
+      {compact ? null : (
+        <p className="mt-1 text-xs text-slate-500">
+          {labels.formats} {labels.unverified}
         </p>
-      ) : null}
+      )}
       {error ? (
-        <p className="mt-2 text-xs text-red-700" role="alert">
+        <p
+          className={
+            compact
+              ? "basis-full text-xs text-red-700"
+              : "mt-2 text-xs text-red-700"
+          }
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
       {documents.length ? (
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ul
+          className={
+            compact
+              ? "flex min-w-0 max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto"
+              : "mt-3 grid gap-2 sm:grid-cols-2"
+          }
+        >
           {documents.map((doc) => {
             const run = runs[doc.id];
             const status = run?.status;
-            const selected = selectedDocumentIds.includes(doc.id);
             return (
               <li
                 className={cn(
-                  "min-w-0 rounded-xl border p-2.5",
-                  selected
-                    ? "border-cyan-500 bg-cyan-50"
-                    : "border-slate-200 bg-white"
+                  compact
+                    ? "flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2 py-1"
+                    : "min-w-0 rounded-xl border p-2.5",
+                  "border-slate-200 bg-white"
                 )}
                 key={doc.id}
               >
-                <div className="flex min-w-0 items-start gap-2">
-                  <FileText className="mt-0.5 size-4 shrink-0 text-slate-500" />
-                  <div className="min-w-0 flex-1">
+                <div
+                  className={
+                    compact
+                      ? "flex min-w-0 items-center gap-1.5"
+                      : "flex min-w-0 items-start gap-2"
+                  }
+                >
+                  <FileText className="size-4 shrink-0 text-slate-500" />
+                  <div
+                    className={compact ? "min-w-0 max-w-36" : "min-w-0 flex-1"}
+                  >
                     <p
-                      className="truncate text-xs font-medium text-slate-800"
+                      className={
+                        compact
+                          ? "truncate text-[11px] font-medium text-slate-800"
+                          : "truncate text-xs font-medium text-slate-800"
+                      }
                       title={doc.originalFilename}
                     >
                       {doc.originalFilename}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
+                    <p className="mt-0.5 truncate text-[10px] text-slate-500">
                       {busy === doc.id
                         ? labels.processing
                         : run?.errorCode === "vision_unavailable"
@@ -341,27 +366,22 @@ export function MatterDocumentsPanel({
                     {run?.truncated ||
                     status === "partial" ||
                     status === "needs_review" ? (
-                      <p className="mt-1 text-[11px] text-amber-800">
+                      <p className="mt-1 truncate text-[10px] text-amber-800">
                         {labels.incomplete}
                       </p>
                     ) : null}
                   </div>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Button
-                    disabled={
-                      !canSelect(doc) ||
-                      disabled ||
-                      (selectedDocumentIds.length >= MAX_SELECTION && !selected)
-                    }
-                    onClick={() => toggle(doc.id)}
-                    size="sm"
-                    variant={selected ? "default" : "outline"}
-                  >
-                    {selected ? labels.selected : labels.select}
-                  </Button>
+                <div
+                  className={
+                    compact
+                      ? "flex shrink-0 items-center gap-0.5"
+                      : "mt-2 flex flex-wrap gap-1.5"
+                  }
+                >
                   <Button
                     aria-label={labels.download}
+                    className={compact ? "size-7" : undefined}
                     disabled={busy !== null}
                     onClick={() => download(doc).catch(() => undefined)}
                     size="icon"
@@ -373,6 +393,7 @@ export function MatterDocumentsPanel({
                   {status === "failed" ? (
                     <Button
                       aria-label={labels.retry}
+                      className={compact ? "size-7" : undefined}
                       disabled={busy !== null}
                       onClick={() =>
                         process(doc, "retryFailed").catch(() => undefined)
@@ -387,6 +408,7 @@ export function MatterDocumentsPanel({
                   {status === "partial" || status === "needs_review" ? (
                     <Button
                       aria-label={labels.reprocess}
+                      className={compact ? "size-7" : undefined}
                       disabled={busy !== null}
                       onClick={() =>
                         process(doc, "reprocessIncomplete").catch(
@@ -402,6 +424,7 @@ export function MatterDocumentsPanel({
                   ) : null}
                   <Button
                     aria-label={labels.delete}
+                    className={compact ? "size-7" : undefined}
                     disabled={busy !== null}
                     onClick={() => remove(doc).catch(() => undefined)}
                     size="icon"
@@ -418,12 +441,9 @@ export function MatterDocumentsPanel({
             );
           })}
         </ul>
-      ) : (
+      ) : compact ? null : (
         <p className="mt-2 text-xs text-slate-500">{labels.documents}: —</p>
       )}
-      {selectableCount === 0 && documents.length ? (
-        <p className="mt-2 text-xs text-slate-500">{labels.noUsableEvidence}</p>
-      ) : null}
     </section>
   );
 }

@@ -16,12 +16,10 @@ import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service"
 import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
 import { requestLegalService } from "@/lib/legal-service-transport";
 import {
-  buildSelectedMatterDocumentEvidence,
+  buildConversationMatterDocumentEvidence,
   customerDocumentSources,
-  SelectedMatterDocumentError,
 } from "@/lib/matter-documents/ai-evidence";
 import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
-import { selectedDocumentIdsSchema } from "@/lib/matter-documents/selected-document-ids";
 import { getPolicyTopicContextEntry } from "@/lib/policy-intelligence-server";
 import {
   blockedResponseForLocale,
@@ -71,7 +69,6 @@ const widgetRequestBodySchema = z.object({
   intakeFacts: z.record(z.string(), z.any()).optional().default({}),
   currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
-  selectedDocumentIds: selectedDocumentIdsSchema,
   answerPreference: z
     .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
     .optional()
@@ -745,7 +742,6 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       responseLanguage: requestedResponseLanguage,
       answerPreference,
       currentIntakeFacts,
-      selectedDocumentIds,
     } = widgetRequestBodySchema.parse(json);
 
     // This is intentionally before rate limiting, authentication, database
@@ -834,42 +830,18 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       );
     }
 
-    let customerDocumentEvidence = {
-      documents:
-        [] as import("@/lib/matter-documents/ai-evidence").CustomerDocumentEvidence["documents"],
-    };
-    let customerDocumentManifest: import("@/lib/matter-documents/ai-evidence").CustomerDocumentManifest[] =
-      [];
-    if (selectedDocumentIds.length) {
-      if (!frontendChatId) {
-        return Response.json(
-          { error: "Conversation not found" },
-          { status: 404 }
-        );
-      }
-      try {
-        const built = await buildSelectedMatterDocumentEvidence({
+    const {
+      evidence: customerDocumentEvidence,
+      manifest: customerDocumentManifest,
+    } = ownedConversation
+      ? await buildConversationMatterDocumentEvidence({
           userId: frontendUserId,
-          chatId: frontendChatId,
-          selectedDocumentIds,
-        });
-        customerDocumentEvidence = built.evidence;
-        customerDocumentManifest = built.manifest;
-      } catch (error) {
-        if (error instanceof SelectedMatterDocumentError) {
-          return Response.json(
-            {
-              error:
-                error.kind === "not_found"
-                  ? "Selected document not found."
-                  : "A selected document is not ready for AI use.",
-            },
-            { status: error.kind === "not_found" ? 404 : 409 }
-          );
-        }
-        throw error;
-      }
-    }
+          chatId: ownedConversation.chatId,
+        })
+      : {
+          evidence: { documents: [] },
+          manifest: [],
+        };
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
