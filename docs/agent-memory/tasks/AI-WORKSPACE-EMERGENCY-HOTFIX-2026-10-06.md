@@ -1,8 +1,8 @@
 # AI Workspace Emergency Hotfix — 2026-10-06
 
-**Status:** ACTIVE  
+**Status:** LOCAL RUNTIME ACCEPTED / STAGING PENDING  
 **Canonical branch:** `phase11-chinese-service-platform-ui-rebase`  
-**Runtime application base:** `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`  
+**Accepted canonical runtime checkpoint:** `c0d04f19ea9b55d02135b84ca08fc172c5654202`  
 **Priority:** emergency / small / fast / one-pass
 
 ## Objective
@@ -119,3 +119,28 @@ Leave the completed patch uncommitted/unpushed for owner review unless explicitl
 - build/diff-check result;
 - smoke result or exact blocker;
 - any genuine remaining release blocker only.
+
+## Final accepted implementation — 2026-10-06
+
+The original two-defect emergency plan expanded only where live owner testing exposed concrete blockers. The final accepted canonical source checkpoint is
+`c0d04f19ea9b55d02135b84ca08fc172c5654202`.
+
+Final behavior:
+
+- compact ChatGPT-style composer attachment affordance; no idle full-width case-file block above the conversation;
+- policy-detail -> Ask AI topic continuity works on the first turn and follow-ups;
+- document upload no longer waits for GuardDuty reconciliation before becoming processable;
+- processed files automatically become conversation-scoped AI context; there is no manual per-turn selection button;
+- server-side document resolution is shared by Fast, Legal Check and Premium/direct, owner/chat scoped, deterministic and fail-soft for unready documents;
+- document evidence bounds are 8 docs / 16 units per doc / 64 units total / 6k chars per unit / 20k per doc / 64k total;
+- model-facing customer-document context is readable labelled text with provenance and customer-evidence caveats preserved.
+
+The previous `selected-document-ids.ts` contract/tests were deleted. Existing GuardDuty/SQS/EventBridge/reconciler support was not removed from the repository or AWS infrastructure; it is simply no longer required by the normal upload -> processing -> AI path.
+
+Owner browser smoke PASS: a new `immigration-upload-smoke.txt` became usable automatically and the assistant correctly quoted `Immigration AI document upload smoke test.` without any manual “Use for next question” action. Customer document evidence provenance was displayed.
+
+Focused tests/checks passed as recorded in the implementation report. Final production build on the accepted canonical commit remains an owner-local pre-staging gate because the coding environment could not fetch Geist/Geist Mono from Google Fonts.
+
+The normal owner-local `chatbot` DB was migrated during acceptance from 0017 through 0023. This was an environment update, not a new migration authored by this hotfix.
+
+**Next action:** run one owner-local production build on the canonical commit; if PASS, deploy the chatbot + legal-service changes to staging and perform a minimal web/document/policy smoke. Then record staging acceptance and close this task.
