@@ -863,3 +863,17 @@ RR-01 is accepted and staging-deployed as recorded above. RR-02 is accepted at
 canonical commit `9461efbe14b22936e6a7311eaadbff413d02070f`; source review,
 owner local validation and staging revalidation all PASS. See the detailed
 staging record in `docs/agent-memory/tasks/PI-RR-02-GUIDANCE-CONTRACT.md`.
+
+## 2026-10-06 Emergency AI Workspace hotfix — ACTIVE
+
+A small, fast hotfix is now the active task after RR-02 closure. The owner clarified the screenshot layout: **A is the AI conversation display and must gain vertical space; B is the composer and should remain intact; the document/upload area above A is what should be compressed.**
+
+The hotfix has exactly two product fixes:
+
+- compress the idle case-file/document area above the conversation so it no longer spends multiple rows listing supported formats, unverified-file copy, or an empty “file: —” state; preserve upload and real document/status controls when they are actually needed;
+- fix Policy Update -> Ask AI continuity so first-turn references such as “这项政策 / this policy” reach semantic routing with the already-existing bounded, server-resolved policy topic reference instead of reaching the router context-free.
+
+This is intentionally **not** a redesign. Runtime base is canonical commit `3a5e821e38c0ad5d52e041ac3ea46c34d6441c6d`. No database migration, Policy Intelligence analyzer/verifier/publication-gate change, answer-architecture rewrite, upload-backend redesign, or unrelated cleanup is authorised. Keep the production patch small (target roughly 2–4 source/test files), run focused regression tests plus build/diff-check, perform one local visual/behavior smoke, and stop when the two acceptance checks pass.
+
+Detailed bounded plan: `docs/agent-memory/tasks/AI-WORKSPACE-EMERGENCY-HOTFIX-2026-10-06.md`.
+
