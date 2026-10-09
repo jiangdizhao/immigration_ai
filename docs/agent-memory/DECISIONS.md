@@ -977,3 +977,22 @@ The automatic Policy Intelligence operator itself has passed live execution: the
 The EventBridge Scheduler `immigration-ai-staging-policy-sync-daily` has been created, verified and is `ENABLED` for `cron(0 6 * * ? *)` in timezone `Australia/Sydney`.
 
 Because the schedule was created after the current day's 06:00 trigger point, no naturally Scheduler-triggered execution has yet been observed. This does not reopen implementation or deployment. It remains a single operational observation item: confirm the next scheduled ECS task launches and completes normally.
+
+
+## D-056 — China VIP payments stay on Stripe: Alipay recurring when approved, WeChat prepaid
+
+**Date:** 2026-10-10  
+**Status:** ACCEPTED
+
+The next commercial-completion task extends the existing VIP billing system for mainland-China-friendly payment methods while preserving the current trusted Stripe billing boundary.
+
+Accepted product contract:
+
+- the current AUD card monthly subscription remains unchanged;
+- Alipay is offered as a CNY monthly recurring VIP option only when the live Stripe account/configuration has the required recurring-Alipay capability/approval; otherwise that option remains unavailable/fail-closed;
+- WeChat Pay is offered through Stripe as a CNY one-time prepaid purchase for exactly 30 days in the first release, with no recurring-payment claim;
+- a successful prepaid renewal extends VIP from `max(now, current vipExpiresAt)` by 30 days;
+- only verified server-side Stripe payment/webhook evidence can grant or extend entitlement; browser success/cancel query parameters never grant VIP;
+- webhook/payment replay must remain idempotent and existing AUD subscription/cancellation/billing-portal behavior must not regress.
+
+This is a fast one-pass product extension, not a billing rewrite. Direct Alipay SDK integration, direct WeChat Pay SDK integration, automatic FX conversion, additional prepaid durations, and a generic multi-provider payment framework are explicitly out of scope. A minimal additive migration is permitted if the existing schema cannot safely represent both flows, but applying any new migration outside an authorized local/disposable environment remains a separate operation.

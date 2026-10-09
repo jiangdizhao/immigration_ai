@@ -1,6 +1,6 @@
 # PROJECT_STATE
 
-**Updated:** 2026-10-06
+**Updated:** 2026-10-10
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
 
@@ -904,3 +904,34 @@ Focused validation reported by the implementation pass passed: 9 focused Node te
 Local database note: during this hotfix acceptance the normal local `chatbot` database was explicitly migrated from ledger `0017_wooden_silver_sable` through repository head `0023_chief_famine` so MatterDocument/processing tables were available. Earlier statements that the normal local chatbot DB remained at 0017 are historical and no longer describe the current owner-local environment.
 
 **Current release state:** source committed/pushed and owner browser smoke PASS; final owner-local production build and AWS staging deployment/revalidation are pending. Do not reopen broad source review unless either gate exposes a core regression.
+
+
+## 2026-10-10 China Stripe payments — ACTIVE / one-pass delivery
+
+The owner has approved a fast China-payment extension and explicitly does **not** want this split into many micro-milestones. Implement it as one bounded billing feature pass, then run concentrated validation and stop for review.
+
+Target product behavior:
+
+- preserve the existing Stripe **AUD card monthly subscription** path without regression;
+- add **Alipay + CNY monthly recurring VIP** through Stripe, but only when the Stripe account/configuration is actually approved/capable for recurring Alipay; capability/configuration must fail closed rather than pretending support;
+- add **WeChat Pay + CNY one-time prepaid VIP** through Stripe Checkout, initially exactly **30 days** with no auto-renewal;
+- successful WeChat renewal extends from `max(now, existing vipExpiresAt)` rather than discarding already-paid remaining VIP time;
+- browser return URLs remain display-only; **only verified Stripe server-side events may grant/extend VIP entitlement**;
+- duplicate/retried webhooks and checkout completion must be idempotent;
+- keep payment/provider facts separate from entitlement state so Premium access still depends on trusted server-side VIP state.
+
+Fast-delivery boundaries:
+
+- use Stripe for both Alipay and WeChat Pay; do not add direct Alipay/WeChat SDK integrations;
+- no 90-day/365-day WeChat packages in this pass;
+- no live FX conversion; CNY pricing is explicit/configured;
+- no broad billing framework rewrite;
+- no unrelated Policy Intelligence, AI answer-path, consultation, document, or lawyer-workspace changes;
+- preserve existing Stripe card subscription, cancellation, billing portal, webhook safety, notification/outbox and existing-customer semantics;
+- if an additive database migration is required, create it in the repository but do not apply it to staging/production without separate authorization.
+
+Implementation should inspect and reuse the existing Phase-9 billing surfaces before changing them, especially `VipPlanPrice`, `VipSubscription`, the historical one-time `VipPurchase`, Stripe gateway/checkout/webhook code, VIP status/entitlement logic, and `VipMembershipClient`.
+
+Detailed task packet: `docs/agent-memory/tasks/STRIPE-CHINA-PAYMENTS-2026-10-10.md`.
+
+**Current priority:** complete this China Stripe payment feature in one implementation pass, validate it locally/deterministically, and return the exact diff/test/migration/configuration report for external review before commit/deployment.
