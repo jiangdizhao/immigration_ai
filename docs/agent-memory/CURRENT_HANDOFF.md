@@ -4204,7 +4204,7 @@ Local database note: during this hotfix acceptance the normal local `chatbot` da
 **Current release state:** source committed/pushed and owner browser smoke PASS; final owner-local production build and AWS staging deployment/revalidation are pending. Do not reopen broad source review unless either gate exposes a core regression.
 
 
-## 2026-10-10 China Stripe payments — FEATURE BRANCH FOR EXTERNAL REVIEW
+## 2026-10-10 China Stripe payments — LOCAL FEATURE BRANCH / PUSH PENDING AUTH
 
 The owner prioritized Stripe WeChat Pay prepaid VIP, preserved the existing AUD card subscription, and explicitly deferred Alipay recurring, Stripe account configuration, credentials, CNY pricing and live payment testing. The billing architecture was kept bounded to one implementation pass.
 
@@ -4212,11 +4212,11 @@ Implementation boundaries: only verified Stripe webhook events may grant VIP; we
 
 Detailed task packet: `docs/agent-memory/tasks/STRIPE-CHINA-PAYMENTS-2026-10-10.md`.
 
-The implementation was committed and pushed on `feature/stripe-china-wechat-prepaid-20261010` from canonical `phase11-chinese-service-platform-ui-rebase`; remote HEAD matches local. Stop for external code review. Do not merge or deploy.
+The implementation is committed locally on `feature/stripe-china-wechat-prepaid-20261010` from canonical `phase11-chinese-service-platform-ui-rebase`. The local commit is `2830f59cc37b1a51ae8635f4f6249f8767b5340c`. The push could not authenticate in this environment, so remote branch HEAD equality is not yet verified. After authenticated push, stop for external code review; do not merge or deploy.
 
 ### Implementation-pass handoff — 2026-10-10
 
-**Status:** WeChat prepaid implementation is committed and pushed on `feature/stripe-china-wechat-prepaid-20261010` for external code review; the branch is based on canonical `phase11-chinese-service-platform-ui-rebase` at `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433`. Alipay remains unavailable by the owner's explicit decision pending Stripe approval and its supported authorization flow.
+**Status:** WeChat prepaid implementation is committed locally on `feature/stripe-china-wechat-prepaid-20261010`; push awaits an authenticated GitHub credential in this environment. The branch is based on canonical `phase11-chinese-service-platform-ui-rebase` at `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433`. Alipay remains unavailable by the owner's explicit decision pending Stripe approval and its supported authorization flow.
 
 The existing AUD card subscription path still uses its prior subscription checkout, recurring invoice, cancellation and Billing Portal behavior. WeChat uses a server-priced Stripe Checkout Session in `payment` mode with only `wechat_pay`, a CNY one-time line item and no subscription object. `VIP_WECHAT_PAY_ENABLED=true`, a valid positive-integer `VIP_WECHAT_CNY_30_DAY_AMOUNT_MINOR`, configured Stripe API access, and a nonblank `STRIPE_WEBHOOK_SECRET` are all required to expose checkout; neither amount nor duration is accepted from the browser. The session's ID and server-generated purchase ID are persisted in the existing `VipPurchase` table before the URL is returned.
 
@@ -4226,4 +4226,4 @@ No database migration/schema change was added or applied. No database, Stripe Da
 
 Final focused validation after the webhook-secret fail-closed fix: 8 billing/config/UI test files passed, 0 failures, 0 skips; changed-file Biome passed; `git diff --check` passed. The earlier full chatbot unit suite reported 71 passes, 2 environment/unrelated failures, and 0 skips: `lib/server-http-timeouts.test.ts` could not bind `127.0.0.1` in the sandbox (`listen EPERM`), and `lib/production/stage3-hardening.test.ts` expected migration CLI exit 2 but got 1. The earlier production build was blocked when Next.js could not fetch Geist fonts from Google Fonts. These broader checks were not repeated for this focused final pass. The standalone TypeScript check touched `chatbot/tsconfig.tsbuildinfo`, which was restored to its starting contents.
 
-The user explicitly authorized creating a separate feature branch, committing, and pushing this implementation. Remote branch HEAD was verified equal to local HEAD. Stop for external code review; do not merge or deploy.
+The user explicitly authorized creating a separate feature branch, committing, and pushing this implementation. The first HTTPS push attempt failed because Git could not read a username in noninteractive mode. No Git credential helper or token environment variable is available, and the SSH agent has no identities. The canonical remote ref matched the base commit and the target branch did not exist at the last remote check. Do not request or paste secrets into chat; after GitHub authentication is restored, push this branch and verify the remote HEAD against local HEAD. No merge or deployment.
