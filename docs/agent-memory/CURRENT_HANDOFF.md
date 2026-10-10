@@ -4204,7 +4204,7 @@ Local database note: during this hotfix acceptance the normal local `chatbot` da
 **Current release state:** source committed/pushed and owner browser smoke PASS; final owner-local production build and AWS staging deployment/revalidation are pending. Do not reopen broad source review unless either gate exposes a core regression.
 
 
-## 2026-10-10 China Stripe payments — REVIEW CORRECTIONS PUSHED
+## 2026-10-10 China Stripe payments — CODE MERGED / ACTIVATION PAUSED
 
 The owner prioritized Stripe WeChat Pay prepaid VIP, preserved the existing AUD card subscription, and explicitly deferred Alipay recurring, Stripe account configuration, credentials, CNY pricing and live payment testing. The billing architecture was kept bounded to one implementation pass.
 
@@ -4227,3 +4227,17 @@ No database migration/schema change was added or applied. No database, Stripe Da
 Initial focused validation after the webhook-secret fail-closed fix: 8 billing/config/UI test files passed, 0 failures, 0 skips. On the external-review correction pass, 9 focused entitlement, membership-copy and billing test files passed, 0 failures, 0 skips; changed-file Biome passed on 6 files; `git diff --check` passed. The earlier full chatbot unit suite reported 71 passes, 2 environment/unrelated failures, and 0 skips: `lib/server-http-timeouts.test.ts` could not bind `127.0.0.1` in the sandbox (`listen EPERM`), and `lib/production/stage3-hardening.test.ts` expected migration CLI exit 2 but got 1. The earlier production build was blocked when Next.js could not fetch Geist fonts from Google Fonts. These broader checks were not repeated for this correction pass. The standalone TypeScript check touched `chatbot/tsconfig.tsbuildinfo`, which was restored to its starting contents.
 
 The initial HTTPS push attempt encountered an authentication blocker, which was later resolved. The external-review correction commit `0ecde0437f39f44075cbd73333925d8ac4ccb1a7` was pushed to `feature/stripe-china-wechat-prepaid-20261010`; `git ls-remote` confirmed remote HEAD equals local HEAD. No schema or migration changed; no Stripe configuration, credentials, live payment, database, AWS, merge or deployment occurred. Stop for final external code review.
+
+## 2026-10-10 Stripe China payments — CODE MERGED; ACTIVATION / PAYMENT TESTING PAUSED
+
+**Owner decision:** Stop further China-payment implementation, Stripe setup and live-payment testing for now; resume only on explicit owner request. The pause is a **commercial activation / external approval hold**, not a source-code defect or rollback.
+
+- **Implemented and code-reviewed:** Stripe WeChat Pay CNY one-time Checkout (30-day prepaid VIP); verified-payment-only entitlement, safe repeated-event settlement and additive expiry; existing AUD/card monthly subscriptions preserved. Two follow-up review defects were corrected before acceptance.
+- **Merged to canonical:** `phase11-chinese-service-platform-ui-rebase` at `0bcdc1f01ae74426367914a04b7ebf4d4b7e3c17`. Owner terminal output confirmed local and origin refs matched after fast-forward push. No payment-schema migration.
+- **Stripe Dashboard observation (2026-10-10):** WeChat Pay showed **Pending approval** after the owner enabled/requested it; not yet **Enabled/approved**. The displayed "Recurring payments: Requires approval" is distinct from our one-time prepaid product. Do not assume an approval deadline or a need for additional documents without Stripe confirmation.
+- **Alipay:** Remains **not implemented / disabled in application**. Dashboard separately showed Pending approval, which does not establish recurring-Alipay capability. Do not configure or activate Alipay as part of this paused task.
+- **Not done:** No approved CNY/30-day business price, WeChat activation keys/enable flag, Stripe test/live payment smoke, AWS deployment of this payment change, or verified customer paid-to-VIP end-to-end flow. Existing server-side Stripe API/webhook configuration is reused, not copied into docs; no secrets may be committed.
+- **Resume gate:** Confirm Stripe WeChat Pay is approved and eligible for one-time CNY transactions; obtain approved CNY price; configure `VIP_WECHAT_CNY_30_DAY_AMOUNT_MINOR` and `VIP_WECHAT_PAY_ENABLED` in the appropriate protected server environment only after access/payment-webhook readiness; verify relevant Stripe checkout/webhook events in sandbox or authorized test; validate real paid/async/duplicate/cancel/refund or reversal semantics and AUD-card regression before authorizing deployment/production acceptance.
+- **Standing instruction:** No further billing code, Stripe, live payment, database or AWS mutation without a new explicit owner request. Continue unrelated product development independently.
+
+This entry supersedes any earlier "ACTIVE / implementation pending" instructions for China Stripe payments; earlier records remain historical implementation evidence.
