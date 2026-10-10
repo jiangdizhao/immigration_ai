@@ -1,6 +1,6 @@
 # STRIPE CHINA PAYMENTS — 2026-10-10
 
-**Status:** IMPLEMENTATION COMPLETE / EXTERNAL REVIEW PENDING
+**Status:** CORRECTION COMPLETE / EXTERNAL REVIEW PENDING
 **Branch:** `feature/stripe-china-wechat-prepaid-20261010` (based on canonical `phase11-chinese-service-platform-ui-rebase` at `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433`)
 **Execution style:** ONE implementation pass; concentrated validation; push feature branch and stop for external review
 **Decision authority:** D-056
@@ -119,5 +119,6 @@ When implementation and local deterministic validation are complete:
 - Stripe WeChat Pay prepaid VIP is implemented; existing AUD card subscriptions are preserved. Each verified successful one-time purchase grants 30 days from `max(now, current VIP expiry)`. Alipay recurring stays unavailable by explicit owner decision.
 - Webhook signature verification uses Stripe's raw request body and configured signing secret. WeChat exposure and checkout fail closed unless Stripe API configuration, a nonblank webhook secret, the server-side enable flag, and a valid positive-integer CNY amount are configured. No Stripe account configuration, credentials, CNY price, or live payment was performed.
 - No schema/migration change was added or applied. No staging/production database, AWS, or Stripe Dashboard was touched.
-- Focused billing tests: 8 files passed, 0 failures, 0 skipped. Changed-file Biome: pass. `git diff --check`: pass.
-- Local branch `feature/stripe-china-wechat-prepaid-20261010` is based on canonical HEAD `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433` and contains commit `2830f59cc37b1a51ae8635f4f6249f8767b5340c`. Push failed because no GitHub authentication is available in the execution environment; the remote target branch did not exist at the last check. After auth is restored, push and verify remote HEAD equality, then stop for external review. Do not merge or deploy.
+- External review correction: subscription deletion now projects only paid, unexpired Stripe CNY prepaid purchase expiries, under the user-row lock shared with `settleVipPurchase`; an old recurring expiry is cleared when no valid prepaid entitlement remains. Renewal and cancellation controls now require an actually active subscription; pending, incomplete, unpaid, past-due and paused subscriptions do not trigger them for prepaid VIP.
+- Correction validation: 9 focused entitlement, membership-copy and billing test files passed, 0 failures, 0 skips; changed-file Biome passed on 6 files; `git diff --check` passed.
+- Correction source commit: `0ecde0437f39f44075cbd73333925d8ac4ccb1a7` on `feature/stripe-china-wechat-prepaid-20261010`. It is based on canonical HEAD `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433`. The remote feature branch was verified at the same SHA after push. No merge or deployment was performed; stop for final external review.
