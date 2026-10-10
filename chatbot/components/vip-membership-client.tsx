@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import {
+  getVipCheckoutReturnNotice,
+  getVipRenewalPresentation,
+} from "@/lib/vip/membership-copy";
 
 type VipStatus = {
   role: "user" | "lawyer" | "admin";
@@ -30,6 +34,15 @@ type VipStatus = {
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
   } | null;
+  chinaPayments?: {
+    alipayRecurring: { available: boolean };
+    wechatPrepaid: {
+      available: boolean;
+      amountMinor: number | null;
+      currency: string;
+      durationDays: number;
+    };
+  };
 };
 
 type Purchase = {
@@ -82,21 +95,24 @@ export function VipMembershipClient() {
 
     // Browser redirect state is display-only. It NEVER activates VIP; the
     // status API reflects activation only after verified provider payment.
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("checkout") === "success") {
-      setCheckoutNotice(
-        "Payment submitted. Membership activates after secure payment confirmation."
-      );
-    } else if (params.get("checkout") === "cancelled") {
-      setCheckoutNotice("Checkout was cancelled. You were not charged.");
-    }
+    setCheckoutNotice(getVipCheckoutReturnNotice(window.location.search));
   }, [refreshStatus]);
 
-  const startCheckout = async () => {
+  const startCheckout = async (
+    paymentMethod: "card" | "wechat_pay" = "card"
+  ) => {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/vip/checkout", { method: "POST" });
+      const response = await fetch("/api/vip/checkout", {
+        method: "POST",
+        ...(paymentMethod === "card"
+          ? {}
+          : {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paymentMethod }),
+            }),
+      });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error ?? "Unable to start checkout.");
@@ -203,6 +219,7 @@ export function VipMembershipClient() {
   }
 
   if (status.premiumAllowed) {
+    const renewal = getVipRenewalPresentation(status.subscription);
     return (
       <div className="mt-8 space-y-4">
         <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-950">
@@ -215,31 +232,41 @@ export function VipMembershipClient() {
             <>
               <p className="mt-1">
                 Access through {formatDate(status.vipExpiresAt)}.
-                {status.subscription?.cancelAtPeriodEnd
-                  ? " Renewal is cancelled; membership stays active until the end of the paid period."
-                  : " Renews automatically until cancelled."}
+                {` ${renewal.renewalCopy}`}
               </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={manageBilling}
-                  type="button"
-                >
-                  Manage billing
-                </button>
-                {status.subscription &&
-                !status.subscription.cancelAtPeriodEnd ? (
+              {renewal.showBillingManagement ? (
+                <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                     disabled={busy}
-                    onClick={cancelRenewal}
+                    onClick={manageBilling}
                     type="button"
                   >
-                    Cancel renewal
+                    Manage billing
                   </button>
-                ) : null}
-              </div>
+                  {renewal.showCancelRenewal ? (
+                    <button
+                      className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                      disabled={busy}
+                      onClick={cancelRenewal}
+                      type="button"
+                    >
+                      Cancel renewal
+                    </button>
+                  ) : null}
+                </div>
+              ) : status.chinaPayments?.wechatPrepaid.available ? (
+                <div className="mt-4">
+                  <button
+                    className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => startCheckout("wechat_pay")}
+                    type="button"
+                  >
+                    Add 30 prepaid days with WeChat Pay
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : (
             <p className="mt-1">
@@ -279,34 +306,66 @@ export function VipMembershipClient() {
         </p>
       </div>
       {isStripeReady ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <p className="font-semibold text-slate-950">VIP Membership</p>
-            {status.activePlan ? (
-              <p className="font-semibold text-[#001736]">
-                {formatAmount(
-                  status.activePlan.amountMinor,
-                  status.activePlan.currency
-                )}{" "}
-                / month
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <p className="font-semibold text-slate-950">
+                Card · AUD monthly subscription
               </p>
-            ) : null}
+              {status.activePlan ? (
+                <p className="font-semibold text-[#001736]">
+                  {formatAmount(
+                    status.activePlan.amountMinor,
+                    status.activePlan.currency
+                  )}{" "}
+                  / month
+                </p>
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Renews automatically until cancelled.
+            </p>
+            <p className="mt-3 text-xs text-slate-500">
+              Payments are handled securely by Stripe. Card details are never
+              entered or stored on this website.
+            </p>
+            <button
+              className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={busy}
+              onClick={() => startCheckout()}
+              type="button"
+            >
+              Subscribe with card
+            </button>
           </div>
-          <p className="mt-2 text-sm text-slate-600">
-            Renews automatically until cancelled.
-          </p>
-          <p className="mt-3 text-xs text-slate-500">
-            Payments are handled securely by Stripe. Card details are never
-            entered or stored on this website.
-          </p>
-          <button
-            className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            disabled={busy}
-            onClick={startCheckout}
-            type="button"
-          >
-            Subscribe
-          </button>
+          {status.chinaPayments?.wechatPrepaid.available &&
+          status.chinaPayments.wechatPrepaid.amountMinor !== null ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <p className="font-semibold text-slate-950">
+                  WeChat Pay · 30-day prepaid VIP
+                </p>
+                <p className="font-semibold text-[#001736]">
+                  {formatAmount(
+                    status.chinaPayments.wechatPrepaid.amountMinor,
+                    status.chinaPayments.wechatPrepaid.currency
+                  )}{" "}
+                  / 30 days
+                </p>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                One-time payment. Renew manually by purchasing again.
+              </p>
+              <button
+                className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                disabled={busy}
+                onClick={() => startCheckout("wechat_pay")}
+                type="button"
+              >
+                Pay with WeChat Pay
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : status.simulationEnabled ? (
         purchase?.status === "pending" ? (
@@ -340,7 +399,7 @@ export function VipMembershipClient() {
             <button
               className="mt-5 rounded-full bg-[#001736] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
               disabled={busy}
-              onClick={startCheckout}
+              onClick={() => startCheckout()}
               type="button"
             >
               Start simulated checkout

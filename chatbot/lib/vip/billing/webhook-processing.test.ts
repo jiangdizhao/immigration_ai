@@ -6,8 +6,10 @@ import { test } from "node:test";
 import type {
   VipBillingEvent,
   VipBillingNotification,
+  VipPurchase,
   VipSubscription,
 } from "../../db/schema";
+import { calculateVipWindow } from "../entitlement";
 import type {
   StripeSubscriptionSnapshot,
   VipBillingMailer,
@@ -31,6 +33,10 @@ const PROVIDER_SUB_ID = "sub_stripe_1";
 const PERIOD_1_START = Date.UTC(2026, 0, 1) / 1000;
 const PERIOD_1_END = Date.UTC(2026, 1, 1) / 1000;
 const PERIOD_2_END = Date.UTC(2026, 2, 1) / 1000;
+const PURCHASE_ID = "44444444-4444-4444-4444-444444444444";
+const WECHAT_SESSION_ID = "cs_wechat_1";
+const WECHAT_AMOUNT_MINOR = 2500;
+const WECHAT_NOW = new Date("2026-10-10T00:00:00.000Z");
 
 function makeSubscription(
   overrides: Partial<VipSubscription> = {}
@@ -58,6 +64,51 @@ function makeSubscription(
     updatedAt: new Date(),
     ...overrides,
   };
+}
+
+function makeWechatPurchase(overrides: Partial<VipPurchase> = {}): VipPurchase {
+  return {
+    id: PURCHASE_ID,
+    userId: USER_ID,
+    provider: "stripe",
+    providerPaymentId: WECHAT_SESSION_ID,
+    amountMinor: WECHAT_AMOUNT_MINOR,
+    currency: "CNY",
+    status: "pending",
+    purchasedAt: null,
+    vipStartsAt: null,
+    vipExpiresAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function wechatPaymentEvent(
+  id: string,
+  overrides: Record<string, unknown> = {},
+  type = "checkout.session.completed"
+) {
+  return eventFor(id, type, {
+    id: WECHAT_SESSION_ID,
+    mode: "payment",
+    status: "complete",
+    payment_status: "paid",
+    payment_method_types: ["wechat_pay"],
+    client_reference_id: PURCHASE_ID,
+    amount_total: WECHAT_AMOUNT_MINOR,
+    currency: "cny",
+    subscription: null,
+    metadata: {
+      vipPurchaseId: PURCHASE_ID,
+      vipUserId: USER_ID,
+      vipProduct: "wechat_vip_30d",
+      vipDurationDays: "30",
+      vipAmountMinor: String(WECHAT_AMOUNT_MINOR),
+      vipCurrency: "CNY",
+    },
+    ...overrides,
+  });
 }
 
 function snapshot(overrides: Partial<StripeSubscriptionSnapshot> = {}) {
@@ -108,11 +159,16 @@ function invoicePaidEvent(id: string, invoiceId: string) {
 
 function makeEnvironment(input: {
   subscription: VipSubscription;
+  purchase?: VipPurchase;
   snapshot?: StripeSubscriptionSnapshot;
   mailFailures?: number;
 }) {
   const events = new Map<string, VipBillingEvent>();
   const notifications: VipBillingNotification[] = [];
+  const purchases = new Map<string, VipPurchase>();
+  if (input.purchase) {
+    purchases.set(input.purchase.id, input.purchase);
+  }
   const user = {
     id: USER_ID,
     email: "customer@example.com",
@@ -286,6 +342,48 @@ function makeEnvironment(input: {
     async getVipSubscriptionById(id: string) {
       return subscription.id === id ? subscription : null;
     },
+    async getVipPurchaseById(id: string) {
+      return purchases.get(id) ?? null;
+    },
+    async settleWechatVipPurchase(settlement: {
+      purchaseId: string;
+      userId: string;
+      providerPaymentId: string;
+      providerStatus: "paid" | "failed" | "cancelled";
+      now?: Date;
+    }) {
+      const purchase = purchases.get(settlement.purchaseId);
+      if (
+        !purchase ||
+        purchase.userId !== settlement.userId ||
+        purchase.provider !== "stripe" ||
+        purchase.providerPaymentId !== settlement.providerPaymentId
+      ) {
+        return null;
+      }
+      if (
+        purchase.status === "paid" ||
+        purchase.status === "failed" ||
+        purchase.status === "cancelled"
+      ) {
+        return purchase;
+      }
+      const settledAt = settlement.now ?? new Date();
+      if (settlement.providerStatus !== "paid") {
+        purchase.status = settlement.providerStatus;
+        purchase.updatedAt = settledAt;
+        return purchase;
+      }
+      const vipWindow = calculateVipWindow(user.vipExpiresAt, settledAt, 30);
+      user.membershipTier = "vip";
+      user.vipExpiresAt = vipWindow.vipExpiresAt;
+      purchase.status = "paid";
+      purchase.purchasedAt = settledAt;
+      purchase.vipStartsAt = vipWindow.vipStartsAt;
+      purchase.vipExpiresAt = vipWindow.vipExpiresAt;
+      purchase.updatedAt = settledAt;
+      return purchase;
+    },
     async getLiveVipSubscriptionForUser(userId: string) {
       return subscription.userId === userId &&
         subscription.status !== "cancelled"
@@ -342,7 +440,9 @@ function makeEnvironment(input: {
       subscription.lastPaidInvoiceId = paid.invoiceId;
       subscription.lastPaidAt = paid.now ?? new Date();
       user.membershipTier = "vip";
-      user.vipExpiresAt = paid.currentPeriodEnd;
+      if (!user.vipExpiresAt || user.vipExpiresAt < paid.currentPeriodEnd) {
+        user.vipExpiresAt = paid.currentPeriodEnd;
+      }
 
       markEvent(paid.billingEventId, "processed");
       const created = insertNotificationIfAbsent(
@@ -504,6 +604,7 @@ function makeEnvironment(input: {
     notifications,
     user,
     subscription,
+    purchase: input.purchase ?? null,
     snapshot: input.snapshot ?? snapshot(),
     setMailFailures: (count: number) => {
       mailFailures = count;
@@ -514,13 +615,17 @@ function makeEnvironment(input: {
   };
 }
 
-function processingDeps(env: ReturnType<typeof makeEnvironment>) {
+function processingDeps(
+  env: ReturnType<typeof makeEnvironment>,
+  now?: () => Date
+) {
   return {
     repo: env.repo,
     provider: {
       retrieveSubscription: async () => env.snapshot,
     },
     mailer: env.mailer,
+    ...(now ? { now } : {}),
   };
 }
 
@@ -574,6 +679,178 @@ test("checkout.session.completed binds provider identity but never grants VIP", 
   assert.equal(env.user.membershipTier, "free");
   assert.equal(env.user.vipExpiresAt, null);
   assert.equal(env.mails.length, 0);
+});
+
+test("verified WeChat Checkout payment grants exactly 30 days once", async () => {
+  const purchase = makeWechatPurchase();
+  const env = makeEnvironment({
+    subscription: makeSubscription(),
+    purchase,
+  });
+  const outcome = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent("evt_wechat_paid_1"),
+    processingDeps(env, () => WECHAT_NOW)
+  );
+
+  assert.deepEqual(outcome, { status: "processed", retryable: false });
+  assert.equal(env.user.membershipTier, "vip");
+  assert.deepEqual(
+    env.user.vipExpiresAt,
+    new Date(WECHAT_NOW.getTime() + 30 * 24 * 60 * 60 * 1000)
+  );
+  assert.equal(purchase.status, "paid");
+  assert.deepEqual(purchase.vipStartsAt, WECHAT_NOW);
+  assert.deepEqual(purchase.vipExpiresAt, env.user.vipExpiresAt);
+});
+
+test("verified WeChat renewal appends 30 days after existing future VIP expiry", async () => {
+  const purchase = makeWechatPurchase();
+  const env = makeEnvironment({
+    subscription: makeSubscription(),
+    purchase,
+  });
+  const currentExpiry = new Date(
+    WECHAT_NOW.getTime() + 12 * 24 * 60 * 60 * 1000
+  );
+  env.user.membershipTier = "vip";
+  env.user.vipExpiresAt = currentExpiry;
+
+  const outcome = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent("evt_wechat_paid_future"),
+    processingDeps(env, () => WECHAT_NOW)
+  );
+
+  assert.deepEqual(outcome, { status: "processed", retryable: false });
+  assert.deepEqual(purchase.vipStartsAt, currentExpiry);
+  assert.deepEqual(
+    env.user.vipExpiresAt,
+    new Date(currentExpiry.getTime() + 30 * 24 * 60 * 60 * 1000)
+  );
+});
+
+test("separate Stripe events for one WeChat payment cannot extend VIP twice", async () => {
+  const purchase = makeWechatPurchase();
+  const env = makeEnvironment({
+    subscription: makeSubscription(),
+    purchase,
+  });
+  const deps = processingDeps(env, () => WECHAT_NOW);
+  const first = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent("evt_wechat_paid_first"),
+    deps
+  );
+  const expiryAfterFirst = env.user.vipExpiresAt;
+  const duplicate = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent("evt_wechat_paid_second"),
+    deps
+  );
+
+  assert.deepEqual(first, { status: "processed", retryable: false });
+  assert.deepEqual(duplicate, { status: "processed", retryable: false });
+  assert.deepEqual(env.user.vipExpiresAt, expiryAfterFirst);
+});
+
+test("asynchronous WeChat payment success is accepted only after Stripe marks it paid", async () => {
+  const purchase = makeWechatPurchase();
+  const env = makeEnvironment({
+    subscription: makeSubscription(),
+    purchase,
+  });
+  const outcome = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent(
+      "evt_wechat_async_paid",
+      {},
+      "checkout.session.async_payment_succeeded"
+    ),
+    processingDeps(env, () => WECHAT_NOW)
+  );
+
+  assert.deepEqual(outcome, { status: "processed", retryable: false });
+  assert.equal(purchase.status, "paid");
+  assert.deepEqual(
+    env.user.vipExpiresAt,
+    new Date(WECHAT_NOW.getTime() + 30 * 24 * 60 * 60 * 1000)
+  );
+});
+
+test("completed but unpaid WeChat Checkout waits for the async paid event", async () => {
+  const purchase = makeWechatPurchase();
+  const env = makeEnvironment({
+    subscription: makeSubscription(),
+    purchase,
+  });
+  const deps = processingDeps(env, () => WECHAT_NOW);
+  const pending = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent("evt_wechat_checkout_pending", {
+      payment_status: "unpaid",
+    }),
+    deps
+  );
+
+  assert.deepEqual(pending, { status: "ignored", retryable: false });
+  assert.equal(purchase.status, "pending");
+  assert.equal(env.user.vipExpiresAt, null);
+
+  const paid = await processVerifiedVipBillingEvent(
+    wechatPaymentEvent(
+      "evt_wechat_checkout_paid_later",
+      {},
+      "checkout.session.async_payment_succeeded"
+    ),
+    deps
+  );
+
+  assert.deepEqual(paid, { status: "processed", retryable: false });
+  assert.equal(purchase.status, "paid");
+  assert.deepEqual(
+    env.user.vipExpiresAt,
+    new Date(WECHAT_NOW.getTime() + 30 * 24 * 60 * 60 * 1000)
+  );
+});
+
+test("tampered WeChat amount, currency, duration, owner or payment method fails closed", async () => {
+  const tamperedEvents = [
+    wechatPaymentEvent("evt_wechat_bad_amount", {
+      amount_total: WECHAT_AMOUNT_MINOR + 1,
+    }),
+    wechatPaymentEvent("evt_wechat_bad_currency", { currency: "aud" }),
+    wechatPaymentEvent("evt_wechat_bad_method", {
+      payment_method_types: ["card"],
+    }),
+    wechatPaymentEvent("evt_wechat_bad_mode", { mode: "subscription" }),
+    wechatPaymentEvent("evt_wechat_bad_reference", {
+      client_reference_id: USER_ID,
+    }),
+    wechatPaymentEvent("evt_wechat_bad_metadata", {
+      metadata: {
+        vipPurchaseId: PURCHASE_ID,
+        vipUserId: "99999999-9999-9999-9999-999999999999",
+        vipProduct: "wechat_vip_30d",
+        vipDurationDays: "90",
+        vipAmountMinor: String(WECHAT_AMOUNT_MINOR),
+        vipCurrency: "CNY",
+      },
+    }),
+  ];
+
+  for (const [index, event] of tamperedEvents.entries()) {
+    const purchase = makeWechatPurchase();
+    const env = makeEnvironment({
+      subscription: makeSubscription(),
+      purchase,
+    });
+    const outcome = await processVerifiedVipBillingEvent(
+      event,
+      processingDeps(env, () => WECHAT_NOW)
+    );
+    assert.deepEqual(
+      outcome,
+      { status: "failed", retryable: false },
+      `case ${index}`
+    );
+    assert.equal(env.user.vipExpiresAt, null, `case ${index}`);
+    assert.equal(purchase.status, "pending", `case ${index}`);
+  }
 });
 
 test("first invoice.paid activates VIP to the trusted provider period end", async () => {
@@ -642,6 +919,28 @@ test("renewal invoice.paid extends entitlement exactly to the new provider perio
   );
   assert.equal(renewals.length, 1);
   assert.equal(env.mails.length, 1);
+});
+
+test("recurring invoice payment preserves separately purchased future VIP time", async () => {
+  const env = makeEnvironment({
+    subscription: makeSubscription({
+      providerSubscriptionId: PROVIDER_SUB_ID,
+      providerCustomerId: "cus_1",
+      providerPriceId: "price_stripe_1",
+      status: "active",
+    }),
+  });
+  const prepaidExpiry = new Date(PERIOD_1_END * 1000 + 14 * 86_400_000);
+  env.user.membershipTier = "vip";
+  env.user.vipExpiresAt = prepaidExpiry;
+
+  const outcome = await processVerifiedVipBillingEvent(
+    invoicePaidEvent("evt_paid_preserve_prepaid", "in_preserve_prepaid"),
+    processingDeps(env)
+  );
+
+  assert.deepEqual(outcome, { status: "processed", retryable: false });
+  assert.deepEqual(env.user.vipExpiresAt, prepaidExpiry);
 });
 
 test("duplicate invoice.paid event delivery does not double-apply or double-notify", async () => {

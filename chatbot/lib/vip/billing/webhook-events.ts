@@ -99,6 +99,7 @@ export function decidePaidNotificationType(input: {
 export const VIP_BILLING_ERROR_CODES = {
   correlationMismatch: "correlation_mismatch",
   unknownSubscription: "unknown_subscription",
+  unknownPurchase: "unknown_purchase",
   customerMismatch: "customer_mismatch",
   priceMismatch: "price_mismatch",
   userMismatch: "user_mismatch",
@@ -109,6 +110,7 @@ export const VIP_BILLING_ERROR_CODES = {
   unsupportedProviderStatus: "unsupported_provider_status",
   missingProviderSubscription: "missing_provider_subscription",
   duplicateInvoice: "duplicate_invoice",
+  paymentMismatch: "payment_mismatch",
   processingError: "processing_error",
   missingEmail: "missing_email",
   deliveryFailed: "delivery_failed",

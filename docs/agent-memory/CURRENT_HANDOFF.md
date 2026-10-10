@@ -4204,32 +4204,26 @@ Local database note: during this hotfix acceptance the normal local `chatbot` da
 **Current release state:** source committed/pushed and owner browser smoke PASS; final owner-local production build and AWS staging deployment/revalidation are pending. Do not reopen broad source review unless either gate exposes a core regression.
 
 
-## 2026-10-10 China Stripe payments — ACTIVE / one-pass delivery
+## 2026-10-10 China Stripe payments — FEATURE BRANCH FOR EXTERNAL REVIEW
 
-The owner has approved a fast China-payment extension and explicitly does **not** want this split into many micro-milestones. Implement it as one bounded billing feature pass, then run concentrated validation and stop for review.
+The owner prioritized Stripe WeChat Pay prepaid VIP, preserved the existing AUD card subscription, and explicitly deferred Alipay recurring, Stripe account configuration, credentials, CNY pricing and live payment testing. The billing architecture was kept bounded to one implementation pass.
 
-Target product behavior:
-
-- preserve the existing Stripe **AUD card monthly subscription** path without regression;
-- add **Alipay + CNY monthly recurring VIP** through Stripe, but only when the Stripe account/configuration is actually approved/capable for recurring Alipay; capability/configuration must fail closed rather than pretending support;
-- add **WeChat Pay + CNY one-time prepaid VIP** through Stripe Checkout, initially exactly **30 days** with no auto-renewal;
-- successful WeChat renewal extends from `max(now, existing vipExpiresAt)` rather than discarding already-paid remaining VIP time;
-- browser return URLs remain display-only; **only verified Stripe server-side events may grant/extend VIP entitlement**;
-- duplicate/retried webhooks and checkout completion must be idempotent;
-- keep payment/provider facts separate from entitlement state so Premium access still depends on trusted server-side VIP state.
-
-Fast-delivery boundaries:
-
-- use Stripe for both Alipay and WeChat Pay; do not add direct Alipay/WeChat SDK integrations;
-- no 90-day/365-day WeChat packages in this pass;
-- no live FX conversion; CNY pricing is explicit/configured;
-- no broad billing framework rewrite;
-- no unrelated Policy Intelligence, AI answer-path, consultation, document, or lawyer-workspace changes;
-- preserve existing Stripe card subscription, cancellation, billing portal, webhook safety, notification/outbox and existing-customer semantics;
-- if an additive database migration is required, create it in the repository but do not apply it to staging/production without separate authorization.
-
-Implementation should inspect and reuse the existing Phase-9 billing surfaces before changing them, especially `VipPlanPrice`, `VipSubscription`, the historical one-time `VipPurchase`, Stripe gateway/checkout/webhook code, VIP status/entitlement logic, and `VipMembershipClient`.
+Implementation boundaries: only verified Stripe webhook events may grant VIP; webhook processing validates payment state, mode, method, purchase/session/user correlation, amount and CNY currency; purchase and user row locks protect idempotency and additive expiry. WeChat grants 30 days from `max(now, current expiry)`. Browser return state is notice-only. No schema/migration, database, Stripe Dashboard, or AWS changes were made.
 
 Detailed task packet: `docs/agent-memory/tasks/STRIPE-CHINA-PAYMENTS-2026-10-10.md`.
 
-**Current priority:** complete this China Stripe payment feature in one implementation pass, validate it locally/deterministically, and return the exact diff/test/migration/configuration report for external review before commit/deployment.
+The implementation was committed and pushed on `feature/stripe-china-wechat-prepaid-20261010` from canonical `phase11-chinese-service-platform-ui-rebase`; remote HEAD matches local. Stop for external code review. Do not merge or deploy.
+
+### Implementation-pass handoff — 2026-10-10
+
+**Status:** WeChat prepaid implementation is committed and pushed on `feature/stripe-china-wechat-prepaid-20261010` for external code review; the branch is based on canonical `phase11-chinese-service-platform-ui-rebase` at `0033c878bd9a3a8f4d16f5f910dd9fa7d1248433`. Alipay remains unavailable by the owner's explicit decision pending Stripe approval and its supported authorization flow.
+
+The existing AUD card subscription path still uses its prior subscription checkout, recurring invoice, cancellation and Billing Portal behavior. WeChat uses a server-priced Stripe Checkout Session in `payment` mode with only `wechat_pay`, a CNY one-time line item and no subscription object. `VIP_WECHAT_PAY_ENABLED=true`, a valid positive-integer `VIP_WECHAT_CNY_30_DAY_AMOUNT_MINOR`, configured Stripe API access, and a nonblank `STRIPE_WEBHOOK_SECRET` are all required to expose checkout; neither amount nor duration is accepted from the browser. The session's ID and server-generated purchase ID are persisted in the existing `VipPurchase` table before the URL is returned.
+
+The signed webhook path checks complete/paid state, payment mode/method, session and purchase IDs, owner, fixed product/duration, amount and CNY currency before settlement. A completed but still-unpaid WeChat session is ignored until Stripe's later async-success event. Purchase-row locking prevents duplicate settlement and user-row locking serializes separate prepaid purchases. A paid purchase grants 30 days from `max(now, current vipExpiresAt)`; recurring invoice projection preserves a later prepaid expiry. Browser `checkout` query state remains notice-only. Alipay status is hardcoded unavailable and checkout returns 503. No Alipay price key, capability flag, direct SDK, or unsupported subscription flow was added after the owner answered that Stripe preview access is not approved.
+
+No database migration/schema change was added or applied. No database, Stripe Dashboard, live Stripe payment, or deployment was performed. The code reads `VIP_WECHAT_PAY_ENABLED` and `VIP_WECHAT_CNY_30_DAY_AMOUNT_MINOR`, plus the existing Stripe API and webhook signing secrets; none were configured in this task. Account setup, credentials, the approved CNY price, and live payment testing remain deferred. No Alipay key exists; recurring Alipay remains unavailable pending account approval and a documented supported authorization flow.
+
+Final focused validation after the webhook-secret fail-closed fix: 8 billing/config/UI test files passed, 0 failures, 0 skips; changed-file Biome passed; `git diff --check` passed. The earlier full chatbot unit suite reported 71 passes, 2 environment/unrelated failures, and 0 skips: `lib/server-http-timeouts.test.ts` could not bind `127.0.0.1` in the sandbox (`listen EPERM`), and `lib/production/stage3-hardening.test.ts` expected migration CLI exit 2 but got 1. The earlier production build was blocked when Next.js could not fetch Geist fonts from Google Fonts. These broader checks were not repeated for this focused final pass. The standalone TypeScript check touched `chatbot/tsconfig.tsbuildinfo`, which was restored to its starting contents.
+
+The user explicitly authorized creating a separate feature branch, committing, and pushing this implementation. Remote branch HEAD was verified equal to local HEAD. Stop for external code review; do not merge or deploy.

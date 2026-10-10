@@ -82,6 +82,13 @@ export function getStripeWebhookSecret(
   return secret;
 }
 
+export function isStripeWebhookSecretConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const secret = env.STRIPE_WEBHOOK_SECRET;
+  return typeof secret === "string" && secret.trim().length > 0;
+}
+
 export type VipBillingProviderStatus = {
   provider: VipBillingProviderName | "unconfigured";
   ready: boolean;

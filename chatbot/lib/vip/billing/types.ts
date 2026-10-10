@@ -2,6 +2,7 @@ import type {
   VipBillingEvent,
   VipBillingNotification,
   VipPlanPrice,
+  VipPurchase,
   VipSubscription,
 } from "@/lib/db/schema";
 import type { VipBillingNotificationType } from "./webhook-events";
@@ -12,6 +13,7 @@ import type { VipBillingNotificationType } from "./webhook-events";
 // network is ever required.
 
 export type VipPlanPriceRow = VipPlanPrice;
+export type VipPurchaseRow = VipPurchase;
 export type VipSubscriptionRow = VipSubscription;
 export type VipBillingEventRow = VipBillingEvent;
 export type VipBillingNotificationRow = VipBillingNotification;
@@ -44,6 +46,14 @@ export interface VipBillingProviderGateway {
     clientReferenceId: string;
     metadata: Record<string, string>;
     subscriptionMetadata: Record<string, string>;
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+  }): Promise<{ id: string; url: string | null }>;
+  createWeChatPrepaidCheckoutSession(input: {
+    amountMinor: number;
+    clientReferenceId: string;
+    metadata: Record<string, string>;
     successUrl: string;
     cancelUrl: string;
     idempotencyKey: string;
@@ -89,6 +99,14 @@ export interface VipBillingWebhookRepository {
     now?: Date
   ): Promise<boolean>;
   getVipSubscriptionById(id: string): Promise<VipSubscriptionRow | null>;
+  getVipPurchaseById(id: string): Promise<VipPurchaseRow | null>;
+  settleWechatVipPurchase(input: {
+    purchaseId: string;
+    userId: string;
+    providerPaymentId: string;
+    providerStatus: "paid" | "failed" | "cancelled";
+    now?: Date;
+  }): Promise<VipPurchaseRow | null>;
   getLiveVipSubscriptionForUser(
     userId: string
   ): Promise<VipSubscriptionRow | null>;

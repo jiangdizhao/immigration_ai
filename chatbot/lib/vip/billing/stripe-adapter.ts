@@ -87,6 +87,38 @@ export function createStripeBillingGateway(): VipBillingProviderGateway {
       );
       return { id: session.id, url: session.url };
     },
+    async createWeChatPrepaidCheckoutSession({
+      amountMinor,
+      clientReferenceId,
+      metadata,
+      successUrl,
+      cancelUrl,
+      idempotencyKey,
+    }) {
+      const session = await client.checkout.sessions.create(
+        {
+          mode: "payment",
+          payment_method_types: ["wechat_pay"],
+          line_items: [
+            {
+              price_data: {
+                currency: "cny",
+                product_data: { name: "VIP Membership — 30 Days" },
+                unit_amount: amountMinor,
+              },
+              quantity: 1,
+            },
+          ],
+          client_reference_id: clientReferenceId,
+          metadata,
+          payment_intent_data: { metadata },
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        },
+        { idempotencyKey }
+      );
+      return { id: session.id, url: session.url };
+    },
     async retrieveSubscription(subscriptionId) {
       return toSubscriptionSnapshot(
         await client.subscriptions.retrieve(subscriptionId)

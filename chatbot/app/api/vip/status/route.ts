@@ -3,7 +3,15 @@ import {
   getLiveVipSubscriptionForUser,
 } from "@/lib/db/queries";
 import { requireRegisteredUser } from "@/lib/vip/access";
-import { describeVipBillingProvider } from "@/lib/vip/billing/config";
+import {
+  getWechatVipPrice,
+  WECHAT_VIP_CURRENCY,
+  WECHAT_VIP_DURATION_DAYS,
+} from "@/lib/vip/billing/china-payments";
+import {
+  describeVipBillingProvider,
+  isStripeWebhookSecretConfigured,
+} from "@/lib/vip/billing/config";
 import { getVipProductConfig, isVipSimulationEnabled } from "@/lib/vip/config";
 import { entitlementState } from "@/lib/vip/entitlement";
 
@@ -16,6 +24,12 @@ export async function GET() {
   const state = entitlementState(access.entitlement);
   const product = isVipSimulationEnabled() ? getVipProductConfig() : null;
   const billingProvider = describeVipBillingProvider();
+  const wechatAmountMinor = getWechatVipPrice();
+  const wechatAvailable =
+    billingProvider.provider === "stripe" &&
+    billingProvider.ready &&
+    isStripeWebhookSecretConfigured() &&
+    wechatAmountMinor !== null;
   const activePlan = await getActiveVipPlanPrice();
   const liveSubscription = await getLiveVipSubscriptionForUser(access.userId);
 
@@ -51,5 +65,16 @@ export async function GET() {
           cancelAtPeriodEnd: liveSubscription.cancelAtPeriodEnd,
         }
       : null,
+    chinaPayments: {
+      // Alipay recurring is private-preview and remains unavailable until
+      // Stripe grants access and the approved authorization flow is added.
+      alipayRecurring: { available: false },
+      wechatPrepaid: {
+        available: wechatAvailable,
+        amountMinor: wechatAvailable ? wechatAmountMinor : null,
+        currency: WECHAT_VIP_CURRENCY,
+        durationDays: WECHAT_VIP_DURATION_DAYS,
+      },
+    },
   });
 }

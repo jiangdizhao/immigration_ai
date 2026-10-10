@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   describeVipBillingProvider,
   getVipBillingProviderConfig,
+  isStripeWebhookSecretConfigured,
   isVipBillingSimulationEnabled,
 } from "./config";
 
@@ -56,6 +57,22 @@ test("client-safe provider status never contains the Stripe secret", () => {
       VIP_BILLING_PROVIDER: "stripe",
     } as NodeJS.ProcessEnv),
     { provider: "stripe", ready: false }
+  );
+});
+
+test("WeChat requires a configured webhook signing secret", () => {
+  assert.equal(isStripeWebhookSecretConfigured({} as NodeJS.ProcessEnv), false);
+  assert.equal(
+    isStripeWebhookSecretConfigured({
+      STRIPE_WEBHOOK_SECRET: "  ",
+    } as NodeJS.ProcessEnv),
+    false
+  );
+  assert.equal(
+    isStripeWebhookSecretConfigured({
+      STRIPE_WEBHOOK_SECRET: "whsec_example",
+    } as NodeJS.ProcessEnv),
+    true
   );
 });
 

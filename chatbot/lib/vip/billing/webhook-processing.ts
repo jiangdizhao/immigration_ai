@@ -1,3 +1,8 @@
+import {
+  WECHAT_VIP_CURRENCY,
+  WECHAT_VIP_DURATION_DAYS,
+  WECHAT_VIP_PRODUCT_CODE,
+} from "./china-payments";
 import type {
   StripeSubscriptionSnapshot,
   VipBillingEventRow,
@@ -38,6 +43,8 @@ type VipBillingEventInput = {
 
 export const SUPPORTED_VIP_BILLING_EVENT_TYPES = [
   "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
   "invoice.paid",
   "invoice.payment_failed",
   "customer.subscription.updated",
@@ -152,11 +159,53 @@ export async function processVerifiedVipBillingEvent(
 
   try {
     switch (event.type) {
-      case "checkout.session.completed":
+      case "checkout.session.completed": {
+        const completedSession = event.data
+          .object as CheckoutSessionObject | null;
+        if (completedSession?.mode === "payment") {
+          if (
+            completedSession.status === "complete" &&
+            completedSession.payment_status === "unpaid" &&
+            (completedSession.subscription === null ||
+              completedSession.subscription === undefined) &&
+            Array.isArray(completedSession.payment_method_types) &&
+            completedSession.payment_method_types.length === 1 &&
+            completedSession.payment_method_types[0] === "wechat_pay"
+          ) {
+            return await ignoreEvent(billingEvent, deps, now);
+          }
+          return await handleWechatCheckoutSettlement(
+            billingEvent,
+            processingToken,
+            completedSession,
+            "paid",
+            deps,
+            now
+          );
+        }
         return await handleCheckoutCompleted(
           billingEvent,
           processingToken,
           event.data.object,
+          deps,
+          now
+        );
+      }
+      case "checkout.session.async_payment_succeeded":
+        return await handleWechatCheckoutSettlement(
+          billingEvent,
+          processingToken,
+          event.data.object,
+          "paid",
+          deps,
+          now
+        );
+      case "checkout.session.async_payment_failed":
+        return await handleWechatCheckoutSettlement(
+          billingEvent,
+          processingToken,
+          event.data.object,
+          "failed",
           deps,
           now
         );
@@ -344,6 +393,12 @@ type CheckoutSessionObject = {
   id: string;
   mode?: string;
   subscription?: unknown;
+  status?: string | null;
+  payment_status?: string | null;
+  payment_method_types?: string[];
+  client_reference_id?: string | null;
+  amount_total?: number | null;
+  currency?: string | null;
   metadata?: Record<string, string | null | undefined> | null;
 };
 
@@ -365,6 +420,111 @@ function resolveInvoiceSubscriptionId(invoice: InvoiceObject): string | null {
     return null;
   }
   return extractSubscriptionId(details?.subscription);
+}
+
+async function handleWechatCheckoutSettlement(
+  billingEvent: VipBillingEventRow,
+  processingToken: string,
+  object: unknown,
+  providerStatus: "paid" | "failed",
+  deps: VipBillingProcessorDeps,
+  now: () => Date
+): Promise<VipBillingProcessingOutcome> {
+  const session = object as CheckoutSessionObject;
+  if (
+    !session ||
+    session.mode !== "payment" ||
+    session.status !== "complete" ||
+    (providerStatus === "paid" && session.payment_status !== "paid") ||
+    (providerStatus === "failed" && session.payment_status === "paid") ||
+    (session.subscription !== null && session.subscription !== undefined) ||
+    !Array.isArray(session.payment_method_types) ||
+    session.payment_method_types.length !== 1 ||
+    session.payment_method_types[0] !== "wechat_pay"
+  ) {
+    return await failEvent(
+      billingEvent,
+      VIP_BILLING_ERROR_CODES.paymentMismatch,
+      deps,
+      now
+    );
+  }
+
+  const metadata = session.metadata;
+  const purchaseId = metadata?.vipPurchaseId;
+  if (
+    !session.id ||
+    typeof purchaseId !== "string" ||
+    metadata?.vipProduct !== WECHAT_VIP_PRODUCT_CODE ||
+    metadata.vipDurationDays !== String(WECHAT_VIP_DURATION_DAYS)
+  ) {
+    return await failEvent(
+      billingEvent,
+      VIP_BILLING_ERROR_CODES.correlationMismatch,
+      deps,
+      now
+    );
+  }
+
+  const purchase = await deps.repo.getVipPurchaseById(purchaseId);
+  if (!purchase) {
+    return await failEvent(
+      billingEvent,
+      VIP_BILLING_ERROR_CODES.unknownPurchase,
+      deps,
+      now
+    );
+  }
+
+  if (
+    purchase.provider !== "stripe" ||
+    purchase.providerPaymentId !== session.id ||
+    session.client_reference_id !== purchase.id ||
+    metadata.vipUserId !== purchase.userId ||
+    metadata.vipAmountMinor !== String(purchase.amountMinor) ||
+    metadata.vipCurrency !== WECHAT_VIP_CURRENCY ||
+    typeof session.amount_total !== "number" ||
+    !Number.isSafeInteger(session.amount_total) ||
+    session.amount_total !== purchase.amountMinor ||
+    session.currency?.toUpperCase() !== purchase.currency ||
+    purchase.currency !== WECHAT_VIP_CURRENCY
+  ) {
+    return await failEvent(
+      billingEvent,
+      VIP_BILLING_ERROR_CODES.paymentMismatch,
+      deps,
+      now
+    );
+  }
+
+  // Checkout completion is trusted only after Stripe signature verification,
+  // exact server-created purchase correlation, and amount/currency/method
+  // checks. The locked VipPurchase settlement makes distinct Stripe events
+  // for the same Session idempotent as well as ordinary event retries.
+  const settled = await deps.repo.settleWechatVipPurchase({
+    purchaseId: purchase.id,
+    userId: purchase.userId,
+    providerPaymentId: session.id,
+    providerStatus,
+    now: now(),
+  });
+  if (!settled) {
+    return await failEvent(
+      billingEvent,
+      VIP_BILLING_ERROR_CODES.unknownPurchase,
+      deps,
+      now
+    );
+  }
+
+  const marked = await deps.repo.markVipBillingEventProcessed(
+    billingEvent.id,
+    processingToken,
+    now()
+  );
+  return marked
+    ? { status: "processed", retryable: false }
+    : { status: "failed", retryable: true };
 }
 
 async function handleCheckoutCompleted(

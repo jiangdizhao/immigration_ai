@@ -707,18 +707,28 @@ export async function getLawyerClarificationRequestForAdmin(id: string) {
 }
 
 export async function createVipPurchase({
+  id,
   userId,
   provider,
   providerPaymentId,
   amountMinor,
   currency,
-}: Pick<
-  VipPurchase,
-  "userId" | "provider" | "providerPaymentId" | "amountMinor" | "currency"
->) {
+}: Omit<
+  Pick<
+    VipPurchase,
+    | "id"
+    | "userId"
+    | "provider"
+    | "providerPaymentId"
+    | "amountMinor"
+    | "currency"
+  >,
+  "id"
+> & { id?: VipPurchase["id"] }) {
   const [purchase] = await db
     .insert(vipPurchase)
     .values({
+      ...(id ? { id } : {}),
       userId,
       provider,
       providerPaymentId,
@@ -728,6 +738,15 @@ export async function createVipPurchase({
     .returning();
 
   return purchase;
+}
+
+export async function getVipPurchaseById(id: string) {
+  const [purchase] = await db
+    .select()
+    .from(vipPurchase)
+    .where(eq(vipPurchase.id, id))
+    .limit(1);
+  return purchase ?? null;
 }
 
 export async function getVipPurchaseForUser({
@@ -800,6 +819,11 @@ export async function settleVipPurchase({
       return settled ?? null;
     }
 
+    // Serialize independent prepaid purchases for the same account so two
+    // concurrent confirmations cannot both append from the same old expiry.
+    await tx.execute(
+      sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`
+    );
     const [currentUser] = await tx
       .select({
         membershipTier: user.membershipTier,
@@ -1624,11 +1648,14 @@ export async function applyVipInvoicePaid({
       .where(eq(vipSubscription.id, subscriptionId))
       .returning();
 
-    // Entitlement projection: the trusted provider paid period end is the
-    // single source for vipExpiresAt.
+    // Entitlement projection: preserve any separately purchased future VIP
+    // time while applying the trusted recurring invoice period.
     await tx
       .update(user)
-      .set({ membershipTier: "vip", vipExpiresAt: currentPeriodEnd })
+      .set({
+        membershipTier: "vip",
+        vipExpiresAt: sql`GREATEST(COALESCE("vipExpiresAt", ${currentPeriodEnd}), ${currentPeriodEnd})`,
+      })
       .where(eq(user.id, prior.userId));
 
     const { notification } = await insertVipBillingNotificationIfAbsent(tx, {

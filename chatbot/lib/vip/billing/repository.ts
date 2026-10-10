@@ -15,6 +15,7 @@ import {
   claimVipBillingNotification,
   getLiveVipSubscriptionForUser,
   getUserEmailById,
+  getVipPurchaseById,
   getVipSubscriptionById,
   getVipSubscriptionByProviderSubscriptionId,
   incrementVipBillingEventAttempt,
@@ -24,7 +25,9 @@ import {
   markVipBillingEventProcessed,
   markVipBillingNotificationFailed,
   markVipBillingNotificationSent,
+  settleVipPurchase as settleVipPurchaseQuery,
 } from "@/lib/db/queries";
+import { WECHAT_VIP_DURATION_DAYS } from "./china-payments";
 
 export function createPostgresVipBillingRepository(): VipBillingWebhookRepository {
   return {
@@ -38,6 +41,13 @@ export function createPostgresVipBillingRepository(): VipBillingWebhookRepositor
     markVipBillingEventFailed: (id, code, token, now) =>
       markVipBillingEventFailed(id, code, token, now),
     getVipSubscriptionById: (id) => getVipSubscriptionById(id),
+    getVipPurchaseById: (id) => getVipPurchaseById(id),
+    settleWechatVipPurchase: (input) =>
+      settleVipPurchaseQuery({
+        ...input,
+        provider: "stripe",
+        durationDays: WECHAT_VIP_DURATION_DAYS,
+      }),
     getLiveVipSubscriptionForUser: (userId) =>
       getLiveVipSubscriptionForUser(userId),
     getVipSubscriptionByProviderSubscriptionId: (input) =>
