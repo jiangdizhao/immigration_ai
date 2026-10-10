@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   calculateVipWindow,
   entitlementState,
+  getRetainedPrepaidVipEntitlement,
   isActiveVip,
   isPremiumAllowed,
 } from "./entitlement";
@@ -86,4 +87,76 @@ test("renewal starts at the later of now and current expiry", () => {
     30
   );
   assert.equal(expiredWindow.vipStartsAt.toISOString(), now.toISOString());
+});
+
+test("subscription deletion retains only the latest valid paid Stripe CNY prepaid expiry", () => {
+  const earlierExpiry = new Date("2026-09-20T00:00:00.000Z");
+  const latestExpiry = new Date("2026-10-20T00:00:00.000Z");
+  const entitlement = getRetainedPrepaidVipEntitlement(
+    [
+      {
+        provider: "stripe",
+        currency: "CNY",
+        status: "paid",
+        vipExpiresAt: earlierExpiry,
+      },
+      {
+        provider: "stripe",
+        currency: "CNY",
+        status: "paid",
+        vipExpiresAt: latestExpiry,
+      },
+      {
+        provider: "stripe",
+        currency: "CNY",
+        status: "pending",
+        vipExpiresAt: new Date("2026-12-01T00:00:00.000Z"),
+      },
+      {
+        provider: "stripe",
+        currency: "CNY",
+        status: "paid",
+        vipExpiresAt: new Date("2026-08-28T00:00:00.000Z"),
+      },
+      {
+        provider: "simulation",
+        currency: "CNY",
+        status: "paid",
+        vipExpiresAt: new Date("2026-12-01T00:00:00.000Z"),
+      },
+    ],
+    now
+  );
+
+  assert.deepEqual(entitlement, {
+    membershipTier: "vip",
+    vipExpiresAt: latestExpiry,
+  });
+});
+
+test("subscription deletion clears recurring expiry when no valid prepaid purchase remains", () => {
+  assert.deepEqual(getRetainedPrepaidVipEntitlement([], now), {
+    membershipTier: "free",
+    vipExpiresAt: null,
+  });
+  assert.deepEqual(
+    getRetainedPrepaidVipEntitlement(
+      [
+        {
+          provider: "stripe",
+          currency: "CNY",
+          status: "paid",
+          vipExpiresAt: new Date("2026-08-28T00:00:00.000Z"),
+        },
+        {
+          provider: "stripe",
+          currency: "CNY",
+          status: "pending",
+          vipExpiresAt: new Date("2026-12-01T00:00:00.000Z"),
+        },
+      ],
+      now
+    ),
+    { membershipTier: "free", vipExpiresAt: null }
+  );
 });

@@ -1,7 +1,7 @@
 export function getVipRenewalPresentation(
-  subscription: { cancelAtPeriodEnd: boolean } | null
+  subscription: { status: string; cancelAtPeriodEnd: boolean } | null
 ) {
-  if (!subscription) {
+  if (!subscription || subscription.status !== "active") {
     return {
       renewalCopy: "This prepaid membership does not renew automatically.",
       showBillingManagement: false,

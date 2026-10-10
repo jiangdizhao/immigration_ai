@@ -9,7 +9,10 @@ import type {
   VipPurchase,
   VipSubscription,
 } from "../../db/schema";
-import { calculateVipWindow } from "../entitlement";
+import {
+  calculateVipWindow,
+  getRetainedPrepaidVipEntitlement,
+} from "../entitlement";
 import type {
   StripeSubscriptionSnapshot,
   VipBillingMailer,
@@ -160,6 +163,7 @@ function invoicePaidEvent(id: string, invoiceId: string) {
 function makeEnvironment(input: {
   subscription: VipSubscription;
   purchase?: VipPurchase;
+  purchases?: VipPurchase[];
   snapshot?: StripeSubscriptionSnapshot;
   mailFailures?: number;
 }) {
@@ -168,6 +172,9 @@ function makeEnvironment(input: {
   const purchases = new Map<string, VipPurchase>();
   if (input.purchase) {
     purchases.set(input.purchase.id, input.purchase);
+  }
+  for (const purchase of input.purchases ?? []) {
+    purchases.set(purchase.id, purchase);
   }
   const user = {
     id: USER_ID,
@@ -522,8 +529,12 @@ function makeEnvironment(input: {
       subscription.status = "cancelled";
       subscription.endedAt = deleted.now ?? new Date();
       subscription.cancelAtPeriodEnd = false;
-      user.membershipTier = "free";
-      user.vipExpiresAt = null;
+      const retainedEntitlement = getRetainedPrepaidVipEntitlement(
+        Array.from(purchases.values()),
+        deleted.now ?? new Date()
+      );
+      user.membershipTier = retainedEntitlement.membershipTier;
+      user.vipExpiresAt = retainedEntitlement.vipExpiresAt;
       markEvent(deleted.billingEventId, "processed");
       return subscription;
     },
@@ -1070,7 +1081,56 @@ test("subscription.updated schedules cancellation once and never activates VIP",
   assert.equal(env.mails.length, 1);
 });
 
-test("subscription.deleted terminates the subscription and closes entitlement", async () => {
+test("subscription.deleted preserves an unexpired paid WeChat prepaid entitlement", async () => {
+  const deletionTime = new Date("2026-10-10T00:00:00.000Z");
+  const prepaidExpiry = new Date("2026-11-09T00:00:00.000Z");
+  const env = makeEnvironment({
+    subscription: makeSubscription({
+      providerSubscriptionId: PROVIDER_SUB_ID,
+      providerCustomerId: "cus_1",
+      providerPriceId: "price_stripe_1",
+      status: "active",
+      cancelAtPeriodEnd: true,
+      lastPaidInvoiceId: "in_1",
+      lastPaidAt: new Date("2026-09-10T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-11-10T00:00:00.000Z"),
+    }),
+    purchase: makeWechatPurchase({
+      status: "paid",
+      purchasedAt: deletionTime,
+      vipStartsAt: deletionTime,
+      vipExpiresAt: prepaidExpiry,
+    }),
+  });
+  env.user.membershipTier = "vip";
+  // This later expiry is from the recurring subscription and must not replace
+  // the independently purchased prepaid expiry after deletion.
+  env.user.vipExpiresAt = new Date("2026-12-10T00:00:00.000Z");
+
+  const outcome = await processVerifiedVipBillingEvent(
+    eventFor("evt_del_with_prepaid", "customer.subscription.deleted", {
+      id: PROVIDER_SUB_ID,
+      status: "canceled",
+      customer: "cus_1",
+      cancel_at_period_end: false,
+      canceled_at: deletionTime.getTime() / 1000,
+      items: { data: [] },
+      metadata: CORRELATION,
+    }),
+    processingDeps(env, () => deletionTime)
+  );
+
+  assert.deepEqual(outcome, { status: "processed", retryable: false });
+  assert.equal(env.subscription.status, "cancelled");
+  assert.equal(env.user.membershipTier, "vip");
+  assert.equal(
+    env.user.vipExpiresAt?.toISOString(),
+    prepaidExpiry.toISOString()
+  );
+});
+
+test("subscription.deleted clears recurring expiry when no valid prepaid entitlement exists", async () => {
+  const deletionTime = new Date("2026-10-10T00:00:00.000Z");
   const env = makeEnvironment({
     subscription: makeSubscription({
       providerSubscriptionId: PROVIDER_SUB_ID,
@@ -1082,9 +1142,21 @@ test("subscription.deleted terminates the subscription and closes entitlement", 
       lastPaidAt: new Date(PERIOD_1_START * 1000),
       currentPeriodEnd: new Date(PERIOD_1_END * 1000),
     }),
+    purchases: [
+      makeWechatPurchase({
+        status: "pending",
+        vipExpiresAt: new Date("2026-12-10T00:00:00.000Z"),
+      }),
+      makeWechatPurchase({
+        id: "55555555-5555-5555-5555-555555555555",
+        providerPaymentId: "cs_wechat_expired",
+        status: "paid",
+        vipExpiresAt: new Date("2026-10-09T00:00:00.000Z"),
+      }),
+    ],
   });
   env.user.membershipTier = "vip";
-  env.user.vipExpiresAt = new Date(PERIOD_1_END * 1000);
+  env.user.vipExpiresAt = new Date("2026-12-10T00:00:00.000Z");
 
   const outcome = await processVerifiedVipBillingEvent(
     eventFor("evt_del_1", "customer.subscription.deleted", {
@@ -1096,7 +1168,7 @@ test("subscription.deleted terminates the subscription and closes entitlement", 
       items: { data: [] },
       metadata: CORRELATION,
     }),
-    processingDeps(env)
+    processingDeps(env, () => deletionTime)
   );
 
   assert.deepEqual(outcome, { status: "processed", retryable: false });

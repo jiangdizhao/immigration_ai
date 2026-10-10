@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { isActiveVip } from "./entitlement";
 import {
   getVipCheckoutReturnNotice,
   getVipRenewalPresentation,
@@ -13,18 +14,50 @@ test("prepaid VIP has no automatic renewal copy or subscription controls", () =>
   assert.equal(presentation.showCancelRenewal, false);
 });
 
+test("prepaid VIP with an abandoned recurring checkout has no renewal controls", () => {
+  const now = new Date("2026-10-10T00:00:00.000Z");
+  const prepaidMembership = {
+    membershipTier: "vip" as const,
+    vipExpiresAt: new Date("2026-11-10T00:00:00.000Z"),
+  };
+  assert.equal(isActiveVip(prepaidMembership, now), true);
+
+  for (const status of [
+    "pending",
+    "incomplete",
+    "unpaid",
+    "past_due",
+    "paused",
+  ]) {
+    assert.deepEqual(
+      getVipRenewalPresentation({ status, cancelAtPeriodEnd: false }),
+      {
+        renewalCopy: "This prepaid membership does not renew automatically.",
+        showBillingManagement: false,
+        showCancelRenewal: false,
+      }
+    );
+  }
+});
+
 test("recurring VIP retains billing and cancellation management", () => {
-  assert.deepEqual(getVipRenewalPresentation({ cancelAtPeriodEnd: false }), {
-    renewalCopy: "Renews automatically until cancelled.",
-    showBillingManagement: true,
-    showCancelRenewal: true,
-  });
-  assert.deepEqual(getVipRenewalPresentation({ cancelAtPeriodEnd: true }), {
-    renewalCopy:
-      "Renewal is cancelled; membership stays active until the end of the paid period.",
-    showBillingManagement: true,
-    showCancelRenewal: false,
-  });
+  assert.deepEqual(
+    getVipRenewalPresentation({ status: "active", cancelAtPeriodEnd: false }),
+    {
+      renewalCopy: "Renews automatically until cancelled.",
+      showBillingManagement: true,
+      showCancelRenewal: true,
+    }
+  );
+  assert.deepEqual(
+    getVipRenewalPresentation({ status: "active", cancelAtPeriodEnd: true }),
+    {
+      renewalCopy:
+        "Renewal is cancelled; membership stays active until the end of the paid period.",
+      showBillingManagement: true,
+      showCancelRenewal: false,
+    }
+  );
 });
 
 test("checkout success redirects are notices only and never imply activation", () => {

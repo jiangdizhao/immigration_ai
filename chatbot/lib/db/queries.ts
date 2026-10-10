@@ -25,7 +25,10 @@ import {
 } from "../matter-documents/chat-deletion";
 import { createS3MatterDocumentStorage } from "../matter-documents/storage";
 import { generateUUID } from "../utils";
-import { calculateVipWindow } from "../vip/entitlement";
+import {
+  calculateVipWindow,
+  getRetainedPrepaidVipEntitlement,
+} from "../vip/entitlement";
 import {
   transitionMatterDocumentSecurityStatus as compareAndSetMatterDocumentSecurityStatus,
   getMatterDocumentSecurityByStorageKey as lookupMatterDocumentSecurityByStorageKey,
@@ -1858,9 +1861,10 @@ export async function applyVipSubscriptionStatusUpdate({
 }
 
 /**
- * Verified provider deletion: terminal local status plus entitlement closure.
- * For period-end cancellations this arrives at/after the paid boundary, so
- * closing entitlement here never removes prepaid time early.
+ * Verified provider deletion: terminal local status plus entitlement
+ * projection from any independently paid, unexpired Stripe CNY prepaid
+ * purchases. The user expiry is not trusted here because it may describe only
+ * the deleted recurring subscription.
  */
 export async function applyVipSubscriptionDeleted({
   billingEventId,
@@ -1909,10 +1913,34 @@ export async function applyVipSubscriptionDeleted({
       .where(eq(vipSubscription.id, subscriptionId))
       .returning();
 
-    // Provider termination closes the entitlement projection.
+    // Serialize against settleVipPurchase(), which takes this same user lock
+    // before it marks a purchase paid and extends VIP. This lets deletion see
+    // a committed prepaid purchase or lets the later settlement regrant it.
+    await tx.execute(
+      sql`SELECT "id" FROM "User" WHERE "id" = ${prior.userId} FOR UPDATE`
+    );
+    const paidPurchases = await tx
+      .select({
+        provider: vipPurchase.provider,
+        currency: vipPurchase.currency,
+        status: vipPurchase.status,
+        vipExpiresAt: vipPurchase.vipExpiresAt,
+      })
+      .from(vipPurchase)
+      .where(
+        and(
+          eq(vipPurchase.userId, prior.userId),
+          eq(vipPurchase.status, "paid")
+        )
+      );
+    const retainedEntitlement = getRetainedPrepaidVipEntitlement(
+      paidPurchases,
+      now
+    );
+
     await tx
       .update(user)
-      .set({ membershipTier: "free", vipExpiresAt: null })
+      .set(retainedEntitlement)
       .where(eq(user.id, prior.userId));
 
     await markOwnedVipBillingEvent(tx, {
