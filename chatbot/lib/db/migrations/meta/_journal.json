@@ -169,6 +169,13 @@
       "when": 1790732822725,
       "tag": "0023_chief_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791681786682,
+      "tag": "0024_phase12_stage1_conversation_turn",
+      "breakpoints": true
     }
   ]
 }

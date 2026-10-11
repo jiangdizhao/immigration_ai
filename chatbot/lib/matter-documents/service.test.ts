@@ -53,6 +53,7 @@ function makeHarness(
     failStoredTransition?: boolean;
     failCreate?: boolean;
     existingRecord?: MatterDocument;
+    existingRecords?: MatterDocument[];
   } = {}
 ) {
   const conversations = new Map([
@@ -62,6 +63,9 @@ function makeHarness(
   const records = new Map<string, MatterDocument>();
   if (options.existingRecord) {
     records.set(options.existingRecord.id, options.existingRecord);
+  }
+  for (const record of options.existingRecords ?? []) {
+    records.set(record.id, record);
   }
   let createdCount = 0;
   let putCount = 0;
@@ -116,6 +120,38 @@ function makeHarness(
           record.storageStatus === "stored" &&
           record.deletedAt === null
       );
+    },
+    async listForUserHistory({ userId, limit, cursor }) {
+      const owned = [...records.values()]
+        .filter(
+          (record) =>
+            record.userId === userId &&
+            record.storageStatus === "stored" &&
+            record.deletedAt === null &&
+            conversations.get(record.chatId)?.userId === userId
+        )
+        .sort((left, right) => {
+          const leftTime = left.createdAt.getTime();
+          const rightTime = right.createdAt.getTime();
+          if (leftTime !== rightTime) {
+            return rightTime - leftTime;
+          }
+          return right.id.localeCompare(left.id);
+        })
+        .filter((record) =>
+          cursor
+            ? record.createdAt.getTime() < cursor.timestamp ||
+              (record.createdAt.getTime() === cursor.timestamp &&
+                record.id < cursor.id)
+            : true
+        );
+      return {
+        documents: owned.slice(0, limit).map((record) => ({
+          ...record,
+          conversationTitle: `Conversation ${record.chatId.slice(0, 4)}`,
+        })),
+        hasMore: owned.length > limit,
+      };
     },
     async getForOwner({ documentId, userId, includeDeleted = false }) {
       const record = records.get(documentId);
@@ -595,4 +631,203 @@ test("downloads fail closed when the stored bytes do not match metadata integrit
     (await h.handlers.download(request("GET", "/"), DOC_ID)).status,
     503
   );
+});
+
+function historyRecord(
+  index: number,
+  overrides: Partial<MatterDocument> = {}
+): MatterDocument {
+  const bytes = new TextEncoder().encode(`document-${index}`);
+  return makeRecord({
+    id: `dddddddd-dddd-4ddd-8ddd-${String(index).padStart(12, "0")}`,
+    chatId: index % 2 === 0 ? CHAT_A : CHAT_A,
+    originalFilename: `record-${index}.pdf`,
+    storageKey: `matter-documents/key-${index}`,
+    byteSize: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    createdAt: new Date(Date.parse("2026-09-01T00:00:00.000Z") + index * 1000),
+    updatedAt: new Date(Date.parse("2026-09-01T00:00:00.000Z") + index * 1000),
+    ...overrides,
+  });
+}
+
+test("the owner lists every retained file across their conversations", async () => {
+  const documents = Array.from({ length: 137 }, (_, index) =>
+    historyRecord(index)
+  );
+  const harness = makeHarness({ existingRecords: documents });
+  const seen: string[] = [];
+  let cursor: { timestamp: number; id: string } | null = null;
+
+  do {
+    const page = await harness.service.listForUser({
+      userId: USER_A,
+      limit: 40,
+      cursor,
+    });
+    seen.push(...page.documents.map((document) => document.id));
+    const last = page.documents.at(-1);
+    cursor =
+      page.hasMore && last
+        ? { timestamp: last.createdAt.getTime(), id: last.id }
+        : null;
+  } while (cursor);
+
+  assert.equal(seen.length, 137);
+  assert.equal(new Set(seen).size, 137);
+  assert.equal(seen[0], documents[136]?.id);
+  assert.equal(seen.at(-1), documents[0]?.id);
+});
+
+test("the account file index never leaks another account's documents", async () => {
+  const mine = historyRecord(1);
+  const foreign = historyRecord(2, { userId: USER_B, chatId: CHAT_B });
+  const harness = makeHarness({ existingRecords: [mine, foreign] });
+
+  const page = await harness.service.listForUser({
+    userId: USER_A,
+    limit: 50,
+    cursor: null,
+  });
+  assert.deepEqual(
+    page.documents.map((document) => document.id),
+    [mine.id]
+  );
+  for (const document of page.documents) {
+    assert.equal(document.evidenceScope, "conversation");
+    assert.equal(document.projectId, null);
+  }
+});
+
+test("deleted and not-yet-stored documents stay out of the account file index", async () => {
+  const stored = historyRecord(1);
+  const deleted = historyRecord(2, {
+    deletedAt: new Date("2026-09-30T00:00:00.000Z"),
+  });
+  const uploading = historyRecord(3, { storageStatus: "uploading" });
+  const cleanupPending = historyRecord(4, { storageStatus: "cleanup_pending" });
+  const storageFailed = historyRecord(5, { storageStatus: "storage_failed" });
+  const harness = makeHarness({
+    existingRecords: [
+      stored,
+      deleted,
+      uploading,
+      cleanupPending,
+      storageFailed,
+    ],
+  });
+
+  const page = await harness.service.listForUser({
+    userId: USER_A,
+    limit: 50,
+    cursor: null,
+  });
+  assert.deepEqual(
+    page.documents.map((document) => document.id),
+    [stored.id]
+  );
+});
+
+test("the account file index preserves processing status and download integrity", async () => {
+  const bytes = new TextEncoder().encode("original docx bytes");
+  const record = historyRecord(7, {
+    originalFilename: "evidence.docx",
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    byteSize: bytes.byteLength,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    processingStatus: "complete",
+  });
+  const harness = makeHarness({ existingRecords: [record] });
+  await harness.storage.put({
+    key: record.storageKey,
+    body: bytes,
+    contentType: record.mimeType,
+    sha256: record.sha256,
+  });
+
+  const page = await harness.service.listForUser({
+    userId: USER_A,
+    limit: 50,
+    cursor: null,
+  });
+  assert.equal(page.documents.length, 1);
+  assert.equal(page.documents[0]?.processingStatus, "complete");
+  assert.equal(page.documents[0]?.mimeType, record.mimeType);
+
+  const download = await harness.service.download({
+    userId: USER_A,
+    documentId: record.id,
+  });
+  assert.ok(download);
+  assert.deepEqual(Buffer.from(download.bytes), Buffer.from(bytes));
+  assert.equal(download.filename, "evidence.docx");
+});
+
+const HISTORY_ROUTE = "http://localhost/api/matter-documents/history";
+
+test("the user-level history endpoint requires an authenticated customer account", async () => {
+  const harness = makeHarness({ existingRecords: [historyRecord(1)] });
+  const anonymous = createMatterDocumentHandlers({
+    authenticate: async () => null,
+    service: harness.service,
+  });
+  assert.equal(
+    (await anonymous.history(new Request(HISTORY_ROUTE))).status,
+    401
+  );
+
+  for (const role of ["lawyer", "admin"] as const) {
+    const staff = createMatterDocumentHandlers({
+      authenticate: async () => ({
+        userId: USER_A,
+        type: "regular" as const,
+        role,
+      }),
+      service: harness.service,
+    });
+    assert.equal((await staff.history(new Request(HISTORY_ROUTE))).status, 403);
+  }
+});
+
+test("the user-level history endpoint paginates with a resumable cursor", async () => {
+  const documents = Array.from({ length: 5 }, (_, index) =>
+    historyRecord(index)
+  );
+  const harness = makeHarness({ existingRecords: documents });
+  const handlers = createMatterDocumentHandlers({
+    authenticate: async () => ({
+      userId: USER_A,
+      type: "regular" as const,
+      role: "user" as const,
+    }),
+    service: harness.service,
+  });
+
+  const first = await (
+    await handlers.history(new Request(`${HISTORY_ROUTE}?limit=2`))
+  ).json();
+  assert.equal(first.documents.length, 2);
+  assert.equal(first.hasMore, true);
+  assert.ok(typeof first.nextCursor === "string");
+
+  const second = await (
+    await handlers.history(
+      new Request(
+        `${HISTORY_ROUTE}?limit=2&cursor=${encodeURIComponent(first.nextCursor)}`
+      )
+    )
+  ).json();
+  assert.equal(second.documents.length, 2);
+  const overlap = new Set(
+    first.documents.map((document: { id: string }) => document.id)
+  );
+  for (const document of second.documents) {
+    assert.equal(overlap.has(document.id), false);
+  }
+
+  const invalid = await handlers.history(
+    new Request(`${HISTORY_ROUTE}?cursor=not-a-cursor`)
+  );
+  assert.equal(invalid.status, 400);
 });

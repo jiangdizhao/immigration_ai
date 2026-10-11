@@ -4,8 +4,17 @@ import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
+  beginWidgetTurn,
+  completeWidgetTurn,
+  completeWidgetTurnFromParts,
+  failWidgetTurn,
+  resolveClientTurnId,
+  type WidgetTurnPersistence,
+  type WidgetTurnStart,
+  widgetFieldsFromAssistantParts,
+} from "@/lib/conversations/widget-turn";
+import {
   getImmigrationConversationByChatId,
-  saveMessages,
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
@@ -54,6 +63,12 @@ const messageSchema = z.object({
 const requestSchema = z.object({
   id: z.string().uuid(),
   frontendChatId: z.string().uuid().optional(),
+  clientTurnId: z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[A-Za-z0-9._:-]+$/u)
+    .optional(),
   policySlug: z
     .string()
     .regex(/^[a-z0-9][a-z0-9-]{0,119}$/u)
@@ -131,6 +146,14 @@ function latestQuestion(messages: z.infer<typeof messageSchema>[]) {
   return text || null;
 }
 
+function latestUserMessageId(
+  messages: z.infer<typeof messageSchema>[]
+): string | null {
+  const message = [...messages].reverse().find((item) => item.role === "user");
+  const id = message?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
 function detectLanguage(text: string): ResponseLanguage {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text) ? "zh" : "en";
 }
@@ -167,7 +190,8 @@ function emptyResponse(
   text: string,
   responseLanguage: ResponseLanguage,
   matterId: string | null = null,
-  retrievalDebug: Record<string, unknown> | null = null
+  retrievalDebug: Record<string, unknown> | null = null,
+  persistence: WidgetTurnPersistence | null = null
 ) {
   return Response.json({
     text,
@@ -189,6 +213,7 @@ function emptyResponse(
     factSlotStates: [],
     interactionPlan: null,
     retrievalDebug,
+    persistence,
   });
 }
 
@@ -208,6 +233,11 @@ function normalizeDebug(debug: Record<string, unknown> | undefined) {
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   const started = performance.now();
+  let failedTurn: {
+    userId: string;
+    chatId: string;
+    clientTurnId: string;
+  } | null = null;
   const finish = (response: Response) => {
     response.headers.set("X-Request-ID", requestId);
     return response;
@@ -259,6 +289,101 @@ export async function POST(request: Request) {
         emptyResponse("Please enter a question so I can help.", "en", matterId)
       );
     }
+
+    // Phase 12 Stage 1: durable pre-generation user turn, shared with the
+    // Legal Check and Premium routes.
+    const assistantMode = normalizeAssistantMode(parsed.assistantMode);
+    const clientTurnId = resolveClientTurnId({
+      clientTurnId: parsed.clientTurnId ?? null,
+      userMessageId: latestUserMessageId(safeMessages),
+      fallbackId: `srv-${requestId}`,
+    });
+    const turnStart: WidgetTurnStart = parsed.frontendChatId
+      ? await beginWidgetTurn({
+          userId: session.user.id,
+          chatId: parsed.frontendChatId,
+          clientTurnId,
+          question,
+          userMessageId: latestUserMessageId(safeMessages),
+          assistantMode,
+        })
+      : { status: "unscoped" };
+
+    if (parsed.frontendChatId) {
+      failedTurn = {
+        userId: session.user.id,
+        chatId: parsed.frontendChatId,
+        clientTurnId,
+      };
+    }
+
+    if (turnStart.status === "unauthorized") {
+      return finish(new ChatbotError("unauthorized:chat").toResponse());
+    }
+    if (turnStart.status === "conflict") {
+      return finish(
+        Response.json(
+          {
+            error:
+              "This turn identifier was already used for a different message. Send the message again as a new turn.",
+            code: "client_turn_conflict",
+            persistence: turnStart.persistence,
+          },
+          { status: 409 }
+        )
+      );
+    }
+    if (
+      (turnStart.status === "replay" || turnStart.status === "resume") &&
+      parsed.frontendChatId
+    ) {
+      const storedParts =
+        turnStart.status === "replay"
+          ? turnStart.replay.parts
+          : turnStart.parts;
+      const storedFields = widgetFieldsFromAssistantParts(storedParts);
+      const storedPersistence =
+        turnStart.status === "replay"
+          ? turnStart.persistence
+          : await completeWidgetTurnFromParts({
+              userId: session.user.id,
+              chatId: parsed.frontendChatId,
+              clientTurnId,
+              parts: turnStart.parts,
+              userTurnPersisted: turnStart.persistence.userTurnPersisted,
+              attempts: turnStart.persistence.attempts,
+            });
+      return finish(
+        Response.json({
+          requestId,
+          text: storedFields.text,
+          assistantMessageId: storedPersistence.assistantMessageId,
+          responseLanguage: detectLanguage(storedFields.text),
+          researchStatus: storedFields.metadata.researchStatus,
+          citations: storedFields.metadata.citations,
+          customerDocumentEvidenceUsed:
+            storedFields.metadata.customerDocumentEvidenceUsed,
+          customerDocumentSources:
+            storedFields.metadata.customerDocumentSources,
+          compactSources: storedFields.metadata.compactSources,
+          userDisplayMode: null,
+          followUpQuestions: storedFields.metadata.followUpQuestions,
+          missingFacts: [],
+          evidenceGaps: [],
+          escalate: false,
+          nextAction: "ask_followup",
+          confidence: storedFields.metadata.confidence,
+          matterId: storedFields.metadata.matterId ?? matterId,
+          conversationState: null,
+          caseHypothesis: null,
+          factSlotStates: [],
+          interactionPlan: null,
+          retrievalDebug: storedFields.metadata.retrievalDebug ?? null,
+          persistence: storedPersistence,
+          replayed: true,
+        })
+      );
+    }
     let customerDocumentEvidence: CustomerDocumentEvidence = { documents: [] };
     let customerDocumentManifest: CustomerDocumentManifest[] = [];
     if (ownedConversation) {
@@ -292,7 +417,7 @@ export async function POST(request: Request) {
         intake_facts: parsed.intakeFacts,
         top_k: 1,
         answer_preference: parsed.answerPreference,
-        assistant_mode: normalizeAssistantMode(parsed.assistantMode),
+        assistant_mode: assistantMode,
         political_gate_version: gateDecision.policyVersion,
         political_gate_decision_id: gateDecision.decisionId,
         current_intake_facts: parsed.currentIntakeFacts ?? null,
@@ -370,34 +495,20 @@ export async function POST(request: Request) {
       retrievalDebug: normalizeDebug(data.retrieval_debug),
     };
 
+    let persistence: WidgetTurnPersistence | null = null;
     let assistantMessageId: string | null = null;
-    if (parsed.frontendChatId) {
-      try {
-        const userMessage = [...parsed.messages]
-          .reverse()
-          .find((message) => message.role === "user");
-        assistantMessageId = crypto.randomUUID();
-        const createdAt = new Date();
-        await saveMessages({
-          messages: [
-            {
-              chatId: parsed.frontendChatId,
-              id: userMessage?.id ?? crypto.randomUUID(),
-              role: "user",
-              parts: [{ type: "text", text: question }],
-              attachments: [],
-              createdAt,
-            },
-            {
-              chatId: parsed.frontendChatId,
-              id: assistantMessageId,
-              role: "assistant",
-              parts: [{ type: "text", text: finalText }, metadata],
-              attachments: [],
-              createdAt: new Date(createdAt.getTime() + 1),
-            },
-          ],
-        });
+    if (parsed.frontendChatId && turnStart.status === "proceed") {
+      persistence = await completeWidgetTurn({
+        userId: session.user.id,
+        chatId: parsed.frontendChatId,
+        clientTurnId,
+        text: finalText,
+        metadata,
+        userTurnPersisted: turnStart.persistence.userTurnPersisted,
+        attempts: turnStart.persistence.attempts,
+      });
+      assistantMessageId = persistence.assistantMessageId;
+      if (assistantMessageId) {
         const traceLink = buildImmigrationAnswerTraceLinkValues({
           chatId: parsed.frontendChatId,
           assistantMessageId,
@@ -405,24 +516,41 @@ export async function POST(request: Request) {
           answerTraceId: data.trace_id,
         });
         if (traceLink) {
-          await createImmigrationAnswerTraceLink(traceLink);
+          try {
+            await createImmigrationAnswerTraceLink(traceLink);
+          } catch {
+            console.warn(
+              JSON.stringify({
+                event: "widget_trace_link_failed",
+                request_id: requestId,
+              })
+            );
+          }
         }
-      } catch (error) {
-        console.warn("Failed to persist Fast workspace messages", error);
       }
 
-      if (data.matter_id) {
-        await updateImmigrationConversation({
-          chatId: parsed.frontendChatId,
-          userId: session.user.id,
-          legalMatterId: data.matter_id,
-          title: question.slice(0, 80) || "Immigration conversation",
-        });
-      } else {
-        await touchImmigrationConversation({
-          chatId: parsed.frontendChatId,
-          userId: session.user.id,
-        });
+      // Conversation bookkeeping must never replace a generated answer.
+      try {
+        if (data.matter_id) {
+          await updateImmigrationConversation({
+            chatId: parsed.frontendChatId,
+            userId: session.user.id,
+            legalMatterId: data.matter_id,
+            title: question.slice(0, 80) || "Immigration conversation",
+          });
+        } else {
+          await touchImmigrationConversation({
+            chatId: parsed.frontendChatId,
+            userId: session.user.id,
+          });
+        }
+      } catch {
+        if (persistence) {
+          persistence = {
+            ...persistence,
+            errorCode: persistence.errorCode ?? "conversation_touch_failed",
+          };
+        }
       }
     }
 
@@ -430,6 +558,7 @@ export async function POST(request: Request) {
       requestId,
       text: finalText,
       assistantMessageId,
+      persistence,
       responseLanguage: finalLanguage,
       researchStatus: data.research_status ?? "not_required",
       citations,
@@ -455,16 +584,41 @@ export async function POST(request: Request) {
     return finish(response);
   } catch (error) {
     console.error("widget-chat-fast error:", error);
+    if (failedTurn) {
+      await failWidgetTurn({
+        userId: failedTurn.userId,
+        chatId: failedTurn.chatId,
+        clientTurnId: failedTurn.clientTurnId,
+        errorCode: "assistant_generation_failed",
+      });
+    }
     if (error instanceof ChatbotError) {
       return finish(error.toResponse());
     }
     return finish(
-      emptyResponse(fallbackText("en"), "en", null, {
-        fastDirectLuna: {
-          completion_status: "route_error",
-          elapsed_ms: Math.round(performance.now() - started),
+      emptyResponse(
+        fallbackText("en"),
+        "en",
+        null,
+        {
+          fastDirectLuna: {
+            completion_status: "route_error",
+            elapsed_ms: Math.round(performance.now() - started),
+          },
         },
-      })
+        failedTurn
+          ? {
+              clientTurnId: failedTurn.clientTurnId,
+              userTurnPersisted: false,
+              assistantTurnPersisted: false,
+              assistantMessageId: null,
+              errorCode: "assistant_generation_failed",
+              replayed: false,
+              attempts: 1,
+              retryable: true,
+            }
+          : null
+      )
     );
   }
 }

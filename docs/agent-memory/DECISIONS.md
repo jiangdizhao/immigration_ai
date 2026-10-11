@@ -2,6 +2,31 @@
 
 Durable decisions for future ChatGPT/Cline/Codex sessions. Do not silently reverse an ACCEPTED decision. If new evidence requires a change, add a superseding decision record.
 
+## D-009 — User-owned durable history is server-authoritative; Projects are interface-reserved only
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED
+
+A user's authenticated account is the durable owner/authorization root for their entitled conversation history and uploaded files. Server PostgreSQL (and the private object store for file bytes) is authoritative; React state, browser localStorage and device caches are caches only. There must be no silent history truncation, no false "saved" acknowledgment, and no device-bound-only content.
+
+Account-wide *visibility* of a user's own retained files is explicitly NOT the same as cross-conversation AI context sharing: a document uploaded into conversation A stays available to its owner on every device, but conversation B does not automatically receive A's document evidence.
+
+GPT-like Projects are reserved as typed interfaces only (`projectId: null`) in Phase 12. No Project table, membership, shared memory, Project UI or parallel file store may be added, and a future user Project must never be conflated with the legal `Matter`.
+
+## D-010 — One shared durable turn contract for Fast, Legal Check and Premium
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED
+
+The three widget answer modes persist through one owner-authorized, idempotent turn contract (`lib/conversations/turn-ledger.ts` + `widget-turn.ts`) keyed by a stable `clientTurnId` with a unique `(chatId, clientTurnId)` database constraint. The user turn is durable before the model stage; the assistant turn and its metadata are durable after it; an already-answered turn is replayed from storage; an interrupted turn is repaired from a persisted pending payload without repeating the model call; a persistence failure is reported to the client instead of being swallowed. No database transaction is held open across the model stage. A future mode must adopt this contract rather than adding a fourth persistence path.
+
+## D-011 — Declared browser MIME is advisory for allowlisted containers; content identity decides
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED
+
+Upload validation keeps the extension allowlist, file-size/decompression/macro limits and real content identity checks (OOXML Word/Excel container, OLE streams, magic bytes). A declared MIME that is unknown or nonstandard must not by itself reject an otherwise valid file; a declared MIME from a positively conflicting family still fails fast, and the accepted MIME stored/served is always the canonical one. Upload success (durable storage) and extraction success (usable evidence units) are separate states in the API and UI.
+
 ## D-001 — Phase 11 product target
 
 **Date:** 2026-09-19  

@@ -20,6 +20,33 @@ export type WorkspaceCopy = {
     chat: string;
     matter: string;
     quickQuestions: string;
+    loadOlder: string;
+    allLoaded: string;
+    loadFailed: string;
+  };
+  messages: {
+    loadEarlier: string;
+    loadingEarlier: string;
+  };
+  persistence: {
+    notSaved: string;
+    retrySave: string;
+    retrying: string;
+    savedAcrossDevices: string;
+  };
+  fileHistory: {
+    title: string;
+    description: string;
+    loading: string;
+    empty: string;
+    error: string;
+    loadMore: string;
+    download: string;
+    conversation: string;
+    processing: string;
+    ready: string;
+    failed: string;
+    saved: string;
   };
   quickQuestions: readonly string[];
   consultation: {
@@ -76,6 +103,8 @@ export type WorkspaceCopy = {
     failed: string;
     notStarted: string;
     availableToAI: string;
+    uploaded: string;
+    noEvidence: string;
     delete: string;
     download: string;
     retry: string;
@@ -128,6 +157,33 @@ const zh: WorkspaceCopy = {
     chat: "对话",
     matter: "案件",
     quickQuestions: "常见移民问题",
+    loadOlder: "加载更早的对话",
+    allLoaded: "已加载全部对话。",
+    loadFailed: "无法加载更早的对话，请重试。",
+  },
+  messages: {
+    loadEarlier: "加载更早的消息",
+    loadingEarlier: "正在加载更早的消息…",
+  },
+  persistence: {
+    notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
+    retrySave: "重新保存",
+    retrying: "正在重新保存…",
+    savedAcrossDevices: "已保存到您的账号，可在其他设备查看。",
+  },
+  fileHistory: {
+    title: "我的历史文件",
+    description: "登录同一账号可在任意设备查看已上传的原始文件。",
+    loading: "正在加载历史文件…",
+    empty: "暂无历史文件。",
+    error: "无法加载历史文件，请重试。",
+    loadMore: "加载更多文件",
+    download: "下载",
+    conversation: "所属对话",
+    processing: "处理中",
+    ready: "处理完成",
+    failed: "处理失败",
+    saved: "已保存到您的账号",
   },
   quickQuestions: [
     "完成授课型硕士后，申请 485 签证需要考虑哪些条件？",
@@ -209,6 +265,8 @@ const zh: WorkspaceCopy = {
     failed: "处理失败",
     notStarted: "尚未处理",
     availableToAI: "可供 AI 使用",
+    uploaded: "上传成功",
+    noEvidence: "已保存，但未提取到可用内容，暂不能用于 AI 分析",
     delete: "删除",
     download: "下载",
     retry: "重试",
@@ -266,6 +324,36 @@ const en: WorkspaceCopy = {
     chat: "Chat",
     matter: "Matter",
     quickQuestions: "Common migration questions",
+    loadOlder: "Load older conversations",
+    allLoaded: "All conversations are loaded.",
+    loadFailed: "Could not load older conversations. Please retry.",
+  },
+  messages: {
+    loadEarlier: "Load earlier messages",
+    loadingEarlier: "Loading earlier messages…",
+  },
+  persistence: {
+    notSaved:
+      "This answer was not saved to your account and may be lost after a refresh.",
+    retrySave: "Retry saving",
+    retrying: "Retrying save…",
+    savedAcrossDevices:
+      "Saved to your account and available on your other devices.",
+  },
+  fileHistory: {
+    title: "My files",
+    description:
+      "Sign in with the same account on any device to see your uploaded original files.",
+    loading: "Loading your files…",
+    empty: "No files yet.",
+    error: "Could not load your files. Please retry.",
+    loadMore: "Load more files",
+    download: "Download",
+    conversation: "Conversation",
+    processing: "Processing",
+    ready: "Processing complete",
+    failed: "Processing failed",
+    saved: "Saved to your account",
   },
   quickQuestions: [
     "After a coursework master’s degree, what should I check for a 485 visa?",
@@ -353,6 +441,9 @@ const en: WorkspaceCopy = {
     failed: "Processing failed",
     notStarted: "Not processed",
     availableToAI: "Available to AI",
+    uploaded: "Upload complete",
+    noEvidence:
+      "Saved, but no usable content was extracted and it cannot be used for AI analysis yet",
     delete: "Delete",
     download: "Download",
     retry: "Retry",

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { matterDocumentDisplayStatus } from "@/lib/matter-documents/display-status";
 import { cn } from "@/lib/utils";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
@@ -29,6 +30,7 @@ type RunState = {
   truncated: boolean;
   errorCode?: string | null;
 };
+type UploadState = "uploading" | "uploaded" | null;
 const MIME_BY_EXTENSION: Record<string, string> = {
   pdf: "application/pdf",
   jpg: "image/jpeg",
@@ -61,6 +63,7 @@ export function MatterDocumentsPanel({
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
@@ -145,6 +148,7 @@ export function MatterDocumentsPanel({
       return;
     }
     setBusy("upload");
+    setUploadState("uploading");
     setError(null);
     const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
     const mime =
@@ -166,9 +170,13 @@ export function MatterDocumentsPanel({
         throw new Error(body.error ?? labels.uploadError);
       }
       const doc = body.document as DocumentRecord;
+      // Upload success is a durable-storage result. Extraction is a separate
+      // step, so the two states stay distinguishable in the UI.
+      setUploadState("uploaded");
       await load();
       await process(doc);
     } catch (e) {
+      setUploadState(null);
       setError(e instanceof Error ? e.message : labels.uploadError);
     } finally {
       setBusy(null);
@@ -213,30 +221,32 @@ export function MatterDocumentsPanel({
   };
   const statusLabel = (doc: DocumentRecord) => {
     const run = runs[doc.id];
-    if (
-      run?.unitCount &&
-      ["complete", "partial", "needs_review"].includes(run.status ?? "")
-    ) {
+    const status = matterDocumentDisplayStatus({
+      processingStatus: doc.processingStatus,
+      runStatus: run?.status ?? null,
+      unitCount: run?.unitCount ?? null,
+    });
+    if (status === "available_to_ai") {
       return labels.availableToAI;
     }
-    const status =
-      run?.status ??
-      (doc.processingStatus === "processing"
-        ? "processing"
-        : doc.processingStatus);
-    if (status === "complete") {
-      return labels.ready;
+    if (status === "no_usable_evidence") {
+      return labels.noEvidence;
     }
-    if (status === "needs_review") {
-      return labels.needsReview;
+    if (status === "incomplete") {
+      return labels.partial;
+    }
+    if (status === "processing") {
+      return labels.processing;
+    }
+    if (status === "failed") {
+      return run?.errorCode === "vision_unavailable"
+        ? labels.visionUnavailable
+        : labels.failed;
     }
     if (status === "not_started") {
       return labels.notStarted;
     }
-    if (status && status in labels) {
-      return labels[status as keyof typeof labels];
-    }
-    return labels.notStarted;
+    return labels.needsReview;
   };
   return (
     <section
@@ -312,6 +322,18 @@ export function MatterDocumentsPanel({
           role="alert"
         >
           {error}
+        </p>
+      ) : null}
+      {uploadState === "uploaded" && !error ? (
+        <p
+          className={
+            compact
+              ? "basis-full text-[11px] text-emerald-700"
+              : "mt-2 text-xs text-emerald-700"
+          }
+          data-testid="matter-document-upload-state"
+        >
+          {labels.uploaded}
         </p>
       ) : null}
       {documents.length ? (

@@ -36,3 +36,19 @@ export function getLazyDatabase(): Database {
   });
   return lazyDatabase;
 }
+
+/**
+ * Releases the lazily configured client. Used by scripts and integration tests
+ * so a short-lived process can exit instead of keeping a pool connection open.
+ */
+export async function closeLazyDatabase(): Promise<void> {
+  if (!database) {
+    return;
+  }
+  const client = (
+    database as unknown as { $client?: { end?: () => Promise<void> } }
+  ).$client;
+  database = undefined;
+  lazyDatabase = undefined;
+  await client?.end?.();
+}

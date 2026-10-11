@@ -319,3 +319,116 @@ test("manifest records exact clipped characters and SHA-256 of supplied text", a
   );
   assert.equal("text" in included[0], false);
 });
+
+function candidate(index: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id: `document-${index}`,
+    userId: "user-a",
+    chatId: "chat-a",
+    originalFilename: `evidence-${index}.pdf`,
+    mimeType: "application/pdf",
+    storageStatus: "stored" as const,
+    securityStatus: "clean" as const,
+    deletedAt: null,
+    createdAt: new Date(Date.parse("2026-09-01T00:00:00.000Z") + index * 1000),
+    ...overrides,
+  };
+}
+
+test("conversation B never receives conversation A document evidence", async () => {
+  const documents = [
+    candidate(1, { chatId: "chat-a" }),
+    candidate(2, { chatId: "chat-b" }),
+  ];
+  const resolve = async ({ chatId }: { chatId: string }) =>
+    await resolveConversationMatterDocumentEvidence({
+      userId: "user-a",
+      chatId,
+      // The account-level file index hands over every retained document; the
+      // conversation scoping must still hold.
+      documents: documents as never,
+      getLatestAttempt: async (documentId) =>
+        ({
+          id: `run-${documentId}`,
+          status: "complete",
+          extractionMethod: "native",
+          truncated: false,
+        }) as never,
+      getEvidence: async () => [
+        {
+          ordinal: 1,
+          locator: { kind: "page", pageNumber: 1 },
+          extractedText: "private evidence",
+          extractionMethod: "native",
+        },
+      ],
+    });
+
+  const a = await resolve({ chatId: "chat-a" });
+  const b = await resolve({ chatId: "chat-b" });
+  assert.deepEqual(
+    a.manifest.map((entry) => entry.documentId),
+    ["document-1"]
+  );
+  assert.deepEqual(
+    b.manifest.map((entry) => entry.documentId),
+    ["document-2"]
+  );
+  assert.equal(
+    JSON.stringify(b.evidence).includes("document-1"),
+    false,
+    "conversation B must not see conversation A evidence"
+  );
+});
+
+test("documents that are deleted, unverified, or not yet stored never reach the model packet", async () => {
+  const documents = [
+    candidate(1),
+    candidate(2, { deletedAt: new Date("2026-09-30T00:00:00.000Z") }),
+    candidate(3, { storageStatus: "uploading" as never }),
+    candidate(4, { securityStatus: "pending" as never }),
+    candidate(5, { userId: "user-b" }),
+  ];
+  const result = await resolveConversationMatterDocumentEvidence({
+    userId: "user-a",
+    chatId: "chat-a",
+    documents: documents as never,
+    getLatestAttempt: async (documentId) =>
+      ({
+        id: `run-${documentId}`,
+        status: "complete",
+        extractionMethod: "native",
+        truncated: false,
+      }) as never,
+    getEvidence: async () => [
+      {
+        ordinal: 1,
+        locator: { kind: "page", pageNumber: 1 },
+        extractedText: "evidence",
+        extractionMethod: "native",
+      },
+    ],
+  });
+  assert.deepEqual(
+    result.manifest.map((entry) => entry.documentId),
+    ["document-1"]
+  );
+});
+
+test("a document whose run produced no evidence units is excluded from the model packet", async () => {
+  const result = await resolveConversationMatterDocumentEvidence({
+    userId: "user-a",
+    chatId: "chat-a",
+    documents: [candidate(1)] as never,
+    getLatestAttempt: async (documentId) =>
+      ({
+        id: `run-${documentId}`,
+        status: "complete",
+        extractionMethod: "native",
+        truncated: false,
+      }) as never,
+    getEvidence: async () => [],
+  });
+  assert.deepEqual(result.manifest, []);
+  assert.deepEqual(result.evidence.documents, []);
+});

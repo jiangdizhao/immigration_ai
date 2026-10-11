@@ -1,8 +1,18 @@
 # CURRENT_MILESTONE
 
 **Milestone:** Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence  
-**Status:** APPROVED / Stage 1 NOT STARTED  
+**Status:** STAGE 1 IMPLEMENTED — AWAITING EXTERNAL REVIEW AND OWNER CROSS-DEVICE ACCEPTANCE
 **Updated:** 2026-10-11
+
+## Phase 12 Stage 1 — implemented on a dedicated branch (2026-10-11)
+
+**Implementation branch:** `codex/phase12-stage1-user-data-reliability`, created from the Phase 12 planning branch at `3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`. Not merged, not deployed, no live migration applied.
+
+**Scope delivered:** one shared owner-authorized durable turn contract for Fast, Legal Check and Premium; cursor-paginated complete conversation and message history with stale-response protection; owner-level account file index with per-conversation AI evidence scoping retained; DOCX browser-MIME fix with real container identity; optional `projectId`/context-scope interfaces reserved only.
+
+**Evidence:** 581/581 unit tests pass; the PostgreSQL integration test passes against the isolated disposable database `immigration_ai_phase12_stage1_test`; changed-file Biome clean; `next build` compiles but the project TypeScript gate fails on a pre-existing VIP-billing type error (`lib/db/queries.ts:1947`) that predates Stage 1. The owner cross-device procedure is pending: `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`.
+
+**Gate rule (unchanged):** Stage 1 is not accepted until independent review and the owner cross-device evidence are recorded. Do not start Stage 2 before Stage 1 acceptance, and do not merge/apply migrations without explicit owner authorization.
 
 ## Phase 12 — Three-stage approved plan; implementation NOT STARTED (2026-10-11)
 

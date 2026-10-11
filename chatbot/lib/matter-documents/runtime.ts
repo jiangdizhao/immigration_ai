@@ -11,9 +11,12 @@ import {
   getMatterDocumentRecordForOwner,
   getMatterDocumentRecordForStorageCleanup,
   listMatterDocumentRecordsForOwner,
+  listMatterDocumentsForUserHistoryPage,
   softDeleteMatterDocumentRecord,
   transitionMatterDocumentStorageStatus,
 } from "@/lib/db/queries";
+import type { MatterDocument } from "@/lib/db/schema";
+import type { MatterDocumentMimeType } from "./formats";
 import { getConfiguredDocumentVision } from "./processing/openai-vision";
 import { createMatterDocumentProcessingService } from "./processing/service";
 import { createMatterDocumentService } from "./service";
@@ -24,9 +27,24 @@ const repository: MatterDocumentRepository = {
   getOwnedConversation: ({ chatId, userId }) =>
     getImmigrationConversationByChatId({ chatId, userId }),
   create: createMatterDocumentRecord,
-  async list(input) {
-    const records = await listMatterDocumentRecordsForOwner(input);
-    return records.map(({ matterDocument }) => matterDocument);
+  list(input) {
+    const records = listMatterDocumentRecordsForOwner(input);
+    return records.then((rows) =>
+      rows.map(({ matterDocument }) => matterDocument)
+    );
+  },
+  async listForUserHistory(input) {
+    const page = await listMatterDocumentsForUserHistoryPage(input);
+    return {
+      hasMore: page.hasMore,
+      documents: page.documents.map((row) => ({
+        ...row,
+        mimeType: row.mimeType as MatterDocumentMimeType,
+        processingStatus:
+          row.processingStatus as MatterDocument["processingStatus"],
+        securityStatus: row.securityStatus as MatterDocument["securityStatus"],
+      })),
+    };
   },
   getForOwner: getMatterDocumentRecordForOwner,
   getForStorageCleanup: getMatterDocumentRecordForStorageCleanup,

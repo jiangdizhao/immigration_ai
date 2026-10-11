@@ -50,6 +50,7 @@ import type {
   WidgetAssistantMessage,
   WidgetMessage,
   WidgetRouteResponse,
+  WidgetTurnPersistence,
 } from "./guided-intake-types";
 import { LawyerRequestAction } from "./lawyer-request-action";
 import { MatterDocumentsPanel } from "./matter-documents-panel";
@@ -58,6 +59,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Textarea } from "./ui/textarea";
+import { UserDocumentHistoryPanel } from "./user-document-history-panel";
 
 const TYPEWRITER_TICK_MS = 38;
 const TYPEWRITER_WORDS_PER_TICK = 3;
@@ -322,6 +324,21 @@ type ImmigrationStoredMessage = {
 
 type ImmigrationConversationDetail = ImmigrationConversationSummary & {
   messages: ImmigrationStoredMessage[];
+  hasOlderMessages?: boolean;
+  olderMessagesCursor?: string | null;
+};
+
+type ConversationListPage = {
+  conversations?: ImmigrationConversationSummary[];
+  hasMore?: boolean;
+  nextCursor?: string | null;
+  totalCount?: number;
+};
+
+type PendingTurnSubmission = {
+  clientTurnId: string;
+  conversationId: string;
+  messages: WidgetMessage[];
 };
 
 function assistantFromStoredMessage(
@@ -475,6 +492,26 @@ export function ImmigrationAIWorkspace({
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
   >([]);
+  const [conversationCursor, setConversationCursor] = useState<string | null>(
+    null
+  );
+  const [conversationHasMore, setConversationHasMore] = useState(false);
+  const [conversationTotalCount, setConversationTotalCount] = useState<
+    number | null
+  >(null);
+  const [loadingOlderConversations, setLoadingOlderConversations] =
+    useState(false);
+  const [conversationLoadFailed, setConversationLoadFailed] = useState(false);
+  const [olderMessagesCursor, setOlderMessagesCursor] = useState<string | null>(
+    null
+  );
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [persistenceNotice, setPersistenceNotice] =
+    useState<WidgetTurnPersistence | null>(null);
+  const [retryingPersistence, setRetryingPersistence] = useState(false);
+  const conversationLoadSeqRef = useRef(0);
+  const pendingSubmissionRef = useRef<PendingTurnSubmission | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
   const [matterId, setMatterId] = useState<string | null>(null);
@@ -562,28 +599,83 @@ export function ImmigrationAIWorkspace({
   }, [status, submittedAt, scrollToBottom]);
 
   const refreshConversationList = useCallback(async () => {
-    const response = await fetchWithErrorHandlers(
-      "/api/immigration-conversations",
-      {
-        method: "GET",
-      }
-    );
-    const data = (await response.json()) as {
-      conversations?: ImmigrationConversationSummary[];
-    };
-    setConversations(data.conversations ?? []);
-    return data.conversations ?? [];
+    try {
+      const response = await fetchWithErrorHandlers(
+        "/api/immigration-conversations?limit=50",
+        {
+          method: "GET",
+        }
+      );
+      const data = (await response.json()) as ConversationListPage;
+      const conversationsFromPage = data.conversations ?? [];
+      setConversations(conversationsFromPage);
+      setConversationCursor(data.nextCursor ?? null);
+      setConversationHasMore(data.hasMore === true);
+      setConversationTotalCount(
+        typeof data.totalCount === "number" ? data.totalCount : null
+      );
+      setConversationLoadFailed(false);
+      return conversationsFromPage;
+    } catch (listError) {
+      setConversationLoadFailed(true);
+      throw listError;
+    }
   }, []);
+
+  /**
+   * Appends the next page of older conversations. Complete history stays
+   * reachable regardless of how many conversations the account has, and the
+   * append is de-duplicated so a race can never show a conversation twice.
+   */
+  const loadOlderConversations = useCallback(async () => {
+    if (!conversationCursor || loadingOlderConversations) {
+      return;
+    }
+    setLoadingOlderConversations(true);
+    try {
+      const response = await fetchWithErrorHandlers(
+        `/api/immigration-conversations?limit=50&cursor=${encodeURIComponent(
+          conversationCursor
+        )}`,
+        { method: "GET" }
+      );
+      const data = (await response.json()) as ConversationListPage;
+      const page = data.conversations ?? [];
+      setConversations((current) => {
+        const seen = new Set(current.map((item) => item.chatId));
+        return [...current, ...page.filter((item) => !seen.has(item.chatId))];
+      });
+      setConversationCursor(data.nextCursor ?? null);
+      setConversationHasMore(data.hasMore === true);
+      if (typeof data.totalCount === "number") {
+        setConversationTotalCount(data.totalCount);
+      }
+    } catch (listError) {
+      const message =
+        listError instanceof Error
+          ? listError.message
+          : copy.history.loadFailed;
+      toast.error(message);
+    } finally {
+      setLoadingOlderConversations(false);
+    }
+  }, [conversationCursor, copy.history.loadFailed, loadingOlderConversations]);
 
   const loadConversation = useCallback(
     async (chatIdToLoad: string) => {
+      const requestSeq = conversationLoadSeqRef.current + 1;
+      conversationLoadSeqRef.current = requestSeq;
       setConversationLoading(true);
       try {
         const response = await fetchWithErrorHandlers(
-          `/api/immigration-conversations/${chatIdToLoad}`,
+          `/api/immigration-conversations/${chatIdToLoad}?messageLimit=200`,
           { method: "GET" }
         );
         const data = (await response.json()) as ImmigrationConversationDetail;
+        // A late response for conversation A must never replace conversation B.
+        if (requestSeq !== conversationLoadSeqRef.current) {
+          return;
+        }
         if (
           shouldClearWorkspaceCaseSummary(
             conversationIdRef.current,
@@ -613,16 +705,65 @@ export function ImmigrationAIWorkspace({
             (data.messages ?? []).map(widgetMessageFromStoredMessage)
           ) as WidgetMessage[]
         );
+        setHasOlderMessages(data.hasOlderMessages === true);
+        setOlderMessagesCursor(data.olderMessagesCursor ?? null);
         setDraftFacts({});
         setIntakeFacts({});
+        setPersistenceNotice(null);
         setConversationReady(true);
         await refreshConversationList();
+      } catch (loadError) {
+        if (requestSeq === conversationLoadSeqRef.current) {
+          throw loadError;
+        }
       } finally {
-        setConversationLoading(false);
+        if (requestSeq === conversationLoadSeqRef.current) {
+          setConversationLoading(false);
+        }
       }
     },
     [linkedPolicyReference, refreshConversationList]
   );
+
+  const loadOlderMessages = useCallback(async () => {
+    const chatId = conversationIdRef.current;
+    if (!chatId || !olderMessagesCursor || loadingOlderMessages) {
+      return;
+    }
+    setLoadingOlderMessages(true);
+    try {
+      const response = await fetchWithErrorHandlers(
+        `/api/immigration-conversations/${chatId}?messageLimit=200&olderCursor=${encodeURIComponent(
+          olderMessagesCursor
+        )}`,
+        { method: "GET" }
+      );
+      const data = (await response.json()) as ImmigrationConversationDetail;
+      if (data.chatId !== conversationIdRef.current) {
+        return;
+      }
+      const older = sanitizePoliticalHistory(
+        (data.messages ?? []).map(widgetMessageFromStoredMessage)
+      ) as WidgetMessage[];
+      setMessages((current) => {
+        const seen = new Set(current.map((message) => message.id));
+        return [
+          ...older.filter((message) => !seen.has(message.id)),
+          ...current,
+        ];
+      });
+      setHasOlderMessages(data.hasOlderMessages === true);
+      setOlderMessagesCursor(data.olderMessagesCursor ?? null);
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : copy.history.loadFailed;
+      toast.error(message);
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [copy.history.loadFailed, loadingOlderMessages, olderMessagesCursor]);
 
   const createConversation = useCallback(
     async (options?: {
@@ -750,6 +891,17 @@ export function ImmigrationAIWorkspace({
       );
     }
 
+    // Durability is reported by the backend, not assumed by the client.
+    const persistence = data.persistence ?? null;
+    if (persistence && persistence.assistantTurnPersisted === false) {
+      setPersistenceNotice(persistence);
+    } else {
+      setPersistenceNotice(null);
+      if (persistence?.assistantTurnPersisted) {
+        pendingSubmissionRef.current = null;
+      }
+    }
+
     if (data.matterId) {
       setMatterId(data.matterId);
       refreshConversationList().catch((refreshError) => {
@@ -849,7 +1001,8 @@ export function ImmigrationAIWorkspace({
     facts: IntakeFacts,
     currentFacts: IntakeFacts = {},
     answerPreference: AnswerPreference = "answer_first",
-    activeConversationId: string | null = conversationId
+    activeConversationId: string | null = conversationId,
+    clientTurnId?: string
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
@@ -863,6 +1016,7 @@ export function ImmigrationAIWorkspace({
         body: JSON.stringify({
           id: stableConversationId,
           frontendChatId: stableConversationId,
+          clientTurnId,
           matterId,
           intakeFacts: facts,
           currentIntakeFacts: currentFacts,
@@ -937,8 +1091,14 @@ export function ImmigrationAIWorkspace({
         intakeFacts,
         {},
         answerPreference,
-        activeConversationId
+        activeConversationId,
+        nextUserMessage.id
       );
+      pendingSubmissionRef.current = {
+        clientTurnId: nextUserMessage.id,
+        conversationId: activeConversationId,
+        messages: nextMessages,
+      };
       await appendAssistantMessage(data, nextUserMessage.id);
     } catch (requestError) {
       const message =
@@ -952,6 +1112,45 @@ export function ImmigrationAIWorkspace({
     } finally {
       setStatus("ready");
       setSubmittedAt(null);
+    }
+  };
+
+  /**
+   * Retries only the durable write of an already-generated answer by resending
+   * the same client turn id. The backend completes persistence from the stored
+   * payload without another model call.
+   */
+  const retryPersistence = async () => {
+    const pending = pendingSubmissionRef.current;
+    if (!pending || retryingPersistence) {
+      return;
+    }
+    setRetryingPersistence(true);
+    try {
+      const data = await sendToWidgetRoute(
+        pending.messages,
+        intakeFacts,
+        {},
+        "answer_first",
+        pending.conversationId,
+        pending.clientTurnId
+      );
+      const persistence = data.persistence ?? null;
+      if (persistence?.assistantTurnPersisted) {
+        setPersistenceNotice(null);
+        pendingSubmissionRef.current = null;
+      } else {
+        setPersistenceNotice((current) => persistence ?? current);
+        toast.error(copy.persistence.notSaved);
+      }
+    } catch (retryError) {
+      const message =
+        retryError instanceof Error
+          ? retryError.message
+          : copy.persistence.notSaved;
+      toast.error(message);
+    } finally {
+      setRetryingPersistence(false);
     }
   };
 
@@ -1169,6 +1368,34 @@ export function ImmigrationAIWorkspace({
                 {copy.history.empty}
               </p>
             ) : null}
+            {conversationLoadFailed ? (
+              <p
+                className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
+                role="alert"
+              >
+                {copy.history.loadFailed}
+              </p>
+            ) : null}
+            {conversationHasMore ? (
+              <button
+                className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                data-testid="load-older-conversations"
+                disabled={status !== "ready" || loadingOlderConversations}
+                onClick={() => loadOlderConversations()}
+                type="button"
+              >
+                {loadingOlderConversations
+                  ? copy.history.loading
+                  : copy.history.loadOlder}
+              </button>
+            ) : conversations.length > 0 ? (
+              <p className="px-1 text-[11px] text-slate-400">
+                {copy.history.allLoaded}
+                {conversationTotalCount === null
+                  ? ""
+                  : ` (${conversationTotalCount})`}
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-4 space-y-2">
@@ -1289,6 +1516,19 @@ export function ImmigrationAIWorkspace({
               </div>
             ) : (
               <div className="min-w-0 space-y-5 pb-4">
+                {hasOlderMessages ? (
+                  <button
+                    className="mx-auto block rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                    data-testid="load-earlier-messages"
+                    disabled={status !== "ready" || loadingOlderMessages}
+                    onClick={() => loadOlderMessages()}
+                    type="button"
+                  >
+                    {loadingOlderMessages
+                      ? copy.messages.loadingEarlier
+                      : copy.messages.loadEarlier}
+                  </button>
+                ) : null}
                 {messages.map((message) => {
                   const isAssistant = message.role === "assistant";
                   const isLatestAssistant =
@@ -1498,6 +1738,25 @@ export function ImmigrationAIWorkspace({
               {error}
             </div>
           ) : null}
+          {persistenceNotice &&
+          persistenceNotice.assistantTurnPersisted === false ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              data-testid="persistence-notice"
+            >
+              <span>{copy.persistence.notSaved}</span>
+              <button
+                className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+                disabled={retryingPersistence}
+                onClick={() => retryPersistence()}
+                type="button"
+              >
+                {retryingPersistence
+                  ? copy.persistence.retrying
+                  : copy.persistence.retrySave}
+              </button>
+            </div>
+          ) : null}
 
           <div className="border-t border-slate-100 bg-white p-3 sm:p-4">
             <div className="rounded-2xl bg-slate-100/80 p-3">
@@ -1544,6 +1803,7 @@ export function ImmigrationAIWorkspace({
         </div>
 
         <aside className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
+          <UserDocumentHistoryPanel copy={copy} />
           <section className="rounded-xl bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>

@@ -12,12 +12,14 @@ import {
   isNull,
   lt,
   ne,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
+import type { PaginationCursor } from "../conversations/pagination";
 import { ChatbotError } from "../errors";
 import {
   createChatDeletionService,
@@ -37,7 +39,9 @@ import {
 import { getLazyDatabase } from "./runtime-client";
 import {
   type Chat,
+  type ConversationTurnRow,
   chat,
+  conversationTurn,
   type DBMessage,
   document,
   emailVerificationToken,
@@ -3194,4 +3198,406 @@ export function transitionMatterDocumentSecurityStatus(input: {
   next: "clean" | "rejected" | "failed";
 }) {
   return compareAndSetMatterDocumentSecurityStatus(input);
+}
+
+/**
+ * Phase 12 Stage 1 durable conversation turn ledger.
+ *
+ * `claimConversationTurn` relies on the unique `(chatId, clientTurnId)` index so
+ * two concurrent requests for the same client turn can never both claim a new
+ * row; the loser re-reads the winner's row instead.
+ */
+export async function claimConversationTurn(input: {
+  chatId: string;
+  userId: string;
+  clientTurnId: string;
+  assistantMode: string | null;
+  requestHash: string;
+  userMessageId: string;
+  now: Date;
+}): Promise<{ turn: ConversationTurnRow; created: boolean }> {
+  const [created] = await db
+    .insert(conversationTurn)
+    .values({
+      chatId: input.chatId,
+      userId: input.userId,
+      clientTurnId: input.clientTurnId,
+      assistantMode: input.assistantMode,
+      requestHash: input.requestHash,
+      userMessageId: input.userMessageId,
+      status: "user_persisted",
+      attemptCount: 1,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoNothing({
+      target: [conversationTurn.chatId, conversationTurn.clientTurnId],
+    })
+    .returning();
+
+  if (created) {
+    return { turn: created, created: true };
+  }
+
+  const existing = await getConversationTurnRecord({
+    chatId: input.chatId,
+    clientTurnId: input.clientTurnId,
+  });
+  if (!existing) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to claim conversation turn"
+    );
+  }
+  return { turn: existing, created: false };
+}
+
+export async function getConversationTurnRecord(input: {
+  chatId: string;
+  clientTurnId: string;
+}): Promise<ConversationTurnRow | null> {
+  const [turn] = await db
+    .select()
+    .from(conversationTurn)
+    .where(
+      and(
+        eq(conversationTurn.chatId, input.chatId),
+        eq(conversationTurn.clientTurnId, input.clientTurnId)
+      )
+    )
+    .limit(1);
+  return turn ?? null;
+}
+
+export async function recordConversationTurnUserMessageId(input: {
+  turnId: string;
+  userMessageId: string;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({ userMessageId: input.userMessageId, updatedAt: input.now })
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        isNull(conversationTurn.userMessageId)
+      )
+    )
+    .returning();
+  if (updated) {
+    return updated;
+  }
+  const [existing] = await db
+    .select()
+    .from(conversationTurn)
+    .where(eq(conversationTurn.id, input.turnId))
+    .limit(1);
+  return existing ?? null;
+}
+
+export async function recordConversationTurnAttempt(input: {
+  turnId: string;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({
+      attemptCount: sql`${conversationTurn.attemptCount} + 1`,
+      updatedAt: input.now,
+    })
+    .where(eq(conversationTurn.id, input.turnId))
+    .returning();
+  return updated ?? null;
+}
+
+export async function storeConversationTurnPendingAssistantParts(input: {
+  turnId: string;
+  parts: unknown[];
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({ pendingAssistantParts: input.parts, updatedAt: input.now })
+    .where(eq(conversationTurn.id, input.turnId))
+    .returning();
+  return updated ?? null;
+}
+
+export async function completeConversationTurn(input: {
+  turnId: string;
+  assistantMessageId: string;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({
+      assistantMessageId: input.assistantMessageId,
+      status: "assistant_persisted",
+      errorCode: null,
+      pendingAssistantParts: null,
+      updatedAt: input.now,
+    })
+    .where(eq(conversationTurn.id, input.turnId))
+    .returning();
+  return updated ?? null;
+}
+
+export async function failConversationTurn(input: {
+  turnId: string;
+  errorCode: string;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({ status: "failed", errorCode: input.errorCode, updatedAt: input.now })
+    .where(eq(conversationTurn.id, input.turnId))
+    .returning();
+  return updated ?? null;
+}
+
+/** Idempotent message insert. A duplicate id is reported, never duplicated. */
+export async function insertMessageIdempotent(input: {
+  chatId: string;
+  messageId: string;
+  role: "user" | "assistant";
+  parts: unknown[];
+  createdAt: Date;
+}): Promise<{ inserted: boolean; message: DBMessage | null }> {
+  const [created] = await db
+    .insert(message)
+    .values({
+      id: input.messageId,
+      chatId: input.chatId,
+      role: input.role,
+      parts: input.parts,
+      attachments: [],
+      createdAt: input.createdAt,
+    })
+    .onConflictDoNothing({ target: message.id })
+    .returning();
+  if (created) {
+    return { inserted: true, message: created };
+  }
+  const [existing] = await db
+    .select()
+    .from(message)
+    .where(eq(message.id, input.messageId))
+    .limit(1);
+  return { inserted: false, message: existing ?? null };
+}
+
+export async function getMessageForChat(input: {
+  chatId: string;
+  messageId: string;
+}): Promise<DBMessage | null> {
+  const [record] = await db
+    .select()
+    .from(message)
+    .where(
+      and(eq(message.id, input.messageId), eq(message.chatId, input.chatId))
+    )
+    .limit(1);
+  return record ?? null;
+}
+
+/**
+ * Complete, cursor-paginated conversation enumeration for the authenticated
+ * owner. Ordering is `(updatedAt DESC, chatId DESC)`, so page boundaries cannot
+ * skip or duplicate a conversation, and no fixed top-N history cap applies.
+ */
+export async function listImmigrationConversationsPage(input: {
+  userId: string;
+  limit: number;
+  cursor: PaginationCursor | null;
+}): Promise<{
+  conversations: Array<{
+    chatId: string;
+    legalMatterId: string | null;
+    title: string | null;
+    chatTitle: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  hasMore: boolean;
+}> {
+  const predicates: SQL[] = [eq(chat.userId, input.userId)];
+  if (input.cursor) {
+    const cursorTime = new Date(input.cursor.timestamp);
+    predicates.push(
+      or(
+        lt(immigrationConversation.updatedAt, cursorTime),
+        and(
+          eq(immigrationConversation.updatedAt, cursorTime),
+          lt(immigrationConversation.chatId, input.cursor.id)
+        )
+      ) as SQL
+    );
+  }
+
+  const rows = await db
+    .select({
+      chatId: immigrationConversation.chatId,
+      legalMatterId: immigrationConversation.legalMatterId,
+      title: immigrationConversation.title,
+      chatTitle: chat.title,
+      createdAt: immigrationConversation.createdAt,
+      updatedAt: immigrationConversation.updatedAt,
+    })
+    .from(immigrationConversation)
+    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
+    .where(and(...predicates))
+    .orderBy(
+      desc(immigrationConversation.updatedAt),
+      desc(immigrationConversation.chatId)
+    )
+    .limit(input.limit + 1);
+
+  return {
+    conversations: rows.slice(0, input.limit),
+    hasMore: rows.length > input.limit,
+  };
+}
+
+/**
+ * Complete, owner-authorized message history page.
+ *
+ * The newest `limit` messages strictly older than the supplied cursor are
+ * returned in ascending display order, with `hasOlder` telling the client
+ * whether more history exists above them. Page boundaries cannot skip or
+ * duplicate a message because ordering is `(createdAt, id)`.
+ */
+export async function listMessagesForChatPage(input: {
+  chatId: string;
+  userId: string;
+  limit: number;
+  olderThan: PaginationCursor | null;
+}): Promise<{ messages: DBMessage[]; hasOlder: boolean }> {
+  const predicates: SQL[] = [
+    eq(message.chatId, input.chatId),
+    sql`exists (
+      select 1 from "Chat"
+      where "Chat"."id" = ${message.chatId}
+        and "Chat"."userId" = ${input.userId}
+    )`,
+  ];
+  if (input.olderThan) {
+    const cursorTime = new Date(input.olderThan.timestamp);
+    predicates.push(
+      or(
+        lt(message.createdAt, cursorTime),
+        and(
+          eq(message.createdAt, cursorTime),
+          lt(message.id, input.olderThan.id)
+        )
+      ) as SQL
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(message)
+    .where(and(...predicates))
+    .orderBy(desc(message.createdAt), desc(message.id))
+    .limit(input.limit + 1);
+
+  const hasOlder = rows.length > input.limit;
+  return {
+    messages: rows.slice(0, input.limit).reverse(),
+    hasOlder,
+  };
+}
+
+export async function countImmigrationConversations(input: {
+  userId: string;
+}): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(immigrationConversation)
+    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
+    .where(eq(chat.userId, input.userId));
+  return Number(row?.total ?? 0);
+}
+
+/**
+ * Owner-level historical file index.
+ *
+ * Lists every retained document belonging to the authenticated account across
+ * all of its conversations so the same account can recover files from any
+ * device. This is an account-level *listing* surface only: unrelated
+ * conversations still do not receive each other's document evidence.
+ */
+export async function listMatterDocumentsForUserHistoryPage(input: {
+  userId: string;
+  limit: number;
+  cursor: PaginationCursor | null;
+}): Promise<{
+  documents: Array<{
+    id: string;
+    chatId: string;
+    legalMatterId: string | null;
+    conversationTitle: string | null;
+    originalFilename: string;
+    mimeType: string;
+    byteSize: number;
+    sha256: string;
+    processingStatus: string;
+    securityStatus: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  hasMore: boolean;
+}> {
+  // `MatterDocument.createdAt` may carry sub-millisecond database precision, so
+  // the cursor compares a millisecond bucket to keep page boundaries exact.
+  const createdAtMillisecond = sql`date_trunc('milliseconds', ${matterDocument.createdAt})`;
+  const predicates: SQL[] = [
+    eq(matterDocument.userId, input.userId),
+    eq(chat.userId, input.userId),
+    eq(matterDocument.storageStatus, "stored"),
+    isNull(matterDocument.deletedAt),
+  ];
+  if (input.cursor) {
+    predicates.push(
+      sql`(
+        ${createdAtMillisecond} < to_timestamp(${input.cursor.timestamp} / 1000.0)::timestamp
+        or (
+          ${createdAtMillisecond} = to_timestamp(${input.cursor.timestamp} / 1000.0)::timestamp
+          and ${matterDocument.id} < ${input.cursor.id}::uuid
+        )
+      )`
+    );
+  }
+
+  const rows = await db
+    .select({
+      id: matterDocument.id,
+      chatId: matterDocument.chatId,
+      legalMatterId: matterDocument.legalMatterId,
+      conversationTitle: immigrationConversation.title,
+      originalFilename: matterDocument.originalFilename,
+      mimeType: matterDocument.mimeType,
+      byteSize: matterDocument.byteSize,
+      sha256: matterDocument.sha256,
+      processingStatus: matterDocument.processingStatus,
+      securityStatus: matterDocument.securityStatus,
+      createdAt: matterDocument.createdAt,
+      updatedAt: matterDocument.updatedAt,
+    })
+    .from(matterDocument)
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .leftJoin(
+      immigrationConversation,
+      eq(matterDocument.chatId, immigrationConversation.chatId)
+    )
+    .where(and(...predicates))
+    .orderBy(
+      sql`date_trunc('milliseconds', ${matterDocument.createdAt}) desc`,
+      desc(matterDocument.id)
+    )
+    .limit(input.limit + 1);
+
+  return {
+    documents: rows.slice(0, input.limit),
+    hasMore: rows.length > input.limit,
+  };
 }

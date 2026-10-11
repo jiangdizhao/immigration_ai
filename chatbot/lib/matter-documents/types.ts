@@ -1,3 +1,4 @@
+import type { PaginationCursor } from "@/lib/conversations/pagination";
 import type { MatterDocument } from "@/lib/db/schema";
 import type { MatterDocumentMimeType } from "./formats";
 
@@ -24,6 +25,34 @@ export type PublicMatterDocument = Pick<
   | "updatedAt"
 >;
 
+/**
+ * Owner-level historical file index entry.
+ *
+ * Account-wide *visibility* of retained files is deliberately separate from AI
+ * working context: `DocumentAccessScope` keeps model evidence scoped to the
+ * current conversation.
+ */
+export type PublicUserDocument = PublicMatterDocument & {
+  conversationTitle: string | null;
+  projectId: null;
+  evidenceScope: "conversation";
+};
+
+export type MatterDocumentHistoryPage = {
+  documents: PublicUserDocument[];
+  hasMore: boolean;
+};
+
+export type MatterDocumentHistoryListing = {
+  userId: string;
+  limit: number;
+  cursor: PaginationCursor | null;
+};
+
+export type MatterDocumentHistoryRow = PublicMatterDocument & {
+  conversationTitle: string | null;
+};
+
 export type MatterDocumentRepository = {
   getOwnedConversation(input: {
     chatId: string;
@@ -49,6 +78,9 @@ export type MatterDocumentRepository = {
     next: MatterDocumentStorageStatus;
   }): Promise<MatterDocument | null>;
   list(input: { chatId: string; userId: string }): Promise<MatterDocument[]>;
+  listForUserHistory(
+    input: MatterDocumentHistoryListing
+  ): Promise<{ documents: MatterDocumentHistoryRow[]; hasMore: boolean }>;
   getForOwner(input: {
     documentId: string;
     userId: string;

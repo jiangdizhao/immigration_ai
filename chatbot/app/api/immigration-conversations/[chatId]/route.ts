@@ -1,228 +1,27 @@
 import { auth } from "@/app/(auth)/auth";
-import {
-  getImmigrationConversationByChatId,
-  getMessagesByChatId,
-  updateImmigrationConversation,
-} from "@/lib/db/queries";
-import { ChatbotError } from "@/lib/errors";
-import { persistedCustomerDocumentManifestForReload } from "@/lib/matter-documents/customer-document-provenance";
+import { createDatabaseConversationHistoryHandlers } from "@/lib/conversations/history-runtime";
 
 type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
 };
 
-async function currentConversationUserId() {
+const handlers = createDatabaseConversationHistoryHandlers(async () => {
   const session = await auth();
-  return session?.user?.id ?? null;
-}
+  if (!session?.user?.id) {
+    return null;
+  }
+  return { userId: session.user.id };
+});
 
 async function getChatId(context: RouteContext) {
   const params = await context.params;
   return params.chatId;
 }
 
-function extractTextFromParts(parts: unknown): string {
-  if (!Array.isArray(parts)) {
-    return "";
-  }
-
-  return parts
-    .map((part) => {
-      if (
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        (part as { type?: unknown }).type === "text" &&
-        "text" in part
-      ) {
-        const text = (part as { text?: unknown }).text;
-        return typeof text === "string" ? text : "";
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function safeCustomerDocumentSources(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.slice(0, 4).flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      return [];
-    }
-    const source = item as Record<string, unknown>;
-    if (
-      typeof source.documentId !== "string" ||
-      typeof source.runId !== "string" ||
-      typeof source.originalFilename !== "string"
-    ) {
-      return [];
-    }
-    const locators = Array.isArray(source.locators)
-      ? source.locators.slice(0, 8).flatMap((locator) => {
-          if (
-            !locator ||
-            typeof locator !== "object" ||
-            Array.isArray(locator)
-          ) {
-            return [];
-          }
-          return [
-            Object.fromEntries(
-              Object.entries(locator as Record<string, unknown>)
-                .filter(
-                  ([key, entry]) =>
-                    key.length <= 64 &&
-                    ((typeof entry === "string" && entry.length <= 256) ||
-                      (typeof entry === "number" && Number.isFinite(entry)))
-                )
-                .slice(0, 16)
-            ),
-          ];
-        })
-      : [];
-    return [
-      {
-        documentId: source.documentId,
-        runId: source.runId,
-        originalFilename: source.originalFilename.slice(0, 255),
-        runStatus:
-          source.runStatus === "partial" || source.runStatus === "needs_review"
-            ? source.runStatus
-            : "complete",
-        extractionMethod:
-          typeof source.extractionMethod === "string"
-            ? source.extractionMethod.slice(0, 32)
-            : "native",
-        truncated: Boolean(source.truncated),
-        locators,
-      },
-    ];
-  });
-}
-
-function extractMetadataFromParts(parts: unknown) {
-  if (!Array.isArray(parts)) {
-    return {};
-  }
-
-  const metadata = parts.find(
-    (part) =>
-      typeof part === "object" &&
-      part !== null &&
-      "type" in part &&
-      (part as { type?: unknown }).type === "metadata"
-  );
-
-  if (!metadata || typeof metadata !== "object") {
-    return {};
-  }
-
-  const value = metadata as Record<string, unknown>;
-  return {
-    compactSources: Array.isArray(value.compactSources)
-      ? value.compactSources.filter(
-          (item): item is string => typeof item === "string"
-        )
-      : [],
-    citations: Array.isArray(value.citations) ? value.citations : [],
-    customerDocumentEvidenceUsed: value.customerDocumentEvidenceUsed === true,
-    customerDocumentSources: safeCustomerDocumentSources(
-      persistedCustomerDocumentManifestForReload(
-        value.customerDocumentManifest,
-        value.customerDocumentEvidenceUsed
-      )
-    ),
-    confidence: typeof value.confidence === "string" ? value.confidence : null,
-    researchStatus:
-      value.researchStatus === "not_required" ||
-      value.researchStatus === "complete" ||
-      value.researchStatus === "incomplete"
-        ? value.researchStatus
-        : null,
-    followUpQuestions: Array.isArray(value.followUpQuestions)
-      ? value.followUpQuestions.filter(
-          (item): item is string => typeof item === "string"
-        )
-      : [],
-    matterId: typeof value.matterId === "string" ? value.matterId : null,
-    retrievalDebug:
-      value.retrievalDebug && typeof value.retrievalDebug === "object"
-        ? value.retrievalDebug
-        : null,
-  };
-}
-
-export async function GET(_request: Request, context: RouteContext) {
-  const userId = await currentConversationUserId();
-  if (!userId) {
-    return new ChatbotError("unauthorized:chat").toResponse();
-  }
-  const chatId = await getChatId(context);
-  const conversation = await getImmigrationConversationByChatId({
-    chatId,
-    userId,
-  });
-
-  if (!conversation) {
-    return Response.json({ error: "Conversation not found" }, { status: 404 });
-  }
-
-  const messages = await getMessagesByChatId({ id: chatId });
-
-  return Response.json({
-    chatId: conversation.chatId,
-    legalMatterId: conversation.legalMatterId ?? null,
-    title:
-      conversation.title ??
-      conversation.chatTitle ??
-      "Immigration conversation",
-    createdAt: conversation.createdAt,
-    updatedAt: conversation.updatedAt,
-    messages: messages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      text: extractTextFromParts(message.parts),
-      createdAt: message.createdAt,
-      ...extractMetadataFromParts(message.parts),
-    })),
-  });
+export async function GET(request: Request, context: RouteContext) {
+  return await handlers.detail(request, await getChatId(context));
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const userId = await currentConversationUserId();
-  if (!userId) {
-    return new ChatbotError("unauthorized:chat").toResponse();
-  }
-  const chatId = await getChatId(context);
-  const body = await request.json();
-
-  const updated = await updateImmigrationConversation({
-    chatId,
-    userId,
-    legalMatterId:
-      typeof body?.legalMatterId === "string" && body.legalMatterId.trim()
-        ? body.legalMatterId.trim()
-        : body?.legalMatterId === null
-          ? null
-          : undefined,
-    title:
-      typeof body?.title === "string"
-        ? body.title.trim().slice(0, 120)
-        : undefined,
-  });
-
-  if (!updated) {
-    return Response.json({ error: "Conversation not found" }, { status: 404 });
-  }
-
-  return Response.json({
-    chatId: updated.chatId,
-    legalMatterId: updated.legalMatterId ?? null,
-    title: updated.title ?? "Immigration conversation",
-    createdAt: updated.createdAt,
-    updatedAt: updated.updatedAt,
-  });
+  return await handlers.update(request, await getChatId(context));
 }

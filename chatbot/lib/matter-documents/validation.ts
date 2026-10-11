@@ -25,6 +25,134 @@ const DOCX_MAIN_CONTENT_TYPE =
 const XLSX_MAIN_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
 
+/**
+ * Declared-MIME handling (Phase 12 Stage 1).
+ *
+ * A browser `File.type` is advisory metadata, not evidence about file content.
+ * Real clients report `.docx` as `application/msword`,
+ * `application/vnd.ms-word.document.12`, `text/x-docx`, `application/x-docx`,
+ * an empty string, or similar. Rejecting an otherwise valid Word document
+ * solely because of that label is a false negative, so the declaration is
+ * resolved to a *content family* and checked against the extension's family:
+ *
+ *  - MIME types listed by the format itself stay accepted as before;
+ *  - `application/zip`-style generic container types are accepted only for
+ *    container formats (DOCX/XLSX/DOC/XLS);
+ *  - a known MIME from a different family still fails fast;
+ *  - an unknown/unrecognised MIME is treated as "no information" and the real
+ *    OOXML/OLE/signature identity check decides;
+ *  - the accepted MIME stored and served is always the canonical one, so a
+ *    nonstandard declaration is normalised server-side rather than trusted.
+ */
+type DeclaredMimeFamily =
+  | "pdf"
+  | "image"
+  | "word"
+  | "spreadsheet"
+  | "text"
+  | "archive_generic";
+
+const DECLARED_MIME_FAMILY: Record<string, DeclaredMimeFamily> = {
+  "application/pdf": "pdf",
+  "application/x-pdf": "pdf",
+  "image/jpeg": "image",
+  "image/pjpeg": "image",
+  "image/png": "image",
+  "image/x-png": "image",
+  "application/msword": "word",
+  "application/x-msword": "word",
+  "application/vnd.ms-word": "word",
+  "application/vnd.ms-word.document.12": "word",
+  "application/vnd.ms-word.document.macroenabled.12": "word",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "word",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.template":
+    "word",
+  "application/vnd.ms-excel": "spreadsheet",
+  "application/msexcel": "spreadsheet",
+  "application/x-msexcel": "spreadsheet",
+  "application/xls": "spreadsheet",
+  "application/vnd.ms-excel.sheet.macroenabled.12": "spreadsheet",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    "spreadsheet",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.template":
+    "spreadsheet",
+  "text/plain": "text",
+  "text/markdown": "text",
+  "text/x-markdown": "text",
+  "text/csv": "text",
+  "application/json": "text",
+  "application/x-json": "text",
+  "text/json": "text",
+  "application/csv": "text",
+  "application/zip": "archive_generic",
+  "application/x-zip-compressed": "archive_generic",
+  "application/octet-stream": "archive_generic",
+  "binary/octet-stream": "archive_generic",
+};
+
+function declaredMimeFamily(mimeType: string): DeclaredMimeFamily | null {
+  return DECLARED_MIME_FAMILY[mimeType] ?? null;
+}
+
+function formatFamily(format: MatterDocumentFormat): DeclaredMimeFamily {
+  if (format.processorHint === "pdf") {
+    return "pdf";
+  }
+  if (format.processorHint === "image") {
+    return "image";
+  }
+  if (format.processorHint === "word") {
+    return "word";
+  }
+  if (format.processorHint === "spreadsheet") {
+    return "spreadsheet";
+  }
+  return "text";
+}
+
+function isContainerFormat(format: MatterDocumentFormat) {
+  return (
+    format.validationStrategy === "ooxml_zip" ||
+    format.validationStrategy === "ole_cfb"
+  );
+}
+
+function normalizeDeclaredMimeType(value: string): string {
+  return value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * Decides whether a declared MIME may proceed to content verification.
+ *
+ * A `false` here means "this declaration positively contradicts the extension".
+ * Content identity (OOXML container, OLE container, or magic bytes) is always
+ * verified afterwards, and the accepted MIME is normalised server-side.
+ */
+export function isDeclaredMimeAccepted(
+  declaredMimeType: string,
+  format: MatterDocumentFormat
+): boolean {
+  const explicitlyAccepted =
+    format.acceptedMimeTypes.includes(declaredMimeType) &&
+    (declaredMimeType !== "application/octet-stream" ||
+      (format.allowOctetStream === true && isContainerFormat(format)));
+  if (explicitlyAccepted) {
+    return true;
+  }
+
+  const family = declaredMimeFamily(declaredMimeType);
+  if (family === null) {
+    // Unknown or nonstandard declaration: treat as advisory and let the real
+    // byte/container identity check decide.
+    return true;
+  }
+  if (family === "archive_generic") {
+    return isContainerFormat(format);
+  }
+  return family === formatFamily(format);
+}
+
 export class MatterDocumentValidationError extends Error {
   readonly status: number;
 
@@ -366,16 +494,8 @@ export async function validateMatterDocument(input: {
     );
   }
 
-  const declaredMimeType = input.declaredMimeType
-    .split(";", 1)[0]
-    ?.trim()
-    .toLowerCase();
-  const mimeAllowed =
-    format.acceptedMimeTypes.includes(declaredMimeType ?? "") &&
-    (declaredMimeType !== "application/octet-stream" ||
-      (format.allowOctetStream === true &&
-        (format.validationStrategy === "ooxml_zip" ||
-          format.validationStrategy === "ole_cfb")));
+  const declaredMimeType = normalizeDeclaredMimeType(input.declaredMimeType);
+  const mimeAllowed = isDeclaredMimeAccepted(declaredMimeType, format);
   if (!mimeAllowed) {
     throw new MatterDocumentValidationError(
       "The file type does not match its extension."

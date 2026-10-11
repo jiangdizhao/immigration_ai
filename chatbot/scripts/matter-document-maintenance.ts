@@ -48,6 +48,10 @@ const cleanup = createMatterDocumentService({
     list() {
       return Promise.resolve([]);
     },
+    listForUserHistory() {
+      // Maintenance/cleanup never uses the account-level history index.
+      return Promise.reject(new Error("unused"));
+    },
     getForOwner() {
       return Promise.resolve(null);
     },

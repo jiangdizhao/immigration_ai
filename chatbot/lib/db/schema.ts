@@ -565,6 +565,45 @@ export type ImmigrationConversation = InferSelectModel<
   typeof immigrationConversation
 >;
 
+export const conversationTurn = pgTable(
+  "ConversationTurn",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    chatId: uuid("chatId")
+      .notNull()
+      .references(() => chat.id, { onDelete: "cascade" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientTurnId: varchar("clientTurnId", { length: 128 }).notNull(),
+    assistantMode: varchar("assistantMode", { length: 32 }),
+    requestHash: varchar("requestHash", { length: 64 }),
+    userMessageId: uuid("userMessageId"),
+    assistantMessageId: uuid("assistantMessageId"),
+    status: varchar("status", {
+      enum: ["user_persisted", "assistant_persisted", "failed"],
+    })
+      .notNull()
+      .default("user_persisted"),
+    attemptCount: integer("attemptCount").notNull().default(1),
+    errorCode: varchar("errorCode", { length: 64 }),
+    pendingAssistantParts: json("pendingAssistantParts").$type<unknown[]>(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatClientTurnUnique: uniqueIndex(
+      "ConversationTurn_chat_client_turn_unique"
+    ).on(table.chatId, table.clientTurnId),
+    ownerCreatedIndex: index("ConversationTurn_owner_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+  })
+);
+
+export type ConversationTurnRow = InferSelectModel<typeof conversationTurn>;
+
 export type ConsultationStatus =
   | "requested"
   | "proposed"
@@ -726,6 +765,11 @@ export const matterDocument = pgTable(
       table.userId,
       table.id
     ),
+    ownerCreatedIndex: index("MatterDocument_owner_created_idx").on(
+      table.userId,
+      table.createdAt,
+      table.id
+    ),
   })
 );
 
@@ -810,16 +854,26 @@ export const messageDeprecated = pgTable("Message", {
 
 export type MessageDeprecated = InferSelectModel<typeof messageDeprecated>;
 
-export const message = pgTable("Message_v2", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  chatId: uuid("chatId")
-    .notNull()
-    .references(() => chat.id),
-  role: varchar("role").notNull(),
-  parts: json("parts").notNull(),
-  attachments: json("attachments").notNull(),
-  createdAt: timestamp("createdAt").notNull(),
-});
+export const message = pgTable(
+  "Message_v2",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    chatId: uuid("chatId")
+      .notNull()
+      .references(() => chat.id),
+    role: varchar("role").notNull(),
+    parts: json("parts").notNull(),
+    attachments: json("attachments").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => ({
+    chatHistoryIndex: index("Message_v2_chat_history_idx").on(
+      table.chatId,
+      table.createdAt,
+      table.id
+    ),
+  })
+);
 
 export type DBMessage = InferSelectModel<typeof message>;
 

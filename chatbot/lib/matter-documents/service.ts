@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { MatterDocument } from "@/lib/db/schema";
 import type {
+  MatterDocumentHistoryListing,
   MatterDocumentRepository,
   MatterDocumentStorage,
   PublicMatterDocument,
@@ -22,7 +23,20 @@ export class MatterDocumentStorageError extends Error {
 }
 
 export function publicMatterDocument(
-  record: MatterDocument
+  record: Pick<
+    MatterDocument,
+    | "id"
+    | "chatId"
+    | "legalMatterId"
+    | "originalFilename"
+    | "mimeType"
+    | "byteSize"
+    | "sha256"
+    | "processingStatus"
+    | "securityStatus"
+    | "createdAt"
+    | "updatedAt"
+  >
 ): PublicMatterDocument {
   return {
     id: record.id,
@@ -186,6 +200,24 @@ export function createMatterDocumentService(deps: {
     async get(input: { userId: string; documentId: string }) {
       const record = await deps.repository.getForOwner(input);
       return record ? publicMatterDocument(record) : null;
+    },
+
+    /**
+     * Account-level historical file index. Every retained document belonging to
+     * the authenticated owner is reachable across devices, while model evidence
+     * stays scoped to the conversation the document was uploaded into.
+     */
+    async listForUser(input: MatterDocumentHistoryListing) {
+      const page = await deps.repository.listForUserHistory(input);
+      return {
+        hasMore: page.hasMore,
+        documents: page.documents.map((record) => ({
+          ...publicMatterDocument(record),
+          conversationTitle: record.conversationTitle ?? null,
+          projectId: null,
+          evidenceScope: "conversation" as const,
+        })),
+      };
     },
 
     async download(input: { userId: string; documentId: string }) {

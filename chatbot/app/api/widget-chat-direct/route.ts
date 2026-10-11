@@ -3,9 +3,18 @@ import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
+  beginWidgetTurn,
+  completeWidgetTurn,
+  completeWidgetTurnFromParts,
+  failWidgetTurn,
+  resolveClientTurnId,
+  type WidgetTurnPersistence,
+  type WidgetTurnStart,
+  widgetFieldsFromAssistantParts,
+} from "@/lib/conversations/widget-turn";
+import {
   getImmigrationConversationByChatId,
   getUserEntitlementById,
-  saveMessages,
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
@@ -53,6 +62,12 @@ const messageSchema = z.object({
 const widgetDirectRequestBodySchema = z.object({
   id: z.string().uuid(),
   frontendChatId: z.string().uuid().optional(),
+  clientTurnId: z
+    .string()
+    .min(8)
+    .max(128)
+    .regex(/^[A-Za-z0-9._:-]+$/u)
+    .optional(),
   policySlug: z
     .string()
     .regex(/^[a-z0-9][a-z0-9-]{0,119}$/u)
@@ -133,6 +148,16 @@ function extractLatestUserText(
     .trim();
 
   return text.length > 0 ? text : null;
+}
+
+function latestUserMessageId(
+  messages: z.infer<typeof messageSchema>[]
+): string | null {
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const id = lastUserMessage?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 async function requirePremiumAccess() {
@@ -333,11 +358,18 @@ async function fetchLegalServiceDirect(params: {
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+  let failedTurn: {
+    userId: string;
+    chatId: string;
+    clientTurnId: string;
+  } | null = null;
   try {
     const json = await request.json();
     const {
       id,
       frontendChatId,
+      clientTurnId: parsedClientTurnId,
       policySlug,
       messages,
       assistantMode: requestedAssistantMode,
@@ -405,6 +437,94 @@ export async function POST(request: Request) {
         effectiveMatterId,
         "en"
       );
+    }
+
+    // Phase 12 Stage 1: durable pre-generation user turn, shared with Fast and
+    // Legal Check. Premium keeps its own answer policy but the same persistence
+    // contract.
+    const clientTurnId = resolveClientTurnId({
+      clientTurnId: parsedClientTurnId ?? null,
+      userMessageId: latestUserMessageId(safeMessages),
+      fallbackId: `srv-${requestId}`,
+    });
+    const turnStart: WidgetTurnStart = frontendChatId
+      ? await beginWidgetTurn({
+          userId: frontendUserId,
+          chatId: frontendChatId,
+          clientTurnId,
+          question,
+          userMessageId: latestUserMessageId(safeMessages),
+          assistantMode,
+        })
+      : { status: "unscoped" };
+    if (frontendChatId) {
+      failedTurn = {
+        userId: frontendUserId,
+        chatId: frontendChatId,
+        clientTurnId,
+      };
+    }
+
+    if (turnStart.status === "unauthorized") {
+      return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    if (turnStart.status === "conflict") {
+      return Response.json(
+        {
+          error:
+            "This turn identifier was already used for a different message. Send the message again as a new turn.",
+          code: "client_turn_conflict",
+          persistence: turnStart.persistence,
+        },
+        { status: 409 }
+      );
+    }
+    if (
+      (turnStart.status === "replay" || turnStart.status === "resume") &&
+      frontendChatId
+    ) {
+      const storedParts =
+        turnStart.status === "replay"
+          ? turnStart.replay.parts
+          : turnStart.parts;
+      const storedFields = widgetFieldsFromAssistantParts(storedParts);
+      const storedPersistence =
+        turnStart.status === "replay"
+          ? turnStart.persistence
+          : await completeWidgetTurnFromParts({
+              userId: frontendUserId,
+              chatId: frontendChatId,
+              clientTurnId,
+              parts: turnStart.parts,
+              userTurnPersisted: turnStart.persistence.userTurnPersisted,
+              attempts: turnStart.persistence.attempts,
+            });
+      return Response.json({
+        text: storedFields.text,
+        assistantMessageId: storedPersistence.assistantMessageId,
+        responseLanguage: detectResponseLanguage(storedFields.text),
+        researchStatus: storedFields.metadata.researchStatus,
+        citations: storedFields.metadata.citations,
+        customerDocumentEvidenceUsed:
+          storedFields.metadata.customerDocumentEvidenceUsed,
+        customerDocumentSources: storedFields.metadata.customerDocumentSources,
+        compactSources: storedFields.metadata.compactSources,
+        userDisplayMode: null,
+        followUpQuestions: storedFields.metadata.followUpQuestions,
+        missingFacts: [],
+        evidenceGaps: [],
+        escalate: false,
+        nextAction: "ask_followup",
+        confidence: storedFields.metadata.confidence,
+        matterId: storedFields.metadata.matterId ?? effectiveMatterId,
+        conversationState: null,
+        caseHypothesis: null,
+        factSlotStates: [],
+        interactionPlan: null,
+        retrievalDebug: storedFields.metadata.retrievalDebug ?? null,
+        persistence: storedPersistence,
+        replayed: true,
+      });
     }
 
     const {
@@ -496,40 +616,20 @@ export async function POST(request: Request) {
         : null,
     };
 
+    let persistence: WidgetTurnPersistence | null = null;
     let persistedAssistantMessageId: string | null = null;
-    if (frontendChatId) {
-      try {
-        const latestUserMessage = [...messages]
-          .reverse()
-          .find((message) => message.role === "user");
-        const userMessageId = latestUserMessage?.id ?? crypto.randomUUID();
-        const assistantMessageId = crypto.randomUUID();
-        const userCreatedAt = new Date();
-        const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1);
-        await saveMessages({
-          messages: [
-            {
-              chatId: frontendChatId,
-              id: userMessageId,
-              role: "user",
-              parts: [{ type: "text", text: question }],
-              attachments: [],
-              createdAt: userCreatedAt,
-            },
-            {
-              chatId: frontendChatId,
-              id: assistantMessageId,
-              role: "assistant",
-              parts: [
-                { type: "text", text: finalText },
-                persistedAssistantMetadata,
-              ],
-              attachments: [],
-              createdAt: assistantCreatedAt,
-            },
-          ],
-        });
-        persistedAssistantMessageId = assistantMessageId;
+    if (frontendChatId && turnStart.status === "proceed") {
+      persistence = await completeWidgetTurn({
+        userId: frontendUserId,
+        chatId: frontendChatId,
+        clientTurnId,
+        text: finalText,
+        metadata: persistedAssistantMetadata,
+        userTurnPersisted: turnStart.persistence.userTurnPersisted,
+        attempts: turnStart.persistence.attempts,
+      });
+      persistedAssistantMessageId = persistence.assistantMessageId;
+      if (persistedAssistantMessageId) {
         const traceLink = buildImmigrationAnswerTraceLinkValues({
           chatId: frontendChatId,
           assistantMessageId: persistedAssistantMessageId,
@@ -537,27 +637,41 @@ export async function POST(request: Request) {
           answerTraceId: data.trace_id,
         });
         if (traceLink) {
-          await createImmigrationAnswerTraceLink(traceLink);
+          try {
+            await createImmigrationAnswerTraceLink(traceLink);
+          } catch {
+            console.warn(
+              JSON.stringify({
+                event: "widget_trace_link_failed",
+                request_id: request.headers.get("x-request-id") ?? null,
+              })
+            );
+          }
         }
-      } catch (error) {
-        console.warn(
-          "Failed to persist premium direct workspace messages",
-          error
-        );
       }
 
-      if (data.matter_id) {
-        await updateImmigrationConversation({
-          chatId: frontendChatId,
-          userId: frontendUserId,
-          legalMatterId: data.matter_id,
-          title: question.slice(0, 80) || "Immigration conversation",
-        });
-      } else {
-        await touchImmigrationConversation({
-          chatId: frontendChatId,
-          userId: frontendUserId,
-        });
+      // Conversation bookkeeping must never replace a generated answer.
+      try {
+        if (data.matter_id) {
+          await updateImmigrationConversation({
+            chatId: frontendChatId,
+            userId: frontendUserId,
+            legalMatterId: data.matter_id,
+            title: question.slice(0, 80) || "Immigration conversation",
+          });
+        } else {
+          await touchImmigrationConversation({
+            chatId: frontendChatId,
+            userId: frontendUserId,
+          });
+        }
+      } catch {
+        if (persistence) {
+          persistence = {
+            ...persistence,
+            errorCode: persistence.errorCode ?? "conversation_touch_failed",
+          };
+        }
       }
     }
 
@@ -572,6 +686,7 @@ export async function POST(request: Request) {
     return Response.json({
       text: finalText,
       assistantMessageId: persistedAssistantMessageId,
+      persistence,
       responseLanguage: finalResponseLanguage,
       researchStatus: data.research_status ?? null,
       citations: normalizedCitations,
@@ -598,6 +713,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("widget-chat-direct error:", error);
+    if (failedTurn) {
+      await failWidgetTurn({
+        userId: failedTurn.userId,
+        chatId: failedTurn.chatId,
+        clientTurnId: failedTurn.clientTurnId,
+        errorCode: "assistant_generation_failed",
+      });
+    }
     if (error instanceof ChatbotError) {
       return error.toResponse();
     }
@@ -620,6 +743,18 @@ export async function POST(request: Request) {
         factSlotStates: [],
         interactionPlan: null,
         retrievalDebug: null,
+        persistence: failedTurn
+          ? {
+              clientTurnId: failedTurn.clientTurnId,
+              userTurnPersisted: false,
+              assistantTurnPersisted: false,
+              assistantMessageId: null,
+              errorCode: "assistant_generation_failed",
+              replayed: false,
+              attempts: 1,
+              retryable: true,
+            }
+          : null,
       },
       { status: 200 }
     );

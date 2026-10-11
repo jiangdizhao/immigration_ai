@@ -147,9 +147,22 @@ export interface WidgetUserMessage {
 
 export type WidgetMessage = WidgetAssistantMessage | WidgetUserMessage;
 
+export interface WidgetTurnPersistence {
+  clientTurnId: string;
+  userTurnPersisted: boolean;
+  assistantTurnPersisted: boolean;
+  assistantMessageId?: string | null;
+  errorCode?: string | null;
+  replayed?: boolean;
+  attempts?: number;
+  retryable?: boolean;
+}
+
 export interface WidgetRouteResponse {
   text: string;
   assistantMessageId?: string | null;
+  persistence?: WidgetTurnPersistence | null;
+  replayed?: boolean;
   responseLanguage?: ResponseLanguage | null;
   researchStatus?: "not_required" | "complete" | "incomplete" | null;
   citations?: CitationItem[];

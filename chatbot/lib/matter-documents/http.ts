@@ -1,3 +1,10 @@
+import {
+  decodeCursor,
+  encodeCursor,
+  normalizePageSize,
+  type PaginationCursor,
+  PaginationCursorError,
+} from "@/lib/conversations/pagination";
 import type { MatterDocumentService } from "./service";
 import {
   MatterDocumentNotFoundError,
@@ -167,6 +174,54 @@ export function createMatterDocumentHandlers(deps: HttpDependencies) {
           chatId,
         });
         return jsonResponse({ documents });
+      } catch (error) {
+        return mapError(error);
+      }
+    },
+
+    /**
+     * Owner-level historical file index for cross-device access. Returning a
+     * document here never adds it to another conversation's AI evidence.
+     */
+    async history(request: Request) {
+      const access = await customer();
+      if ("response" in access) {
+        return access.response;
+      }
+      const url = new URL(request.url);
+      const limit = normalizePageSize(
+        "document",
+        url.searchParams.has("limit")
+          ? Number(url.searchParams.get("limit"))
+          : null
+      );
+      let cursor: PaginationCursor | null;
+      try {
+        cursor = decodeCursor("document", url.searchParams.get("cursor"));
+      } catch (error) {
+        if (error instanceof PaginationCursorError) {
+          return jsonError("Invalid cursor", 400);
+        }
+        throw error;
+      }
+      try {
+        const page = await deps.service.listForUser({
+          userId: access.userId,
+          limit,
+          cursor,
+        });
+        const last = page.documents.at(-1);
+        return jsonResponse({
+          documents: page.documents,
+          hasMore: page.hasMore,
+          nextCursor:
+            page.hasMore && last
+              ? encodeCursor("document", {
+                  timestamp: last.createdAt.getTime(),
+                  id: last.id,
+                })
+              : null,
+        });
       } catch (error) {
         return mapError(error);
       }

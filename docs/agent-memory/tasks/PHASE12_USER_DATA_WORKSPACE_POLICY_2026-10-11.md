@@ -1,11 +1,13 @@
 # Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence
 
 **Date / decision:** 2026-10-11; owner-approved three-stage plan.
-**Status:** PLAN APPROVED; STAGE 1 NOT STARTED; no code or migrations executed.
+**Status:** PLAN APPROVED; STAGE 1 IMPLEMENTED ON A DEDICATED BRANCH; awaiting independent review + owner-host/cross-device acceptance.
 **Work branch:** `phase12-user-data-reliability-policy-intelligence`
+**Stage 1 implementation branch:** `codex/phase12-stage1-user-data-reliability` (created from `3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`)
 **Baseline / parent:** `phase11-chinese-service-platform-ui-rebase@0ed11150015773573cd7e1d0396134e696bf7357`
-**Implementation authorization:** NOT YET GRANTED. Owner will sync this planning branch locally and separately request the Stage 1 coding-model prompt. Do not start implementation, migrate, merge or deploy based solely on this document.
+**Implementation authorization:** Stage 1 coding task authorized 2026-10-11. Stages 2 and 3 are NOT authorized and NOT started.
 **Scope:** The six observed workspace/document/policy issues and the owner's cross-device user-data requirement. GPT-like Projects are interface-reserved only.
+
 
 ## 1. Product invariants — non-negotiable
 
@@ -110,14 +112,22 @@
 - No bulk reprocessing or deletion of actual customer histories/files; pre-existing irrecoverable data must be reported and only reconciled with evidence.
 - Stage 3 **does include** a lawyer-only, non-AI, form-based policy creation and manual publication path; this is not a generic CMS rewrite and must not be split into Stage 4. Manual policy publication must not depend on AI discovery/verifier, and the automated maintenance process must remain separately operational.
 - Exact data migrations, persistent context shape, replay strategy and server deployment environment remain implementation design decisions to be reviewed within each Stage; the product and validation invariants above control them.
-- Owner will request Stage 1 code-model prompt **after local Git sync**. This planning commit does not constitute execution approval.
+- Stage 1 was implemented on the dedicated branch `codex/phase12-stage1-user-data-reliability` on 2026-10-11. Stages 2 and 3 remain unauthorized. No database migration has been applied, and no merge, deploy or production change has been made.
 
 ## 5. Stage status tracker
 
 | Stage | Status | Code commit | Test/owner evidence | Owner gate |
 | --- | --- | --- | --- | --- |
-| Stage 1 — Durable history & documents | NOT STARTED | — | — | NOT REVIEWED |
+| Stage 1 — Durable history & documents | IMPLEMENTED / AWAITING EXTERNAL REVIEW | `codex/phase12-stage1-user-data-reliability` (see that branch head; commit recorded in `CURRENT_HANDOFF.md`) | 581/581 unit tests pass, 1 PostgreSQL integration test pass on the isolated test DB, changed-file Biome clean, `next build` compiles but fails the project TypeScript gate on a pre-existing VIP-billing type error. Owner cross-device procedure prepared in `PHASE12_STAGE1_OWNER_ACCEPTANCE.md` and **PENDING OWNER VERIFICATION**. | NOT REVIEWED |
 | Stage 2 — Context & workspace UI | NOT STARTED | — | — | NOT REVIEWED |
 | Stage 3 — Policy Intelligence | NOT STARTED | — | — | NOT REVIEWED |
 
-Next action: **owner syncs new branch locally and explicitly requests Stage 1 coding-model prompt.**
+## 6. Stage 1 implementation summary (2026-10-11)
+
+- **Branch:** `codex/phase12-stage1-user-data-reliability` from `3fa358d`.
+- **Durable turn ledger:** new additive table `ConversationTurn` (migration `0024_phase12_stage1_conversation_turn.sql`, generated, **NOT applied** to any live database) plus `lib/conversations/turn-ledger.ts`, `widget-turn.ts`, `message-parts.ts` and `scope.ts`. Fast, Legal Check and Premium widget routes all persist through the same owner-authorized, idempotent contract: user turn before generation, assistant turn after, replay/resume without duplicate model calls, explicit non-success reporting, no database transaction held open across the model stage.
+- **Complete history:** cursor pagination for conversations and messages (`lib/conversations/conversation-http.ts`, `pagination.ts`), removing the 80-record history cap; the workspace loads older conversations and earlier messages explicitly and guards against stale responses overwriting a newly selected conversation.
+- **Account file index:** owner-level paginated document history (`GET /api/matter-documents/history`), retained per-conversation AI evidence scoping, and a cross-device panel (`components/user-document-history-panel.tsx`).
+- **DOCX MIME fix:** declared browser MIME is treated as a hint, the real OOXML Word container is verified, the accepted MIME is normalised server-side, and conflicting families/macros/fake archives still fail closed (`lib/matter-documents/validation.ts`).
+- **Read-only audit:** `pnpm run phase12:audit -- --expect-database=chatbot` reports sanitized aggregates only.
+- **Not implemented (reserved interfaces only):** GPT-like Projects. See section 4 exclusions.
