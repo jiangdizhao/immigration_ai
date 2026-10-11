@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  acquireConversationTurnExecution,
   claimConversationTurn,
   completeConversationTurn,
   failConversationTurn,
@@ -10,6 +11,7 @@ import {
   insertMessageIdempotent,
   recordConversationTurnAttempt,
   recordConversationTurnUserMessageId,
+  renewConversationTurnExecution,
   storeConversationTurnPendingAssistantParts,
 } from "@/lib/db/queries";
 import {
@@ -32,6 +34,8 @@ const repository: ConversationTurnRepository = {
   claimTurn: claimConversationTurn,
   recordUserMessageId: recordConversationTurnUserMessageId,
   recordAttempt: recordConversationTurnAttempt,
+  acquireExecution: acquireConversationTurnExecution,
+  renewExecution: renewConversationTurnExecution,
   storePendingAssistantParts: storeConversationTurnPendingAssistantParts,
   completeTurn: completeConversationTurn,
   failTurn: failConversationTurn,
@@ -45,6 +49,7 @@ const repository: ConversationTurnRepository = {
             chatId: result.message.chatId,
             role: result.message.role,
             parts: result.message.parts,
+            attachments: result.message.attachments,
           }
         : null,
     };
@@ -57,6 +62,7 @@ const repository: ConversationTurnRepository = {
           chatId: record.chatId,
           role: record.role,
           parts: record.parts,
+          attachments: record.attachments,
         }
       : null;
   },

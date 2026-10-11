@@ -17,7 +17,8 @@ import {
   widgetRouteForAssistantMode,
 } from "@/lib/assistant-mode";
 import { consultationCreateHref } from "@/lib/consultations/customer-ui";
-import { ChatbotError } from "@/lib/errors";
+import { resolveWorkspacePersistence } from "@/lib/conversations/persistence-notice";
+import { ChatbotError, type ErrorCode } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import {
   isPolicyLinkedConversation,
@@ -891,13 +892,15 @@ export function ImmigrationAIWorkspace({
       );
     }
 
-    // Durability is reported by the backend, not assumed by the client.
+    // Durability is reported by the backend, not assumed by the client. A turn
+    // counts as saved only when the server stored and linked both messages.
     const persistence = data.persistence ?? null;
-    if (persistence && persistence.assistantTurnPersisted === false) {
+    const persistenceState = resolveWorkspacePersistence(persistence);
+    if (persistence && !persistenceState.saved) {
       setPersistenceNotice(persistence);
     } else {
       setPersistenceNotice(null);
-      if (persistence?.assistantTurnPersisted) {
+      if (persistenceState.saved) {
         pendingSubmissionRef.current = null;
       }
     }
@@ -1006,38 +1009,92 @@ export function ImmigrationAIWorkspace({
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
-    const response = await fetchWithErrorHandlers(
-      widgetRouteForAssistantMode(assistantMode),
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: stableConversationId,
-          frontendChatId: stableConversationId,
-          clientTurnId,
-          matterId,
-          intakeFacts: facts,
-          currentIntakeFacts: currentFacts,
-          answerPreference,
-          selectedChatModel: DEFAULT_CHAT_MODEL,
-          assistantMode,
-          policySlug: linkedPolicySlugForConversation(
-            stableConversationId,
-            linkedPolicyChatIdRef.current,
-            linkedPolicyReference
-          ),
-          messages: nextMessages.map((message) => ({
-            id: message.id,
-            role: message.role,
-            parts: [{ type: "text", text: message.text }],
-          })),
-        }),
-      }
-    );
+    const body = JSON.stringify({
+      id: stableConversationId,
+      frontendChatId: stableConversationId,
+      clientTurnId,
+      matterId,
+      intakeFacts: facts,
+      currentIntakeFacts: currentFacts,
+      answerPreference,
+      selectedChatModel: DEFAULT_CHAT_MODEL,
+      assistantMode,
+      policySlug: linkedPolicySlugForConversation(
+        stableConversationId,
+        linkedPolicyChatIdRef.current,
+        linkedPolicyReference
+      ),
+      messages: nextMessages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        parts: [{ type: "text", text: message.text }],
+      })),
+    });
 
-    return (await response.json()) as WidgetRouteResponse;
+    /**
+     * A duplicate submission (double click, network retry, second device) is
+     * answered with `client_turn_in_progress` while the first request is still
+     * generating. Retrying the same client turn is bounded and ends with the
+     * server replaying the single saved answer instead of a second generation.
+     */
+    const maxAttempts = 3;
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      let response: Response;
+      try {
+        response = await fetch(widgetRouteForAssistantMode(assistantMode), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+      } catch (fetchError) {
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          throw new ChatbotError("offline:chat");
+        }
+        throw fetchError;
+      }
+      if (response.ok) {
+        return (await response.json()) as WidgetRouteResponse;
+      }
+
+      const failure = (await response.json().catch(() => null)) as {
+        code?: string;
+        cause?: string;
+        error?: string;
+        retryAfterMs?: number;
+      } | null;
+
+      if (
+        failure?.code === "client_turn_in_progress" &&
+        attempt < maxAttempts
+      ) {
+        const delay = Math.min(
+          Math.max(Number(failure.retryAfterMs) || 1000, 500),
+          5000
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      const localizedMessage =
+        failure?.code === "client_turn_in_progress"
+          ? copy.persistence.answerInProgress
+          : failure?.code === "conversation_turn_not_persisted"
+            ? copy.persistence.messageNotSaved
+            : null;
+      const failureError = new ChatbotError(
+        (failure?.code ?? "bad_request:api") as ErrorCode,
+        failure?.cause
+      );
+      const serverMessage =
+        typeof failure?.error === "string" && failure.error.trim()
+          ? failure.error.trim()
+          : null;
+      failureError.message =
+        localizedMessage ?? serverMessage ?? failureError.message;
+      throw failureError;
+    }
   };
 
   const submitMessage = async (
@@ -1086,6 +1143,14 @@ export function ImmigrationAIWorkspace({
     setError(null);
 
     try {
+      // Recorded before the request so a failed or in-progress turn can be
+      // retried with the same client turn id, which is what makes the server
+      // replay one saved answer instead of generating another one.
+      pendingSubmissionRef.current = {
+        clientTurnId: nextUserMessage.id,
+        conversationId: activeConversationId,
+        messages: nextMessages,
+      };
       const data = await sendToWidgetRoute(
         nextMessages,
         intakeFacts,
@@ -1094,11 +1159,6 @@ export function ImmigrationAIWorkspace({
         activeConversationId,
         nextUserMessage.id
       );
-      pendingSubmissionRef.current = {
-        clientTurnId: nextUserMessage.id,
-        conversationId: activeConversationId,
-        messages: nextMessages,
-      };
       await appendAssistantMessage(data, nextUserMessage.id);
     } catch (requestError) {
       const message =
@@ -1107,6 +1167,25 @@ export function ImmigrationAIWorkspace({
           : requestError instanceof Error
             ? requestError.message
             : "Unable to reach the assistant right now.";
+      const failureCode =
+        requestError instanceof ChatbotError ? String(requestError.type) : null;
+      if (
+        failureCode === "client_turn_in_progress" ||
+        failureCode === "conversation_turn_not_persisted"
+      ) {
+        setPersistenceNotice({
+          clientTurnId: nextUserMessage.id,
+          userTurnPersisted: false,
+          assistantTurnPersisted: false,
+          assistantMessageId: null,
+          errorCode: failureCode,
+          replayed: false,
+          attempts: 1,
+          saved: false,
+          retryable: true,
+          retryAfterMs: null,
+        });
+      }
       setError(message);
       toast.error(message);
     } finally {
@@ -1136,7 +1215,8 @@ export function ImmigrationAIWorkspace({
         pending.clientTurnId
       );
       const persistence = data.persistence ?? null;
-      if (persistence?.assistantTurnPersisted) {
+      const persistenceState = resolveWorkspacePersistence(persistence);
+      if (persistenceState.saved) {
         setPersistenceNotice(null);
         pendingSubmissionRef.current = null;
       } else {
@@ -1739,12 +1819,20 @@ export function ImmigrationAIWorkspace({
             </div>
           ) : null}
           {persistenceNotice &&
-          persistenceNotice.assistantTurnPersisted === false ? (
+          resolveWorkspacePersistence(persistenceNotice).noticeKind !==
+            "none" ? (
             <div
               className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
               data-testid="persistence-notice"
             >
-              <span>{copy.persistence.notSaved}</span>
+              <span>
+                {persistenceNotice.errorCode === "client_turn_in_progress"
+                  ? copy.persistence.answerInProgress
+                  : persistenceNotice.errorCode ===
+                      "conversation_turn_not_persisted"
+                    ? copy.persistence.messageNotSaved
+                    : copy.persistence.notSaved}
+              </span>
               <button
                 className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
                 disabled={retryingPersistence}
@@ -1753,7 +1841,12 @@ export function ImmigrationAIWorkspace({
               >
                 {retryingPersistence
                   ? copy.persistence.retrying
-                  : copy.persistence.retrySave}
+                  : persistenceNotice.errorCode === "client_turn_in_progress"
+                    ? copy.persistence.checkSavedAnswer
+                    : persistenceNotice.errorCode ===
+                        "conversation_turn_not_persisted"
+                      ? copy.persistence.retrySending
+                      : copy.persistence.retrySave}
               </button>
             </div>
           ) : null}

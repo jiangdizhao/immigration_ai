@@ -1,7 +1,7 @@
 # CURRENT_MILESTONE
 
 **Milestone:** Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence  
-**Status:** STAGE 1 IMPLEMENTED — AWAITING EXTERNAL REVIEW AND OWNER CROSS-DEVICE ACCEPTANCE
+**Status:** STAGE 1 IMPLEMENTED + R1 REVIEW CORRECTIONS — AWAITING EXTERNAL REVIEW AND OWNER CROSS-DEVICE ACCEPTANCE
 **Updated:** 2026-10-11
 
 ## Phase 12 Stage 1 — implemented on a dedicated branch (2026-10-11)
@@ -10,7 +10,20 @@
 
 **Scope delivered:** one shared owner-authorized durable turn contract for Fast, Legal Check and Premium; cursor-paginated complete conversation and message history with stale-response protection; owner-level account file index with per-conversation AI evidence scoping retained; DOCX browser-MIME fix with real container identity; optional `projectId`/context-scope interfaces reserved only.
 
-**Evidence:** 581/581 unit tests pass; the PostgreSQL integration test passes against the isolated disposable database `immigration_ai_phase12_stage1_test`; changed-file Biome clean; `next build` compiles but the project TypeScript gate fails on a pre-existing VIP-billing type error (`lib/db/queries.ts:1947`) that predates Stage 1. The owner cross-device procedure is pending: `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`.
+**Evidence (initial submission):** 581/581 unit tests pass; the PostgreSQL integration test passes against the isolated disposable database `immigration_ai_phase12_stage1_test`; changed-file Biome clean; `next build` compiles but the project TypeScript gate fails on a pre-existing VIP-billing type error (`lib/db/queries.ts:1947`) that predates Stage 1.
+
+## R1 external review corrections (2026-10-11, same branch; Gate 1 NOT accepted)
+
+Independent review rejected the first submission and raised four Stage-1 defects plus one inherited build blocker. Corrections, all on the same branch:
+
+1. **Single execution per client turn.** `ConversationTurn` carries a durable execution lease (`executionOwnerId` fencing token, `executionLeaseExpiresAt`, `executionStartedAt`, `executionAttempt`). One atomic compare-and-set claims it; every other concurrent duplicate gets `409 client_turn_in_progress` and never runs the model or writes a second assistant message. Long model stages renew the lease through a fenced heartbeat; expired leases are recoverable; every terminal write is fenced so an obsolete attempt cannot overwrite a newer result.
+2. **Fail-closed user-message persistence.** A failed user-message write, ledger link or ownership/link read now returns `persistence_failed` (HTTP 503, retryable) instead of proceeding. `saved` is reported only when both messages are durable and linked (`linkVerified`), so a half-durable turn is never presented as saved.
+3. **Strict message identity.** A duplicate id counts as an idempotent retry only for the same immutable message (id, chat, role, canonical parts fingerprint, empty attachments); anything else fails deterministically and existing rows are never modified or treated as durable.
+4. **Legacy history.** Chats with messages but no `ImmigrationConversation` row are listed as `origin: "legacy_chat"` and are readable, with no backfill (audit: 20 messages in 4 chats, all registered accounts; integration test proves the conversation-row count and message ids/timestamps are unchanged by reads).
+
+**Evidence (R1):** unit suite **606/606 passed, 0 failed, 0 skipped**; PostgreSQL integration test **passed** on the isolated disposable database (concurrent duplicates → exactly one execute decision and exactly one user + one assistant message; stale-lease takeover; obsolete-attempt rejection; 121-conversation pagination including the legacy chat on a non-UTC host); `tsc --noEmit` shows the **same 47-error pre-existing set as the base commit**; changed-file Biome clean; `next build` compiles and still fails the project-wide TypeScript gate on the pre-existing retained-VIP typing error (smallest proposed typing-only fix reported, **not applied** — it touches paused payment code).
+
+The owner cross-device procedure is pending: `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`.
 
 **Gate rule (unchanged):** Stage 1 is not accepted until independent review and the owner cross-device evidence are recorded. Do not start Stage 2 before Stage 1 acceptance, and do not merge/apply migrations without explicit owner authorization.
 

@@ -588,6 +588,15 @@ export const conversationTurn = pgTable(
     attemptCount: integer("attemptCount").notNull().default(1),
     errorCode: varchar("errorCode", { length: 64 }),
     pendingAssistantParts: json("pendingAssistantParts").$type<unknown[]>(),
+    /**
+     * Phase 12 Stage 1 R1 execution ownership. Only the request that holds the
+     * live lease may execute the model stage for a turn, and only the fencing
+     * token stored in `executionOwnerId` may write that turn's terminal state.
+     */
+    executionOwnerId: varchar("executionOwnerId", { length: 64 }),
+    executionLeaseExpiresAt: timestamp("executionLeaseExpiresAt"),
+    executionStartedAt: timestamp("executionStartedAt"),
+    executionAttempt: integer("executionAttempt").notNull().default(0),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -598,6 +607,9 @@ export const conversationTurn = pgTable(
     ownerCreatedIndex: index("ConversationTurn_owner_created_idx").on(
       table.userId,
       table.createdAt
+    ),
+    executionLeaseIndex: index("ConversationTurn_execution_lease_idx").on(
+      table.executionLeaseExpiresAt
     ),
   })
 );

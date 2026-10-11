@@ -74,3 +74,80 @@ test("widget routes cannot silently swallow a persistence failure", () => {
     );
   }
 });
+
+test("every widget route fails closed when the durable turn is not established", () => {
+  for (const route of ROUTES) {
+    const contents = source(route);
+    assert.match(
+      contents,
+      /turnStart\.status === "persistence_failed"/u,
+      "a failed user-turn write must be reported instead of answering"
+    );
+    assert.match(
+      contents,
+      /"conversation_turn_not_persisted"/u,
+      "the client must receive an explicit retryable persistence failure"
+    );
+    assert.match(
+      contents,
+      /turnStart\.status === "in_progress"/u,
+      "a duplicate in-flight request must not generate a second answer"
+    );
+    assert.match(contents, /"client_turn_in_progress"/u);
+  }
+});
+
+test("every widget route holds and releases the execution lease", () => {
+  for (const route of ROUTES) {
+    const contents = source(route);
+    assert.match(
+      contents,
+      /startWidgetTurnHeartbeat\(/u,
+      "a long model stage must renew its execution lease"
+    );
+    assert.match(
+      contents,
+      /executionOwnerId: turnStart\.executionOwnerId/u,
+      "completion must be fenced by the lease owner"
+    );
+    assert.match(
+      contents,
+      /heartbeat\.stop\(\)/u,
+      "every exit path must release the execution lease"
+    );
+  }
+});
+
+test("the durable turn service owns the one-execution-per-turn rule", () => {
+  const shared = readFileSync(
+    new URL("./turn-ledger.ts", import.meta.url),
+    "utf8"
+  );
+  for (const required of [
+    "acquireExecution",
+    "renewExecution",
+    "TURN_EXECUTION_LEASE_MS",
+    "executionOwnerId",
+    "turn_execution_lease_lost",
+    "deterministicMessageId",
+  ]) {
+    assert.match(shared, new RegExp(required, "u"), `${required} is required`);
+  }
+  const widget = readFileSync(
+    new URL("./widget-turn.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    widget,
+    /runModel: start\.status === "proceed"/u,
+    "only a proceed decision may run the model"
+  );
+
+  // The two terminal failure modes must never look like a saved turn.
+  const notice = readFileSync(
+    new URL("./persistence-notice.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(notice, /saved: false/u);
+  assert.match(notice, /persistence\.saved === true/u);
+});

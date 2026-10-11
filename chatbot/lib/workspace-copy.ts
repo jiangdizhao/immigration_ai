@@ -33,6 +33,10 @@ export type WorkspaceCopy = {
     retrySave: string;
     retrying: string;
     savedAcrossDevices: string;
+    answerInProgress: string;
+    checkSavedAnswer: string;
+    messageNotSaved: string;
+    retrySending: string;
   };
   fileHistory: {
     title: string;
@@ -170,6 +174,10 @@ const zh: WorkspaceCopy = {
     retrySave: "重新保存",
     retrying: "正在重新保存…",
     savedAcrossDevices: "已保存到您的账号，可在其他设备查看。",
+    answerInProgress: "这条消息仍在生成答复，请稍候查看已保存的回复。",
+    checkSavedAnswer: "查看已保存的回复",
+    messageNotSaved: "这条消息尚未保存到您的账号，请重新发送。",
+    retrySending: "重新发送",
   },
   fileHistory: {
     title: "我的历史文件",
@@ -339,6 +347,12 @@ const en: WorkspaceCopy = {
     retrying: "Retrying save…",
     savedAcrossDevices:
       "Saved to your account and available on your other devices.",
+    answerInProgress:
+      "This message is still being answered. Please check again for the saved reply.",
+    checkSavedAnswer: "Check the saved reply",
+    messageNotSaved:
+      "This message could not be saved to your account. Please send it again.",
+    retrySending: "Send again",
   },
   fileHistory: {
     title: "My files",

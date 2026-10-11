@@ -8,6 +8,8 @@ import {
   completeWidgetTurnFromParts,
   failWidgetTurn,
   resolveClientTurnId,
+  startWidgetTurnHeartbeat,
+  type WidgetTurnHeartbeat,
   type WidgetTurnPersistence,
   type WidgetTurnStart,
   widgetFieldsFromAssistantParts,
@@ -363,7 +365,15 @@ export async function POST(request: Request) {
     userId: string;
     chatId: string;
     clientTurnId: string;
+    executionOwnerId?: string | null;
   } | null = null;
+  let heartbeat: WidgetTurnHeartbeat | null = null;
+  const stopHeartbeat = () => {
+    if (heartbeat) {
+      heartbeat.stop();
+      heartbeat = null;
+    }
+  };
   try {
     const json = await request.json();
     const {
@@ -462,11 +472,37 @@ export async function POST(request: Request) {
         userId: frontendUserId,
         chatId: frontendChatId,
         clientTurnId,
+        executionOwnerId:
+          turnStart.status === "proceed" ? turnStart.executionOwnerId : null,
       };
     }
 
     if (turnStart.status === "unauthorized") {
       return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    if (turnStart.status === "persistence_failed") {
+      return Response.json(
+        {
+          error:
+            "Your message could not be saved to your account yet. Nothing was lost, please send it again.",
+          code: "conversation_turn_not_persisted",
+          persistence: turnStart.persistence,
+        },
+        { status: 503 }
+      );
+    }
+    if (turnStart.status === "in_progress") {
+      // A duplicate request must never generate a second Premium answer.
+      return Response.json(
+        {
+          error:
+            "This message is already being answered. Please wait a moment for the saved answer.",
+          code: "client_turn_in_progress",
+          persistence: turnStart.persistence,
+          retryAfterMs: turnStart.persistence.retryAfterMs,
+        },
+        { status: 409 }
+      );
     }
     if (turnStart.status === "conflict") {
       return Response.json(
@@ -498,6 +534,7 @@ export async function POST(request: Request) {
               parts: turnStart.parts,
               userTurnPersisted: turnStart.persistence.userTurnPersisted,
               attempts: turnStart.persistence.attempts,
+              executionOwnerId: turnStart.executionOwnerId,
             });
       return Response.json({
         text: storedFields.text,
@@ -539,6 +576,14 @@ export async function POST(request: Request) {
           evidence: { documents: [] },
           manifest: [],
         };
+
+    if (turnStart.status === "proceed") {
+      // Premium runs one long direct-web stage; renew the lease while it runs.
+      heartbeat = startWidgetTurnHeartbeat({
+        turnId: turnStart.turnId,
+        executionOwnerId: turnStart.executionOwnerId,
+      });
+    }
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
@@ -627,6 +672,7 @@ export async function POST(request: Request) {
         metadata: persistedAssistantMetadata,
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
+        executionOwnerId: turnStart.executionOwnerId,
       });
       persistedAssistantMessageId = persistence.assistantMessageId;
       if (persistedAssistantMessageId) {
@@ -719,6 +765,7 @@ export async function POST(request: Request) {
         chatId: failedTurn.chatId,
         clientTurnId: failedTurn.clientTurnId,
         errorCode: "assistant_generation_failed",
+        executionOwnerId: failedTurn.executionOwnerId ?? null,
       });
     }
     if (error instanceof ChatbotError) {
@@ -752,11 +799,15 @@ export async function POST(request: Request) {
               errorCode: "assistant_generation_failed",
               replayed: false,
               attempts: 1,
+              saved: false,
               retryable: true,
+              retryAfterMs: null,
             }
           : null,
       },
       { status: 200 }
     );
+  } finally {
+    stopHeartbeat();
   }
 }

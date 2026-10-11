@@ -155,7 +155,14 @@ export interface WidgetTurnPersistence {
   errorCode?: string | null;
   replayed?: boolean;
   attempts?: number;
+  /**
+   * True only when the user message and the assistant answer are both durably
+   * stored and linked on the server. The client must never imply "saved"
+   * otherwise, even when `assistantTurnPersisted` is true.
+   */
+  saved?: boolean;
   retryable?: boolean;
+  retryAfterMs?: number | null;
 }
 
 export interface WidgetRouteResponse {

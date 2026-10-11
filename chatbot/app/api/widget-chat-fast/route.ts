@@ -9,6 +9,8 @@ import {
   completeWidgetTurnFromParts,
   failWidgetTurn,
   resolveClientTurnId,
+  startWidgetTurnHeartbeat,
+  type WidgetTurnHeartbeat,
   type WidgetTurnPersistence,
   type WidgetTurnStart,
   widgetFieldsFromAssistantParts,
@@ -237,8 +239,16 @@ export async function POST(request: Request) {
     userId: string;
     chatId: string;
     clientTurnId: string;
+    executionOwnerId?: string | null;
   } | null = null;
+  let heartbeat: WidgetTurnHeartbeat | null = null;
   const finish = (response: Response) => {
+    // Every exit path stops lease renewal, so a finished request never keeps
+    // extending ownership of its turn.
+    if (heartbeat) {
+      heartbeat.stop();
+      heartbeat = null;
+    }
     response.headers.set("X-Request-ID", requestId);
     return response;
   };
@@ -314,11 +324,42 @@ export async function POST(request: Request) {
         userId: session.user.id,
         chatId: parsed.frontendChatId,
         clientTurnId,
+        executionOwnerId:
+          turnStart.status === "proceed" ? turnStart.executionOwnerId : null,
       };
     }
 
     if (turnStart.status === "unauthorized") {
       return finish(new ChatbotError("unauthorized:chat").toResponse());
+    }
+    if (turnStart.status === "persistence_failed") {
+      return finish(
+        Response.json(
+          {
+            error:
+              "Your message could not be saved to your account yet. Nothing was lost, please send it again.",
+            code: "conversation_turn_not_persisted",
+            persistence: turnStart.persistence,
+          },
+          { status: 503 }
+        )
+      );
+    }
+    if (turnStart.status === "in_progress") {
+      // Another request owns this turn and is still producing the answer. This
+      // request must not run the model and must not create a second answer.
+      return finish(
+        Response.json(
+          {
+            error:
+              "This message is already being answered. Please wait a moment for the saved answer.",
+            code: "client_turn_in_progress",
+            persistence: turnStart.persistence,
+            retryAfterMs: turnStart.persistence.retryAfterMs,
+          },
+          { status: 409 }
+        )
+      );
     }
     if (turnStart.status === "conflict") {
       return finish(
@@ -352,6 +393,7 @@ export async function POST(request: Request) {
               parts: turnStart.parts,
               userTurnPersisted: turnStart.persistence.userTurnPersisted,
               attempts: turnStart.persistence.attempts,
+              executionOwnerId: turnStart.executionOwnerId,
             });
       return finish(
         Response.json({
@@ -386,6 +428,14 @@ export async function POST(request: Request) {
     }
     let customerDocumentEvidence: CustomerDocumentEvidence = { documents: [] };
     let customerDocumentManifest: CustomerDocumentManifest[] = [];
+    if (turnStart.status === "proceed") {
+      // Only the lease holder reaches the model stage; renew the lease while it
+      // runs so a crashed attempt cannot hold the turn forever.
+      heartbeat = startWidgetTurnHeartbeat({
+        turnId: turnStart.turnId,
+        executionOwnerId: turnStart.executionOwnerId,
+      });
+    }
     if (ownedConversation) {
       const built = await buildConversationMatterDocumentEvidence({
         userId: session.user.id,
@@ -506,6 +556,7 @@ export async function POST(request: Request) {
         metadata,
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
+        executionOwnerId: turnStart.executionOwnerId,
       });
       assistantMessageId = persistence.assistantMessageId;
       if (assistantMessageId) {
@@ -590,6 +641,7 @@ export async function POST(request: Request) {
         chatId: failedTurn.chatId,
         clientTurnId: failedTurn.clientTurnId,
         errorCode: "assistant_generation_failed",
+        executionOwnerId: failedTurn.executionOwnerId ?? null,
       });
     }
     if (error instanceof ChatbotError) {
@@ -615,7 +667,9 @@ export async function POST(request: Request) {
               errorCode: "assistant_generation_failed",
               replayed: false,
               attempts: 1,
+              saved: false,
               retryable: true,
+              retryAfterMs: null,
             }
           : null
       )

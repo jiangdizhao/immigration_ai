@@ -27,6 +27,27 @@ The three widget answer modes persist through one owner-authorized, idempotent t
 
 Upload validation keeps the extension allowlist, file-size/decompression/macro limits and real content identity checks (OOXML Word/Excel container, OLE streams, magic bytes). A declared MIME that is unknown or nonstandard must not by itself reject an otherwise valid file; a declared MIME from a positively conflicting family still fails fast, and the accepted MIME stored/served is always the canonical one. Upload success (durable storage) and extraction success (usable evidence units) are separate states in the API and UI.
 
+## D-012 — Exactly one execution per client turn (durable lease + fencing); a turn is "saved" only when both messages are durable and linked
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED (R1 correction to D-010/D-009 semantics; does not reverse them)
+
+A unique turn row does not make *execution* exclusive. The durable turn contract therefore owns an execution lease as well:
+
+- `ConversationTurn` carries `executionOwnerId` (fencing token), `executionLeaseExpiresAt`, `executionStartedAt` and `executionAttempt`. A lease is claimed by one atomic compare-and-set update and renewed by a fenced heartbeat while the model stage runs; the lease is never held inside a database transaction across that stage.
+- Exactly one concurrent request per client turn may execute the model. Losing duplicates get `409 client_turn_in_progress` with a retry hint; they never generate an answer and never create a second assistant message. An already-answered turn is replayed instead.
+- Every terminal write (pending payload, completion, failure) is fenced by the lease owner, so an obsolete attempt whose lease expired or was taken over cannot overwrite, re-complete or fail a newer attempt's result. A failed turn releases its lease so a retry can proceed immediately.
+- Assistant and durable user message identity are server-controlled and deterministic per turn, so retries converge on the same rows instead of accumulating duplicates.
+- A message id collision is an idempotent retry only for the same immutable message (same id, chat, role, canonical parts fingerprint, empty attachments). Anything else fails deterministically and never counts as durable.
+- For an authenticated conversation, a failed user-message write (or an unverifiable ownership/link read) fails closed: the route answers retryably and does not run the model. A turn is reported as saved only when the user message and the assistant answer are both durable and linked; guest/unscoped requests make no durability claim at all.
+
+## D-013 — Legacy chats without an immigration conversation row are readable history; reads never backfill data
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED
+
+The pre-Phase-12 `Chat` rows that hold messages but have no `ImmigrationConversation` row belong to real customers (read-only audit: 20 messages in 4 chats, all owned by registered accounts). They are listed for their owner as `origin: "legacy_chat"` with `legalMatterId: null` and are readable and paginated through the existing owner-authorized message endpoint, while chats with neither a conversation row nor messages stay excluded from history. Read paths must never create, rewrite or backfill a conversation row or a message, and `totalCount` must describe exactly the same eligible set as the listing. Any future backfill requires a separate explicit approval, a migration and owner sign-off.
+
 ## D-001 — Phase 11 product target
 
 **Date:** 2026-09-19  

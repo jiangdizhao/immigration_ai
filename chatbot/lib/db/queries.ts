@@ -9,8 +9,10 @@ import {
   gt,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
+  lte,
   ne,
   or,
   type SQL,
@@ -3269,6 +3271,80 @@ export async function getConversationTurnRecord(input: {
   return turn ?? null;
 }
 
+export async function getConversationTurnRecordById(
+  turnId: string
+): Promise<ConversationTurnRow | null> {
+  const [turn] = await db
+    .select()
+    .from(conversationTurn)
+    .where(eq(conversationTurn.id, turnId))
+    .limit(1);
+  return turn ?? null;
+}
+
+/**
+ * Phase 12 Stage 1 R1 exclusive execution ownership.
+ *
+ * This single atomic statement is the race-safe lease primitive: PostgreSQL
+ * serializes the row update, so of N concurrent callers exactly one observes a
+ * claimable row (no owner, or expired lease, or its own re-entry) and every
+ * other caller receives `null` and must not run the model stage. `ownerId` is
+ * the fencing token: only it can renew or write that turn's terminal state.
+ */
+export async function acquireConversationTurnExecution(input: {
+  turnId: string;
+  ownerId: string;
+  leaseMs: number;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({
+      executionOwnerId: input.ownerId,
+      executionLeaseExpiresAt: new Date(input.now.getTime() + input.leaseMs),
+      executionStartedAt: input.now,
+      executionAttempt: sql`${conversationTurn.executionAttempt} + 1`,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        ne(conversationTurn.status, "assistant_persisted"),
+        or(
+          isNull(conversationTurn.executionOwnerId),
+          lte(conversationTurn.executionLeaseExpiresAt, input.now),
+          eq(conversationTurn.executionOwnerId, input.ownerId)
+        )
+      )
+    )
+    .returning();
+  return updated ?? null;
+}
+
+/** Extends a live lease. Returns null when the fence was lost or expired. */
+export async function renewConversationTurnExecution(input: {
+  turnId: string;
+  ownerId: string;
+  leaseMs: number;
+  now: Date;
+}): Promise<ConversationTurnRow | null> {
+  const [updated] = await db
+    .update(conversationTurn)
+    .set({
+      executionLeaseExpiresAt: new Date(input.now.getTime() + input.leaseMs),
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        eq(conversationTurn.executionOwnerId, input.ownerId),
+        ne(conversationTurn.status, "assistant_persisted")
+      )
+    )
+    .returning();
+  return updated ?? null;
+}
+
 export async function recordConversationTurnUserMessageId(input: {
   turnId: string;
   userMessageId: string;
@@ -3312,19 +3388,32 @@ export async function recordConversationTurnAttempt(input: {
 
 export async function storeConversationTurnPendingAssistantParts(input: {
   turnId: string;
+  ownerId: string;
   parts: unknown[];
   now: Date;
 }): Promise<ConversationTurnRow | null> {
   const [updated] = await db
     .update(conversationTurn)
     .set({ pendingAssistantParts: input.parts, updatedAt: input.now })
-    .where(eq(conversationTurn.id, input.turnId))
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        eq(conversationTurn.executionOwnerId, input.ownerId),
+        ne(conversationTurn.status, "assistant_persisted")
+      )
+    )
     .returning();
   return updated ?? null;
 }
 
+/**
+ * Fenced terminal write. Only the current lease holder may complete the turn,
+ * and a turn that is already completed is never overwritten, so a late or
+ * obsolete attempt cannot replace a newer successful result.
+ */
 export async function completeConversationTurn(input: {
   turnId: string;
+  ownerId: string;
   assistantMessageId: string;
   now: Date;
 }): Promise<ConversationTurnRow | null> {
@@ -3335,22 +3424,54 @@ export async function completeConversationTurn(input: {
       status: "assistant_persisted",
       errorCode: null,
       pendingAssistantParts: null,
+      executionLeaseExpiresAt: null,
       updatedAt: input.now,
     })
-    .where(eq(conversationTurn.id, input.turnId))
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        eq(conversationTurn.executionOwnerId, input.ownerId),
+        ne(conversationTurn.status, "assistant_persisted")
+      )
+    )
     .returning();
-  return updated ?? null;
+  if (updated) {
+    return updated;
+  }
+  // Either another attempt already completed the turn, or this attempt lost the
+  // fencing token. The caller must inspect the returned authoritative row.
+  return getConversationTurnRecordById(input.turnId);
 }
 
+/**
+ * Fenced failure write. `ownerId` is required so a losing attempt can never
+ * mark a turn that another attempt is actively executing as failed. A failed
+ * turn releases its lease so a retry can acquire it immediately.
+ */
 export async function failConversationTurn(input: {
   turnId: string;
+  ownerId: string | null;
   errorCode: string;
   now: Date;
 }): Promise<ConversationTurnRow | null> {
   const [updated] = await db
     .update(conversationTurn)
-    .set({ status: "failed", errorCode: input.errorCode, updatedAt: input.now })
-    .where(eq(conversationTurn.id, input.turnId))
+    .set({
+      status: "failed",
+      errorCode: input.errorCode,
+      executionOwnerId: null,
+      executionLeaseExpiresAt: null,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(conversationTurn.id, input.turnId),
+        input.ownerId
+          ? eq(conversationTurn.executionOwnerId, input.ownerId)
+          : isNull(conversationTurn.executionOwnerId),
+        ne(conversationTurn.status, "assistant_persisted")
+      )
+    )
     .returning();
   return updated ?? null;
 }
@@ -3401,9 +3522,54 @@ export async function getMessageForChat(input: {
 }
 
 /**
+ * Phase 12 Stage 1 R1 historical compatibility helpers.
+ *
+ * A conversation's effective activity time is the immigration conversation row
+ * when one exists, otherwise the newest stored message of that chat. Both are
+ * real columns, so keyset pagination on the expression stays stable.
+ */
+function lastMessageAtExpression() {
+  return sql<Date | null>`(select max(m."createdAt") from "Message_v2" m where m."chatId" = ${chat.id})`;
+}
+
+function effectiveUpdatedAtExpression() {
+  return sql<Date>`coalesce(${immigrationConversation.updatedAt}, ${lastMessageAtExpression()}, ${chat.createdAt})`;
+}
+
+/**
+ * A computed SQL expression is returned by the driver as a timestamp string,
+ * while a plain column is returned as a Date. The public contract of the
+ * history queries is always a Date, so both are normalised here.
+ */
+function asDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+/**
+ * Keyset boundary for the conversation listing.
+ *
+ * `timestamp` columns are decoded in the process time zone by the driver, while
+ * the stored value is a wall clock. The cursor is therefore converted back into
+ * that same wall-clock frame and compared as a numeric epoch, which avoids both
+ * string/date parameter typing and any server-side zone conversion.
+ */
+function cursorWallClockMs(cursor: PaginationCursor): number {
+  const cursorDate = new Date(cursor.timestamp);
+  return cursorDate.getTime() - cursorDate.getTimezoneOffset() * 60_000;
+}
+
+/**
  * Complete, cursor-paginated conversation enumeration for the authenticated
- * owner. Ordering is `(updatedAt DESC, chatId DESC)`, so page boundaries cannot
- * skip or duplicate a conversation, and no fixed top-N history cap applies.
+ * owner. Ordering is `(effectiveUpdatedAt DESC, chatId DESC)`, so page
+ * boundaries cannot skip or duplicate a conversation, and no fixed top-N
+ * history cap applies.
+ *
+ * Phase 12 Stage 1 R1 historical compatibility: an owner chat that holds
+ * messages but has no `ImmigrationConversation` row (legacy pre-conversation
+ * rows) is listed instead of being silently hidden. Such a chat is reported as
+ * `origin: "legacy_chat"` with `legalMatterId: null`, and no row is created or
+ * modified by this read. Chats with neither an immigration conversation nor any
+ * message stay excluded so unrelated Chat rows never appear as history.
  */
 export async function listImmigrationConversationsPage(input: {
   userId: string;
@@ -3417,18 +3583,24 @@ export async function listImmigrationConversationsPage(input: {
     chatTitle: string;
     createdAt: Date;
     updatedAt: Date;
+    origin: "immigration" | "legacy_chat";
   }>;
   hasMore: boolean;
 }> {
-  const predicates: SQL[] = [eq(chat.userId, input.userId)];
+  const predicates: SQL[] = [
+    eq(chat.userId, input.userId),
+    or(
+      isNotNull(immigrationConversation.chatId),
+      isNotNull(lastMessageAtExpression())
+    ) as SQL,
+  ];
   if (input.cursor) {
-    const cursorTime = new Date(input.cursor.timestamp);
     predicates.push(
       or(
-        lt(immigrationConversation.updatedAt, cursorTime),
+        sql`round(extract(epoch from ${effectiveUpdatedAtExpression()}) * 1000) < ${cursorWallClockMs(input.cursor)}`,
         and(
-          eq(immigrationConversation.updatedAt, cursorTime),
-          lt(immigrationConversation.chatId, input.cursor.id)
+          sql`round(extract(epoch from ${effectiveUpdatedAtExpression()}) * 1000) = ${cursorWallClockMs(input.cursor)}`,
+          lt(chat.id, input.cursor.id)
         )
       ) as SQL
     );
@@ -3436,25 +3608,86 @@ export async function listImmigrationConversationsPage(input: {
 
   const rows = await db
     .select({
-      chatId: immigrationConversation.chatId,
+      chatId: chat.id,
       legalMatterId: immigrationConversation.legalMatterId,
       title: immigrationConversation.title,
       chatTitle: chat.title,
-      createdAt: immigrationConversation.createdAt,
-      updatedAt: immigrationConversation.updatedAt,
+      createdAt: sql<
+        Date | string
+      >`coalesce(${immigrationConversation.createdAt}, ${chat.createdAt})`,
+      updatedAt: sql<Date | string>`${effectiveUpdatedAtExpression()}`,
+      origin: sql<
+        "immigration" | "legacy_chat"
+      >`case when ${immigrationConversation.chatId} is null then 'legacy_chat' else 'immigration' end`,
     })
-    .from(immigrationConversation)
-    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
-    .where(and(...predicates))
-    .orderBy(
-      desc(immigrationConversation.updatedAt),
-      desc(immigrationConversation.chatId)
+    .from(chat)
+    .leftJoin(
+      immigrationConversation,
+      eq(immigrationConversation.chatId, chat.id)
     )
+    .where(and(...predicates))
+    .orderBy(sql`${effectiveUpdatedAtExpression()} desc`, desc(chat.id))
     .limit(input.limit + 1);
 
   return {
-    conversations: rows.slice(0, input.limit),
+    conversations: rows.slice(0, input.limit).map((row) => ({
+      ...row,
+      createdAt: asDate(row.createdAt),
+      updatedAt: asDate(row.updatedAt),
+    })),
     hasMore: rows.length > input.limit,
+  };
+}
+
+/**
+ * Owner-authorized summary for a chat that holds messages but predates the
+ * immigration conversation row. Read-only: it never creates or repairs the
+ * missing conversation row.
+ */
+export async function getOwnedLegacyChatSummary(input: {
+  chatId: string;
+  userId: string;
+}): Promise<{
+  chatId: string;
+  legalMatterId: string | null;
+  title: string | null;
+  chatTitle: string;
+  createdAt: Date;
+  updatedAt: Date;
+  origin: "legacy_chat";
+} | null> {
+  const [row] = await db
+    .select({
+      chatId: chat.id,
+      chatTitle: chat.title,
+      createdAt: chat.createdAt,
+      updatedAt: sql<Date | string>`${effectiveUpdatedAtExpression()}`,
+    })
+    .from(chat)
+    .leftJoin(
+      immigrationConversation,
+      eq(immigrationConversation.chatId, chat.id)
+    )
+    .where(
+      and(
+        eq(chat.id, input.chatId),
+        eq(chat.userId, input.userId),
+        isNull(immigrationConversation.chatId),
+        isNotNull(lastMessageAtExpression())
+      )
+    )
+    .limit(1);
+
+  if (!row) {
+    return null;
+  }
+  return {
+    ...row,
+    createdAt: asDate(row.createdAt),
+    updatedAt: asDate(row.updatedAt),
+    legalMatterId: null,
+    title: null,
+    origin: "legacy_chat" as const,
   };
 }
 
@@ -3507,14 +3740,29 @@ export async function listMessagesForChatPage(input: {
   };
 }
 
+/**
+ * Counts the same eligible set as `listImmigrationConversationsPage`, so
+ * `totalCount` cannot disagree with the paginated list.
+ */
 export async function countImmigrationConversations(input: {
   userId: string;
 }): Promise<number> {
   const [row] = await db
     .select({ total: count() })
-    .from(immigrationConversation)
-    .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
-    .where(eq(chat.userId, input.userId));
+    .from(chat)
+    .leftJoin(
+      immigrationConversation,
+      eq(immigrationConversation.chatId, chat.id)
+    )
+    .where(
+      and(
+        eq(chat.userId, input.userId),
+        or(
+          isNotNull(immigrationConversation.chatId),
+          isNotNull(lastMessageAtExpression())
+        )
+      )
+    );
   return Number(row?.total ?? 0);
 }
 

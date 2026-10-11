@@ -10,6 +10,8 @@ import {
   completeWidgetTurnFromParts,
   failWidgetTurn,
   resolveClientTurnId,
+  startWidgetTurnHeartbeat,
+  type WidgetTurnHeartbeat,
   type WidgetTurnPersistence,
   type WidgetTurnStart,
   widgetFieldsFromAssistantParts,
@@ -758,7 +760,15 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     userId: string;
     chatId: string;
     clientTurnId: string;
+    executionOwnerId?: string | null;
   } | null = null;
+  let heartbeat: WidgetTurnHeartbeat | null = null;
+  const stopHeartbeat = () => {
+    if (heartbeat) {
+      heartbeat.stop();
+      heartbeat = null;
+    }
+  };
   try {
     const json = await request.json();
     const {
@@ -884,11 +894,37 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         userId: frontendUserId,
         chatId: frontendChatId,
         clientTurnId,
+        executionOwnerId:
+          turnStart.status === "proceed" ? turnStart.executionOwnerId : null,
       };
     }
 
     if (turnStart.status === "unauthorized") {
       return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    if (turnStart.status === "persistence_failed") {
+      return Response.json(
+        {
+          error:
+            "Your message could not be saved to your account yet. Nothing was lost, please send it again.",
+          code: "conversation_turn_not_persisted",
+          persistence: turnStart.persistence,
+        },
+        { status: 503 }
+      );
+    }
+    if (turnStart.status === "in_progress") {
+      // A duplicate request must never start a second research/model stage.
+      return Response.json(
+        {
+          error:
+            "This message is already being answered. Please wait a moment for the saved answer.",
+          code: "client_turn_in_progress",
+          persistence: turnStart.persistence,
+          retryAfterMs: turnStart.persistence.retryAfterMs,
+        },
+        { status: 409 }
+      );
     }
     if (turnStart.status === "conflict") {
       return Response.json(
@@ -945,6 +981,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         parts: turnStart.parts,
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
+        executionOwnerId: turnStart.executionOwnerId,
       });
       return Response.json({
         requestId,
@@ -986,6 +1023,15 @@ async function handleWidgetRequest(request: Request, requestId: string) {
           evidence: { documents: [] },
           manifest: [],
         };
+
+    if (turnStart.status === "proceed") {
+      // Only the lease holder runs the Legal Check research stage; renew the
+      // lease while it runs so a crashed attempt cannot hold the turn forever.
+      heartbeat = startWidgetTurnHeartbeat({
+        turnId: turnStart.turnId,
+        executionOwnerId: turnStart.executionOwnerId,
+      });
+    }
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
@@ -1089,7 +1135,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         metadata: persistedAssistantMetadata,
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
-        assistantMessageId: turnStart.persistence.assistantMessageId,
+        executionOwnerId: turnStart.executionOwnerId,
       });
       persistedAssistantMessageId = persistence.assistantMessageId;
       if (persistedAssistantMessageId) {
@@ -1186,6 +1232,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         chatId: failedTurn.chatId,
         clientTurnId: failedTurn.clientTurnId,
         errorCode: "assistant_generation_failed",
+        executionOwnerId: failedTurn.executionOwnerId ?? null,
       });
     }
     if (error instanceof ChatbotError) {
@@ -1220,11 +1267,15 @@ async function handleWidgetRequest(request: Request, requestId: string) {
               errorCode: "assistant_generation_failed",
               replayed: false,
               attempts: 1,
+              saved: false,
               retryable: true,
+              retryAfterMs: null,
             }
           : null,
       },
       { status: 200 }
     );
+  } finally {
+    stopHeartbeat();
   }
 }

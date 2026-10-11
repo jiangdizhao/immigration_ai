@@ -4,6 +4,7 @@ import {
   countImmigrationConversations,
   createImmigrationConversation,
   getImmigrationConversationByChatId,
+  getOwnedLegacyChatSummary,
   listImmigrationConversationsPage,
   listMessagesForChatPage,
   updateImmigrationConversation,
@@ -24,6 +25,7 @@ const repository: ConversationHistoryRepository = {
       chatTitle: created.title ?? title,
       createdAt: created.createdAt,
       updatedAt: created.updatedAt,
+      origin: "immigration" as const,
     };
   },
   async getConversation({ chatId, userId }) {
@@ -31,16 +33,21 @@ const repository: ConversationHistoryRepository = {
       chatId,
       userId,
     });
-    return conversation
-      ? {
-          chatId: conversation.chatId,
-          legalMatterId: conversation.legalMatterId ?? null,
-          title: conversation.title ?? null,
-          chatTitle: conversation.chatTitle,
-          createdAt: conversation.createdAt,
-          updatedAt: conversation.updatedAt,
-        }
-      : null;
+    if (conversation) {
+      return {
+        chatId: conversation.chatId,
+        legalMatterId: conversation.legalMatterId ?? null,
+        title: conversation.title ?? null,
+        chatTitle: conversation.chatTitle,
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+        origin: "immigration" as const,
+      };
+    }
+    // Phase 12 Stage 1 R1: a legacy owner chat that holds messages but has no
+    // immigration conversation row stays readable. Messages are still
+    // authorized by Chat ownership and nothing is created or repaired here.
+    return await getOwnedLegacyChatSummary({ chatId, userId });
   },
   listMessages: ({ chatId, userId, limit, olderThan }) =>
     listMessagesForChatPage({ chatId, userId, limit, olderThan }),

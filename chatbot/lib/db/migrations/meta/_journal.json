@@ -176,6 +176,13 @@
       "when": 1791681786682,
       "tag": "0024_phase12_stage1_conversation_turn",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791687409232,
+      "tag": "0025_phase12_stage1_turn_execution_lease",
+      "breakpoints": true
     }
   ]
 }

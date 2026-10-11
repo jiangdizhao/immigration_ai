@@ -35,6 +35,12 @@ export type ConversationSummaryRecord = {
   chatTitle: string;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * `legacy_chat` marks an owner chat that holds messages but predates the
+   * immigration conversation row. It is presented as retained history and is
+   * never silently rewritten or backfilled by the read path.
+   */
+  origin?: "immigration" | "legacy_chat";
 };
 
 export type ConversationHistoryRepository = {
@@ -86,6 +92,7 @@ function conversationFields(record: ConversationSummaryRecord) {
     title: record.title ?? record.chatTitle ?? "Immigration conversation",
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    origin: record.origin ?? "immigration",
   };
 }
 

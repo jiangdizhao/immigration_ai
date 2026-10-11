@@ -6,7 +6,7 @@
  * message content, emails or credentials, and it performs no writes.
  *
  * Usage:
- *   pnpm run phase12:audit -- --expect-database=immigration_legal
+ *   pnpm run phase12:audit -- --expect-database=chatbot
  */
 
 import { resolve } from "node:path";
@@ -220,6 +220,46 @@ async function main() {
         : 0,
     ]);
 
+    const [
+      chatsWithMessagesAndNoConversationRow,
+      chatsWithoutConversationRowAndNoMessages,
+      legacyOwnedByRegisteredUser,
+      legacyOwnedByGuest,
+      legacyInOtherAccount,
+    ] = await Promise.all([
+      scalar(sql`select count(distinct m."chatId")::text as count from "Message_v2" m
+            where not exists (
+              select 1 from "ImmigrationConversation" c where c."chatId" = m."chatId"
+            )`),
+      scalar(sql`select count(*)::text as count from "Chat" ch
+            where not exists (
+              select 1 from "ImmigrationConversation" c where c."chatId" = ch."id"
+            )
+              and not exists (
+                select 1 from "Message_v2" m where m."chatId" = ch."id"
+              )`),
+      scalar(sql`select count(distinct m."chatId")::text as count from "Message_v2" m
+            join "Chat" ch on ch."id" = m."chatId"
+            join "User" u on u."id" = ch."userId"
+            where not exists (
+              select 1 from "ImmigrationConversation" c where c."chatId" = m."chatId"
+            )
+              and u."email" is not null`),
+      scalar(sql`select count(distinct m."chatId")::text as count from "Message_v2" m
+            join "Chat" ch on ch."id" = m."chatId"
+            join "User" u on u."id" = ch."userId"
+            where not exists (
+              select 1 from "ImmigrationConversation" c where c."chatId" = m."chatId"
+            )
+              and u."email" is null`),
+      scalar(sql`select count(distinct m."chatId")::text as count from "Message_v2" m
+            join "Chat" ch on ch."id" = m."chatId"
+            where not exists (
+              select 1 from "ImmigrationConversation" c where c."chatId" = m."chatId"
+            )
+              and ch."userId" is null`),
+    ]);
+
     console.log(
       JSON.stringify({
         event: "phase12_stage1_audit",
@@ -236,6 +276,18 @@ async function main() {
           conversationTurns,
         },
         conversationTurnLedgerPresent: turnLedgerPresent,
+        legacyChatClassification: {
+          chats,
+          messagesWithoutConversationRow: messagesWithoutConversation,
+          chatsWithMessagesAndNoConversationRow,
+          chatsWithoutConversationRowAndNoMessages,
+          messagesInWidgetChats: conversationMessages,
+          messagesWithoutConversationRowOwnedByRegisteredUser:
+            legacyOwnedByRegisteredUser,
+          messagesWithoutConversationRowOwnedByGuest: legacyOwnedByGuest,
+          messagesWithoutConversationRowInOtherAccount: legacyInOtherAccount,
+          note: "Read-only classification of pre-conversation rows. Legacy chats now appear in owner history as origin=legacy_chat with legalMatterId=null; nothing is created, rewritten or backfilled.",
+        },
         findings: {
           emptyConversations,
           emptyRecentConversations,

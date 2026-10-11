@@ -30,6 +30,13 @@ type Fixtures = {
   messageChatId: string;
   documentIds: string[];
   chatId: string;
+  /** Owner chat with messages but no ImmigrationConversation row. */
+  legacyChatId: string;
+  legacyMessageIds: string[];
+  /** Owner chat with no conversation row and no messages. */
+  emptyChatId: string;
+  /** Another account's legacy chat. */
+  foreignLegacyChatId: string;
 };
 
 function timestamp(base: number, offsetMs: number) {
@@ -56,7 +63,9 @@ test(
       await assertConversationPagination(queries, fixtures);
       await assertMessagePagination(queries, fixtures);
       await assertDocumentHistoryPagination(queries, fixtures);
+      await assertLegacyChatCompatibility(sql, queries, fixtures);
       await assertTurnDurability(queries, fixtures);
+      await assertConcurrentTurnExecution(sql, queries, fixtures);
       await assertOwnershipIsolation(queries, fixtures);
     } finally {
       if (fixtures) {
@@ -160,6 +169,58 @@ async function seed(
     `;
   }
 
+  // Phase 12 Stage 1 R1 legacy fixtures: owner chats that hold messages but
+  // have no ImmigrationConversation row, one empty chat, and a foreign legacy
+  // chat. None of them may be modified by the read paths under test.
+  const legacyChatId = randomUUID();
+  const emptyChatId = randomUUID();
+  const foreignLegacyChatId = randomUUID();
+  const legacyMessageIds = [randomUUID(), randomUUID()];
+  const legacyChatRows: Array<{
+    id: string;
+    userId: string;
+    title: string;
+    createdAt: Date;
+  }> = [
+    {
+      id: legacyChatId,
+      userId: ownerA.id,
+      title: "Phase12 legacy chat",
+      createdAt: timestamp(base, -600_000),
+    },
+    {
+      id: emptyChatId,
+      userId: ownerA.id,
+      title: "Phase12 empty chat",
+      createdAt: timestamp(base, -500_000),
+    },
+    {
+      id: foreignLegacyChatId,
+      userId: ownerB.id,
+      title: "Phase12 foreign legacy chat",
+      createdAt: timestamp(base, -400_000),
+    },
+  ];
+  for (const row of legacyChatRows) {
+    await sql`
+      insert into "Chat" ("id", "createdAt", "title", "userId", "visibility")
+      values (${row.id}, ${row.createdAt}, ${row.title}, ${row.userId}, 'private')
+    `;
+  }
+  for (const [index, messageId] of legacyMessageIds.entries()) {
+    await sql`
+      insert into "Message_v2" ("id", "chatId", "role", "parts", "attachments", "createdAt")
+      values (
+        ${messageId},
+        ${legacyChatId},
+        ${index === 0 ? "user" : "assistant"},
+        ${sql.json([{ type: "text", text: `phase12 legacy message ${index}` }])},
+        ${sql.json([])},
+        ${timestamp(base, -600_000 + index * 1000)}
+      )
+    `;
+  }
+
   return {
     ownerA: ownerA.id,
     ownerB: ownerB.id,
@@ -167,6 +228,10 @@ async function seed(
     messageChatId,
     documentIds,
     chatId: conversations[0] as string,
+    legacyChatId,
+    legacyMessageIds,
+    emptyChatId,
+    foreignLegacyChatId,
   };
 }
 
@@ -192,8 +257,17 @@ async function assertConversationPagination(
     cursor = { timestamp: last.updatedAt.getTime(), id: last.chatId };
   }
 
-  assert.equal(seen.length, fixtures.conversations.length);
-  assert.equal(new Set(seen).size, fixtures.conversations.length);
+  const eligible = [...fixtures.conversations, fixtures.legacyChatId];
+  assert.equal(seen.length, eligible.length);
+  assert.equal(new Set(seen).size, eligible.length);
+  assert.ok(
+    seen.includes(fixtures.legacyChatId),
+    "a legacy chat with messages must stay visible in history"
+  );
+  assert.ok(
+    !seen.includes(fixtures.emptyChatId),
+    "a chat with no conversation row and no messages is not history"
+  );
   const timestamps = await Promise.all(
     seen.map(async (chatId) => {
       const conversation = await queries.getImmigrationConversationByChatId({
@@ -211,7 +285,8 @@ async function assertConversationPagination(
   }
   assert.equal(
     await queries.countImmigrationConversations({ userId: fixtures.ownerA }),
-    fixtures.conversations.length
+    eligible.length,
+    "totalCount must describe the same eligible set as the list"
   );
 }
 
@@ -330,16 +405,82 @@ async function assertTurnDurability(
   assert.equal(duplicateInsert.inserted, false);
 
   const turnId = claims[0]?.turn.id as string;
-  await queries.storeConversationTurnPendingAssistantParts({
+  const ownerId = "phase12-owner-a";
+  const acquired = await queries.acquireConversationTurnExecution({
     turnId,
+    ownerId,
+    leaseMs: 60_000,
+    now,
+  });
+  assert.equal(acquired?.executionOwnerId, ownerId);
+  assert.equal(acquired?.executionAttempt, 1);
+
+  // A second owner cannot take a live lease, and a foreign owner cannot write.
+  assert.equal(
+    await queries.acquireConversationTurnExecution({
+      turnId,
+      ownerId: "phase12-owner-b",
+      leaseMs: 60_000,
+      now,
+    }),
+    null
+  );
+  assert.equal(
+    await queries.storeConversationTurnPendingAssistantParts({
+      turnId,
+      ownerId: "phase12-owner-b",
+      parts: [{ type: "text", text: "injected" }],
+      now,
+    }),
+    null
+  );
+
+  const pending = await queries.storeConversationTurnPendingAssistantParts({
+    turnId,
+    ownerId,
     parts: [{ type: "text", text: "phase12 pending answer" }],
     now,
   });
-  const completed = await queries.completeConversationTurn({
+  assert.equal(Array.isArray(pending?.pendingAssistantParts), true);
+
+  // A foreign owner may not complete or fail this turn.
+  const foreignComplete = await queries.completeConversationTurn({
     turnId,
+    ownerId: "phase12-owner-b",
     assistantMessageId: randomUUID(),
     now,
   });
+  assert.notEqual(foreignComplete?.status, "assistant_persisted");
+  assert.equal(
+    await queries.failConversationTurn({
+      turnId,
+      ownerId: "phase12-owner-b",
+      errorCode: "foreign_attempt",
+      now,
+    }),
+    null
+  );
+
+  const completed = await queries.completeConversationTurn({
+    turnId,
+    ownerId,
+    assistantMessageId: randomUUID(),
+    now,
+  });
+  assert.equal(completed?.status, "assistant_persisted");
+
+  // An obsolete attempt can never overwrite or re-complete the turn.
+  const staleComplete = await queries.completeConversationTurn({
+    turnId,
+    ownerId: "phase12-owner-b",
+    assistantMessageId: randomUUID(),
+    now,
+  });
+  assert.equal(staleComplete?.status, "assistant_persisted");
+  assert.equal(
+    staleComplete?.assistantMessageId,
+    completed?.assistantMessageId
+  );
   assert.equal(completed?.status, "assistant_persisted");
   assert.equal(completed?.pendingAssistantParts, null);
 
@@ -369,6 +510,284 @@ async function assertOwnershipIsolation(
     }),
     null
   );
+}
+
+/**
+ * Phase 12 Stage 1 R1 historical compatibility: a chat that holds messages but
+ * has no `ImmigrationConversation` row stays visible and readable, an empty chat
+ * without a conversation row stays hidden, and no read path mutates the data.
+ */
+/**
+ * Phase 12 Stage 1 R1 historical compatibility: a chat that holds messages but
+ * has no `ImmigrationConversation` row stays visible and readable, an empty chat
+ * without a conversation row stays hidden, and no read path mutates the data.
+ */
+async function assertLegacyChatCompatibility(
+  sql: ReturnType<typeof postgres>,
+  queries: typeof import("@/lib/db/queries"),
+  fixtures: Fixtures
+) {
+  const listed = await queries.listImmigrationConversationsPage({
+    userId: fixtures.ownerA,
+    limit: 200,
+    cursor: null,
+  });
+  const legacyEntry = listed.conversations.find(
+    (conversation) => conversation.chatId === fixtures.legacyChatId
+  );
+  assert.ok(legacyEntry, "the legacy chat must be listed");
+  assert.equal(legacyEntry.origin, "legacy_chat");
+  assert.equal(legacyEntry.legalMatterId, null);
+  assert.equal(legacyEntry.chatTitle, "Phase12 legacy chat");
+  assert.ok(
+    listed.conversations.every(
+      (conversation) => conversation.chatId !== fixtures.emptyChatId
+    ),
+    "an empty chat without a conversation row must not be listed"
+  );
+  const widgetEntry = listed.conversations.find(
+    (conversation) => conversation.chatId === fixtures.chatId
+  );
+  assert.equal(widgetEntry?.origin, "immigration");
+
+  // Owner-authorized read of the legacy chat; another account is refused.
+  const legacySummary = await queries.getOwnedLegacyChatSummary({
+    chatId: fixtures.legacyChatId,
+    userId: fixtures.ownerA,
+  });
+  assert.equal(legacySummary?.origin, "legacy_chat");
+  assert.equal(legacySummary?.legalMatterId, null);
+  assert.equal(
+    await queries.getOwnedLegacyChatSummary({
+      chatId: fixtures.legacyChatId,
+      userId: fixtures.ownerB,
+    }),
+    null,
+    "another account must never read this legacy chat"
+  );
+  assert.equal(
+    await queries.getOwnedLegacyChatSummary({
+      chatId: fixtures.foreignLegacyChatId,
+      userId: fixtures.ownerA,
+    }),
+    null
+  );
+
+  const messages = await queries.listMessagesForChatPage({
+    chatId: fixtures.legacyChatId,
+    userId: fixtures.ownerA,
+    limit: 50,
+    olderThan: null,
+  });
+  assert.deepEqual(
+    messages.messages.map((message) => message.id).sort(),
+    [...fixtures.legacyMessageIds].sort(),
+    "legacy message identifiers must be preserved"
+  );
+  const foreignMessages = await queries.listMessagesForChatPage({
+    chatId: fixtures.legacyChatId,
+    userId: fixtures.ownerB,
+    limit: 50,
+    olderThan: null,
+  });
+  assert.equal(foreignMessages.messages.length, 0);
+
+  // No read path may create or modify conversation rows or messages.
+  const [row] = (await sql`
+    select count(*)::int as total
+    from "ImmigrationConversation" c
+    join "Chat" ch on ch."id" = c."chatId"
+    where ch."userId" = ${fixtures.ownerA}
+  `) as unknown as { total: number }[];
+  assert.equal(
+    Number(row?.total ?? -1),
+    fixtures.conversations.length,
+    "reads must never backfill a missing conversation row"
+  );
+}
+
+/**
+ * Phase 12 Stage 1 R1 exclusive execution: real concurrent requests against real
+ * PostgreSQL. Exactly one request may own the model stage for a client turn, so
+ * exactly one model invocation and exactly one assistant message can result.
+ */
+async function assertConcurrentTurnExecution(
+  sql: ReturnType<typeof postgres>,
+  queries: typeof import("@/lib/db/queries"),
+  fixtures: Fixtures
+) {
+  const runtime = await import("@/lib/conversations/runtime");
+  const { deterministicMessageId } = await import(
+    "@/lib/conversations/turn-ledger"
+  );
+  const service = runtime.getConversationTurnService();
+  const clientTurnId = `phase12-concurrency-${randomUUID()}`;
+  const question = "phase12 concurrency question";
+  const parts = [
+    { type: "text", text: "phase12 concurrency answer" },
+    { type: "metadata", citations: [], compactSources: [] },
+  ];
+
+  // Four simultaneous route-equivalent requests for the same client turn.
+  const attempts = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      service.beginTurn({
+        userId: fixtures.ownerA,
+        chatId: fixtures.chatId,
+        clientTurnId,
+        question,
+        assistantMode: "default",
+      })
+    )
+  );
+
+  const executable = attempts.filter((attempt) => attempt.ok);
+  assert.equal(
+    executable.length,
+    1,
+    "exactly one concurrent request may execute the model"
+  );
+  assert.equal(
+    attempts.filter((attempt) => attempt.kind === "in_progress").length,
+    3
+  );
+
+  // The model stage runs only for the lease holder.
+  let modelInvocations = 0;
+  for (const attempt of attempts) {
+    if (!attempt.ok) {
+      continue;
+    }
+    modelInvocations += 1;
+    const completed = await service.completeTurn({
+      userId: fixtures.ownerA,
+      chatId: fixtures.chatId,
+      clientTurnId,
+      parts,
+      executionOwnerId: attempt.executionOwnerId as string,
+    });
+    assert.equal(completed.saved, true);
+    assert.equal(completed.linkVerified, true);
+    assert.equal(
+      completed.assistantMessageId,
+      deterministicMessageId(`assistant:${attempt.turnId as string}`)
+    );
+  }
+  assert.equal(modelInvocations, 1);
+
+  const turn = await queries.getConversationTurnRecord({
+    chatId: fixtures.chatId,
+    clientTurnId,
+  });
+  assert.equal(turn?.status, "assistant_persisted");
+  assert.equal(turn?.executionAttempt, 1);
+  const userMessageId = turn?.userMessageId as string;
+  const assistantMessageId = turn?.assistantMessageId as string;
+
+  const storedRows = (await sql`
+    select "id", "role" from "Message_v2"
+    where "chatId" = ${fixtures.chatId}
+      and "id" in (${userMessageId}, ${assistantMessageId})
+  `) as unknown as { id: string; role: string }[];
+  assert.equal(
+    storedRows.filter((row) => row.role === "user").length,
+    1,
+    "exactly one durable user message"
+  );
+  assert.equal(
+    storedRows.filter((row) => row.role === "assistant").length,
+    1,
+    "exactly one durable assistant message"
+  );
+
+  // A retry replays the stored answer instead of generating another one.
+  const replay = await service.beginTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    question,
+    assistantMode: "default",
+  });
+  assert.equal(replay.kind, "replayed");
+  assert.equal(replay.replay?.assistantMessageId, assistantMessageId);
+  assert.equal(modelInvocations, 1);
+
+  // A late completion from an obsolete attempt may not overwrite the answer.
+  const obsolete = await service.completeTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    parts: [{ type: "text", text: "obsolete answer that must not win" }],
+    executionOwnerId: "phase12-obsolete-attempt",
+  });
+  assert.equal(obsolete.assistantMessageId, assistantMessageId);
+  const afterObsolete = await queries.getMessageForChat({
+    chatId: fixtures.chatId,
+    messageId: assistantMessageId,
+  });
+  assert.deepEqual(
+    afterObsolete?.parts,
+    parts,
+    "the stored answer must never be replaced by an obsolete attempt"
+  );
+
+  // Stale-lease recovery on real PostgreSQL: a live lease cannot be stolen, an
+  // expired (crashed) lease can be taken over, and the obsolete attempt can no
+  // longer write anything for that turn.
+  const staleTurnId = `phase12-stale-${randomUUID()}`;
+  const stalled = await service.beginTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId: staleTurnId,
+    question,
+    assistantMode: "default",
+  });
+  assert.equal(stalled.ok, true);
+  assert.equal(
+    await queries.acquireConversationTurnExecution({
+      turnId: stalled.turnId as string,
+      ownerId: "phase12-newer-attempt",
+      leaseMs: 60_000,
+      now: new Date(),
+    }),
+    null,
+    "a live lease must not be stolen before it expires"
+  );
+
+  await sql`
+    update "ConversationTurn"
+    set "executionLeaseExpiresAt" = now() - interval '1 minute'
+    where "id" = ${stalled.turnId as string}
+  `;
+  const takeover = await service.beginTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId: staleTurnId,
+    question,
+    assistantMode: "default",
+  });
+  assert.equal(takeover.ok, true);
+  assert.notEqual(takeover.executionOwnerId, stalled.executionOwnerId);
+
+  const stolenWrite = await service.completeTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId: staleTurnId,
+    parts: [{ type: "text", text: "stale answer" }],
+    executionOwnerId: stalled.executionOwnerId as string,
+  });
+  assert.equal(stolenWrite.assistantTurnPersisted, false);
+  assert.equal(stolenWrite.saved, false);
+  assert.equal(stolenWrite.errorCode, "turn_execution_lease_lost");
+
+  const takeoverWrite = await service.completeTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId: staleTurnId,
+    parts: [{ type: "text", text: "takeover answer" }],
+    executionOwnerId: takeover.executionOwnerId as string,
+  });
+  assert.equal(takeoverWrite.saved, true);
 }
 
 async function cleanup(sql: ReturnType<typeof postgres>, fixtures: Fixtures) {

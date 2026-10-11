@@ -75,12 +75,34 @@ blocked). Do not mark a line passed if it was skipped.
    Expected: the answer is saved without generating a second answer.
 3. With the database temporarily stopped (only if you can do so safely on a
    disposable environment), confirm the answer is not reported as saved.
+4. **R1 — duplicate submission.** Send the same message twice in quick
+   succession (double-click, or send on a phone while the desktop request is
+   still running). Expected: exactly one answer; the duplicate shows the
+   "still being answered" notice, and checking again shows the single saved
+   answer. There must never be two answers or two copies of the question in the
+   saved history.
+5. **R1 — persistence failure is explicit.** If a message cannot be saved
+   (database unavailable), expected: the message is not answered with a false
+   "saved" state; the UI asks you to send it again, and the retry succeeds once
+   the database is back. A half-saved turn must never appear as saved.
+6. **R1 — legacy conversations are readable.** Any conversation created before
+   Phase 12 (a chat that has messages but no conversation record) must now
+   appear in the history list and open read-only with its original messages,
+   timestamps and citations. Nothing about it may be altered by opening it.
 
 ## 6. Evidence to record
 
 For each step: device, browser, timestamp, expected vs observed, screenshot or
 note. Record the exact failing step identifier if any step fails; do not
 summarize a failure as a pass.
+
+## 7. Owner-authorized items that are NOT part of this procedure
+
+- Applying migration `0024`/`0025` to any non-disposable database.
+- Fixing the inherited production build blocker (`lib/db/queries.ts`
+  retained-VIP typing); the smallest typing-only correction is documented in the
+  handoff and needs an explicit decision because it touches paused payment code.
+- Any backfill of the legacy chats, or any change to existing customer data.
 
 **Gate rule:** Stage 1 is not accepted until this procedure has been executed
 and recorded, in addition to independent code review of the Stage 1 diff.

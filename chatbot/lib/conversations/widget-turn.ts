@@ -11,6 +11,7 @@ import {
   CLIENT_TURN_ID_PATTERN,
   ConversationTurnInputError,
   ConversationTurnOwnershipError,
+  type TurnExecutionHeartbeat,
 } from "./turn-ledger";
 
 /**
@@ -29,8 +30,24 @@ export type WidgetTurnPersistence = {
   errorCode: string | null;
   replayed: boolean;
   attempts: number;
+  /**
+   * True only when the user message and the assistant answer are both durably
+   * stored and linked. The client must never present a turn as saved otherwise.
+   */
+  saved: boolean;
   retryable: boolean;
+  /** Suggested delay before retrying an in-progress or failed turn. */
+  retryAfterMs: number | null;
 };
+
+export type {
+  BeginTurnResult,
+  CompleteTurnResult,
+  ConversationTurnRecord,
+  ConversationTurnStatus,
+  PersistedMessageRecord,
+  TurnExecutionHeartbeat as WidgetTurnHeartbeat,
+} from "./turn-ledger";
 
 export type WidgetReplayPayload = {
   assistantMessageId: string;
@@ -41,6 +58,10 @@ export type WidgetTurnStart =
   | {
       status: "proceed";
       persistence: WidgetTurnPersistence;
+      /** Fencing token required to complete or fail this executed turn. */
+      executionOwnerId: string;
+      /** Durable turn row whose execution lease must be renewed while running. */
+      turnId: string;
       pendingAssistantParts: unknown[] | null;
     }
   | {
@@ -52,9 +73,23 @@ export type WidgetTurnStart =
       /** A previous attempt generated an answer that was not durably stored. */
       status: "resume";
       persistence: WidgetTurnPersistence;
+      executionOwnerId: string;
       parts: unknown[];
     }
   | { status: "conflict"; persistence: WidgetTurnPersistence }
+  | {
+      /**
+       * The durable user turn could not be established for an authenticated
+       * conversation. No model call may run and the client must retry.
+       */
+      status: "persistence_failed";
+      persistence: WidgetTurnPersistence;
+    }
+  | {
+      /** Another live request owns this turn and is still producing the answer. */
+      status: "in_progress";
+      persistence: WidgetTurnPersistence;
+    }
   | { status: "unauthorized"; persistence: null }
   /**
    * The request has no owned conversation to attach durable history to (legacy
@@ -62,6 +97,20 @@ export type WidgetTurnStart =
    * response must not claim persistence.
    */
   | { status: "unscoped" };
+
+export type WidgetTurnDecision = {
+  /** True only for `proceed`: no other status may reach the model stage. */
+  runModel: boolean;
+  kind: WidgetTurnStart["status"];
+};
+
+/**
+ * Single decision table shared by the Fast, Legal Check and Premium routes so
+ * that "exactly one model execution per turn" cannot drift per route.
+ */
+export function widgetTurnDecision(start: WidgetTurnStart): WidgetTurnDecision {
+  return { runModel: start.status === "proceed", kind: start.status };
+}
 
 function persistenceState(input: {
   clientTurnId: string;
@@ -71,17 +120,27 @@ function persistenceState(input: {
   errorCode?: string | null;
   replayed?: boolean;
   attempts?: number;
+  saved?: boolean;
+  retryable?: boolean;
+  retryAfterMs?: number | null;
 }): WidgetTurnPersistence {
   const errorCode = input.errorCode ?? null;
+  const assistantTurnPersisted = input.assistantTurnPersisted === true;
+  const saved =
+    input.saved === true &&
+    assistantTurnPersisted &&
+    input.userTurnPersisted === true;
   return {
     clientTurnId: input.clientTurnId,
     userTurnPersisted: input.userTurnPersisted,
-    assistantTurnPersisted: input.assistantTurnPersisted === true,
+    assistantTurnPersisted,
     assistantMessageId: input.assistantMessageId ?? null,
     errorCode,
     replayed: input.replayed === true,
     attempts: input.attempts ?? 1,
-    retryable: input.assistantTurnPersisted !== true,
+    saved,
+    retryable: input.retryable ?? !saved,
+    retryAfterMs: input.retryAfterMs ?? null,
   };
 }
 
@@ -136,10 +195,21 @@ export async function beginWidgetTurn(input: {
     userTurnPersisted: started.userTurnPersisted,
     errorCode: started.durabilityError,
     attempts: started.attemptCount,
+    retryAfterMs: started.retryAfterMs,
   });
 
   if (started.kind === "conflict") {
     return { status: "conflict", persistence };
+  }
+
+  if (started.kind === "persistence_failed") {
+    // The durable user turn could not be established. Failing closed here keeps
+    // an unpersistable answer out of the customer's history.
+    return { status: "persistence_failed", persistence };
+  }
+
+  if (started.kind === "in_progress") {
+    return { status: "in_progress", persistence };
   }
 
   if (started.kind === "replayed" && started.replay) {
@@ -150,12 +220,26 @@ export async function beginWidgetTurn(input: {
         assistantTurnPersisted: true,
         assistantMessageId: started.replay.assistantMessageId,
         replayed: true,
+        saved: true,
         errorCode: null,
         retryable: false,
       },
       replay: {
         assistantMessageId: started.replay.assistantMessageId,
         parts: started.replay.parts,
+      },
+    };
+  }
+
+  if (!started.executionOwnerId || !started.turnId) {
+    // Defensive: the service never reports an executable turn without a lease
+    // token. Without one a model run could not be recorded, so fail closed.
+    return {
+      status: "persistence_failed",
+      persistence: {
+        ...persistence,
+        errorCode: persistence.errorCode ?? "turn_lease_not_issued",
+        retryable: true,
       },
     };
   }
@@ -167,6 +251,7 @@ export async function beginWidgetTurn(input: {
     return {
       status: "resume",
       persistence,
+      executionOwnerId: started.executionOwnerId,
       parts: started.pendingAssistantParts,
     };
   }
@@ -174,8 +259,24 @@ export async function beginWidgetTurn(input: {
   return {
     status: "proceed",
     persistence,
+    executionOwnerId: started.executionOwnerId,
+    turnId: started.turnId,
     pendingAssistantParts: started.pendingAssistantParts,
   };
+}
+
+/**
+ * Starts lease renewal for an executed turn. Callers must stop it in a `finally`
+ * so a finished or failed request never keeps extending its lease.
+ */
+export function startWidgetTurnHeartbeat(input: {
+  turnId: string;
+  executionOwnerId: string;
+}): TurnExecutionHeartbeat {
+  return getConversationTurnService().startExecutionHeartbeat({
+    turnId: input.turnId,
+    ownerId: input.executionOwnerId,
+  });
 }
 
 export async function completeWidgetTurn(input: {
@@ -186,7 +287,7 @@ export async function completeWidgetTurn(input: {
   metadata: Record<string, unknown>;
   userTurnPersisted: boolean;
   attempts: number;
-  assistantMessageId?: string | null;
+  executionOwnerId: string;
 }): Promise<WidgetTurnPersistence> {
   const service = getConversationTurnService();
   const parts = buildAssistantMessageParts({
@@ -199,7 +300,7 @@ export async function completeWidgetTurn(input: {
       chatId: input.chatId,
       clientTurnId: input.clientTurnId,
       parts,
-      assistantMessageId: input.assistantMessageId ?? null,
+      executionOwnerId: input.executionOwnerId,
     });
     return persistenceState({
       clientTurnId: input.clientTurnId,
@@ -208,6 +309,8 @@ export async function completeWidgetTurn(input: {
       assistantMessageId: completed.assistantMessageId,
       errorCode: completed.errorCode,
       attempts: input.attempts,
+      saved: completed.saved,
+      retryable: completed.retryable,
     });
   } catch (error) {
     if (
@@ -235,6 +338,7 @@ export async function failWidgetTurn(input: {
   chatId: string;
   clientTurnId: string;
   errorCode: string;
+  executionOwnerId?: string | null;
 }): Promise<void> {
   const service = getConversationTurnService();
   await service.failTurn(input).catch(() => false);
@@ -251,6 +355,7 @@ export async function completeWidgetTurnFromParts(input: {
   parts: unknown[];
   userTurnPersisted: boolean;
   attempts: number;
+  executionOwnerId: string;
 }): Promise<WidgetTurnPersistence> {
   const service = getConversationTurnService();
   try {
@@ -259,6 +364,7 @@ export async function completeWidgetTurnFromParts(input: {
       chatId: input.chatId,
       clientTurnId: input.clientTurnId,
       parts: input.parts,
+      executionOwnerId: input.executionOwnerId,
     });
     return persistenceState({
       clientTurnId: input.clientTurnId,
@@ -268,6 +374,8 @@ export async function completeWidgetTurnFromParts(input: {
       errorCode: completed.errorCode,
       replayed: true,
       attempts: input.attempts,
+      saved: completed.saved,
+      retryable: completed.retryable,
     });
   } catch {
     return persistenceState({

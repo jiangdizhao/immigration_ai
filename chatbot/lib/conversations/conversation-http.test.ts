@@ -257,10 +257,13 @@ test("a single page without a cursor keeps the backward compatible response shap
   assert.equal(body.hasMore, false);
   assert.equal(body.nextCursor, null);
   assert.equal(body.conversations.length, 3);
+  // `origin` is the additive Phase 12 Stage 1 R1 field that marks a retained
+  // legacy chat; every pre-existing field keeps its name and meaning.
   assert.deepEqual(Object.keys(body.conversations[0]).sort(), [
     "chatId",
     "createdAt",
     "legalMatterId",
+    "origin",
     "title",
     "updatedAt",
   ]);
