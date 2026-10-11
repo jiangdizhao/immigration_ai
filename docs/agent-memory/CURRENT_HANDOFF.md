@@ -3,7 +3,7 @@
 **Updated:** 2026-10-11
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
 **Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
-**R1 review-correction commit:** see the completion record below (`feat(phase12): single-execution turn lease, fail-closed persistence, legacy history`) — remotely verified after push
+**R1 review-correction commit:** `b5d2fd40363c6f7eac0ea704448c5fc786acf97e` — `fix(phase12): single-execution turn lease, fail-closed persistence, legacy history (R1)` (remote-verified)
 **Stage 1 base:** `phase12-user-data-reliability-policy-intelligence@3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -56,7 +56,7 @@ Gate 1 was NOT accepted after review; the review raised four Stage-1 defects and
 
 ### Immediate next action
 
-Independent review of the Stage 1 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android. Stage 2 must not start before Stage 1 is accepted.
+Independent re-review of the Stage 1 R1 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android (steps 4-6 cover the R1 duplicate-submission, explicit-persistence-failure and legacy-history behaviours). Stage 2 must not start before Stage 1 is accepted; Gate 1 remains pending and is NOT claimed as passed.
 
 ### Stage 1 environment side effects (for the owner)
 
