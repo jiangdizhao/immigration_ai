@@ -1013,3 +1013,16 @@ Same-account historical visibility and file retrieval must be complete for retai
 **Prior decision clarification:** D-053/D-054's existing automated Policy Intelligence publishing pipeline remains operational; D-057 permits a separately authorized lawyer editorial **exception** pathway and broader official candidate discovery without imposing a mandatory lawyer review step on every automatically eligible policy. Manual review does not allow unsupported legal facts or fake effective dates to be labeled verified. Previous architecture/safety and evidence rules remain in force.
 
 **Scope restriction:** This acceptance authorizes creating the Phase 12 branch and committing plan/state documents, **not** implementing Stage 1, merging, deploying, applying migrations or changing Stripe settings. Existing WeChat/Alipay payment activation hold remains in effect. Owner will request Stage 1 coding-model prompt after local sync.
+
+## D-058 — Stage 3 includes independent lawyer-authored manual policy publication
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED — PLAN ADDITION; no implementation authorized
+
+The lawyer requested and the owner explicitly approved **first-class, fully manual policy authoring and publication** as part of **Phase 12 Stage 3** (not a separate fourth milestone). An expressly authorized lawyer/Policy Editor can create a new policy from scratch in the web UI, write the text and bilingual fields personally, assign accurate proposed/announced/in-force status and source references, save a draft, preview, publish and later edit/archive/restore. The manual creation/publishing workflow is **independent of AI**: no discovery candidate, AI generation, AI relevance score, AI verification, `evaluatePublicationGate()` automated eligibility or LLM API call is a prerequisite or side effect.
+
+Manual content must be durable first-class policy content in the normal public index/detail alongside automated entries (not just `registry.ts` fallback), clearly labeled human authored and never AI-generated. Preserve explicit source/provenance, human editorial accountability, bilingual text entered by the lawyer or an explicit non-AI locale policy, verifiable temporal/legal status, append-only audit trail and published revision history, server-side RBAC, safe text/URL validation and concurrent editing protections. Deterministic mechanical validation and human editorial responsibility remain; no claim that a manual publication itself proves a proposal is law.
+
+**Relationship to D-053/D-054/D-057:** Scheduled automated policy discovery/publication and separately authorized human override of blocked AI candidates remain operational, but **are distinct workflows** from independent original human policy creation. No mandatory lawyer gate is added to previously trusted automated publishing. Project remains optional-interface-only, Stage 1 and Stage 2 scopes are unchanged. This records scope only; no code, database, migration, merge, deployment or payment action is authorized by this decision.
+
+**Specification and Gate 3 tests:** `docs/agent-memory/tasks/PHASE12_USER_DATA_WORKSPACE_POLICY_2026-10-11.md`. Stage 3 cannot be accepted without real no-AI manual create/draft/preview/publish/reload/security/audit/regression tests.
