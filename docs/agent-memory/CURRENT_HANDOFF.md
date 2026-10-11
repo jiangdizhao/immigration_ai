@@ -2,6 +2,7 @@
 
 **Updated:** 2026-10-11
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
+**Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
 **Stage 1 base:** `phase12-user-data-reliability-policy-intelligence@3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
 **P11-001 verified checkpoint:** `4bc039c60f72e61e2e3b6a7cc26a88a862d5c1e3`  
@@ -43,6 +44,12 @@
 ### Immediate next action
 
 Independent review of the Stage 1 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android. Stage 2 must not start before Stage 1 is accepted.
+
+### Stage 1 environment side effects (for the owner)
+
+- The isolated disposable database `immigration_ai_phase12_stage1_test` exists on the local PostgreSQL server (same host/port as the application database) and contains only synthetic test data (`@example.test` accounts). Drop it with `pnpm run phase12:test-db drop --confirm-drop` if you do not want to keep it.
+- No migration was applied to the application database (`chatbot`) or to `immigration_legal`; `ConversationTurn` exists only in the isolated test database.
+- Read-only audit evidence (`chatbot` database): 169 chats, 165 conversations, 380 messages, 6 documents, 2 processing runs, 2 evidence units, 36 empty conversations (10 recent, 0 stale-with-later-activity), 20 messages in chats without an `ImmigrationConversation` row (legacy), 2 `cleanup_pending` upload intents, 3 soft-deleted documents, 0 ownership mismatches, 0 documents marked complete without evidence, 0 duplicate message groups, `ConversationTurn` absent (pre-migration).
 
 
 **Planning branch:** `phase12-user-data-reliability-policy-intelligence` created from canonical `phase11-chinese-service-platform-ui-rebase@0ed11150015773573cd7e1d0396134e696bf7357`. **Authority:** owner approved a compact three-stage plan and authorized this **documentation-only branch and commit**. This is NOT authorization to implement Stage 1, run migrations, alter existing customer data, deploy, or merge. Owner first syncs branch locally; only then will request the Stage 1 coding-model prompt.
