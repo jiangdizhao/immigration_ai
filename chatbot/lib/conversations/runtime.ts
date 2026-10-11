@@ -3,8 +3,8 @@ import "server-only";
 import {
   acquireConversationTurnExecution,
   claimConversationTurn,
-  completeConversationTurn,
   failConversationTurn,
+  finalizeConversationTurnAtomic,
   getConversationTurnRecord,
   getImmigrationConversationByChatId,
   getMessageForChat,
@@ -14,10 +14,47 @@ import {
   renewConversationTurnExecution,
   storeConversationTurnPendingAssistantParts,
 } from "@/lib/db/queries";
-import {
-  type ConversationTurnRepository,
-  createConversationTurnService,
+import type { ConversationTurnRow } from "@/lib/db/schema";
+import type {
+  ConversationTurnRecord,
+  ConversationTurnRepository,
+  TurnFinalizeResult,
 } from "./turn-ledger";
+import { createConversationTurnService } from "./turn-ledger";
+
+/**
+ * Phase 12 Stage 1 R2: assistant persistence is a single atomic operation, so
+ * the repository exposes `finalizeTurn` instead of a separate message insert
+ * plus turn completion.
+ */
+function toFinalizeResult(
+  result: Awaited<ReturnType<typeof finalizeConversationTurnAtomic>>
+): TurnFinalizeResult {
+  if (result.outcome === "write_failed") {
+    return { outcome: "write_failed" };
+  }
+  if (result.outcome === "fence_lost") {
+    return {
+      outcome: "fence_lost",
+      turn: result.turn ? toTurnRecord(result.turn) : null,
+    };
+  }
+  if (result.outcome === "message_conflict") {
+    return {
+      outcome: "message_conflict",
+      turn: toTurnRecord(result.turn),
+    };
+  }
+  return {
+    outcome: result.outcome,
+    turn: toTurnRecord(result.turn),
+    linkVerified: result.linkVerified,
+  };
+}
+
+function toTurnRecord(row: ConversationTurnRow): ConversationTurnRecord {
+  return row;
+}
 
 const repository: ConversationTurnRepository = {
   getOwnedConversation: ({ chatId, userId }) =>
@@ -37,7 +74,9 @@ const repository: ConversationTurnRepository = {
   acquireExecution: acquireConversationTurnExecution,
   renewExecution: renewConversationTurnExecution,
   storePendingAssistantParts: storeConversationTurnPendingAssistantParts,
-  completeTurn: completeConversationTurn,
+  async finalizeTurn(input) {
+    return toFinalizeResult(await finalizeConversationTurnAtomic(input));
+  },
   failTurn: failConversationTurn,
   async insertMessageIdempotent(input) {
     const result = await insertMessageIdempotent(input);

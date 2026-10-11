@@ -3,6 +3,7 @@
 **Updated:** 2026-10-11
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
 **Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
+**R2 review-correction commit:** recorded in the completion message for this pass (verified against the remote after push)
 **R1 review-correction commit:** `b5d2fd40363c6f7eac0ea704448c5fc786acf97e` — `fix(phase12): single-execution turn lease, fail-closed persistence, legacy history (R1)` (remote-verified)
 **Stage 1 base:** `phase12-user-data-reliability-policy-intelligence@3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`
 **Phase 11 base:** `3b3653202f9b067fbed4adfd410edc02cb7215cc`  
@@ -21,6 +22,19 @@
 ## Phase 12 Stage 1 — Account-centred durable history and documents (IMPLEMENTED 2026-10-11; awaiting external review)
 
 **Status:** IMPLEMENTED on `codex/phase12-stage1-user-data-reliability`. Stage 1 is NOT accepted: independent code review plus the owner cross-device procedure (`docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`) are still required. No merge, deploy or live migration has happened.
+
+### R2 review corrections (2026-10-11, same branch)
+
+A second independent review found one remaining concurrency defect: `completeTurn()` checked the lease, wrote the pending payload, then inserted the assistant message **without** the lease check inside the same database concurrency boundary, and only then performed the fenced terminal write. A request that lost its lease between the payload write and the message insert could still create the deterministic assistant message row, and the new lease owner then hit a conflicting row and could not persist its legitimate answer.
+
+1. **Atomic assistant persistence (corrected).** Assistant persistence is now one transaction: `finalizeConversationTurnAtomic` locks the turn row (`SELECT … FOR UPDATE`), verifies the whole fence **inside** that boundary, reuses an identical stored message or inserts the new one, and commits the message row, the terminal `assistant_persisted` transition and the clearing of the pending payload together. `completeConversationTurn` (the old non-atomic terminal write) has been removed, and the ledger no longer inserts the assistant message at all — the transaction is the only assistant-persistence path. No transaction spans the model stage.
+2. **Whole-token fencing (corrected).** The fence is now the pair `(executionOwnerId, executionAttempt)`: acquisition increments a monotonic `executionAttempt`, and renewal, payload write, finalization and failure all require both values. A superseded attempt cannot write, renew, fail or re-complete the turn even if a later attempt's lease expires — a stale executor can no longer regain authority by re-acquiring an expired lease with its old token.
+3. **Expiry and takeover semantics (documented and tested).** Expiry alone does not revoke authority (the same owner may renew after expiry while nobody else has taken over); **takeover** revokes it, and takeover is only possible once the lease has expired. A live lease cannot be stolen.
+4. **Partial states preserved.** An identical stored message is reused untouched; a different message owning the deterministic id produces `message_conflict` and **nothing** is written (the historical row is never rewritten). A failed finalization transaction rolls back completely — the turn stays `user_persisted` with its pending payload intact — so the retry resumes the stored answer without another model call. `write_failed` and `message_conflict` release the lease (fenced) so an immediate retry can resume.
+
+**R2 test evidence (real PostgreSQL, isolated database):** the mandated deterministic interleaving is reproduced end-to-end: A acquires the lease and reaches the persistence boundary, A's lease is expired in the database, B acquires the new lease, A resumes first while B still holds the lease → A is rejected (`fence_lost`) and **no assistant message row exists**; B then finalizes → exactly one assistant message with B's content and one terminal state; A's later finalization → `already_completed` with B's message and B's content intact; a subsequent retry replays that same answer without generating again; a stale `failTurn` cannot clear the finalized state. Also covered on the real database: database error between payload and terminal persistence (complete rollback, payload intact, no orphan message, retry resumes and finalizes), duplicate completion idempotency, assistant-id collision, existing successful-turn replay, Fast/Legal Check/Premium contract parity, and all Stage 1/R1 regressions (concurrency, legacy history, pagination, ownership, DOCX, file history).
+
+**R2 validation totals:** unit suite **614/614 passed, 0 failed, 0 skipped**; PostgreSQL integration test **1 passed / 0 failed / 0 skipped**; `tsc --noEmit` shows an error set **identical to the Phase 12 base commit** (verified by normalized diff: 47 pre-existing errors, no new ones); changed-file Biome clean; `next build` compiles successfully and still fails only on the pre-existing retained-VIP typing error (unchanged, still not applied).
 
 ### R1 external review corrections (2026-10-11, same branch)
 
@@ -56,7 +70,7 @@ Gate 1 was NOT accepted after review; the review raised four Stage-1 defects and
 
 ### Immediate next action
 
-Independent re-review of the Stage 1 R1 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android (steps 4-6 cover the R1 duplicate-submission, explicit-persistence-failure and legacy-history behaviours). Stage 2 must not start before Stage 1 is accepted; Gate 1 remains pending and is NOT claimed as passed.
+Independent re-review of the Stage 1 R2 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android (steps 4-6 cover the duplicate-submission, explicit-persistence-failure and legacy-history behaviours). Stage 2 must not start before Stage 1 is accepted; Gate 1 remains pending and is NOT claimed as passed.
 
 ### Stage 1 environment side effects (for the owner)
 

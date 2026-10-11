@@ -25,6 +25,14 @@ Independent review rejected the first submission and raised four Stage-1 defects
 
 The owner cross-device procedure is pending: `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`.
 
+## R2 external review corrections (2026-10-11, same branch)
+
+A second review found one remaining concurrency defect: the assistant message insert was not inside the same concurrency boundary as the fence check, so an attempt that lost its lease between the payload write and the message insert could still create the deterministic assistant message row and block the new lease owner's legitimate answer.
+
+Corrections: assistant persistence is now a single transaction (`finalizeConversationTurnAtomic`, `SELECT … FOR UPDATE`) that verifies the whole fence inside that boundary and commits the assistant message, the terminal turn transition and the payload clearing together; the fence is the pair `(executionOwnerId, executionAttempt)` so a superseded attempt can never write, renew, fail or regain authority; the old non-atomic terminal write was removed; partial states are preserved (identical message reused untouched, conflicting id writes nothing, failed transaction rolls back completely and releases the lease so a retry resumes without another model call). Detailed record and the deterministically reproduced race are in `CURRENT_HANDOFF.md`; the durable decision is D-014.
+
+**R2 evidence:** unit suite **614/614 passed, 0 failed, 0 skipped**; PostgreSQL integration test **passed** (deterministic A/B lease takeover race, database error between payload and terminal persistence, duplicate completion, assistant-id collision, existing-turn replay, plus all Stage 1/R1 regressions); `tsc --noEmit` error set **identical to the base commit**; changed-file Biome clean; `next build` compiles and still fails only on the pre-existing retained-VIP typing error (not modified).
+
 **Gate rule (unchanged):** Stage 1 is not accepted until independent review and the owner cross-device evidence are recorded. Do not start Stage 2 before Stage 1 acceptance, and do not merge/apply migrations without explicit owner authorization.
 
 ## Phase 12 — Three-stage approved plan; implementation NOT STARTED (2026-10-11)

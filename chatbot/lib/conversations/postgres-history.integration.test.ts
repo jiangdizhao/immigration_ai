@@ -66,6 +66,8 @@ test(
       await assertLegacyChatCompatibility(sql, queries, fixtures);
       await assertTurnDurability(queries, fixtures);
       await assertConcurrentTurnExecution(sql, queries, fixtures);
+      await assertAtomicFinalizeFencing(sql, queries, fixtures);
+      await assertFinalizeDatabaseErrorRecovery(sql, queries, fixtures);
       await assertOwnershipIsolation(queries, fixtures);
     } finally {
       if (fixtures) {
@@ -414,8 +416,9 @@ async function assertTurnDurability(
   });
   assert.equal(acquired?.executionOwnerId, ownerId);
   assert.equal(acquired?.executionAttempt, 1);
+  const attempt = acquired?.executionAttempt as number;
 
-  // A second owner cannot take a live lease, and a foreign owner cannot write.
+  // A second owner cannot take a live lease, and a foreign fence cannot write.
   assert.equal(
     await queries.acquireConversationTurnExecution({
       turnId,
@@ -429,6 +432,7 @@ async function assertTurnDurability(
     await queries.storeConversationTurnPendingAssistantParts({
       turnId,
       ownerId: "phase12-owner-b",
+      executionAttempt: attempt,
       parts: [{ type: "text", text: "injected" }],
       now,
     }),
@@ -438,51 +442,80 @@ async function assertTurnDurability(
   const pending = await queries.storeConversationTurnPendingAssistantParts({
     turnId,
     ownerId,
+    executionAttempt: attempt,
     parts: [{ type: "text", text: "phase12 pending answer" }],
     now,
   });
   assert.equal(Array.isArray(pending?.pendingAssistantParts), true);
 
-  // A foreign owner may not complete or fail this turn.
-  const foreignComplete = await queries.completeConversationTurn({
+  // A foreign owner may not finalize or fail this turn.
+  const assistantMessageId = randomUUID();
+  const foreignFinalize = await queries.finalizeConversationTurnAtomic({
     turnId,
     ownerId: "phase12-owner-b",
-    assistantMessageId: randomUUID(),
+    executionAttempt: attempt,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: [{ type: "text", text: "foreign answer" }],
+    createdAt: new Date(now.getTime() + 1),
     now,
   });
-  assert.notEqual(foreignComplete?.status, "assistant_persisted");
+  assert.equal(foreignFinalize.outcome, "fence_lost");
   assert.equal(
     await queries.failConversationTurn({
       turnId,
       ownerId: "phase12-owner-b",
+      executionAttempt: attempt,
       errorCode: "foreign_attempt",
       now,
     }),
     null
   );
 
-  const completed = await queries.completeConversationTurn({
+  const completed = await queries.finalizeConversationTurnAtomic({
     turnId,
     ownerId,
-    assistantMessageId: randomUUID(),
+    executionAttempt: attempt,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: [{ type: "text", text: "phase12 integration answer" }],
+    createdAt: new Date(now.getTime() + 1),
     now,
   });
-  assert.equal(completed?.status, "assistant_persisted");
+  assert.equal(completed.outcome, "completed");
+  const storedAssistant = await queries.getMessageForChat({
+    chatId: fixtures.chatId,
+    messageId: assistantMessageId,
+  });
+  assert.equal(storedAssistant?.role, "assistant");
 
-  // An obsolete attempt can never overwrite or re-complete the turn.
-  const staleComplete = await queries.completeConversationTurn({
+  // An obsolete attempt can never re-complete or overwrite the turn.
+  const staleComplete = await queries.finalizeConversationTurnAtomic({
     turnId,
     ownerId: "phase12-owner-b",
-    assistantMessageId: randomUUID(),
+    executionAttempt: 99,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: [{ type: "text", text: "obsolete answer" }],
+    createdAt: new Date(now.getTime() + 2),
     now,
   });
-  assert.equal(staleComplete?.status, "assistant_persisted");
+  assert.equal(staleComplete.outcome, "already_completed");
+  const storedAfterStale = await queries.getMessageForChat({
+    chatId: fixtures.chatId,
+    messageId: assistantMessageId,
+  });
+  assert.deepEqual(storedAfterStale?.parts, [
+    { type: "text", text: "phase12 integration answer" },
+  ]);
   assert.equal(
-    staleComplete?.assistantMessageId,
-    completed?.assistantMessageId
+    staleComplete.outcome === "already_completed"
+      ? staleComplete.turn.assistantMessageId
+      : null,
+    completed.outcome === "completed" ? completed.turn.assistantMessageId : null
   );
-  assert.equal(completed?.status, "assistant_persisted");
-  assert.equal(completed?.pendingAssistantParts, null);
+  assert.equal(completed.outcome, "completed");
+  assert.equal(completed.turn.pendingAssistantParts, null);
 
   const read = await queries.getConversationTurnRecord({
     chatId: fixtures.chatId,
@@ -665,6 +698,7 @@ async function assertConcurrentTurnExecution(
       clientTurnId,
       parts,
       executionOwnerId: attempt.executionOwnerId as string,
+      executionAttempt: attempt.executionAttempt as number,
     });
     assert.equal(completed.saved, true);
     assert.equal(completed.linkVerified, true);
@@ -719,6 +753,7 @@ async function assertConcurrentTurnExecution(
     clientTurnId,
     parts: [{ type: "text", text: "obsolete answer that must not win" }],
     executionOwnerId: "phase12-obsolete-attempt",
+    executionAttempt: 99,
   });
   assert.equal(obsolete.assistantMessageId, assistantMessageId);
   const afterObsolete = await queries.getMessageForChat({
@@ -775,6 +810,7 @@ async function assertConcurrentTurnExecution(
     clientTurnId: staleTurnId,
     parts: [{ type: "text", text: "stale answer" }],
     executionOwnerId: stalled.executionOwnerId as string,
+    executionAttempt: stalled.executionAttempt as number,
   });
   assert.equal(stolenWrite.assistantTurnPersisted, false);
   assert.equal(stolenWrite.saved, false);
@@ -786,8 +822,318 @@ async function assertConcurrentTurnExecution(
     clientTurnId: staleTurnId,
     parts: [{ type: "text", text: "takeover answer" }],
     executionOwnerId: takeover.executionOwnerId as string,
+    executionAttempt: takeover.executionAttempt as number,
   });
   assert.equal(takeoverWrite.saved, true);
+}
+
+/**
+ * Phase 12 Stage 1 R2: the mandated deterministic interleaving for atomic
+ * assistant persistence.
+ *
+ * A acquires the lease and reaches the persistence boundary (its pending payload
+ * is stored), then A's lease expires, B takes over, and only then does A resume.
+ * A must not insert or finalize anything, B must persist exactly one correct
+ * assistant message, and a later retry must replay that same result.
+ */
+async function assertAtomicFinalizeFencing(
+  sql: ReturnType<typeof postgres>,
+  queries: typeof import("@/lib/db/queries"),
+  fixtures: Fixtures
+) {
+  const runtime = await import("@/lib/conversations/runtime");
+  const { deterministicMessageId } = await import(
+    "@/lib/conversations/message-identity"
+  );
+  const { requestHashForQuestion } = await import(
+    "@/lib/conversations/turn-ledger"
+  );
+  const service = runtime.getConversationTurnService();
+  const clientTurnId = `phase12-atomic-${randomUUID()}`;
+  const question = "phase12 atomic finalization question";
+  const userMessageId = randomUUID();
+  const now = new Date();
+  const aParts = [{ type: "text", text: "answer generated by attempt A" }];
+  const bParts = [{ type: "text", text: "answer generated by attempt B" }];
+
+  // A claims the turn and owns the lease.
+  const claims = await queries.claimConversationTurn({
+    chatId: fixtures.chatId,
+    userId: fixtures.ownerA,
+    clientTurnId,
+    assistantMode: "default",
+    requestHash: requestHashForQuestion(question),
+    userMessageId,
+    now,
+  });
+  const turnId = claims.turn.id;
+  await queries.insertMessageIdempotent({
+    chatId: fixtures.chatId,
+    messageId: userMessageId,
+    role: "user",
+    parts: [{ type: "text", text: question }],
+    createdAt: now,
+  });
+  const attemptA = await queries.acquireConversationTurnExecution({
+    turnId,
+    ownerId: "phase12-atomic-a",
+    leaseMs: 60_000,
+    now,
+  });
+  assert.equal(attemptA?.executionAttempt, 1);
+
+  // A reaches the persistence boundary: payload stored, message not yet written.
+  const payloadA = await queries.storeConversationTurnPendingAssistantParts({
+    turnId,
+    ownerId: "phase12-atomic-a",
+    executionAttempt: 1,
+    parts: aParts,
+    now,
+  });
+  assert.deepEqual(payloadA?.pendingAssistantParts, aParts);
+
+  // A's lease expires (crashed/stalled attempt), and B takes over.
+  await sql`
+    update "ConversationTurn"
+    set "executionLeaseExpiresAt" = now() - interval '1 minute'
+    where "id" = ${turnId}
+  `;
+  const attemptB = await queries.acquireConversationTurnExecution({
+    turnId,
+    ownerId: "phase12-atomic-b",
+    leaseMs: 60_000,
+    now: new Date(),
+  });
+  assert.equal(attemptB?.executionAttempt, 2);
+  assert.equal(attemptB?.executionOwnerId, "phase12-atomic-b");
+
+  const assistantMessageId = deterministicMessageId(`assistant:${turnId}`);
+
+  // A resumes after the takeover: it must not insert an assistant message,
+  // finalize the turn, or clear B's ownership of the payload.
+  const staleFinalize = await queries.finalizeConversationTurnAtomic({
+    turnId,
+    ownerId: "phase12-atomic-a",
+    executionAttempt: 1,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: aParts,
+    createdAt: new Date(now.getTime() + 1),
+    now: new Date(),
+  });
+  assert.equal(staleFinalize.outcome, "fence_lost");
+  const afterStaleRows = (await sql`
+    select count(*)::int as total from "Message_v2" where "id" = ${assistantMessageId}
+  `) as unknown as { total: number }[];
+  assert.equal(
+    Number(afterStaleRows[0]?.total ?? -1),
+    0,
+    "the stale attempt must not insert an assistant message"
+  );
+  // B finalizes its own answer: exactly one assistant message, correct content.
+  const completedB = await queries.finalizeConversationTurnAtomic({
+    turnId,
+    ownerId: "phase12-atomic-b",
+    executionAttempt: 2,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: bParts,
+    createdAt: new Date(now.getTime() + 1),
+    now: new Date(),
+  });
+  assert.equal(completedB.outcome, "completed");
+  if (completedB.outcome !== "completed") {
+    throw new Error("attempt B must be able to finalize the turn");
+  }
+  assert.equal(completedB.linkVerified, true);
+  const storedB = await queries.getMessageForChat({
+    chatId: fixtures.chatId,
+    messageId: assistantMessageId,
+  });
+  assert.deepEqual(storedB?.parts, bParts);
+  const messageRows = (await sql`
+    select count(*)::int as total from "Message_v2"
+    where "chatId" = ${fixtures.chatId}
+      and "role" = 'assistant'
+      and "id" = ${assistantMessageId}
+  `) as unknown as { total: number }[];
+  assert.equal(Number(messageRows[0]?.total ?? -1), 1);
+
+  // A late A finalization can never overwrite B's answer.
+  const lateFinalize = await queries.finalizeConversationTurnAtomic({
+    turnId,
+    ownerId: "phase12-atomic-a",
+    executionAttempt: 1,
+    chatId: fixtures.chatId,
+    assistantMessageId,
+    parts: aParts,
+    createdAt: new Date(now.getTime() + 2),
+    now: new Date(),
+  });
+  assert.equal(lateFinalize.outcome, "already_completed");
+  const storedAfterLate = await queries.getMessageForChat({
+    chatId: fixtures.chatId,
+    messageId: assistantMessageId,
+  });
+  assert.deepEqual(
+    storedAfterLate?.parts,
+    bParts,
+    "the stored answer must never be replaced by the obsolete attempt"
+  );
+
+  // A retry replays the same result without generating anything again.
+  const replay = await service.beginTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    question,
+    assistantMode: "default",
+  });
+  assert.equal(replay.kind, "replayed");
+  assert.equal(replay.replay?.assistantMessageId, assistantMessageId);
+
+  // A stale attempt cannot clear the finalized state either.
+  const lateFailure = await service.failTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    errorCode: "obsolete_attempt",
+    executionOwnerId: "phase12-atomic-a",
+    executionAttempt: 1,
+  });
+  assert.equal(lateFailure, false);
+  const finalTurn = await queries.getConversationTurnRecord({
+    chatId: fixtures.chatId,
+    clientTurnId,
+  });
+  assert.equal(finalTurn?.status, "assistant_persisted");
+  assert.equal(finalTurn?.assistantMessageId, assistantMessageId);
+  assert.equal(finalTurn?.executionAttempt, 2);
+}
+
+/**
+ * Phase 12 Stage 1 R2: a database error between the pending-payload write and
+ * terminal persistence must roll back completely, and the retry must resume the
+ * stored answer without another model call.
+ */
+async function assertFinalizeDatabaseErrorRecovery(
+  sql: ReturnType<typeof postgres>,
+  queries: typeof import("@/lib/db/queries"),
+  fixtures: Fixtures
+) {
+  const runtime = await import("@/lib/conversations/runtime");
+  const { deterministicMessageId } = await import(
+    "@/lib/conversations/message-identity"
+  );
+  const { requestHashForQuestion } = await import(
+    "@/lib/conversations/turn-ledger"
+  );
+  const service = runtime.getConversationTurnService();
+  const clientTurnId = `phase12-atomic-error-${randomUUID()}`;
+  const question = "phase12 error question";
+  const userMessageId = randomUUID();
+  const now = new Date();
+  const parts = [{ type: "text", text: "phase12 error answer" }];
+
+  const claim = await queries.claimConversationTurn({
+    chatId: fixtures.chatId,
+    userId: fixtures.ownerA,
+    clientTurnId,
+    assistantMode: "default",
+    requestHash: requestHashForQuestion(question),
+    userMessageId,
+    now,
+  });
+  await queries.insertMessageIdempotent({
+    chatId: fixtures.chatId,
+    messageId: userMessageId,
+    role: "user",
+    parts: [{ type: "text", text: question }],
+    createdAt: now,
+  });
+  await queries.acquireConversationTurnExecution({
+    turnId: claim.turn.id,
+    ownerId: "phase12-atomic-error",
+    leaseMs: 60_000,
+    now,
+  });
+  await queries.storeConversationTurnPendingAssistantParts({
+    turnId: claim.turn.id,
+    ownerId: "phase12-atomic-error",
+    executionAttempt: 1,
+    parts,
+    now,
+  });
+
+  // A non-existent chat id makes the message insert fail inside the
+  // transaction, so the whole finalization must roll back.
+  const dbError = await queries.finalizeConversationTurnAtomic({
+    turnId: claim.turn.id,
+    ownerId: "phase12-atomic-error",
+    executionAttempt: 1,
+    chatId: randomUUID(),
+    assistantMessageId: deterministicMessageId(`assistant:${claim.turn.id}`),
+    parts,
+    createdAt: new Date(now.getTime() + 1),
+    now,
+  });
+  assert.equal(dbError.outcome, "write_failed");
+
+  const afterError = await queries.getConversationTurnRecord({
+    chatId: fixtures.chatId,
+    clientTurnId,
+  });
+  assert.equal(afterError?.status, "user_persisted");
+  assert.deepEqual(afterError?.pendingAssistantParts, parts);
+  const orphanRows = (await sql`
+    select count(*)::int as total from "Message_v2"
+    where "id" = ${deterministicMessageId(`assistant:${claim.turn.id}`)}
+  `) as unknown as { total: number }[];
+  assert.equal(
+    Number(orphanRows[0]?.total ?? -1),
+    0,
+    "a failed finalization must not leave a message behind"
+  );
+
+  // The stalled attempt's lease expires (as it would after a crashed process),
+  // and the retry acquires a fresh fence and resumes the stored payload.
+  await sql`
+    update "ConversationTurn"
+    set "executionLeaseExpiresAt" = now() - interval '1 minute'
+    where "id" = ${claim.turn.id}
+  `;
+  const retry = await service.beginTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    question,
+    assistantMode: "default",
+  });
+  assert.equal(retry.kind, "resumed");
+  assert.equal(retry.executionAttempt, 2);
+  const finalized = await service.completeTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    parts: retry.pendingAssistantParts ?? [],
+    executionOwnerId: retry.executionOwnerId as string,
+    executionAttempt: retry.executionAttempt as number,
+  });
+  assert.equal(finalized.saved, true);
+  assert.equal(finalized.alreadyPersisted, false);
+
+  // A duplicate completion of the same turn is idempotent.
+  const duplicate = await service.completeTurn({
+    userId: fixtures.ownerA,
+    chatId: fixtures.chatId,
+    clientTurnId,
+    parts: retry.pendingAssistantParts ?? [],
+    executionOwnerId: retry.executionOwnerId as string,
+    executionAttempt: retry.executionAttempt as number,
+  });
+  assert.equal(duplicate.alreadyPersisted, true);
+  assert.equal(duplicate.assistantMessageId, finalized.assistantMessageId);
+  assert.equal(duplicate.saved, true);
 }
 
 async function cleanup(sql: ReturnType<typeof postgres>, fixtures: Fixtures) {

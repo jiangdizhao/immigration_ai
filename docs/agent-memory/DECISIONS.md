@@ -27,6 +27,19 @@ The three widget answer modes persist through one owner-authorized, idempotent t
 
 Upload validation keeps the extension allowlist, file-size/decompression/macro limits and real content identity checks (OOXML Word/Excel container, OLE streams, magic bytes). A declared MIME that is unknown or nonstandard must not by itself reject an otherwise valid file; a declared MIME from a positively conflicting family still fails fast, and the accepted MIME stored/served is always the canonical one. Upload success (durable storage) and extraction success (usable evidence units) are separate states in the API and UI.
 
+## D-014 — Assistant persistence is atomic and fenced by the whole execution token
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED (R2 amendment of D-012; does not reverse it)
+
+The durable turn contract's fence is the pair `(executionOwnerId, executionAttempt)`, and assistant persistence is a single database transaction:
+
+- Acquisition increments a monotonic `executionAttempt`. Renewal, pending-payload write, finalization and failure all require **both** values, so a superseded attempt can never write, renew, fail, re-complete or clear another owner's payload — and cannot regain authority by re-acquiring an expired lease with an old token.
+- `finalizeConversationTurnAtomic` locks the turn row (`SELECT … FOR UPDATE`), verifies the fence inside that concurrency boundary, and commits the assistant message row, the terminal `assistant_persisted` transition and the clearing of the pending payload together. An identical stored message is reused unchanged; a different message owning the deterministic id fails with `message_conflict` and writes nothing. There is no separate non-atomic terminal write.
+- Expiry alone does not revoke authority: the current owner may renew after expiry while no takeover has occurred, and a live lease can never be stolen. Takeover is what revokes authority, and takeover requires an expired lease.
+- A failed finalization transaction rolls back completely, leaving the turn `user_persisted` with its pending payload, and releases the lease (fenced) so an immediate retry resumes the stored answer without another model call.
+- No database transaction is ever held open across model execution.
+
 ## D-012 — Exactly one execution per client turn (durable lease + fencing); a turn is "saved" only when both messages are durable and linked
 
 **Date:** 2026-10-11

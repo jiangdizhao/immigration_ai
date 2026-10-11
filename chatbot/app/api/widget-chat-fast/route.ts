@@ -240,6 +240,7 @@ export async function POST(request: Request) {
     chatId: string;
     clientTurnId: string;
     executionOwnerId?: string | null;
+    executionAttempt?: number | null;
   } | null = null;
   let heartbeat: WidgetTurnHeartbeat | null = null;
   const finish = (response: Response) => {
@@ -326,6 +327,8 @@ export async function POST(request: Request) {
         clientTurnId,
         executionOwnerId:
           turnStart.status === "proceed" ? turnStart.executionOwnerId : null,
+        executionAttempt:
+          turnStart.status === "proceed" ? turnStart.executionAttempt : null,
       };
     }
 
@@ -394,6 +397,7 @@ export async function POST(request: Request) {
               userTurnPersisted: turnStart.persistence.userTurnPersisted,
               attempts: turnStart.persistence.attempts,
               executionOwnerId: turnStart.executionOwnerId,
+              executionAttempt: turnStart.executionAttempt,
             });
       return finish(
         Response.json({
@@ -434,6 +438,7 @@ export async function POST(request: Request) {
       heartbeat = startWidgetTurnHeartbeat({
         turnId: turnStart.turnId,
         executionOwnerId: turnStart.executionOwnerId,
+        executionAttempt: turnStart.executionAttempt,
       });
     }
     if (ownedConversation) {
@@ -557,6 +562,7 @@ export async function POST(request: Request) {
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
         executionOwnerId: turnStart.executionOwnerId,
+        executionAttempt: turnStart.executionAttempt,
       });
       assistantMessageId = persistence.assistantMessageId;
       if (assistantMessageId) {
@@ -642,6 +648,7 @@ export async function POST(request: Request) {
         clientTurnId: failedTurn.clientTurnId,
         errorCode: "assistant_generation_failed",
         executionOwnerId: failedTurn.executionOwnerId ?? null,
+        executionAttempt: failedTurn.executionAttempt ?? null,
       });
     }
     if (error instanceof ChatbotError) {

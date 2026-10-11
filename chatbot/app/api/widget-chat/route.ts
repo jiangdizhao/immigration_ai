@@ -761,6 +761,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     chatId: string;
     clientTurnId: string;
     executionOwnerId?: string | null;
+    executionAttempt?: number | null;
   } | null = null;
   let heartbeat: WidgetTurnHeartbeat | null = null;
   const stopHeartbeat = () => {
@@ -896,6 +897,8 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         clientTurnId,
         executionOwnerId:
           turnStart.status === "proceed" ? turnStart.executionOwnerId : null,
+        executionAttempt:
+          turnStart.status === "proceed" ? turnStart.executionAttempt : null,
       };
     }
 
@@ -982,6 +985,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
         executionOwnerId: turnStart.executionOwnerId,
+        executionAttempt: turnStart.executionAttempt,
       });
       return Response.json({
         requestId,
@@ -1030,6 +1034,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       heartbeat = startWidgetTurnHeartbeat({
         turnId: turnStart.turnId,
         executionOwnerId: turnStart.executionOwnerId,
+        executionAttempt: turnStart.executionAttempt,
       });
     }
 
@@ -1136,6 +1141,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         userTurnPersisted: turnStart.persistence.userTurnPersisted,
         attempts: turnStart.persistence.attempts,
         executionOwnerId: turnStart.executionOwnerId,
+        executionAttempt: turnStart.executionAttempt,
       });
       persistedAssistantMessageId = persistence.assistantMessageId;
       if (persistedAssistantMessageId) {
@@ -1233,6 +1239,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         clientTurnId: failedTurn.clientTurnId,
         errorCode: "assistant_generation_failed",
         executionOwnerId: failedTurn.executionOwnerId ?? null,
+        executionAttempt: failedTurn.executionAttempt ?? null,
       });
     }
     if (error instanceof ChatbotError) {

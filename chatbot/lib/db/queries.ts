@@ -21,6 +21,7 @@ import {
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
+import { matchesImmutableMessage } from "../conversations/message-identity";
 import type { PaginationCursor } from "../conversations/pagination";
 import { ChatbotError } from "../errors";
 import {
@@ -3325,6 +3326,7 @@ export async function acquireConversationTurnExecution(input: {
 export async function renewConversationTurnExecution(input: {
   turnId: string;
   ownerId: string;
+  executionAttempt: number;
   leaseMs: number;
   now: Date;
 }): Promise<ConversationTurnRow | null> {
@@ -3338,6 +3340,7 @@ export async function renewConversationTurnExecution(input: {
       and(
         eq(conversationTurn.id, input.turnId),
         eq(conversationTurn.executionOwnerId, input.ownerId),
+        eq(conversationTurn.executionAttempt, input.executionAttempt),
         ne(conversationTurn.status, "assistant_persisted")
       )
     )
@@ -3389,6 +3392,7 @@ export async function recordConversationTurnAttempt(input: {
 export async function storeConversationTurnPendingAssistantParts(input: {
   turnId: string;
   ownerId: string;
+  executionAttempt: number;
   parts: unknown[];
   now: Date;
 }): Promise<ConversationTurnRow | null> {
@@ -3399,6 +3403,7 @@ export async function storeConversationTurnPendingAssistantParts(input: {
       and(
         eq(conversationTurn.id, input.turnId),
         eq(conversationTurn.executionOwnerId, input.ownerId),
+        eq(conversationTurn.executionAttempt, input.executionAttempt),
         ne(conversationTurn.status, "assistant_persisted")
       )
     )
@@ -3406,41 +3411,143 @@ export async function storeConversationTurnPendingAssistantParts(input: {
   return updated ?? null;
 }
 
+export type TurnFinalizeOutcome =
+  | {
+      outcome: "completed" | "already_completed";
+      turn: ConversationTurnRow;
+      /** True only when the user message and the assistant answer are linked. */
+      linkVerified: boolean;
+    }
+  | { outcome: "fence_lost"; turn: ConversationTurnRow | null }
+  | { outcome: "message_conflict"; turn: ConversationTurnRow }
+  | { outcome: "write_failed" };
+
 /**
- * Fenced terminal write. Only the current lease holder may complete the turn,
- * and a turn that is already completed is never overwritten, so a late or
- * obsolete attempt cannot replace a newer successful result.
+ * Phase 12 Stage 1 R2 atomic assistant persistence.
+ *
+ * The assistant message row, the terminal turn transition and the clearing of
+ * the pending payload happen in one transaction, and the execution lease is
+ * verified on the same row lock that authorizes the insert. A stale or obsolete
+ * execution therefore cannot insert an assistant message, cannot finalize the
+ * turn and cannot clear another owner's pending payload — while an identical
+ * existing message (a genuine retry) is reused instead of being rewritten.
+ *
+ * No model stage ever runs inside this transaction.
  */
-export async function completeConversationTurn(input: {
+export async function finalizeConversationTurnAtomic(input: {
   turnId: string;
   ownerId: string;
+  executionAttempt: number;
+  chatId: string;
   assistantMessageId: string;
+  parts: unknown[];
+  createdAt: Date;
   now: Date;
-}): Promise<ConversationTurnRow | null> {
-  const [updated] = await db
-    .update(conversationTurn)
-    .set({
-      assistantMessageId: input.assistantMessageId,
-      status: "assistant_persisted",
-      errorCode: null,
-      pendingAssistantParts: null,
-      executionLeaseExpiresAt: null,
-      updatedAt: input.now,
-    })
-    .where(
-      and(
-        eq(conversationTurn.id, input.turnId),
-        eq(conversationTurn.executionOwnerId, input.ownerId),
-        ne(conversationTurn.status, "assistant_persisted")
-      )
-    )
-    .returning();
-  if (updated) {
-    return updated;
+}): Promise<TurnFinalizeOutcome> {
+  try {
+    return await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(conversationTurn)
+        .where(eq(conversationTurn.id, input.turnId))
+        .limit(1)
+        .for("update");
+      if (!locked) {
+        return { outcome: "fence_lost", turn: null };
+      }
+
+      const linkVerified = await (async () => {
+        if (!locked.userMessageId) {
+          return false;
+        }
+        const [storedUserMessage] = await tx
+          .select({ id: message.id, role: message.role })
+          .from(message)
+          .where(
+            and(
+              eq(message.id, locked.userMessageId),
+              eq(message.chatId, locked.chatId)
+            )
+          )
+          .limit(1);
+        return Boolean(
+          storedUserMessage &&
+            storedUserMessage.id === locked.userMessageId &&
+            storedUserMessage.role === "user"
+        );
+      })();
+
+      if (locked.status === "assistant_persisted") {
+        // Already finalized by this or another attempt: never overwrite.
+        return { outcome: "already_completed", turn: locked, linkVerified };
+      }
+      if (
+        locked.executionOwnerId !== input.ownerId ||
+        locked.executionAttempt !== input.executionAttempt
+      ) {
+        // The lease was taken over, or this attempt never held it.
+        return { outcome: "fence_lost", turn: locked };
+      }
+
+      const [existingAssistantMessage] = await tx
+        .select()
+        .from(message)
+        .where(eq(message.id, input.assistantMessageId))
+        .limit(1);
+      if (
+        existingAssistantMessage &&
+        !matchesImmutableMessage(existingAssistantMessage, {
+          chatId: input.chatId,
+          role: "assistant",
+          parts: input.parts,
+        })
+      ) {
+        // A different message owns this id: do not rewrite it and do not
+        // finalize the turn on top of it.
+        return { outcome: "message_conflict", turn: locked };
+      }
+
+      const [finalized] = await tx
+        .update(conversationTurn)
+        .set({
+          assistantMessageId: input.assistantMessageId,
+          status: "assistant_persisted",
+          errorCode: null,
+          pendingAssistantParts: null,
+          executionLeaseExpiresAt: null,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(conversationTurn.id, input.turnId),
+            eq(conversationTurn.executionOwnerId, input.ownerId),
+            eq(conversationTurn.executionAttempt, input.executionAttempt),
+            ne(conversationTurn.status, "assistant_persisted")
+          )
+        )
+        .returning();
+      if (!finalized) {
+        // Defensive: the row lock above makes this unreachable, but a
+        // non-authoritative write must never be committed.
+        return { outcome: "fence_lost", turn: locked };
+      }
+
+      if (!existingAssistantMessage) {
+        await tx.insert(message).values({
+          id: input.assistantMessageId,
+          chatId: input.chatId,
+          role: "assistant",
+          parts: input.parts,
+          attachments: [],
+          createdAt: input.createdAt,
+        });
+      }
+
+      return { outcome: "completed", turn: finalized, linkVerified };
+    });
+  } catch {
+    return { outcome: "write_failed" };
   }
-  // Either another attempt already completed the turn, or this attempt lost the
-  // fencing token. The caller must inspect the returned authoritative row.
-  return getConversationTurnRecordById(input.turnId);
 }
 
 /**
@@ -3451,6 +3558,7 @@ export async function completeConversationTurn(input: {
 export async function failConversationTurn(input: {
   turnId: string;
   ownerId: string | null;
+  executionAttempt?: number | null;
   errorCode: string;
   now: Date;
 }): Promise<ConversationTurnRow | null> {
@@ -3469,6 +3577,9 @@ export async function failConversationTurn(input: {
         input.ownerId
           ? eq(conversationTurn.executionOwnerId, input.ownerId)
           : isNull(conversationTurn.executionOwnerId),
+        input.ownerId && typeof input.executionAttempt === "number"
+          ? eq(conversationTurn.executionAttempt, input.executionAttempt)
+          : sql`true`,
         ne(conversationTurn.status, "assistant_persisted")
       )
     )

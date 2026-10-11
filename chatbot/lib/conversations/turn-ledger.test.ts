@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/useAwait: repository doubles intentionally return plain values from fake async methods.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { matchesImmutableMessage } from "./message-identity";
 import {
   ConversationTurnInputError,
   ConversationTurnOwnershipError,
@@ -33,6 +34,7 @@ type Harness = {
   failUserMessageInsert: boolean;
   failPendingPayload: boolean;
   failUserMessageLink: boolean;
+  failFinalize: boolean;
   now: Date;
 };
 
@@ -63,6 +65,7 @@ function makeHarness(): Harness {
     failUserMessageInsert: false,
     failPendingPayload: false,
     failUserMessageLink: false,
+    failFinalize: false,
     now: NOW,
     turns,
     messages,
@@ -147,12 +150,19 @@ function makeHarness(): Harness {
           updatedAt: now,
         });
       },
-      async renewExecution({ turnId, ownerId, leaseMs, now }) {
+      async renewExecution({
+        turnId,
+        ownerId,
+        executionAttempt,
+        leaseMs,
+        now,
+      }) {
         const entry = findTurn(harness, turnId);
         if (
           !entry ||
           entry.status === "assistant_persisted" ||
-          entry.executionOwnerId !== ownerId
+          entry.executionOwnerId !== ownerId ||
+          entry.executionAttempt !== executionAttempt
         ) {
           return null;
         }
@@ -171,7 +181,12 @@ function makeHarness(): Harness {
         turns.set(turnKey(entry.chatId, entry.clientTurnId), updated);
         return updated;
       },
-      async storePendingAssistantParts({ turnId, ownerId, parts }) {
+      async storePendingAssistantParts({
+        turnId,
+        ownerId,
+        executionAttempt,
+        parts,
+      }) {
         if (harness.failPendingPayload) {
           throw new Error("payload_write_failed");
         }
@@ -179,7 +194,8 @@ function makeHarness(): Harness {
         if (
           !entry ||
           entry.status === "assistant_persisted" ||
-          entry.executionOwnerId !== ownerId
+          entry.executionOwnerId !== ownerId ||
+          entry.executionAttempt !== executionAttempt
         ) {
           return null;
         }
@@ -188,29 +204,83 @@ function makeHarness(): Harness {
         events.push("pending_payload");
         return updated;
       },
-      async completeTurn({ turnId, ownerId, assistantMessageId }) {
+      /**
+       * Mirrors the atomic finalization transaction: the fence is verified on
+       * the locked row, an identical stored message is reused unchanged, a
+       * different message owning the id is never rewritten, and a database
+       * error leaves no partial state.
+       */
+      async finalizeTurn({
+        turnId,
+        ownerId,
+        executionAttempt,
+        chatId,
+        assistantMessageId,
+        parts,
+      }) {
+        if (harness.failFinalize) {
+          harness.failFinalize = false;
+          return { outcome: "write_failed" };
+        }
         const entry = findTurn(harness, turnId);
         if (!entry) {
-          return null;
+          return { outcome: "fence_lost", turn: null };
+        }
+        const userMessage = entry.userMessageId
+          ? (messages.get(entry.userMessageId) ?? null)
+          : null;
+        const linkVerified = Boolean(
+          userMessage &&
+            userMessage.chatId === chatId &&
+            userMessage.role === "user"
+        );
+        if (entry.status === "assistant_persisted") {
+          return { outcome: "already_completed", turn: entry, linkVerified };
         }
         if (
-          entry.status === "assistant_persisted" ||
-          entry.executionOwnerId !== ownerId
+          entry.executionOwnerId !== ownerId ||
+          entry.executionAttempt !== executionAttempt
         ) {
-          return entry;
+          return { outcome: "fence_lost", turn: entry };
         }
-        const updated: ConversationTurnRecord = {
+        const existing = messages.get(assistantMessageId) ?? null;
+        if (
+          existing &&
+          !matchesImmutableMessage(existing, {
+            chatId,
+            role: "assistant",
+            parts,
+          })
+        ) {
+          return { outcome: "message_conflict", turn: entry };
+        }
+        if (!existing && harness.failAssistantMessageInsert) {
+          harness.failAssistantMessageInsert = false;
+          return { outcome: "write_failed" };
+        }
+        const finalized: ConversationTurnRecord = {
           ...entry,
           assistantMessageId,
           status: "assistant_persisted",
           pendingAssistantParts: null,
           errorCode: null,
+          executionLeaseExpiresAt: null,
         };
-        turns.set(turnKey(entry.chatId, entry.clientTurnId), updated);
-        events.push("complete");
-        return updated;
+        storeTurn(harness, finalized);
+        if (!existing) {
+          messages.set(assistantMessageId, {
+            id: assistantMessageId,
+            chatId,
+            role: "assistant",
+            parts,
+            attachments: [],
+          });
+          events.push("insert:assistant");
+        }
+        events.push("finalize");
+        return { outcome: "completed", turn: finalized, linkVerified };
       },
-      async failTurn({ turnId, ownerId, errorCode }) {
+      async failTurn({ turnId, ownerId, executionAttempt, errorCode }) {
         const entry = findTurn(harness, turnId);
         if (!entry || entry.status === "assistant_persisted") {
           return null;
@@ -218,7 +288,11 @@ function makeHarness(): Harness {
         const ownerMatches = ownerId
           ? entry.executionOwnerId === ownerId
           : entry.executionOwnerId === null;
-        if (!ownerMatches) {
+        const attemptMatches =
+          ownerId && typeof executionAttempt === "number"
+            ? entry.executionAttempt === executionAttempt
+            : true;
+        if (!ownerMatches || !attemptMatches) {
           return null;
         }
         const updated: ConversationTurnRecord = {
@@ -319,6 +393,7 @@ test("the user turn is durable before generation and the assistant turn after", 
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
     parts: [
       { type: "text", text: "Condition 8501 requires adequate health cover." },
       { type: "metadata", citations: [], compactSources: [] },
@@ -345,6 +420,7 @@ test("a repeated request with the same client turn id never duplicates messages"
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: firstTurn.executionOwnerId as string,
+    executionAttempt: firstTurn.executionAttempt as number,
     parts: [{ type: "text", text: "First answer" }],
   });
 
@@ -376,6 +452,7 @@ test("an already answered turn is replayed from storage with its metadata", asyn
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: reviewTurn.executionOwnerId as string,
+    executionAttempt: reviewTurn.executionAttempt as number,
     parts: [
       { type: "text", text: "Stored answer" },
       {
@@ -458,6 +535,7 @@ test("a database outage never reports a durable write as successful", async () =
     clientTurnId: TURN_A,
     parts: [{ type: "text", text: "answer" }],
     executionOwnerId: "owner-unavailable",
+    executionAttempt: 0,
   });
   assert.equal(completed.assistantTurnPersisted, false);
   assert.equal(completed.errorCode, "conversation_ownership_unverified");
@@ -479,11 +557,12 @@ test("an interrupted turn is recovered from the pending payload without a new mo
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: interruptedTurn.executionOwnerId as string,
+    executionAttempt: interruptedTurn.executionAttempt as number,
     parts: [{ type: "text", text: "Generated but unstored answer" }],
   });
 
   assert.equal(failedCompletion.assistantTurnPersisted, false);
-  assert.equal(failedCompletion.errorCode, "message_write_failed");
+  assert.equal(failedCompletion.errorCode, "assistant_turn_write_failed");
   assert.equal(assistantMessagesOf(harness).length, 0);
 
   const resumed = await turns.beginTurn({
@@ -503,6 +582,7 @@ test("an interrupted turn is recovered from the pending payload without a new mo
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: resumed.executionOwnerId as string,
+    executionAttempt: resumed.executionAttempt as number,
     parts: resumed.pendingAssistantParts ?? [],
   });
   assert.equal(repaired.assistantTurnPersisted, true);
@@ -570,6 +650,7 @@ test("ownership is enforced for a foreign conversation and a foreign turn", asyn
         clientTurnId: TURN_A,
         parts: [{ type: "text", text: "injected" }],
         executionOwnerId: "owner-foreign",
+        executionAttempt: 0,
       }),
     ConversationTurnOwnershipError
   );
@@ -866,6 +947,7 @@ test("saved requires the linked user message to exist", async () => {
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
     parts: [{ type: "text", text: "answer without a stored question" }],
   });
 
@@ -942,6 +1024,7 @@ test("the execution heartbeat renews a live lease and stops renewing after stop"
   const heartbeat = turns.startExecutionHeartbeat({
     turnId: started.turnId as string,
     ownerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
     intervalMs: 5,
     leaseMs: 1000,
   });
@@ -975,6 +1058,7 @@ test("the heartbeat reports a stolen lease instead of extending it", async () =>
   const heartbeat = turns.startExecutionHeartbeat({
     turnId: stalled.turnId as string,
     ownerId: stalled.executionOwnerId as string,
+    executionAttempt: stalled.executionAttempt as number,
     intervalMs: 5,
     leaseMs: 1000,
   });
@@ -1007,6 +1091,7 @@ test("assistant message identity is deterministic per turn", async () => {
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
     parts: [{ type: "text", text: "deterministic answer" }],
   });
   assert.equal(
@@ -1071,6 +1156,7 @@ test("exactly one concurrent request may execute the model for a turn", async ()
         chatId: CHAT_A,
         clientTurnId: TURN_A,
         executionOwnerId: attempt.executionOwnerId as string,
+        executionAttempt: attempt.executionAttempt as number,
         parts: [{ type: "text", text: "single answer" }],
       });
       assert.equal(completed.saved, true);
@@ -1122,6 +1208,7 @@ test("an in-progress duplicate never writes a second assistant message", async (
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: primary.executionOwnerId as string,
+    executionAttempt: primary.executionAttempt as number,
     parts: [{ type: "text", text: "primary answer" }],
   });
 
@@ -1159,6 +1246,7 @@ test("a stale attempt cannot complete once its lease was stolen", async () => {
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: stalled.executionOwnerId as string,
+    executionAttempt: stalled.executionAttempt as number,
     parts: [{ type: "text", text: "stale answer" }],
   });
   assert.equal(staleCompletion.assistantTurnPersisted, false);
@@ -1172,6 +1260,7 @@ test("a stale attempt cannot complete once its lease was stolen", async () => {
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: recovery.executionOwnerId as string,
+    executionAttempt: recovery.executionAttempt as number,
     parts: [{ type: "text", text: "recovery answer" }],
   });
   assert.equal(winner.saved, true);
@@ -1183,6 +1272,7 @@ test("a stale attempt cannot complete once its lease was stolen", async () => {
     chatId: CHAT_A,
     clientTurnId: TURN_A,
     executionOwnerId: stalled.executionOwnerId as string,
+    executionAttempt: stalled.executionAttempt as number,
     parts: [{ type: "text", text: "late different answer" }],
   });
   assert.equal(late.assistantMessageId, winner.assistantMessageId);
@@ -1191,4 +1281,235 @@ test("a stale attempt cannot complete once its lease was stolen", async () => {
     (assistantMessagesOf(harness)[0]?.parts as { text?: string }[])[0]?.text,
     "recovery answer"
   );
+});
+test("a superseded attempt number has no authority even if it re-acquires a lease", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const first = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  harness.now = new Date(
+    NOW.getTime() + TURN_EXECUTION_LEASE_MS + TURN_EXECUTION_LEASE_MS
+  );
+  const takeover = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  assert.equal(takeover.ok, true);
+  assert.equal(takeover.executionAttempt, 2);
+
+  // The superseded attempt presents its original token: no authority at all.
+  const stale = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts: [{ type: "text", text: "stale answer" }],
+    executionOwnerId: first.executionOwnerId as string,
+    executionAttempt: first.executionAttempt as number,
+  });
+  assert.equal(stale.assistantTurnPersisted, false);
+  assert.equal(stale.saved, false);
+  assert.equal(stale.errorCode, "turn_execution_lease_lost");
+  assert.equal(assistantMessagesOf(harness).length, 0);
+  assert.equal(turnOf(harness)?.executionOwnerId, takeover.executionOwnerId);
+});
+
+test("an obsolete attempt cannot clear the new owner's pending payload", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const first = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  harness.now = new Date(NOW.getTime() + TURN_EXECUTION_LEASE_MS * 3);
+  const takeover = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  assert.equal(takeover.ok, true);
+  await harness.repository.storePendingAssistantParts({
+    turnId: takeover.turnId as string,
+    ownerId: takeover.executionOwnerId as string,
+    executionAttempt: takeover.executionAttempt as number,
+    parts: [{ type: "text", text: "new owner answer" }],
+    now: harness.now,
+  });
+
+  const stale = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts: [{ type: "text", text: "stale answer" }],
+    executionOwnerId: first.executionOwnerId as string,
+    executionAttempt: first.executionAttempt as number,
+  });
+  assert.equal(stale.errorCode, "turn_execution_lease_lost");
+  assert.deepEqual(turnOf(harness)?.pendingAssistantParts, [
+    { type: "text", text: "new owner answer" },
+  ]);
+});
+
+test("renewal after expiry keeps the same owner's authority but not a superseded one", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const started = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  const turnId = started.turnId as string;
+  const expired = new Date(
+    NOW.getTime() + TURN_EXECUTION_LEASE_MS + TURN_EXECUTION_LEASE_MS
+  );
+  harness.now = expired;
+
+  // The same owner may renew after expiry (no takeover happened).
+  const renewed = await harness.repository.renewExecution({
+    turnId,
+    ownerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
+    leaseMs: 1000,
+    now: expired,
+  });
+  assert.equal(renewed?.executionOwnerId, started.executionOwnerId);
+
+  // A superseded attempt number cannot renew.
+  const staleRenewal = await harness.repository.renewExecution({
+    turnId,
+    ownerId: started.executionOwnerId as string,
+    executionAttempt: (started.executionAttempt as number) + 1,
+    leaseMs: 1000,
+    now: expired,
+  });
+  assert.equal(staleRenewal, null);
+});
+test("duplicate finalization is idempotent and keeps a single assistant message", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const started = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  const parts = [{ type: "text", text: "single answer" }];
+  const first = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts,
+    executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
+  });
+  const duplicate = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts,
+    executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
+  });
+
+  assert.equal(first.saved, true);
+  assert.equal(duplicate.alreadyPersisted, true);
+  assert.equal(duplicate.assistantMessageId, first.assistantMessageId);
+  assert.equal(duplicate.saved, true);
+  assert.equal(assistantMessagesOf(harness).length, 1);
+});
+
+test("a database error during finalization leaves no partial state and is retryable", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const started = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  harness.failFinalize = true;
+  const failed = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts: [{ type: "text", text: "answer that could not be committed" }],
+    executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
+  });
+
+  assert.equal(failed.assistantTurnPersisted, false);
+  assert.equal(failed.saved, false);
+  assert.equal(failed.errorCode, "assistant_turn_write_failed");
+  assert.equal(failed.retryable, true);
+  assert.equal(assistantMessagesOf(harness).length, 0);
+  assert.equal(turnOf(harness)?.status, "failed");
+  assert.deepEqual(turnOf(harness)?.pendingAssistantParts, [
+    { type: "text", text: "answer that could not be committed" },
+  ]);
+
+  // The retry resumes the stored payload and finalizes without a model call.
+  const resumed = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  assert.equal(resumed.kind, "resumed");
+  const repaired = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts: resumed.pendingAssistantParts ?? [],
+    executionOwnerId: resumed.executionOwnerId as string,
+    executionAttempt: resumed.executionAttempt as number,
+  });
+  assert.equal(repaired.saved, true);
+  assert.equal(assistantMessagesOf(harness).length, 1);
+});
+
+test("an assistant id collision with different content is rejected without finalizing", async () => {
+  const harness = makeHarness();
+  const turns = service(harness);
+  const started = await turns.beginTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    question: QUESTION,
+  });
+  const assistantMessageId = deterministicMessageId(
+    `assistant:${started.turnId as string}`
+  );
+  harness.messages.set(assistantMessageId, {
+    id: assistantMessageId,
+    chatId: CHAT_A,
+    role: "assistant",
+    parts: [{ type: "text", text: "message owned by something else" }],
+    attachments: [],
+  });
+
+  const conflicted = await turns.completeTurn({
+    userId: USER_A,
+    chatId: CHAT_A,
+    clientTurnId: TURN_A,
+    parts: [{ type: "text", text: "new answer" }],
+    executionOwnerId: started.executionOwnerId as string,
+    executionAttempt: started.executionAttempt as number,
+  });
+
+  assert.equal(conflicted.saved, false);
+  assert.equal(conflicted.errorCode, "assistant_message_conflict");
+  assert.equal(assistantMessagesOf(harness).length, 1);
+  assert.deepEqual(harness.messages.get(assistantMessageId)?.parts, [
+    { type: "text", text: "message owned by something else" },
+  ]);
+  assert.equal(turnOf(harness)?.status, "failed");
 });

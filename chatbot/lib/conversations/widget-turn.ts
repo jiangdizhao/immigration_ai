@@ -60,6 +60,8 @@ export type WidgetTurnStart =
       persistence: WidgetTurnPersistence;
       /** Fencing token required to complete or fail this executed turn. */
       executionOwnerId: string;
+      /** Attempt number issued with the token; a superseded one has no authority. */
+      executionAttempt: number;
       /** Durable turn row whose execution lease must be renewed while running. */
       turnId: string;
       pendingAssistantParts: unknown[] | null;
@@ -74,6 +76,7 @@ export type WidgetTurnStart =
       status: "resume";
       persistence: WidgetTurnPersistence;
       executionOwnerId: string;
+      executionAttempt: number;
       parts: unknown[];
     }
   | { status: "conflict"; persistence: WidgetTurnPersistence }
@@ -243,6 +246,7 @@ export async function beginWidgetTurn(input: {
       },
     };
   }
+  const executionAttempt = started.executionAttempt ?? 0;
 
   if (
     started.pendingAssistantParts &&
@@ -252,6 +256,7 @@ export async function beginWidgetTurn(input: {
       status: "resume",
       persistence,
       executionOwnerId: started.executionOwnerId,
+      executionAttempt,
       parts: started.pendingAssistantParts,
     };
   }
@@ -260,6 +265,7 @@ export async function beginWidgetTurn(input: {
     status: "proceed",
     persistence,
     executionOwnerId: started.executionOwnerId,
+    executionAttempt,
     turnId: started.turnId,
     pendingAssistantParts: started.pendingAssistantParts,
   };
@@ -272,10 +278,12 @@ export async function beginWidgetTurn(input: {
 export function startWidgetTurnHeartbeat(input: {
   turnId: string;
   executionOwnerId: string;
+  executionAttempt: number;
 }): TurnExecutionHeartbeat {
   return getConversationTurnService().startExecutionHeartbeat({
     turnId: input.turnId,
     ownerId: input.executionOwnerId,
+    executionAttempt: input.executionAttempt,
   });
 }
 
@@ -288,6 +296,7 @@ export async function completeWidgetTurn(input: {
   userTurnPersisted: boolean;
   attempts: number;
   executionOwnerId: string;
+  executionAttempt: number;
 }): Promise<WidgetTurnPersistence> {
   const service = getConversationTurnService();
   const parts = buildAssistantMessageParts({
@@ -301,6 +310,7 @@ export async function completeWidgetTurn(input: {
       clientTurnId: input.clientTurnId,
       parts,
       executionOwnerId: input.executionOwnerId,
+      executionAttempt: input.executionAttempt,
     });
     return persistenceState({
       clientTurnId: input.clientTurnId,
@@ -339,6 +349,7 @@ export async function failWidgetTurn(input: {
   clientTurnId: string;
   errorCode: string;
   executionOwnerId?: string | null;
+  executionAttempt?: number | null;
 }): Promise<void> {
   const service = getConversationTurnService();
   await service.failTurn(input).catch(() => false);
@@ -356,6 +367,7 @@ export async function completeWidgetTurnFromParts(input: {
   userTurnPersisted: boolean;
   attempts: number;
   executionOwnerId: string;
+  executionAttempt: number;
 }): Promise<WidgetTurnPersistence> {
   const service = getConversationTurnService();
   try {
@@ -365,6 +377,7 @@ export async function completeWidgetTurnFromParts(input: {
       clientTurnId: input.clientTurnId,
       parts: input.parts,
       executionOwnerId: input.executionOwnerId,
+      executionAttempt: input.executionAttempt,
     });
     return persistenceState({
       clientTurnId: input.clientTurnId,

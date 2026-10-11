@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 
+import {
+  deterministicMessageId,
+  matchesImmutableMessage,
+} from "./message-identity";
+
 /**
  * Durable, owner-authorized conversation turn ledger.
  *
@@ -15,8 +20,16 @@ import { createHash } from "node:crypto";
  *    the persisted pending assistant payload without another model call;
  *  - no database transaction is held open across the long-running model call.
  *
- * Concurrency safety comes from the `ConversationTurn` unique
- * `(chatId, clientTurnId)` index plus `ON CONFLICT DO NOTHING` claims.
+ * Concurrency safety comes from three mechanisms:
+ *  1. the `ConversationTurn` unique `(chatId, clientTurnId)` index plus
+ *     `ON CONFLICT DO NOTHING` claims;
+ *  2. a durable execution lease (`executionOwnerId` + `executionAttempt`) so
+ *     exactly one attempt may run the model for a turn and a superseded attempt
+ *     can never regain write authority;
+ *  3. atomic finalization: the assistant message row, the terminal turn
+ *     transition and the payload clearing commit in one transaction that
+ *     re-verifies the lease on the locked turn row, so a stale attempt cannot
+ *     insert a message, finalize the turn or clear another owner's payload.
  */
 
 export const CLIENT_TURN_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/u;
@@ -64,6 +77,21 @@ export type PersistedMessageRecord = {
   attachments: unknown;
 };
 
+/**
+ * Result of the atomic finalization. `fence_lost` covers a taken-over lease and
+ * a superseded attempt number; `message_conflict` means the deterministic id is
+ * owned by a different message and nothing was written.
+ */
+export type TurnFinalizeResult =
+  | {
+      outcome: "completed" | "already_completed";
+      turn: ConversationTurnRecord;
+      linkVerified: boolean;
+    }
+  | { outcome: "fence_lost"; turn: ConversationTurnRecord | null }
+  | { outcome: "message_conflict"; turn: ConversationTurnRecord }
+  | { outcome: "write_failed" };
+
 export type ConversationTurnRepository = {
   getOwnedConversation(input: {
     chatId: string;
@@ -104,24 +132,37 @@ export type ConversationTurnRepository = {
   renewExecution(input: {
     turnId: string;
     ownerId: string;
+    executionAttempt: number;
     leaseMs: number;
     now: Date;
   }): Promise<ConversationTurnRecord | null>;
   storePendingAssistantParts(input: {
     turnId: string;
     ownerId: string;
+    executionAttempt: number;
     parts: unknown[];
     now: Date;
   }): Promise<ConversationTurnRecord | null>;
-  completeTurn(input: {
+  /**
+   * Phase 12 Stage 1 R2: the assistant message row, the terminal turn
+   * transition and the payload clearing commit in one transaction whose fence
+   * is re-verified on the locked turn row. There is deliberately no separate
+   * "insert assistant message" repository method any more.
+   */
+  finalizeTurn(input: {
     turnId: string;
     ownerId: string;
+    executionAttempt: number;
+    chatId: string;
     assistantMessageId: string;
+    parts: unknown[];
+    createdAt: Date;
     now: Date;
-  }): Promise<ConversationTurnRecord | null>;
+  }): Promise<TurnFinalizeResult>;
   failTurn(input: {
     turnId: string;
     ownerId: string | null;
+    executionAttempt?: number | null;
     errorCode: string;
     now: Date;
   }): Promise<ConversationTurnRecord | null>;
@@ -138,51 +179,10 @@ export type ConversationTurnRepository = {
   }): Promise<PersistedMessageRecord | null>;
 };
 
-/**
- * Canonical content fingerprint for immutable message identity. Message rows are
- * never compared loosely: an id collision is only an idempotent retry when the
- * stored row is the same message with the same content.
- */
-export function partsFingerprint(parts: unknown): string {
-  return createHash("sha256")
-    .update(canonicalJson(parts), "utf8")
-    .digest("hex");
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value) ?? "null";
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-  }
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, entry]) => entry !== undefined)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  return `{${entries
-    .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
-    .join(",")}}`;
-}
-
-/**
- * Server-controlled, stable assistant message identity. The id is derived from
- * the durable turn, so every retry of the same turn targets the same row and
- * idempotency cannot fork into duplicate assistant messages.
- */
-export function deterministicMessageId(scope: string): string {
-  const digest = createHash("sha256").update(scope, "utf8").digest("hex");
-  const hex = digest.slice(0, 32).split("");
-  hex[12] = "4";
-  hex[16] = "8";
-  const joined = hex.join("");
-  return [
-    joined.slice(0, 8),
-    joined.slice(8, 12),
-    joined.slice(12, 16),
-    joined.slice(16, 20),
-    joined.slice(20, 32),
-  ].join("-");
-}
+// Message identity (fingerprints, deterministic ids and immutable-message
+// comparison) lives in ./message-identity so the ledger and the database
+// finalization transaction share exactly one implementation.
+export { deterministicMessageId, partsFingerprint } from "./message-identity";
 
 export class ConversationTurnInputError extends Error {
   readonly code = "invalid_client_turn_id";
@@ -214,8 +214,13 @@ export type BeginTurnResult = {
     | "in_progress";
   clientTurnId: string;
   turnId: string | null;
-  /** Fencing token the caller must present to complete or fail this turn. */
+  /**
+   * Fencing token the caller must present to complete or fail this turn. The
+   * pair (executionOwnerId, executionAttempt) is the whole fence: the attempt
+   * number prevents a superseded attempt from regaining authority later.
+   */
   executionOwnerId: string | null;
+  executionAttempt: number | null;
   leaseExpiresAt: Date | null;
   userTurnPersisted: boolean;
   userMessageId: string;
@@ -308,10 +313,7 @@ export function createConversationTurnService(deps: {
       if (existing.chatId !== input.chatId || existing.role !== input.role) {
         return { durable: false, errorCode: "message_id_conflict" };
       }
-      if (
-        partsFingerprint(existing.parts) !== partsFingerprint(input.parts) ||
-        partsFingerprint(existing.attachments ?? []) !== partsFingerprint([])
-      ) {
+      if (!matchesImmutableMessage(existing, input)) {
         return { durable: false, errorCode: "message_id_content_conflict" };
       }
       return { durable: true, errorCode: null };
@@ -340,6 +342,7 @@ export function createConversationTurnService(deps: {
       clientTurnId: input.clientTurnId,
       userMessageId: durableUserMessageId,
       executionOwnerId: null,
+      executionAttempt: null,
       leaseExpiresAt: null,
       replay: null,
       pendingAssistantParts: null,
@@ -503,6 +506,7 @@ export function createConversationTurnService(deps: {
       kind: context.claim.created ? "fresh" : "resumed",
       turnId: turn.id,
       executionOwnerId: ownerId,
+      executionAttempt: turn.executionAttempt,
       leaseExpiresAt: turn.executionLeaseExpiresAt,
       userTurnPersisted: true,
       attemptCount,
@@ -532,6 +536,7 @@ export function createConversationTurnService(deps: {
       clientTurnId: input.clientTurnId,
       userMessageId,
       executionOwnerId: null,
+      executionAttempt: null,
       leaseExpiresAt: null,
       replay: null,
       pendingAssistantParts: null,
@@ -617,6 +622,8 @@ export function createConversationTurnService(deps: {
     parts: unknown[];
     /** Required: the fencing token issued by `beginTurn`. */
     executionOwnerId: string;
+    /** Required: the attempt number issued together with the token. */
+    executionAttempt: number;
   }): Promise<CompleteTurnResult> {
     if (!CLIENT_TURN_ID_PATTERN.test(input.clientTurnId)) {
       throw new ConversationTurnInputError();
@@ -706,9 +713,14 @@ export function createConversationTurnService(deps: {
       }
     }
 
-    // Fencing: a late or obsolete attempt whose lease was stolen or expired may
-    // not write the message row, the pending payload or the terminal state.
-    if (turn.executionOwnerId !== input.executionOwnerId) {
+    // Fencing: a late or obsolete attempt whose lease was taken over, or whose
+    // attempt number was superseded, may not write the message row, the pending
+    // payload or the terminal state. The authoritative check happens inside the
+    // finalization transaction below.
+    if (
+      turn.executionOwnerId !== input.executionOwnerId ||
+      turn.executionAttempt !== input.executionAttempt
+    ) {
       return {
         assistantTurnPersisted: false,
         assistantMessageId: null,
@@ -722,25 +734,29 @@ export function createConversationTurnService(deps: {
 
     const assistantMessageId = deterministicMessageId(`assistant:${turn.id}`);
 
-    // The payload is stored before the message row and both writes are fenced.
-    // If the payload write fails, no message is written, so a retry can never
-    // resume with content that differs from the stored answer.
+    // The payload is stored before the message row so a failure between the two
+    // can be repaired by retrying the same client turn without another model
+    // call. It is fenced by the same lease and is cleared in the same
+    // transaction that finalizes the turn.
     const storedPayload = await deps.repository
       .storePendingAssistantParts({
         turnId: turn.id,
         ownerId: input.executionOwnerId,
+        executionAttempt: input.executionAttempt,
         parts: input.parts,
         now: now(),
       })
       .catch(() => null);
     if (
       !storedPayload ||
-      storedPayload.executionOwnerId !== input.executionOwnerId
+      storedPayload.executionOwnerId !== input.executionOwnerId ||
+      storedPayload.executionAttempt !== input.executionAttempt
     ) {
       await deps.repository
         .failTurn({
           turnId: turn.id,
           ownerId: input.executionOwnerId,
+          executionAttempt: input.executionAttempt,
           errorCode: "assistant_payload_write_failed",
           now: now(),
         })
@@ -756,20 +772,42 @@ export function createConversationTurnService(deps: {
       };
     }
 
-    const inserted = await insertMessage({
+    // Atomic assistant persistence: the message row, the terminal turn
+    // transition and the payload clearing commit together, and the lease is
+    // re-verified on the locked turn row inside that transaction.
+    const finalized = await deps.repository.finalizeTurn({
+      turnId: turn.id,
+      ownerId: input.executionOwnerId,
+      executionAttempt: input.executionAttempt,
       chatId: input.chatId,
-      messageId: assistantMessageId,
-      role: "assistant",
+      assistantMessageId,
       parts: input.parts,
       createdAt: new Date(turn.createdAt.getTime() + 1),
+      now: now(),
     });
 
-    if (!inserted.durable) {
+    if (finalized.outcome === "fence_lost") {
+      return {
+        assistantTurnPersisted: false,
+        assistantMessageId: null,
+        alreadyPersisted: false,
+        linkVerified: false,
+        saved: false,
+        errorCode: "turn_execution_lease_lost",
+        retryable: true,
+      };
+    }
+
+    if (finalized.outcome === "message_conflict") {
+      // A different message owns the deterministic id. Nothing was written and
+      // the existing row must never be rewritten. The lease is released so an
+      // immediate retry can resume from the stored payload.
       await deps.repository
         .failTurn({
           turnId: turn.id,
           ownerId: input.executionOwnerId,
-          errorCode: inserted.errorCode ?? "message_write_failed",
+          executionAttempt: input.executionAttempt,
+          errorCode: "assistant_message_conflict",
           now: now(),
         })
         .catch(() => null);
@@ -779,64 +817,73 @@ export function createConversationTurnService(deps: {
         alreadyPersisted: false,
         linkVerified: false,
         saved: false,
-        errorCode: inserted.errorCode ?? "message_write_failed",
+        errorCode: "assistant_message_conflict",
         retryable: true,
       };
     }
 
-    const finalized = await deps.repository
-      .completeTurn({
-        turnId: turn.id,
-        ownerId: input.executionOwnerId,
-        assistantMessageId,
-        now: now(),
-      })
-      .catch(() => null);
-
-    if (
-      finalized?.status === "assistant_persisted" &&
-      finalized.assistantMessageId === assistantMessageId
-    ) {
-      const linkVerified = await verifyUserLink(finalized);
+    if (finalized.outcome === "write_failed") {
+      // The finalization transaction rolled back, so no partial state exists and
+      // the pending payload is intact. Releasing the lease lets an immediate
+      // retry resume the stored answer without another model call.
+      await deps.repository
+        .failTurn({
+          turnId: turn.id,
+          ownerId: input.executionOwnerId,
+          executionAttempt: input.executionAttempt,
+          errorCode: "assistant_turn_write_failed",
+          now: now(),
+        })
+        .catch(() => null);
       return {
-        assistantTurnPersisted: true,
-        assistantMessageId,
+        assistantTurnPersisted: false,
+        assistantMessageId: null,
         alreadyPersisted: false,
-        linkVerified,
-        saved: linkVerified,
-        errorCode: linkVerified ? null : "user_turn_link_missing",
-        retryable: !linkVerified,
+        linkVerified: false,
+        saved: false,
+        errorCode: "assistant_turn_write_failed",
+        retryable: true,
       };
     }
 
-    if (
-      finalized?.status === "assistant_persisted" &&
-      finalized.assistantMessageId
-    ) {
-      // Another attempt completed this turn first. Report its authoritative
+    if (finalized.outcome === "already_completed") {
+      // Another attempt finalized this turn first. Report its authoritative
       // result instead of claiming this attempt's content.
-      return await completedResult(finalized);
+      return {
+        assistantTurnPersisted: true,
+        assistantMessageId: finalized.turn.assistantMessageId,
+        alreadyPersisted: true,
+        linkVerified: finalized.linkVerified,
+        saved: finalized.linkVerified,
+        errorCode: finalized.linkVerified ? null : "user_turn_link_missing",
+        retryable: !finalized.linkVerified,
+      };
     }
 
     return {
       assistantTurnPersisted: true,
-      assistantMessageId,
+      assistantMessageId: finalized.turn.assistantMessageId,
       alreadyPersisted: false,
-      linkVerified: false,
-      saved: false,
-      errorCode: "assistant_turn_ledger_write_failed",
-      retryable: true,
+      linkVerified: finalized.linkVerified,
+      saved: finalized.linkVerified,
+      errorCode: finalized.linkVerified ? null : "user_turn_link_missing",
+      retryable: !finalized.linkVerified,
     };
   }
 
   /**
-   * Renews the execution lease while the model stage runs. Renewal is fenced by
-   * `ownerId`, so a stolen or expired lease is reported rather than silently
-   * extending ownership.
+   * Renews the execution lease while the model stage runs.
+   *
+   * Renewal is fenced by the whole token (`ownerId` + `executionAttempt`), so a
+   * lease that was taken over — or an attempt whose number was superseded —
+   * cannot keep extending (or regain) authority; the caller sees `leaseLost`.
+   * Expiry alone does not revoke authority: takeover is what revokes it, and a
+   * takeover can only happen once the lease has expired.
    */
   function startExecutionHeartbeat(input: {
     turnId: string;
     ownerId: string;
+    executionAttempt: number;
     intervalMs?: number;
     leaseMs?: number;
   }): TurnExecutionHeartbeat {
@@ -853,6 +900,7 @@ export function createConversationTurnService(deps: {
         .renewExecution({
           turnId: input.turnId,
           ownerId: input.ownerId,
+          executionAttempt: input.executionAttempt,
           leaseMs,
           now: now(),
         })
@@ -883,6 +931,7 @@ export function createConversationTurnService(deps: {
     clientTurnId: string;
     errorCode: string;
     executionOwnerId?: string | null;
+    executionAttempt?: number | null;
   }): Promise<boolean> {
     if (!CLIENT_TURN_ID_PATTERN.test(input.clientTurnId)) {
       return false;
@@ -897,6 +946,7 @@ export function createConversationTurnService(deps: {
       .failTurn({
         turnId: turn.id,
         ownerId: input.executionOwnerId ?? null,
+        executionAttempt: input.executionAttempt ?? null,
         errorCode: input.errorCode.slice(0, 64),
         now: now(),
       })
