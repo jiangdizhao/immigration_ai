@@ -1,8 +1,26 @@
 # CURRENT_MILESTONE
 
-**Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase  
-**Status:** IN PROGRESS  
-**Updated:** 2026-10-10
+**Milestone:** Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence  
+**Status:** APPROVED / Stage 1 NOT STARTED  
+**Updated:** 2026-10-11
+
+## Phase 12 — Three-stage approved plan; implementation NOT STARTED (2026-10-11)
+
+**Planning branch:** `phase12-user-data-reliability-policy-intelligence` created from canonical `phase11-chinese-service-platform-ui-rebase@0ed11150015773573cd7e1d0396134e696bf7357`. **Authority:** owner approved a compact three-stage plan and authorized this **documentation-only branch and commit**. This is NOT authorization to implement Stage 1, run migrations, alter existing customer data, deploy, or merge. Owner first syncs branch locally; only then will request the Stage 1 coding-model prompt.
+
+**Detailed authoritative plan:** `docs/agent-memory/tasks/PHASE12_USER_DATA_WORKSPACE_POLICY_2026-10-11.md`.
+
+- **Stage 1 — User Data Reliability:** user-owned durable conversation/message/history, idempotency, complete pagination, cross-device history/file retrieval, real DOCX MIME/content fix, optional Project scope interfaces only. **NOT STARTED**.
+- **Stage 2 — AI Workspace Integration:** one authorized scope resolver shared by Fast/Legal Check/Premium, actual document evidence in all backend serving paths, persisted policy-to-conversation binding, compact composer and right-side files. **NOT STARTED**.
+- **Stage 3 — Policy Intelligence Completion:** fuller official proposed/consultation discovery, permissioned lawyer editorial override and audit, clear legal-vs-publication status, currentness/revision continuity, integrated staging gate. **NOT STARTED**.
+
+**Hard gate rule:** each Stage is one integrated coding-model task, with its own full code/tests/DB-owner-host/browser/cross-device evidence, independent review and owner acceptance. A failed/skipped/blocked required check is never PASS. No Stage 2 before Stage 1 PASS; no Stage 3 before Stage 2 PASS. Real database/staging/production changes always require separate explicit owner authorization. No additional milestone fragmentation.
+
+**Durable invariant:** same account on Ubuntu/Windows/Android can access all retained authorized historic messages, attached metadata and original files; full history is NOT the same as cross-chat AI context sharing. Project support remains only optional typed interfaces (`projectId: null`) and no feature. Stripe China activation stays PAUSED (see prior record). Older Phase 11 and Stripe records below are historical, not active instructions for Phase 12.
+
+## Historical Phase 11 objective and background
+
+**Previous milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase. Its source/history below are retained for traceability.
 
 ## Objective
 

@@ -996,3 +996,20 @@ Accepted product contract:
 - webhook/payment replay must remain idempotent and existing AUD subscription/cancellation/billing-portal behavior must not regress.
 
 This is a fast one-pass product extension, not a billing rewrite. Direct Alipay SDK integration, direct WeChat Pay SDK integration, automatic FX conversion, additional prepaid durations, and a generic multi-provider payment framework are explicitly out of scope. A minimal additive migration is permitted if the existing schema cannot safely represent both flows, but applying any new migration outside an authorized local/disposable environment remains a separate operation.
+
+## D-057 — Phase 12 three-stage reliability and Policy Intelligence plan
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED — PLAN ONLY; Stage 1 execution NOT YET AUTHORIZED
+
+The owner rejects excessive micro-milestone splitting and accepts **exactly three** coherent implementation stages, each with concentrated rigorous test and independent owner approval gates, as defined in `docs/agent-memory/tasks/PHASE12_USER_DATA_WORKSPACE_POLICY_2026-10-11.md`:
+
+1. Durable user-centred conversation/file history across Ubuntu/Windows/Android, reliable message persistence, pagination and DOCX handling, plus **interfaces only** for future optional Projects.
+2. Unified authorized conversation/document/policy context across Fast/Legal Check/Premium, persisted policy identity, and chat-priority/responsive file UI.
+3. Broader official proposed-policy discovery and lawyer-authorized editorial correction/approval, status/currentness clarity and integrated staging acceptance.
+
+Same-account historical visibility and file retrieval must be complete for retained authorized records, but independent-chat model contexts remain isolated. Existing customer files, histories and legal Matter boundaries remain protected; no destructive migration or cross-user access. A future GPT-like Project does not exist in this Phase.
+
+**Prior decision clarification:** D-053/D-054's existing automated Policy Intelligence publishing pipeline remains operational; D-057 permits a separately authorized lawyer editorial **exception** pathway and broader official candidate discovery without imposing a mandatory lawyer review step on every automatically eligible policy. Manual review does not allow unsupported legal facts or fake effective dates to be labeled verified. Previous architecture/safety and evidence rules remain in force.
+
+**Scope restriction:** This acceptance authorizes creating the Phase 12 branch and committing plan/state documents, **not** implementing Stage 1, merging, deploying, applying migrations or changing Stripe settings. Existing WeChat/Alipay payment activation hold remains in effect. Owner will request Stage 1 coding-model prompt after local sync.

@@ -1,0 +1,114 @@
+# Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence
+
+**Date / decision:** 2026-10-11; owner-approved three-stage plan.
+**Status:** PLAN APPROVED; STAGE 1 NOT STARTED; no code or migrations executed.
+**Work branch:** `phase12-user-data-reliability-policy-intelligence`
+**Baseline / parent:** `phase11-chinese-service-platform-ui-rebase@0ed11150015773573cd7e1d0396134e696bf7357`
+**Implementation authorization:** NOT YET GRANTED. Owner will sync this planning branch locally and separately request the Stage 1 coding-model prompt. Do not start implementation, migrate, merge or deploy based solely on this document.
+**Scope:** The six observed workspace/document/policy issues and the owner's cross-device user-data requirement. GPT-like Projects are interface-reserved only.
+
+## 1. Product invariants — non-negotiable
+
+1. **User-owned durable history:** A user's authenticated account is the durable owner/authorization root for their entitled conversation history and uploaded files. Same account on Ubuntu, Windows, Android, another browser or after a new login must find all retained conversations/messages and permitted original files, subject to explicit deletions/retention policy. Server PostgreSQL/object storage are authoritative. React state/localStorage are caches/preferences only. There must be no silent history truncation (the current list endpoint has a limit of 80), false "saved" acknowledgment, or device-bound-only content.
+2. **Full history vs AI working context:** Preserve the complete recoverable history and original files, but send only an authorized, provenance-rich, bounded subset to the model. Accessible in a user-level file history does **not** imply automatic LLM access from unrelated conversations.
+3. **Conversation ownership, not universal sharing:** Uploaded documents remain scoped to their owner and current conversation by default. Owner may find/access/download them account-wide across devices, but unrelated conversations do not silently inherit their content. Matter/lawyer access requires explicit authorization. Unfinished, failed or evidence-empty files must not be presented as successfully analyzed.
+4. **Future optional Project, not implemented now:** Reserve typed scope/adapter contracts along the lines of `{userId, conversationId, matterId?, projectId?: null}`, document access scope, and memory scope. A non-project conversation remains fully supported. Do not add Project CRUD, membership, memory synthesis, cross-conversation document sharing, UI, or a parallel database in Phase 12. Do not conflate a future user Project with the legal `Matter`.
+5. **Mode-specific execution, shared trusted scope:** Fast, Legal Check (including AgentRuntime and any permitted legacy serving path) and Premium each retain their own answer/research policy, but receive the same authenticated current-conversation policy identity and usable customer-document evidence. Customer files are untrusted customer evidence, never official law.
+6. **Policy source status is distinct from editorial publication:** `proposed`, `consultation`, `announced`, enacted-but-not-commenced, in-force and withdrawn/superseded must not be conflated. Public publication of a reviewed proposed-policy briefing never implies legislation is in force.
+7. **No payment scope creep:** WeChat Stripe code is merged but account approval/activation/payment smoke remain PAUSED; Alipay is not implemented. Leave AUD recurring subscription, VIP entitlement, Stripe keys, live billing and billing deployment unchanged unless explicitly reauthorized.
+8. **No destructive change:** No silent deletion, reclassification or irreversible migration of existing customer history/files. New database migration code may be designed/reviewed in a Stage if essential; applying it to real/staging/production data requires separately approved environment-specific validation and authorization.
+
+## 2. Stage structure and mandatory gate discipline
+
+**Exactly THREE delivery stages, not eight micro-milestones.** Each is one integrated coding-model task covering the entire stage. Baseline/environment preflight, necessary tests, owner-host validation, peer review, and durable project-state updates are part of that stage, not new milestones. Fix blockers within the same stage; no next-stage work unless its gate is accepted.
+
+### Stage 1 — Account-centred durable history and documents
+
+**Outcome:** Signed-in users can recover *all retained and authorized* conversation messages, associated metadata and historical original files from another device; DOCX upload works without unsafe MIME trust; actual persistence failures cannot masquerade as success.
+
+**Required product/code behavior:**
+- Inspect existing `Chat`, `ImmigrationConversation`, `Message`, answer-metadata, `MatterDocument`, processing/evidence, object-storage, auth/role and retention contracts. Read-only audit of existing orphans, empty chats, gaps and file/storage integrity. Distinguish valid empty new chats from failed persistence. Record existing unrecoverable history honestly; do not fabricate data.
+- Replace duplicate ad-hoc `saveMessages` calls in `chatbot/app/api/widget-chat*/route.ts` with one owner-authorized, idempotent conversation-write contract. Persist user turn before model execution; persist assistant answer/metadata and report durable receipt before declaring "saved". Stable `clientTurnId` and message IDs; safe retry without duplicate content or repeated model billing. Ensure write failure is observable, recoverable where possible, and not swallowed as a successful persisted turn. Keep citations, source metadata, document manifests, research status, and Matter links on reload. Avoid holding DB transactions open across provider calls.
+- Support cursor-based **complete** conversation enumeration and message history pagination; no hard top-80 cap; stable ordering, no page gaps, backward-compatible API/load semantics. Guard fast conversation switching against stale HTTP responses and differentiate loading/empty/error/persist-failed states. Resolve cross-device races/duplicate retry semantics.
+- Provide an authenticated user-level **historical file index** spanning that user's conversations, while retaining per-conversation AI access. Keep original S3 bytes plus immutable/traceable metadata, processing status and downloaded content available across devices. Respect deletion/retention and prevent cross-user or over-broad lawyer/admin access.
+- Fix DOCX browser-MIME mismatch: validate allowlisted extension **and real OOXML Word container identity**, normalize MIME server-side instead of rejecting an otherwise valid DOCX solely for an unknown `File.type`; retain strict ZIP/OOXML, decompression, size, macro, signature and malformed-file safeguards. Never accept an arbitrary renamed ZIP. Preserve existing file worker, limits and security boundary.
+- Reserve only the optional `projectId`/ContextScope/DocumentAccessScope/MemoryScope interface in appropriate existing types/adapters; currently `projectId=null`; do not create Project features or a second ownership model.
+- Inspect initial auth behavior on customer vs lawyer/admin file routes; preserve least privilege. Any staff self-workspace access requires a scoped, reviewed authorization contract, not a blanket role bypass.
+
+**Gate 1 — must ALL pass and be reported:**
+- Focused unit/API/DB tests for successful user+assistant persistence, retry/idempotency, simulated DB write failure (no false success), preserved structured metadata and crash/interruption recovery assumptions.
+- More than 100 conversations plus long-message pagination across page boundaries; list and reopen earliest conversations. Rapid A/B switching cannot overwrite B with A's late response.
+- Real authenticated account cross-environment checks: Ubuntu creates/updates conversation and uploads DOCX/PDF; Windows and Android/browser profiles recover messages/files/processing status and download unchanged original bytes; verify new reply returns on next device. When real OS devices are not available in the coding sandbox, mark owner manual verification PENDING, **not PASS**.
+- Valid browser DOCX with normal and nonstandard MIME passes through actual upload + worker and generates usable evidence. Fake, malformed, swapped-extension, macro and over-limit documents remain rejected.
+- Second customer cannot access others' chat/messages/files; unrelated same-user chat does not automatically consume original chat's document evidence. Database/object-store failures have explicit UI states. Audit anomalies are documented, not deleted.
+- Relevant existing frontend unit tests, tests against an approved isolated database/object store, changed-file lint/typecheck/build and security regression pass. If real environment/network blocks validation, report BLOCKED and get owner-host evidence. No authorization to mutate production.
+
+**Gate 1 status:** NOT RUN / NOT ACCEPTED. Stage 2 blocked until owner review.
+
+### Stage 2 — Consistent AI context + policy handoff + compact workspace UI
+
+**Outcome:** All three modes actually receive the current authenticated conversation's available policy identity and usable document evidence. The UI prioritizes chat messages and places the persistent file list on the right.
+
+**Required product/code behavior:**
+- Introduce one server-side typed context resolver/adapter fed by authorized user, conversation, optional Matter, persisted policy binding, bounded history and bounded, processed conversation-doc evidence. Centralize identity/access/availability decisions; **do not** homogenize model prompts or rewrite premium/agent architecture. Keep context vs provenance vs verified legal authority separate. Project scoping is a null/optional reserved adapter only.
+- Fix document consumption in both Legal Check serving configurations: the `DefaultAgentServingService` AgentRuntime request currently omits `customer_document_evidence`; other PFVD/legacy paths may not consistently feed it to final synthesis. Fast/Premium existing explicit file formatters must remain correct. If agent request schema/budget cannot carry full document text, use an authorized bounded typed evidence handle/tool with secure provenance, not a fake citation. Include availability/packaged/used distinctions and truthful partial/no-text statuses.
+- Persist a policy-to-conversation binding on the server when user invokes **就这项政策向 AI 提问**; anchor policy ID/slug, original revision/source identity, title snapshot and timestamp. Avoid reliance on `linkedPolicyReference`, `linkedPolicyChatIdRef`, URL alone. Refresh, device change, mode switch, archived/superseded/unavailable source must preserve *topic identity*, while legal currentness is independently verified. Return an explicit error if binding genuinely cannot be recovered rather than asking user to redescribe a bound policy.
+- Compact A/C/D areas (short header, bounded auto-growing composer, integrated upload/send controls), enlarge B chat viewport with responsive flex/grid constraints; prevent composer from crowding message list on normal desktop heights. Keep the upload affordance near composer; move account-owned **current-conversation files** into right-hand panel beside matter facts/case summary, using server reload not browser-only upload state; responsive mobile drawer/tab with accessible touch targets. Show file processing/error/cross-device states accurately; optional account file history is separate from the current-chat AI attachment list.
+
+**Gate 2 — must ALL pass and be reported:**
+- Same prepared PDF/DOCX, same chat and same user: Fast, Legal Check (AgentRuntime ON and OFF where supported), Premium answer content questions using *actual* document evidence; mode switch never requires reupload. Source provenance is customer-document, never government law; failed/partial/truncated processing is stated honestly.
+- Policy-linked conversation survives first question, follow-up "这项政策", fast/default/premium switching, reload, historical reopen and another OS/browser; archive/new revision does not erase originally linked topic.
+- Negative authorization tests: another user, unrelated chat, deleted document, missing policy, expired session; no metadata/spoofed client policy reference can widen access.
+- Visual/browser E2E at desktop 1920x1080 and 1366x768, tablet ~768px and mobile ~390px; materially more chat message area, bounded composer, persistent right-hand files / mobile alternative, no clipping or missing send/upload controls. Preserve keyboard and screen-reader basics.
+- Mode, answer, document provenance, consultation, VIP/UI and client portal regression; unit + integration + owner-browser evidence, changed-file lint/typecheck/build. Any unexecuted required check remains BLOCKED.
+
+**Gate 2 status:** NOT RUN / NOT ACCEPTED. Stage 3 blocked until owner review.
+
+### Stage 3 — Policy Intelligence proposal coverage, lawyer override and integrated release readiness
+
+**Outcome:** Official proposed/consultation/upcoming policy changes enter review, are distinguished from enacted/in-force, and authorized lawyer editors can consciously publish reviewed, source-traceable held items; public pages remain stable and auditable.
+
+**Required product/code behavior:**
+- Extend bounded allowlisted official discovery beyond current narrow Home Affairs Student-500 alert seed, Federal Register registered legislation and ART news. Prioritize official Home Affairs/ministerial news, consultation/discussion papers and appropriate official parliamentary/bill processes. Keep HTTPS/host/DNS/redirect/byte/time safeguards, source identities, original dates, immutable snapshots, dedup/observability. Add permissioned official URL submission into same discover/acquire/analyze/verify/review pipeline. Do not treat rumor, unsupported predictions or general social chatter as official policy.
+- Keep `sourceStatus` separate from `editorialStatus`. Explicitly support proposed, consultation, announced, adopted-not-yet-commenced, in-force and withdrawn/superseded with verifiable dates and honest uncertainty; public UI must never label an announcement as legally in force. Add display/status test coverage, including historical snapshots.
+- Implement a scoped Policy Editor permission for explicitly authorized lawyer/admin staff, not all lawyers by default. Admin/archive/restore remains; permit lawyer editing and human approval of AI-held `review_required` records, including `source_not_policy_relevant` classification errors. Record reviewer, timestamp, source/revision, old/new content, override reason and audit event. **No indiscriminate `forcePublish=true` bypass** of missing official identity or unsupported decisive legal claims; allow careful qualified editorial correction/reverification.
+- Preserve approved public revision independently of newest unapproved snapshot, so a new failed/held update does not silently blank all previously reviewed content. However flag known stale/withdrawn/currentness issues instead of silently treating obsolete legal statements as current. Maintain safe archive suppression and reviewed manual fallback continuity. **Do not impose mandatory review for every automatic publication**: owner-approved manual override is an extra exception-control/editorial facility, and the existing trusted automated publication path remains unless separately reauthorized.
+- In public policy UI, present at least clearly differentiated in-force, announced/upcoming, and proposed/consultation groups, source URLs and last review/effect dates; link into the persistent policy conversation context from Stage 2.
+
+**Gate 3 — must ALL pass and be reported:**
+- At least one genuinely retrieved official consultation/proposal plus one announced/registered/in-force source enters pipeline with grounded citations and appropriate lifecycle status; discovery failure/allowlist/ambiguous source tests.
+- Held but valid policy can be corrected/approved by authorized Policy Editor, audit all changes; no ordinary user/unauthorized lawyer can act; unsigned sources, unsupported claims, false effective dates cannot be laundered into "verified law".
+- Existing approved revision stays available with appropriate currentness warnings when a new source snapshot is held; deliberate archive remains effective; rollback/restore and manual fallback continue working.
+- Lawyer manually checks one proposed-policy editorial publication; cross-device data/history/file and three-mode regression from Stages 1–2 remain green; run complete staging E2E with separate authorization. Billing and unrelated services regressions are checked without configuring/activating deferred Stripe payments.
+- All required automated and approved live/staging validations, security review, build, rollback/backup plan and externally reviewed diff are recorded. Only afterward is Phase 12 eligible for **separate owner-authorized** merge/deployment/production acceptance.
+
+**Gate 3 status:** NOT RUN / NOT ACCEPTED.
+
+## 3. Standard engineering contract for each Stage
+
+- **One main coding-model prompt per Stage; no M1/M2/M3 splitting.** Comprehensive code+tests+docs in one coherent feature work unit; correction tasks only if real failure/review finding demands it.
+- Start by reading `AGENTS.md`, `docs/agent-memory/CURRENT_HANDOFF.md`, `CURRENT_MILESTONE.md`, `PROJECT_STATE.md`, `DECISIONS.md`, this plan, relevant architecture and actual source/tests. Verify Git branch/HEAD/clean tree and no conflicting owner edits. Prefer an isolated implementation branch from this Phase 12 planning branch; do not implement directly on canonical or overwrite existing protected WIP.
+- Respect frozen legal evidence identity, user privacy, political-gate behavior and all relevant previous business rules; no hardcoded visa/phrase fixes or silent downgrades of legal correctness. No blanket file/lawyer permission.
+- Scope changes to required frontend/API/backend/schema/tests. Migrations are source artifacts only until approved; do not use production/staging or substitute stale Docker DB. Existing local Python: `/home/rico/anaconda3/envs/torch/bin/python`; authoritative host PostgreSQL is `127.0.0.1:5432`/`immigration_legal`, but any test with mutation uses a separately approved isolated test DB. No credentials in prompts/logs/docs.
+- Base check commands on `cd chatbot && pnpm test:unit`, `pnpm exec tsc --noEmit`, `pnpm build`, changed-file Biome and backend targeted/full pytest as relevant; add real DB/API/browser/E2E tests where the Stage demands. Record actual pass/fail/skip, not asserted estimates. Tooling/network restrictions are **not** PASS.
+- Return exact diff, tests and skip explanations, migration status, risk/security/rollback notes, unresolved issues, expected Gate result. Do not mark PASS until ChatGPT independent review plus owner-host and cross-device validation as applicable. Commit/push reviewed Stage branch and independently verify remote SHA; no merge, force push, AWS staging/production deployment, real payments or DB migration without separate owner authorization.
+- Update the durable task and handoff/decision records with truthful PASS / REWORK / BLOCKED gate status, and only proceed when the owner explicitly approves the next Stage.
+
+## 4. Explicit exclusions and unresolved choices
+
+- **No Project implementation**: no Project table, UI, project membership, shared memory or project-file sharing. Only interface seams and null scope now.
+- No silent universal file sharing between conversations; no automatically exposing customer files to every lawyer.
+- No replacement of Fast/Legal Check/Premium with one monolithic agent; no AI fine-tuning.
+- No bulk reprocessing or deletion of actual customer histories/files; pre-existing irrecoverable data must be reported and only reconciled with evidence.
+- Exact data migrations, persistent context shape, replay strategy and server deployment environment remain implementation design decisions to be reviewed within each Stage; the product and validation invariants above control them.
+- Owner will request Stage 1 code-model prompt **after local Git sync**. This planning commit does not constitute execution approval.
+
+## 5. Stage status tracker
+
+| Stage | Status | Code commit | Test/owner evidence | Owner gate |
+| --- | --- | --- | --- | --- |
+| Stage 1 — Durable history & documents | NOT STARTED | — | — | NOT REVIEWED |
+| Stage 2 — Context & workspace UI | NOT STARTED | — | — | NOT REVIEWED |
+| Stage 3 — Policy Intelligence | NOT STARTED | — | — | NOT REVIEWED |
+
+Next action: **owner syncs new branch locally and explicitly requests Stage 1 coding-model prompt.**
