@@ -549,11 +549,7 @@ async function assertOwnershipIsolation(
  * Phase 12 Stage 1 R1 historical compatibility: a chat that holds messages but
  * has no `ImmigrationConversation` row stays visible and readable, an empty chat
  * without a conversation row stays hidden, and no read path mutates the data.
- */
-/**
- * Phase 12 Stage 1 R1 historical compatibility: a chat that holds messages but
- * has no `ImmigrationConversation` row stays visible and readable, an empty chat
- * without a conversation row stays hidden, and no read path mutates the data.
+ * Phase 12 Stage 1 R3 adds the frontend read-only contract assertions below.
  */
 async function assertLegacyChatCompatibility(
   sql: ReturnType<typeof postgres>,
@@ -597,6 +593,61 @@ async function assertLegacyChatCompatibility(
     }),
     null,
     "another account must never read this legacy chat"
+  );
+
+  // Phase 12 Stage 1 R3 read-only contract: browsing the legacy chat (list,
+  // detail, page read) must not create or repair anything, and the widget route
+  // gate (which requires an ImmigrationConversation row) must still refuse it.
+  const beforeRows = (await sql`
+    select count(*)::int as total from "ImmigrationConversation"
+    where "chatId" = ${fixtures.legacyChatId}
+  `) as unknown as { total: number }[];
+  assert.equal(Number(beforeRows[0]?.total ?? -1), 0);
+
+  const legacyMessages = await queries.listMessagesForChatPage({
+    chatId: fixtures.legacyChatId,
+    userId: fixtures.ownerA,
+    limit: 2,
+    olderThan: null,
+  });
+  assert.ok(
+    legacyMessages.messages.length >= 1,
+    "the legacy chat keeps its historical messages readable"
+  );
+  assert.equal(legacyMessages.messages.at(0)?.role, "user");
+  assert.equal(
+    await queries.getImmigrationConversationByChatId({
+      chatId: fixtures.legacyChatId,
+      userId: fixtures.ownerA,
+    }),
+    null,
+    "the widget answer route gate still rejects a chat without a conversation row"
+  );
+
+  const afterRows = (await sql`
+    select count(*)::int from "ImmigrationConversation"
+    where "chatId" = ${fixtures.legacyChatId}
+  `) as unknown as { count: number }[];
+  assert.equal(
+    Number(afterRows[0]?.count ?? -1),
+    0,
+    "opening an archived chat must never create the missing conversation row"
+  );
+  const legacyMessageCount = (await sql`
+    select count(*)::int from "Message_v2" where "chatId" = ${fixtures.legacyChatId}
+  `) as unknown as { count: number }[];
+  assert.ok(
+    Number(legacyMessageCount[0]?.count ?? 0) >= 1,
+    "historical messages stay intact"
+  );
+  const legacyAnchor = await sql`
+    select "createdAt" from "Message_v2"
+    where "chatId" = ${fixtures.legacyChatId}
+    order by "createdAt" asc limit 1
+  `;
+  assert.ok(
+    legacyAnchor.length === 1 && legacyAnchor[0]?.createdAt,
+    "historical timestamps stay intact"
   );
   assert.equal(
     await queries.getOwnedLegacyChatSummary({

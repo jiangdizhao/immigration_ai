@@ -28,6 +28,23 @@ export type WorkspaceCopy = {
     loadEarlier: string;
     loadingEarlier: string;
   };
+  /**
+   * Phase 12 Stage 1 R3: archived (legacy) conversation read-only surface.
+   * A legacy chat is retained history whose immigration conversation record was
+   * never created, so new messages cannot be accepted here.
+   */
+  legacy: {
+    badge: string;
+    title: string;
+    description: string;
+    listHint: string;
+    readOnlySubmitBlocked: string;
+    readOnlyIntakeBlocked: string;
+    readOnlyUploadBlocked: string;
+    readOnlyLawyerBlocked: string;
+    startNewConversation: string;
+    startNewConversationHint: string;
+  };
   persistence: {
     notSaved: string;
     retrySave: string;
@@ -168,6 +185,21 @@ const zh: WorkspaceCopy = {
   messages: {
     loadEarlier: "加载更早的消息",
     loadingEarlier: "正在加载更早的消息…",
+  },
+  legacy: {
+    badge: "历史归档",
+    title: "历史对话（只读）",
+    description:
+      "这是账号中保留下来的历史对话记录（只读）。您可以完整查看原有消息、来源与时间，但不能在此对话中继续提问或修改内容。",
+    listHint: "只读历史",
+    readOnlySubmitBlocked: "该历史对话为只读，请新建对话后继续提问。",
+    readOnlyIntakeBlocked: "该历史对话为只读，无法在此提交信息。请新建对话。",
+    readOnlyUploadBlocked: "该历史对话为只读，无法上传文件。请新建对话。",
+    readOnlyLawyerBlocked:
+      "该历史对话为只读，无法在此发起人工复核。请新建对话。",
+    startNewConversation: "新建对话",
+    startNewConversationHint:
+      "在新建对话中继续向 AI 提问，历史记录会保留在这里。",
   },
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
@@ -339,6 +371,24 @@ const en: WorkspaceCopy = {
   messages: {
     loadEarlier: "Load earlier messages",
     loadingEarlier: "Loading earlier messages…",
+  },
+  legacy: {
+    badge: "Archived",
+    title: "Archived conversation (read-only)",
+    description:
+      "This is retained history from your account, shown read-only. You can read the original messages, sources and timestamps, but new questions and edits are not accepted in this conversation.",
+    listHint: "Read-only history",
+    readOnlySubmitBlocked:
+      "This archived conversation is read-only. Start a new conversation to ask a new question.",
+    readOnlyIntakeBlocked:
+      "This archived conversation is read-only, so case details cannot be submitted here. Start a new conversation.",
+    readOnlyUploadBlocked:
+      "This archived conversation is read-only, so files cannot be uploaded here. Start a new conversation.",
+    readOnlyLawyerBlocked:
+      "This archived conversation is read-only, so a lawyer review cannot be requested here. Start a new conversation.",
+    startNewConversation: "Start a new conversation",
+    startNewConversationHint:
+      "Ask the AI in a new conversation — this archived history stays available here.",
   },
   persistence: {
     notSaved:

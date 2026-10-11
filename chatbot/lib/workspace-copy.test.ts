@@ -10,6 +10,47 @@ test("workspace copy provides Chinese-first and English chrome", () => {
   );
 });
 
+test("archived conversation copy is present, localized and non-misleading", () => {
+  const zh = getWorkspaceCopy("zh-CN").legacy;
+  const en = getWorkspaceCopy("en").legacy;
+
+  assert.equal(zh.badge, "历史归档");
+  assert.equal(zh.title, "历史对话（只读）");
+  assert.equal(zh.startNewConversation, "新建对话");
+  assert.match(zh.description, /只读|不能在此对话中继续提问/);
+  assert.match(zh.readOnlySubmitBlocked, /只读/);
+
+  assert.equal(en.badge, "Archived");
+  assert.match(en.title, /read-only/);
+  assert.equal(en.startNewConversation, "Start a new conversation");
+  assert.match(en.description, /read-only/);
+  assert.match(en.readOnlySubmitBlocked, /read-only/);
+
+  for (const key of [
+    "badge",
+    "title",
+    "description",
+    "listHint",
+    "readOnlySubmitBlocked",
+    "readOnlyIntakeBlocked",
+    "readOnlyUploadBlocked",
+    "readOnlyLawyerBlocked",
+    "startNewConversation",
+    "startNewConversationHint",
+  ] as const) {
+    assert.ok(zh[key].trim().length > 0, `zh.legacy.${key} must not be empty`);
+    assert.ok(en[key].trim().length > 0, `en.legacy.${key} must not be empty`);
+    assert.notEqual(zh[key], en[key], `legacy.${key} must be localized`);
+  }
+
+  // The archived surface must never promise an outcome.
+  assert.doesNotMatch(Object.values(zh).join(" "), /保证|一定获批|必然/);
+  assert.doesNotMatch(
+    Object.values(en).join(" "),
+    /guarantee|guaranteed approval|always approved/i
+  );
+});
+
 test("quick questions are localized and make no outcome guarantees", () => {
   const chineseQuestions = getWorkspaceCopy("zh-CN").quickQuestions;
   const englishQuestions = getWorkspaceCopy("en").quickQuestions;

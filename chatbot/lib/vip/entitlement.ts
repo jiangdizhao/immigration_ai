@@ -14,6 +14,20 @@ export type PrepaidVipPurchaseEntitlement = {
   vipExpiresAt: Date | null;
 };
 
+/**
+ * Phase 12 Stage 1 R3 typing correction: the retained entitlement is always a
+ * concrete membership tier plus either a real `Date` expiry or `null`. It used
+ * to be declared as `Pick<EntitlementUser, "membershipTier" | "vipExpiresAt">`,
+ * which widened `vipExpiresAt` to `Date | string | null` even though the
+ * function never returns a string, and that widened type did not match the
+ * database timestamp column. The declaration below matches the guaranteed
+ * runtime values exactly; no runtime behaviour changed.
+ */
+export type RetainedPrepaidVipEntitlement = {
+  membershipTier: VipMembershipTier;
+  vipExpiresAt: Date | null;
+};
+
 function expirationDate(value: Date | string | null): Date | null {
   if (!value) {
     return null;
@@ -56,7 +70,7 @@ export function calculateVipWindow(
 export function getRetainedPrepaidVipEntitlement(
   purchases: readonly PrepaidVipPurchaseEntitlement[],
   now = new Date()
-): Pick<EntitlementUser, "membershipTier" | "vipExpiresAt"> {
+): RetainedPrepaidVipEntitlement {
   let latestExpiry: Date | null = null;
 
   for (const purchase of purchases) {

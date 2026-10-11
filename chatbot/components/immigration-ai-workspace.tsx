@@ -35,6 +35,13 @@ import {
 } from "@/lib/political-gate";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import {
+  type ConversationOrigin,
+  normalizeConversationOrigin,
+  resolveConversationInteraction,
+  shouldApplyConversationDetail,
+  shouldApplyOlderMessages,
+} from "@/lib/workspace/conversation-origin";
+import {
   buildWorkspaceCaseSummary,
   shouldClearWorkspaceCaseSummary,
 } from "@/lib/workspace-case-summary";
@@ -54,6 +61,10 @@ import type {
   WidgetTurnPersistence,
 } from "./guided-intake-types";
 import { LawyerRequestAction } from "./lawyer-request-action";
+import {
+  LegacyConversationBadge,
+  LegacyConversationNotice,
+} from "./legacy-conversation-notice";
 import { MatterDocumentsPanel } from "./matter-documents-panel";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
@@ -305,6 +316,11 @@ type ImmigrationConversationSummary = {
   title?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  /**
+   * Phase 12 Stage 1 R3: `legacy_chat` marks retained history whose immigration
+   * conversation record does not exist, so the chat is read-only in the UI.
+   */
+  origin?: ConversationOrigin;
 };
 
 type ImmigrationStoredMessage = {
@@ -481,6 +497,9 @@ export function ImmigrationAIWorkspace({
   const quickQuestions = copy.quickQuestions;
   const [conversationId, setConversationId] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const [conversationOrigin, setConversationOrigin] =
+    useState<ConversationOrigin>("immigration");
+  const conversationOriginRef = useRef<ConversationOrigin>("immigration");
   const [linkedPolicyReference, setLinkedPolicyReference] =
     useState<PolicyWorkspaceReference | null>(
       initialChatId && !policyLaunch ? policyReference : null
@@ -536,6 +555,23 @@ export function ImmigrationAIWorkspace({
     () => [...messages].reverse().find(isAssistantMessage) ?? null,
     [messages]
   );
+  /**
+   * Phase 12 Stage 1 R3: one contract decides whether this conversation accepts
+   * new work. Read-only is derived from the origin that was applied together
+   * with the loaded conversation, so a stale or delayed response cannot leave
+   * the workspace in the wrong mode.
+   */
+  const interaction = useMemo(
+    () =>
+      resolveConversationInteraction({
+        origin: conversationOrigin,
+        conversationReady,
+        conversationLoading,
+        turnInFlight: status !== "ready",
+      }),
+    [conversationOrigin, conversationReady, conversationLoading, status]
+  );
+  const isReadOnlyConversation = interaction.readOnly;
   const latestKnownFacts =
     latestAssistant?.interactionPlan?.known_facts_summary ?? {};
   const latestRequestedFacts =
@@ -674,7 +710,14 @@ export function ImmigrationAIWorkspace({
         );
         const data = (await response.json()) as ImmigrationConversationDetail;
         // A late response for conversation A must never replace conversation B.
-        if (requestSeq !== conversationLoadSeqRef.current) {
+        if (
+          !shouldApplyConversationDetail({
+            requestSeq,
+            latestRequestSeq: conversationLoadSeqRef.current,
+            requestedChatId: chatIdToLoad,
+            loadedChatId: data.chatId ?? null,
+          })
+        ) {
           return;
         }
         if (
@@ -687,6 +730,11 @@ export function ImmigrationAIWorkspace({
         }
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
+        // The read-only mode is applied atomically with the conversation: this
+        // origin belongs to the chat id that was just applied.
+        const nextOrigin = normalizeConversationOrigin(data.origin);
+        conversationOriginRef.current = nextOrigin;
+        setConversationOrigin(nextOrigin);
         const keepPolicy = isPolicyLinkedConversation(
           data.chatId,
           linkedPolicyChatIdRef.current,
@@ -740,7 +788,12 @@ export function ImmigrationAIWorkspace({
         { method: "GET" }
       );
       const data = (await response.json()) as ImmigrationConversationDetail;
-      if (data.chatId !== conversationIdRef.current) {
+      if (
+        !shouldApplyOlderMessages({
+          loadedChatId: data.chatId ?? null,
+          activeChatId: conversationIdRef.current,
+        })
+      ) {
         return;
       }
       const older = sanitizePoliticalHistory(
@@ -791,6 +844,9 @@ export function ImmigrationAIWorkspace({
         setLinkedPolicyReference(options?.policyReference ?? null);
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
+        // A conversation created here is always a normal, writable conversation.
+        conversationOriginRef.current = "immigration";
+        setConversationOrigin("immigration");
         setWorkspaceChatParam(
           data.chatId,
           options?.policyReference?.slug ?? null
@@ -808,6 +864,21 @@ export function ImmigrationAIWorkspace({
     },
     [refreshConversationList]
   );
+
+  /**
+   * Phase 12 Stage 1 R3: the archived-conversation screen only ever offers this
+   * one mutation — an explicit new conversation. It is never triggered by merely
+   * opening or reading an archived chat.
+   */
+  const startNewConversation = useCallback(() => {
+    createConversation().catch((conversationError) => {
+      const message =
+        conversationError instanceof Error
+          ? conversationError.message
+          : "Unable to create a new conversation.";
+      toast.error(message);
+    });
+  }, [createConversation]);
 
   useEffect(() => {
     if (initializationStartedRef.current) {
@@ -1105,6 +1176,16 @@ export function ImmigrationAIWorkspace({
     if (!trimmed || status !== "ready") {
       return;
     }
+    // Read-only archived history: the answer route requires a real immigration
+    // conversation, so a new question is refused here instead of failing late.
+    if (conversationOriginRef.current === "legacy_chat") {
+      toast.error(copy.legacy.readOnlySubmitBlocked);
+      return;
+    }
+    // Never send into a conversation that is still being switched away from.
+    if (conversationLoading) {
+      return;
+    }
 
     const nextUserMessage: WidgetMessage = {
       id: generateUUID(),
@@ -1204,6 +1285,10 @@ export function ImmigrationAIWorkspace({
     if (!pending || retryingPersistence) {
       return;
     }
+    if (conversationOriginRef.current === "legacy_chat") {
+      toast.error(copy.legacy.readOnlySubmitBlocked);
+      return;
+    }
     setRetryingPersistence(true);
     try {
       const data = await sendToWidgetRoute(
@@ -1243,6 +1328,15 @@ export function ImmigrationAIWorkspace({
 
   const handleSubmitDraftFacts = async () => {
     if (status !== "ready") {
+      return;
+    }
+    // Guided intake writes a turn into the conversation, so it is unavailable in
+    // read-only archived history.
+    if (conversationOriginRef.current === "legacy_chat") {
+      toast.error(copy.legacy.readOnlyIntakeBlocked);
+      return;
+    }
+    if (conversationLoading) {
       return;
     }
 
@@ -1320,6 +1414,10 @@ export function ImmigrationAIWorkspace({
     }
   };
   const handleBookConsultation = (_responseLanguage?: string | null) => {
+    if (conversationOriginRef.current === "legacy_chat") {
+      toast.error(copy.legacy.readOnlyLawyerBlocked);
+      return;
+    }
     router.push(consultationCreateHref(conversationId));
   };
 
@@ -1425,6 +1523,9 @@ export function ImmigrationAIWorkspace({
               >
                 <span className="block truncate font-semibold">
                   {conversation.title || copy.history.unnamed}
+                  {conversation.origin === "legacy_chat" ? (
+                    <LegacyConversationBadge copy={copy} />
+                  ) : null}
                 </span>
                 <span className="mt-1 block text-[11px] opacity-75">
                   {formatConversationUpdatedAt(
@@ -1441,6 +1542,11 @@ export function ImmigrationAIWorkspace({
                     ? conversation.legalMatterId.slice(0, 8)
                     : copy.status.noMatter}
                 </span>
+                {conversation.origin === "legacy_chat" ? (
+                  <span className="mt-1 block text-[11px] opacity-75">
+                    {copy.legacy.listHint}
+                  </span>
+                ) : null}
               </button>
             ))}
             {!conversationLoading && conversations.length === 0 ? (
@@ -1485,7 +1591,7 @@ export function ImmigrationAIWorkspace({
             {quickQuestions.map((question) => (
               <button
                 className="w-full rounded-xl bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
-                disabled={status !== "ready" || !conversationReady}
+                disabled={!interaction.canUseSuggestedQuestions}
                 key={question}
                 onClick={() => submitMessage(question)}
                 type="button"
@@ -1509,6 +1615,15 @@ export function ImmigrationAIWorkspace({
                 </h2>
               </div>
               <div className="flex flex-wrap gap-1.5">
+                {isReadOnlyConversation ? (
+                  <Badge
+                    className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
+                    data-testid="legacy-conversation-header-badge"
+                    variant="secondary"
+                  >
+                    {copy.legacy.badge}
+                  </Badge>
+                ) : null}
                 <Badge
                   className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
                   variant="secondary"
@@ -1580,8 +1695,8 @@ export function ImmigrationAIWorkspace({
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {quickQuestions.slice(0, 3).map((question) => (
                       <button
-                        className="rounded-full bg-slate-100 px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50"
-                        disabled={status !== "ready" || !conversationReady}
+                        className="rounded-full bg-slate-100 px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
+                        disabled={!interaction.canUseSuggestedQuestions}
                         key={question}
                         onClick={() => submitMessage(question)}
                         type="button"
@@ -1750,6 +1865,7 @@ export function ImmigrationAIWorkspace({
 
                         {isAssistant &&
                         !message.isStreaming &&
+                        interaction.canRequestLawyerReview &&
                         conversationId &&
                         persistedAssistantMessageIdForReview(message) ? (
                           <LawyerRequestAction
@@ -1764,7 +1880,8 @@ export function ImmigrationAIWorkspace({
 
                         {isAssistant &&
                         isLatestAssistant &&
-                        !message.isStreaming ? (
+                        !message.isStreaming &&
+                        interaction.canUseGuidedIntake ? (
                           <GuidedIntakeCard
                             draftFacts={draftFacts}
                             factSlotStates={message.factSlotStates}
@@ -1852,46 +1969,54 @@ export function ImmigrationAIWorkspace({
           ) : null}
 
           <div className="border-t border-slate-100 bg-white p-3 sm:p-4">
-            <div className="rounded-2xl bg-slate-100/80 p-3">
-              <Textarea
-                aria-label={copy.consultation.placeholder}
-                className="min-h-[76px] max-h-40 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
-                data-testid="workspace-input"
-                disabled={status !== "ready"}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder={copy.consultation.placeholder}
-                value={input}
+            {isReadOnlyConversation ? (
+              // Archived history: no composer exists here, only reading and the
+              // explicit path to a new conversation.
+              <LegacyConversationNotice
+                copy={copy}
+                disabled={!interaction.canStartNewConversation}
+                onStartNewConversation={startNewConversation}
               />
-              <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <MatterDocumentsPanel
-                    chatId={conversationId}
-                    compact
-                    copy={copy}
-                    disabled={status !== "ready" || !conversationReady}
-                  />
-                  <p className="min-w-0 text-xs leading-5 text-slate-500">
-                    {copy.consultation.composerHelp}
-                  </p>
+            ) : (
+              <div className="rounded-2xl bg-slate-100/80 p-3">
+                <Textarea
+                  aria-label={copy.consultation.placeholder}
+                  className="min-h-[76px] max-h-40 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+                  data-testid="workspace-input"
+                  disabled={!interaction.canSubmitMessage}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder={copy.consultation.placeholder}
+                  value={input}
+                />
+                <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <MatterDocumentsPanel
+                      chatId={conversationId}
+                      compact
+                      copy={copy}
+                      disabled={!interaction.canUploadDocuments}
+                    />
+                    <p className="min-w-0 text-xs leading-5 text-slate-500">
+                      {copy.consultation.composerHelp}
+                    </p>
+                  </div>
+                  <Button
+                    className="rounded-xl bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
+                    data-testid="workspace-send"
+                    disabled={!input.trim() || !interaction.canSubmitMessage}
+                    onClick={() => submitMessage(input)}
+                    type="button"
+                  >
+                    {status === "ready" ? (
+                      <Send className="mr-2 size-4" />
+                    ) : (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    )}
+                    {copy.consultation.send}
+                  </Button>
                 </div>
-                <Button
-                  className="rounded-xl bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
-                  data-testid="workspace-send"
-                  disabled={
-                    !input.trim() || status !== "ready" || !conversationReady
-                  }
-                  onClick={() => submitMessage(input)}
-                  type="button"
-                >
-                  {status === "ready" ? (
-                    <Send className="mr-2 size-4" />
-                  ) : (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  )}
-                  {copy.consultation.send}
-                </Button>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

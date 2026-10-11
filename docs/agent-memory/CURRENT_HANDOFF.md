@@ -3,6 +3,7 @@
 **Updated:** 2026-10-11
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
 **Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
+**R3 final-closure commit:** `<SHA>` — recorded after push (verified against the remote)
 **R2 review-correction commit:** `78d19c3087fd91eef62aab2f6ef8487948d97cc2` — `fix(phase12): atomic assistant persistence and whole-token lease fencing (R2)` (remote-verified)
 **R1 review-correction commit:** `b5d2fd40363c6f7eac0ea704448c5fc786acf97e` — `fix(phase12): single-execution turn lease, fail-closed persistence, legacy history (R1)` (remote-verified)
 **Stage 1 base:** `phase12-user-data-reliability-policy-intelligence@3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`
@@ -22,6 +23,29 @@
 ## Phase 12 Stage 1 — Account-centred durable history and documents (IMPLEMENTED 2026-10-11; awaiting external review)
 
 **Status:** IMPLEMENTED on `codex/phase12-stage1-user-data-reliability`. Stage 1 is NOT accepted: independent code review plus the owner cross-device procedure (`docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`) are still required. No merge, deploy or live migration has happened.
+
+### R3 final closure (2026-10-11, same branch)
+
+The owner authorized exactly two bounded corrections within Stage 1. R2's atomic persistence and lease fencing were left untouched.
+
+**A. Retained-VIP typing correction (authorized, typing-only).** `lib/vip/entitlement.ts` declared the return type of `getRetainedPrepaidVipEntitlement()` as `Pick<EntitlementUser, "membershipTier" | "vipExpiresAt">`, which widens `vipExpiresAt` to `Date | string | null`. The function only ever returns a real `Date` or `null`, so the widened declaration did not match the database timestamp column in `lib/db/queries.ts` (`.set(retainedEntitlement)`). The return type is now the explicit `RetainedPrepaidVipEntitlement` (`membershipTier: VipMembershipTier`, `vipExpiresAt: Date | null`). Runtime logic, returned values, Stripe events, subscription handling, VIP eligibility and billing records are unchanged (the diff is a type declaration, a doc comment and one focused type/runtime test). This removed exactly two pre-existing errors — `lib/db/queries.ts` TS2345 and `lib/vip/billing/webhook-processing.test.ts` TS2322 (same root cause, test file) — and no new errors appeared.
+
+**B. Legacy conversation read-only user experience.** The history API already returned `origin: "legacy_chat"`; the workspace ignored it, so opening an archived chat offered a composer whose submissions the answer route must reject (the route requires an `ImmigrationConversation` row). Now:
+
+- Frontend conversation summary/detail types accept `origin: "immigration" | "legacy_chat"` and normalize it defensively (`unknown -> immigration`).
+- The applied origin is kept in component state (`conversationOrigin` + `conversationOriginRef`) and is set atomically with the chat id, messages and matter when a detail response is applied; creating a conversation always resets it to `immigration`. After a reload the origin comes from the detail response, so the read-only state is restored from the server rather than from local caching.
+- One shared contract (`lib/workspace/conversation-origin.ts`) decides capability: `readOnly`, `canSubmitMessage`, `canUseSuggestedQuestions`, `canUseGuidedIntake`, `canUploadDocuments`, `canRequestLawyerReview`, `canStartNewConversation`, plus the stale-response guards `shouldApplyConversationDetail`/`shouldApplyOlderMessages` used by the loader and by pagination.
+- Archived chats are visibly read-only in both languages: an amber banner (`components/legacy-conversation-notice.tsx`; zh `历史对话（只读）` / en `Archived conversation (read-only)`), a badge in the conversation list (`历史归档` / `Archived`) and a header badge. The composer is **replaced** (not merely disabled) by that notice, so the archived screen has no textarea, no upload control and no send button; the only action is an explicit "Start a new conversation".
+- Suggested questions, guided intake, document uploads, lawyer-review requests, persistence retry and consultation booking are disabled or hidden, and the mutating handlers also early-return for an archived chat (defence in depth, so a stray control cannot send into an archived conversation).
+- Browsing is untouched: original messages, timestamps, citations, files and "load earlier messages" pagination all still work, and normal conversations keep their full composer, uploads, AI modes and matter workflows.
+- Rapid switching is safe: a detail response is applied only when it belongs to the newest request and to the requested chat id, older-message pages merge only into the conversation on screen, and sending is refused while a switch is in flight.
+- The server remains the authority: the widget answer route still refuses a chat without an immigration conversation row, and the read paths never create or repair one (asserted against real PostgreSQL).
+
+**R3 test evidence:** unit suite **634/634 passed, 0 failed, 0 skipped**, including new real-logic tests (`lib/workspace/conversation-origin.test.ts`, 9 cases), component-level render tests of the archived surface in both locales (`components/legacy-conversation-notice.test.tsx`, 5 cases — including that the read-only screen renders no `textarea`/`input`/send control and that the new-conversation button is the only enabled control), copy tests for both languages, a wiring guard, two HTTP-contract tests proving `origin` is carried in the detail response, and the focused VIP type/runtime test. The PostgreSQL integration test is **1 passed / 0 failed / 0 skipped**, now also asserting that listing/reading an archived chat creates no `ImmigrationConversation` row, that historical messages and timestamps stay intact and readable, that the widget gate still rejects the chat, and that another account still cannot read it.
+
+**R3 validation totals:** `pnpm build` now **succeeds (exit 0)**; `tsc --noEmit` shows **45 errors — exactly the base set minus the two fixed above, no new errors**; changed-file Biome clean; `git diff --check` clean.
+
+**Remaining `tsc` errors (pre-existing, unchanged by R3, none in Stage 1 code):** the 45 errors are all in files that already failed at the Phase 12 base commit `3fa358d`: `lib/policy-intelligence/pipeline.test.ts` (20), `lib/vip/billing/customer-billing-api.test.ts` (10), `lib/ai/models.test.ts` (5), `lib/vip/billing/config.test.ts` (2), `lib/client-portal/client-portal.test.ts` (3), `lib/matter-documents/processing.test.ts` (2), `lib/matter-documents/guardduty-sqs-reconciler.test.ts` (1), `lib/matter-documents/chat-deletion.test.ts` (1), `lib/lawyer-workspace/projection.test.ts` (1). They do not block `pnpm build` (which now passes) and are outside this authorization; they were not modified.
 
 ### R2 review corrections (2026-10-11, same branch)
 
@@ -70,7 +94,7 @@ Gate 1 was NOT accepted after review; the review raised four Stage-1 defects and
 
 ### Immediate next action
 
-Independent re-review of the Stage 1 R2 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android (steps 4-6 cover the duplicate-submission, explicit-persistence-failure and legacy-history behaviours). Stage 2 must not start before Stage 1 is accepted; Gate 1 remains pending and is NOT claimed as passed.
+Independent re-review of the Stage 1 R3 diff, then the owner runs `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md` on Ubuntu/Windows/Android: steps 4-6 of section 5 cover the duplicate-submission, explicit-persistence-failure and legacy-history behaviours, and **section 5A** covers the new archived read-only surface (labelling, no composer, full history browsing, new-conversation action, archived -> normal -> archived switching, Chinese and English). Stage 2 must not start before Stage 1 is accepted; Gate 1 remains pending and is NOT claimed as passed.
 
 ### Stage 1 environment side effects (for the owner)
 

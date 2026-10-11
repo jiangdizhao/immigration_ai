@@ -90,6 +90,39 @@ blocked). Do not mark a line passed if it was skipped.
    appear in the history list and open read-only with its original messages,
    timestamps and citations. Nothing about it may be altered by opening it.
 
+## 5A. Archived conversation read-only surface (R3)
+
+An "archived" conversation is a chat that has messages but no immigration
+conversation record. The history list marks it; it is retained history and must
+be read-only.
+
+1. **R3 — it is labelled.** Open an archived conversation from the history list.
+   Expected: the list entry shows an "archived / 历史归档" badge, the conversation
+   header shows the same badge, and a banner explains in your language that this
+   is retained history shown read-only. No banner appears on a normal
+   conversation.
+2. **R3 — nothing to type into.** Expected: there is **no** message box, no send
+   button and no upload control on that screen — only a "Start a new
+   conversation / 新建对话" button.
+3. **R3 — history is fully readable.** Expected: original messages, timestamps,
+   citations and "load earlier messages" all work exactly as before, and the
+   archived conversation appears unchanged after you re-open it.
+4. **R3 — the answer route is still refused server-side.** (Optional, for the
+   owner's own confidence, using browser developer tools or an API client:)
+   posting a message with that chat identifier must be rejected, and it must not
+   create a conversation record for it.
+5. **R3 — starting a new conversation works.** Use the banner button.
+   Expected: a new, normal conversation opens with an input box, and the archived
+   conversation is still listed and unchanged.
+6. **R3 — switching restores the right mode.** Switch archived → normal →
+   archived, including quickly, and reload the page on an archived conversation.
+   Expected: the read-only banner and missing composer come back for the archived
+   one, and the normal conversation is fully interactive again (input, uploads,
+   AI modes, matter panels). A slow response must never leave a normal composer
+   on an archived conversation, or the read-only banner on a normal one.
+7. **R3 — both languages.** Repeat steps 1-2 with the interface in Chinese and in
+   English and confirm the wording is clear in each.
+
 ## 6. Evidence to record
 
 For each step: device, browser, timestamp, expected vs observed, screenshot or
@@ -99,10 +132,15 @@ summarize a failure as a pass.
 ## 7. Owner-authorized items that are NOT part of this procedure
 
 - Applying migration `0024`/`0025` to any non-disposable database.
-- Fixing the inherited production build blocker (`lib/db/queries.ts`
-  retained-VIP typing); the smallest typing-only correction is documented in the
-  handoff and needs an explicit decision because it touches paused payment code.
 - Any backfill of the legacy chats, or any change to existing customer data.
+
+**Resolved in R3 (no longer open):** the inherited production build blocker was
+the retained-VIP typing declaration in `lib/vip/entitlement.ts`. Under explicit
+owner authorization it was corrected typing-only (the return type is now the
+concrete `RetainedPrepaidVipEntitlement` with `vipExpiresAt: Date | null`);
+billing, Stripe events, subscription handling and VIP eligibility are unchanged,
+and `pnpm build` now succeeds. The remaining `tsc` errors are pre-existing test-file
+typings unrelated to Stage 1; they are listed in the R3 handoff section.
 
 **Gate rule:** Stage 1 is not accepted until this procedure has been executed
 and recorded, in addition to independent code review of the Stage 1 diff.

@@ -25,6 +25,16 @@ Independent review rejected the first submission and raised four Stage-1 defects
 
 The owner cross-device procedure is pending: `docs/agent-memory/tasks/PHASE12_STAGE1_OWNER_ACCEPTANCE.md`.
 
+## R3 final closure (2026-10-11, same branch)
+
+The owner authorized two bounded corrections to close Stage 1: (A) the typing-only retained-VIP correction that unblocked the production build, and (B) the legacy/archived conversation read-only user experience. R2's atomic persistence and lease fencing were not reopened.
+
+- **A.** `getRetainedPrepaidVipEntitlement()` now declares `RetainedPrepaidVipEntitlement` (`membershipTier: VipMembershipTier`, `vipExpiresAt: Date | null`) instead of the widened `Pick<EntitlementUser, ...>`. Behaviour is unchanged; the two pre-existing errors it caused are gone and **`pnpm build` now succeeds (exit 0)**.
+- **B.** The workspace now consumes the server's `origin: "legacy_chat"`, keeps the applied origin in state (restored from the detail response after reload), and derives every capability from one shared contract. Archived chats show a read-only banner in Chinese and English, keep full history browsing and pagination, replace the composer with an explicit "start a new conversation" action, and refuse submissions, guided intake, uploads, lawyer requests and consultation booking. The server is still the authority: the answer route continues to reject chats without an immigration conversation row, and read paths never create or repair one.
+
+**R3 evidence:** unit suite **634/634 passed, 0 failed, 0 skipped** (new real-logic origin/capability tests, component render tests of the archived surface in both locales, copy tests, HTTP-contract `origin` tests, focused VIP type test); PostgreSQL integration test **passed** (no `ImmigrationConversation` row created by archived-chat reads, history and timestamps intact, widget gate still rejects, cross-account access still refused); `tsc --noEmit` **45 errors = base set minus the two fixed, no new errors**; changed-file Biome clean; `git diff --check` clean; `pnpm build` **exit 0**.
+
+Stage 1 remains **NOT ACCEPTED** until independent review and the owner cross-device evidence (including the new read-only steps) are recorded. Stage 2 must not start before that.
 ## R2 external review corrections (2026-10-11, same branch)
 
 A second review found one remaining concurrency defect: the assistant message insert was not inside the same concurrency boundary as the fence check, so an attempt that lost its lease between the payload write and the message insert could still create the deterministic assistant message row and block the new lease owner's legitimate answer.

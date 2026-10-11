@@ -6,6 +6,7 @@ import {
   getRetainedPrepaidVipEntitlement,
   isActiveVip,
   isPremiumAllowed,
+  type RetainedPrepaidVipEntitlement,
 } from "./entitlement";
 
 const now = new Date("2026-08-29T00:00:00.000Z");
@@ -87,6 +88,41 @@ test("renewal starts at the later of now and current expiry", () => {
     30
   );
   assert.equal(expiredWindow.vipStartsAt.toISOString(), now.toISOString());
+});
+
+test("retained prepaid entitlement exposes a Date expiry, never a string", () => {
+  const now = new Date("2026-10-01T00:00:00.000Z");
+  const expectedExpiry = new Date("2026-10-20T00:00:00.000Z");
+  // A string timestamp is still a legal stored value elsewhere in the system
+  // (that is why `EntitlementUser.vipExpiresAt` accepts one) — the retained
+  // entitlement projection must never produce that shape.
+  const storedStringForm: Date | string = "2026-11-01T00:00:00.000Z";
+  assert.equal(typeof storedStringForm, "string");
+
+  // Phase 12 Stage 1 R3: the declared return type is the concrete retained
+  // entitlement, so the expiry is assignable to `Date | null` and can no longer
+  // carry a `string` that the database timestamp column would reject.
+  const retained: RetainedPrepaidVipEntitlement =
+    getRetainedPrepaidVipEntitlement(
+      [
+        {
+          provider: "stripe",
+          currency: "CNY",
+          status: "paid",
+          vipExpiresAt: expectedExpiry,
+        },
+      ],
+      now
+    );
+  const expiry: Date | null = retained.vipExpiresAt;
+  assert.ok(expiry instanceof Date);
+  assert.equal(expiry.toISOString(), expectedExpiry.toISOString());
+
+  const cleared: Date | null = getRetainedPrepaidVipEntitlement(
+    [],
+    now
+  ).vipExpiresAt;
+  assert.equal(cleared, null);
 });
 
 test("subscription deletion retains only the latest valid paid Stripe CNY prepaid expiry", () => {

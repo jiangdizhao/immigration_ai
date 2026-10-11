@@ -27,6 +27,19 @@ The three widget answer modes persist through one owner-authorized, idempotent t
 
 Upload validation keeps the extension allowlist, file-size/decompression/macro limits and real content identity checks (OOXML Word/Excel container, OLE streams, magic bytes). A declared MIME that is unknown or nonstandard must not by itself reject an otherwise valid file; a declared MIME from a positively conflicting family still fails fast, and the accepted MIME stored/served is always the canonical one. Upload success (durable storage) and extraction success (usable evidence units) are separate states in the API and UI.
 
+## D-015 — Archived (legacy) chats are read-only in the UI, and the server stays the authority
+
+**Date:** 2026-10-11
+**Status:** ACCEPTED
+
+Stage 1 keeps pre-conversation history visible, so some listed chats have messages but no `ImmigrationConversation` row (`origin: "legacy_chat"`). Such a chat cannot accept a new turn: the answer route requires the immigration conversation row. The product contract is now:
+
+- The UI derives every capability from one shared contract (`lib/workspace/conversation-origin.ts`) rather than from ad-hoc status checks: read-only follows the **applied** conversation origin, so a delayed or stale detail response can never leave the workspace in the wrong mode.
+- An archived chat is clearly labelled read-only in Chinese and English, keeps full browsing (messages, timestamps, citations, files, older-message pagination), and replaces the composer with an explicit "start a new conversation" action. Submission, guided intake, uploads, lawyer-review requests and consultation booking are unavailable there.
+- Opening or reading an archived chat never creates or modifies an `ImmigrationConversation` row, and no backfill or migration is performed. Normal conversations keep their full interactive workflow.
+- Disabled controls are a courtesy, not a security boundary: the server still rejects any attempt to write into a chat that has no immigration conversation row.
+
+Within the same authorized closure, the retained-VIP projection declares its real return type: `getRetainedPrepaidVipEntitlement()` returns `RetainedPrepaidVipEntitlement` (`membershipTier: VipMembershipTier`, `vipExpiresAt: Date | null`). The previous `Pick<EntitlementUser, ...>` declaration widened the expiry to `Date | string | null`, which did not match the database timestamp column and blocked the production build. This is a typing-only correction: billing, Stripe events, subscription handling and VIP eligibility are unchanged.
 ## D-014 — Assistant persistence is atomic and fenced by the whole execution token
 
 **Date:** 2026-10-11

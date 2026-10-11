@@ -269,6 +269,72 @@ test("a single page without a cursor keeps the backward compatible response shap
   ]);
 });
 
+test("a detail response carries the legacy origin the read-only UI depends on", async () => {
+  const chatId = conversationId(5000);
+  const handlers = handlersFor(
+    makeRepository({
+      conversations: [
+        {
+          ownerId: USER_A,
+          chatId,
+          legalMatterId: null,
+          title: null,
+          chatTitle: "Phase12 legacy chat",
+          createdAt: new Date(baseTime()),
+          updatedAt: new Date(baseTime() + 1),
+          origin: "legacy_chat",
+        },
+      ],
+      messages: makeMessages(chatId, 1),
+    })
+  );
+
+  const response = await handlers.detail(
+    request(`/api/immigration-conversations/${chatId}`),
+    chatId
+  );
+  const body = (await response.json()) as {
+    origin?: string;
+    legalMatterId?: string | null;
+    messages?: { text?: string }[];
+  };
+
+  assert.equal(response.status, 200);
+  // `origin` is what makes the workspace present the archived read-only surface.
+  assert.equal(body.origin, "legacy_chat");
+  assert.equal(body.legalMatterId, null);
+  assert.equal(body.messages?.length, 1);
+  assert.equal(body.messages?.[0]?.text, "Question 0");
+});
+
+test("a normal conversation detail keeps the immigration origin", async () => {
+  const chatId = conversationId(5001);
+  const handlers = handlersFor(
+    makeRepository({
+      conversations: [
+        {
+          ownerId: USER_A,
+          chatId,
+          legalMatterId: "matter-1",
+          title: "Normal",
+          chatTitle: "Normal chat",
+          createdAt: new Date(baseTime()),
+          updatedAt: new Date(baseTime() + 1),
+        },
+      ],
+      messages: makeMessages(chatId, 1),
+    })
+  );
+
+  const response = await handlers.detail(
+    request(`/api/immigration-conversations/${chatId}`),
+    chatId
+  );
+  const body = (await response.json()) as { origin?: string };
+
+  assert.equal(body.origin, "immigration");
+});
+
 test("an invalid cursor is rejected instead of silently restarting history", async () => {
   const handlers = handlersFor(
     makeRepository({ conversations: makeConversations(3) })
