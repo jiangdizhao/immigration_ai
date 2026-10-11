@@ -3,7 +3,7 @@
 **Updated:** 2026-10-11
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
 **Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
-**R3 final-closure commit:** `<SHA>` — recorded after push (verified against the remote)
+**R3 final-closure commit:** `dc4492169edeea70bd0123b9ef65cff5c20db93b` — `fix(phase12): retained-VIP typing and legacy read-only workspace (R3)` (remote-verified)
 **R2 review-correction commit:** `78d19c3087fd91eef62aab2f6ef8487948d97cc2` — `fix(phase12): atomic assistant persistence and whole-token lease fencing (R2)` (remote-verified)
 **R1 review-correction commit:** `b5d2fd40363c6f7eac0ea704448c5fc786acf97e` — `fix(phase12): single-execution turn lease, fail-closed persistence, legacy history (R1)` (remote-verified)
 **Stage 1 base:** `phase12-user-data-reliability-policy-intelligence@3fa358dad5d75f6bf9ed8a5332b6a94e72e6e323`
