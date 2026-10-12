@@ -1194,3 +1194,54 @@ The owner host test uploaded `test_pdf.pdf` and `test_docx.docx` to the ordinary
 **Storage and cleanup.** The temporary independent S3 test Bucket `immigration-ai-localtest-documents-747452892291-ap-southeast-2` (ap-southeast-2, AES256, Public Access Block enabled) passed read-only `s3:preflight` with `{"ok":true,"failures":[]}`. Its test objects are still needed until closeout; cleanup and removal of this test Bucket are the **second pending owner-supervised task**, with a prior check for local database file records/download impacts. No bucket deletion or database cleanup is part of this docs commit.
 
 **Explicit non-acceptance and deferral.** The screenshots establish user-visible end-to-end answer behaviour, not a separate database evidence-unit audit, original-byte download, source-link click check, malicious-file testing, alternative legacy Legal Check runtime, cross-device durability, or AWS staging/production acceptance. Cross-device checks were explicitly DEFERRED BY OWNER; other outstanding original Gate 2 checks (including staging/production S3, negative authorization, original-byte download and remaining environment/UI cases) are NOT RUN/NOT ACCEPTED. Stage 1 formal Gate 1 remains open. The original all-items Gate 2 was not satisfied; no unrun check is marked PASS. Stage 3 remains not started; any change to the original hard-gate sequencing requires a separate explicit decision. No AWS staging/production operation, merge, migration, database deletion or code change is authorized by this documentation decision.
+
+### D-064 — Retain the isolated AWS S3 local-test Bucket for future development (2026-10-13)
+
+**Status:** OWNER-APPROVED — RETAIN; no AWS operation authorized here.
+
+**Decision:** Keep the independently created local-development Bucket rather than delete it after the Stage 2 experiment, so future PDF/DOCX, provenance, three-mode and access-control regression tests can reuse the existing S3 object store. The owner prefers deletion only if actual operating costs become material or the Bucket is no longer needed. **Supersession:** This retention decision **supersedes only** D-063's proposed second closeout task to clean up/delete the temporary Bucket; it does not alter D-063's Stage 2 functional sign-off, Gate 2 non-acceptance, or outstanding environment checks. No automatic cleanup is scheduled.
+
+**Connection and security parameters:**
+
+| Parameter | Recorded value |
+| --- | --- |
+| Purpose | Dedicated **local-development test** S3 object store for PDF/DOCX intake, extraction, AI-mode testing; **not** the existing staging/production bucket |
+| AWS account | `747452892291` |
+| AWS CLI profile | `aulawyers-staging` (workstation-local credential resolution; do not store credentials in repository) |
+| AWS Region | `ap-southeast-2` (Sydney) |
+| S3 Bucket | `immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Bucket ARN | `arn:aws:s3:::immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Environment variables, for local Next.js process only | `AWS_PROFILE=aulawyers-staging`, `AWS_REGION=ap-southeast-2`, `MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Encryption | Default SSE-S3 `AES256`; existing app also requests AES256 on PUT |
+| Public access | BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets all enabled |
+| Validation | `pnpm run s3:preflight` with the three env vars above returned `{"ok":true,"failures":[]}` (2026-10-12) |
+| Dataset | Synthetic `test_pdf.pdf` and `test_docx.docx` in the local test conversation `0a8c3d1d-887d-4246-8f76-28ea613ecc55`; no real client documents |
+| Scope isolation | Do **not** connect this Bucket to AWS staging/production ECS; do not mix with `immigration-ai-staging-matter-documents-747452892291`; this Bucket does not automatically contain original bytes of older local DB file records |
+
+**Reuse command (process-local only; do not modify protected environment files):**
+
+```bash
+cd ~/immigration_ai/chatbot
+
+AWS_PROFILE=aulawyers-staging \
+AWS_REGION=ap-southeast-2 \
+MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+pnpm run s3:preflight
+
+# Start Next.js in a foreground terminal, only after stopping the old instance.
+AWS_PROFILE=aulawyers-staging \
+AWS_REGION=ap-southeast-2 \
+MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+pnpm exec next dev --turbo -p 3000
+```
+
+**Cost, isolation, safety and deletion:** **Retention/cost decision (owner, 2026-10-13):** RETAIN this isolated test Bucket after Stage 2 for future development/regression tests; do **not** delete it during closeout. Ordinary S3 general-purpose buckets have no separate creation fee or minimum charge; pay-as-you-go charges depend on stored bytes, requests and applicable transfer/optional AWS features. The two observed test uploads were only about 24.2 KB and 10.0 KB, so at that scale the expected recurring storage cost is negligible compared with an actively running ECS/RDS stack. This is an estimate, **not** a verified bucket-attributed AWS bill. Keep only synthetic test data, inspect storage and billing periodically, and consider deletion if costs grow or the Bucket becomes unnecessary. No lifecycle auto-delete, AWS change, deletion or credential rotation is authorized by this documentation update. Deletion requires separate owner confirmation after inspecting objects, versioning/multipart state and database download/reference implications. Do not assume the two visible PDFs/DOCX represent the Bucket's exact inventory. ```bash
+# Read-only, reports object count and total bytes without listing object names.
+aws s3api list-objects-v2 \
+  --bucket immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+  --profile aulawyers-staging \
+  --region ap-southeast-2 \
+  --query '{Objects:length(Contents),Bytes:sum(Contents[].Size)}' \
+  --output json
+```
+ Never put real client documents or credentials here; keep the Bucket separate from Staging/production. The existing local DB may retain file metadata pointing at this Bucket; deleting objects or the Bucket can break original downloads and must be reviewed before any later deletion. Bucket versioning and actual billing attribution were not independently checked by this documentation update.

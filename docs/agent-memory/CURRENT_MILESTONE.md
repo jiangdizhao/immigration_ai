@@ -4,6 +4,10 @@
 **Status:** STAGE 2 CORE FUNCTIONALITY **OWNER SIGNED OFF** (2026-10-13) at `7031b37292410597c4411b8a9b60f10bdf35b823`; D-061 and D-062 committed/pushed, policy context and same-conversation PDF/DOCX answers passed in Fast, Legal Check and Premium. **Original Gate 2 NOT ACCEPTED** because deferred/unrun checks remain. Stage 1 Gate 1 remains open; Stage 3 implementation not yet authorized by this closeout.
 **Updated:** 2026-10-13
 
+## Phase 12 — local-test S3 Bucket retained (D-064, 2026-10-13)
+
+**Owner choice:** Keep `immigration-ai-localtest-documents-747452892291-ap-southeast-2` rather than delete after Stage 2; use only for synthetic local development/regression tests. Account `747452892291`, region `ap-southeast-2`, profile `aulawyers-staging`; process-only Next.js configuration: `AWS_PROFILE=aulawyers-staging`, `AWS_REGION=ap-southeast-2`, `MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2`. Default SSE-S3 AES256, four Block Public Access flags enabled, S3 preflight `{"ok":true,"failures":[]}`. No keys stored. Current file size observed ~34.2 KB in two synthetic test files; S3 storage cost expected negligible, requests/transfer/optional services still billable. AWS actual charges not yet audited. Original Stage 2 Gate 2 remains NOT ACCEPTED due to deferred checks; bucket retention does not change this. Reuse commands, safety rules, and read-only usage audit are recorded in CURRENT_HANDOFF.md. Retention supersedes D-063's proposed cleanup/deletion only; do not delete bucket or DB rows without new authorization.
+
 ## Phase 12 Stage 2 — owner functional completion and deferred gate evidence (2026-10-13)
 
 - **Checkpoint:** `codex/phase12-stage2-context-ui` @ `7031b37292410597c4411b8a9b60f10bdf35b823`; clean local tree / matching remote SHA reported by owner. Both D-061 and D-062 are committed and the owner's D-062 browser retest passed.

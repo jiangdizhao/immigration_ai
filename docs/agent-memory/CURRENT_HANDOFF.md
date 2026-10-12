@@ -1,11 +1,63 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-13 (owner functional sign-off for Stage 2; D-062 three-mode PDF/DOCX browser PASS; remaining original Gate 2 checks deferred/not accepted)
+**Updated:** 2026-10-13 (Stage 2 owner functional closeout at c97bb259; D-064 retains isolated local-test S3 Bucket for future regression; docs-only update)
 **Stage 2 branch:** `codex/phase12-stage2-context-ui` — committed/pushed code checkpoint `7031b37292410597c4411b8a9b60f10bdf35b823` (D-061 and D-062 both included); current change is documentation-only.
 **Stage 2 implementation checkpoint:** `7031b37292410597c4411b8a9b60f10bdf35b823` (D-062 source independently reviewed; owner-host Fast/Legal Check/Premium document test PASSED).
 **Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of `ce4e803`; the base used for the R1/R2/closure work was `ce4e803`
 **Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
 **Gate 2 owner host status (updated 2026-10-13):** Stage 2 core functionality OWNER SIGNED OFF. D-061 policy-topic test PASSED in Legal Check and Premium; D-062 regression on ordinary no-policy conversations PASSED in Fast, Legal Check and Premium with the same saved PDF/DOCX. Migration `0026` applied to local `chatbot` database and verified. Original Gate 2 still NOT ACCEPTED due to deferred and unexecuted items. See current closeout section immediately below; earlier entries are preserved as historical implementation notes.
+
+## Phase 12 local S3 test storage — retained for future regression testing (2026-10-13)
+
+| Parameter | Recorded value |
+| --- | --- |
+| Purpose | Dedicated **local-development test** S3 object store for PDF/DOCX intake, extraction, AI-mode testing; **not** the existing staging/production bucket |
+| AWS account | `747452892291` |
+| AWS CLI profile | `aulawyers-staging` (workstation-local credential resolution; do not store credentials in repository) |
+| AWS Region | `ap-southeast-2` (Sydney) |
+| S3 Bucket | `immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Bucket ARN | `arn:aws:s3:::immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Environment variables, for local Next.js process only | `AWS_PROFILE=aulawyers-staging`, `AWS_REGION=ap-southeast-2`, `MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2` |
+| Encryption | Default SSE-S3 `AES256`; existing app also requests AES256 on PUT |
+| Public access | BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets all enabled |
+| Validation | `pnpm run s3:preflight` with the three env vars above returned `{"ok":true,"failures":[]}` (2026-10-12) |
+| Dataset | Synthetic `test_pdf.pdf` and `test_docx.docx` in the local test conversation `0a8c3d1d-887d-4246-8f76-28ea613ecc55`; no real client documents |
+| Scope isolation | Do **not** connect this Bucket to AWS staging/production ECS; do not mix with `immigration-ai-staging-matter-documents-747452892291`; this Bucket does not automatically contain original bytes of older local DB file records |
+
+**Retention/cost decision (owner, 2026-10-13):** RETAIN this isolated test Bucket after Stage 2 for future development/regression tests; do **not** delete it during closeout. Ordinary S3 general-purpose buckets have no separate creation fee or minimum charge; pay-as-you-go charges depend on stored bytes, requests and applicable transfer/optional AWS features. The two observed test uploads were only about 24.2 KB and 10.0 KB, so at that scale the expected recurring storage cost is negligible compared with an actively running ECS/RDS stack. This is an estimate, **not** a verified bucket-attributed AWS bill. Keep only synthetic test data, inspect storage and billing periodically, and consider deletion if costs grow or the Bucket becomes unnecessary. No lifecycle auto-delete, AWS change, deletion or credential rotation is authorized by this documentation update. Deletion requires separate owner confirmation after inspecting objects, versioning/multipart state and database download/reference implications.
+
+**Supersession:** This retention decision **supersedes only** D-063's proposed second closeout task to clean up/delete the temporary Bucket; it does not alter D-063's Stage 2 functional sign-off, Gate 2 non-acceptance, or outstanding environment checks. No automatic cleanup is scheduled.
+
+### Reuse on Ubuntu
+
+```bash
+cd ~/immigration_ai/chatbot
+
+AWS_PROFILE=aulawyers-staging \
+AWS_REGION=ap-southeast-2 \
+MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+pnpm run s3:preflight
+
+# Start Next.js in a foreground terminal, only after stopping the old instance.
+AWS_PROFILE=aulawyers-staging \
+AWS_REGION=ap-southeast-2 \
+MATTER_DOCUMENTS_S3_BUCKET=immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+pnpm exec next dev --turbo -p 3000
+```
+
+### Read-only usage check (small dataset)
+
+```bash
+# Read-only, reports object count and total bytes without listing object names.
+aws s3api list-objects-v2 \
+  --bucket immigration-ai-localtest-documents-747452892291-ap-southeast-2 \
+  --profile aulawyers-staging \
+  --region ap-southeast-2 \
+  --query '{Objects:length(Contents),Bytes:sum(Contents[].Size)}' \
+  --output json
+```
+
+**Safety:** Never commit AWS access keys, secrets, `.env.local` or customer documents. The environment variables above are nonsecret configuration and are injected **only into the local Next.js process**. If the app switches to another Bucket later, do not assume old file-download links resolve across buckets; PostgreSQL file metadata is independent of object storage. Staging/production environments are unchanged.
 
 ## Phase 12 Stage 2 — Owner functional sign-off and closeout (2026-10-13)
 
