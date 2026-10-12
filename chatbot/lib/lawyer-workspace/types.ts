@@ -82,6 +82,7 @@ export type LawyerWorkspaceDetail = {
   handoffContext: LawyerWorkspaceContextItem[];
   officialEvidence: LawyerWorkspaceOfficialEvidenceItem[];
   customerDocumentEvidence: LawyerWorkspaceCustomerDocumentItem[];
+  documentSharing: LawyerWorkspaceDocumentSharing | null;
   unsupportedEvidenceCount: number;
   messages: LawyerWorkspaceMessage[];
   lawyerDisposition: {
@@ -116,4 +117,23 @@ export type LawyerWorkspaceCustomerDocumentItem = {
   locator: string | null;
   quote: string;
   truncated: boolean;
+  /**
+   * R2: true only when the AI answer acknowledged relying on this document.
+   * False means the customer explicitly selected this authorized attachment for
+   * sharing even though the answer never claimed to use it.
+   */
+  usedByAnswer: boolean;
+};
+
+/**
+ * Bounded record of the customer's explicit attachment decision. Counts only:
+ * the lawyer never sees the names or excerpts of withheld documents.
+ */
+export type LawyerWorkspaceDocumentSharing = {
+  decision: string;
+  eligibleDocumentCount: number | null;
+  acknowledgedDocumentCount: number | null;
+  selectedDocumentCount: number | null;
+  acknowledgedSharedCount: number | null;
+  acknowledgedWithheldCount: number | null;
 };

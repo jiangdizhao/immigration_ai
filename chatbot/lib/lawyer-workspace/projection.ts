@@ -4,6 +4,7 @@ import type {
   LawyerWorkspaceContextItem,
   LawyerWorkspaceCustomerDocumentItem,
   LawyerWorkspaceDetail,
+  LawyerWorkspaceDocumentSharing,
   LawyerWorkspaceMessage,
   LawyerWorkspaceOfficialEvidenceItem,
 } from "./types";
@@ -72,6 +73,12 @@ function safeUrl(value: unknown): string | null {
   return text;
 }
 
+function boundedCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.min(Math.floor(value), 100_000)
+    : null;
+}
+
 function formatLocator(locator: unknown): string | null {
   if (typeof locator === "string") {
     return boundedText(locator, 500);
@@ -101,6 +108,7 @@ function formatLocator(locator: unknown): string | null {
 export type LawyerWorkspaceEvidenceProjection = {
   official: LawyerWorkspaceOfficialEvidenceItem[];
   customerDocuments: LawyerWorkspaceCustomerDocumentItem[];
+  documentSharing: LawyerWorkspaceDocumentSharing | null;
   unsupportedCount: number;
 };
 
@@ -109,9 +117,10 @@ export function projectLawyerEvidence(
 ): LawyerWorkspaceEvidenceProjection {
   const official: LawyerWorkspaceOfficialEvidenceItem[] = [];
   const customerDocuments: LawyerWorkspaceCustomerDocumentItem[] = [];
+  let documentSharing: LawyerWorkspaceDocumentSharing | null = null;
   let unsupportedCount = 0;
   if (!Array.isArray(raw)) {
-    return { official, customerDocuments, unsupportedCount };
+    return { official, customerDocuments, documentSharing, unsupportedCount };
   }
   for (const entry of raw) {
     const record =
@@ -141,6 +150,24 @@ export function projectLawyerEvidence(
       });
       continue;
     }
+    if (record.kind === "customer_document_selection") {
+      documentSharing = {
+        decision:
+          typeof record.selection_mode === "string"
+            ? record.selection_mode
+            : "unknown",
+        eligibleDocumentCount: boundedCount(record.eligible_document_count),
+        acknowledgedDocumentCount: boundedCount(
+          record.acknowledged_document_count
+        ),
+        selectedDocumentCount: boundedCount(record.selected_document_count),
+        acknowledgedSharedCount: boundedCount(record.acknowledged_shared_count),
+        acknowledgedWithheldCount: boundedCount(
+          record.acknowledged_withheld_count
+        ),
+      };
+      continue;
+    }
     if (record.kind === "customer_document") {
       if (
         customerDocuments.length >= LAWYER_WORKSPACE_CUSTOMER_DOCUMENT_LIMIT
@@ -163,12 +190,13 @@ export function projectLawyerEvidence(
         locator: formatLocator(record.locator),
         quote,
         truncated: record.truncated === true,
+        usedByAnswer: record.used_by_answer === true,
       });
       continue;
     }
     unsupportedCount += 1;
   }
-  return { official, customerDocuments, unsupportedCount };
+  return { official, customerDocuments, documentSharing, unsupportedCount };
 }
 
 export function projectLawyerMessages(raw: unknown): LawyerWorkspaceMessage[] {
@@ -341,6 +369,7 @@ export function projectLawyerDetailSource(input: {
     handoffContext: context,
     officialEvidence: evidence.official,
     customerDocumentEvidence: evidence.customerDocuments,
+    documentSharing: evidence.documentSharing,
     unsupportedEvidenceCount: evidence.unsupportedCount,
     messages: projectLawyerMessages(input.messages),
     lawyerDisposition: {

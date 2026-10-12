@@ -47,11 +47,11 @@ test("the workspace derives read-only capability from the shared contract", () =
 
 test("the archived screen replaces the composer instead of disabling part of it", () => {
   const readOnlyBranch = workspaceSource.match(
-    /\{isReadOnlyConversation \? \(([\s\S]*?)\) : \(\n\s*<div className="rounded-2xl bg-slate-100\/80/u
+    /\{isReadOnlyConversation \? \(([\s\S]*?)\) : \(\s*\/\*\s*\n\s*Phase 12 Stage 2 interactive composer/u
   );
   assert.ok(readOnlyBranch, "the composer must branch on the read-only flag");
   assert.match(readOnlyBranch[1], /LegacyConversationNotice/u);
-  assert.doesNotMatch(readOnlyBranch[1], /<Textarea/u);
+  assert.doesNotMatch(readOnlyBranch[1], /<textarea/u);
   assert.doesNotMatch(readOnlyBranch[1], /MatterDocumentsPanel/u);
   // The interactive composer still exists for normal conversations.
   assert.match(workspaceSource, /data-testid="workspace-input"/u);

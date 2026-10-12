@@ -11,7 +11,10 @@ from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.services.agent_observability_service import AbsoluteTurnDeadline
-from app.services.customer_document_context import format_customer_document_context
+from app.services.customer_document_context import (
+    customer_document_usage_fields,
+    format_customer_document_prompt_section,
+)
 from app.services.openai_responses_adapter import (
     ResponsesStreamAccumulator,
     consume_responses_stream,
@@ -257,10 +260,19 @@ class FastDirectLunaService:
         web_action_find_in_page_count: int,
         web_search_query_count: int,
     ) -> QueryResponse:
+        # Phase 12 Stage 2 R1/R2: this single-shot path has no acknowledgement
+        # channel, so a supplied packet is honestly reported as unconfirmed
+        # rather than asserted as used, and `customer_document_used_ids` stays
+        # empty (no acknowledged document is knowable here).
+        _document_used, _document_usage = customer_document_usage_fields(
+            evidence_supplied=bool(payload.customer_document_evidence.documents),
+            answer_present=bool(answer.strip()),
+        )
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=answer,
-            customer_document_evidence_used=bool(payload.customer_document_evidence.documents),
+            customer_document_evidence_used=_document_used,
+            customer_document_usage=_document_usage,
             response_language=language,
             confidence="medium",
             user_display_mode="general_with_warning",
@@ -327,6 +339,7 @@ class FastDirectLunaService:
             matter_id=payload.matter_id,
             answer=answer,
             customer_document_evidence_used=False,
+            customer_document_usage="not_supplied",
             response_language=language,
             confidence="low",
             user_display_mode="general_with_warning",
@@ -445,7 +458,7 @@ class FastDirectLunaService:
             lines.append(f"User: {question[:4000]}")
         if topic_context:
             lines.insert(0, topic_context[0])
-        evidence = format_customer_document_context(payload.customer_document_evidence)
+        evidence = format_customer_document_prompt_section(payload)
         if evidence:
             lines.extend(["", evidence])
         return "\n".join(lines)

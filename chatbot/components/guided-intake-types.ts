@@ -123,6 +123,8 @@ export interface WidgetAssistantMessage {
   citations?: CitationItem[];
   compactSources?: string[];
   customerDocumentEvidenceUsed?: boolean;
+  /** R1: verified use vs supplied-but-unconfirmed. */
+  customerDocumentUsage?: "not_supplied" | "supplied_unconfirmed" | "confirmed";
   customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];
@@ -175,6 +177,8 @@ export interface WidgetRouteResponse {
   citations?: CitationItem[];
   compactSources?: string[];
   customerDocumentEvidenceUsed?: boolean;
+  /** R1: verified use vs supplied-but-unconfirmed. */
+  customerDocumentUsage?: "not_supplied" | "supplied_unconfirmed" | "confirmed";
   customerDocumentSources?: CustomerDocumentSource[];
   userDisplayMode?: string | null;
   followUpQuestions?: string[];

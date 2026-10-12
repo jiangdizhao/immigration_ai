@@ -26,12 +26,13 @@ import { ChatbotError } from "@/lib/errors";
 import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service";
 import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
 import { requestLegalService } from "@/lib/legal-service-transport";
+import { customerDocumentSources } from "@/lib/matter-documents/ai-evidence";
 import {
-  buildConversationMatterDocumentEvidence,
-  customerDocumentSources,
-} from "@/lib/matter-documents/ai-evidence";
-import { acknowledgedCustomerDocumentProvenance } from "@/lib/matter-documents/customer-document-provenance";
-import { getPolicyTopicContextEntry } from "@/lib/policy-intelligence-server";
+  acknowledgedCustomerDocumentProvenance,
+  customerDocumentUsageState,
+  persistedCustomerDocumentUsedIds,
+} from "@/lib/matter-documents/customer-document-provenance";
+import { resolveConversationPolicyTopicContextEntry } from "@/lib/policy-intelligence-server";
 import {
   blockedResponseForLocale,
   evaluateWidgetSubmission,
@@ -40,6 +41,7 @@ import {
 import { preservePublicAnswer } from "@/lib/public-answer-preservation";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
+import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
 
 export const maxDuration = 390;
 
@@ -107,6 +109,9 @@ type LegalCitation = {
 
 type LegalServiceResponse = {
   customer_document_evidence_used?: boolean;
+  customer_document_usage?: string;
+  /** R2: bounded, request-authorized acknowledged document ids. */
+  customer_document_used_ids?: string[];
   trace_id?: string | null;
   answer?: string;
   response_language?: string | null;
@@ -953,6 +958,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         compactSources: replayFields.metadata.compactSources,
         customerDocumentEvidenceUsed:
           replayFields.metadata.customerDocumentEvidenceUsed,
+        customerDocumentUsage: replayFields.metadata.customerDocumentUsage,
         customerDocumentSources: replayFields.metadata.customerDocumentSources,
         confidence: replayFields.metadata.confidence,
         researchStatus: replayFields.metadata.researchStatus,
@@ -996,6 +1002,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         compactSources: resumedFields.metadata.compactSources,
         customerDocumentEvidenceUsed:
           resumedFields.metadata.customerDocumentEvidenceUsed,
+        customerDocumentUsage: resumedFields.metadata.customerDocumentUsage,
         customerDocumentSources: resumedFields.metadata.customerDocumentSources,
         confidence: resumedFields.metadata.confidence,
         researchStatus: resumedFields.metadata.researchStatus,
@@ -1015,18 +1022,24 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       });
     }
 
+    /**
+     * Phase 12 Stage 2: Legal Check (AgentRuntime or the supported legacy
+     * serving path) reads the same authenticated, conversation-scoped context as
+     * Fast and Premium. The policy topic comes from the persisted binding, the
+     * evidence stays scoped to this conversation, and the availability summary
+     * tells the backend when the customer's files produced nothing usable.
+     */
+    const workspaceContext = await resolveWorkspaceContext({
+      userId: frontendUserId,
+      chatId: ownedConversation?.chatId ?? null,
+      matterId: effectiveMatterId,
+      clientPolicySlug: policySlug,
+    });
     const {
       evidence: customerDocumentEvidence,
       manifest: customerDocumentManifest,
-    } = ownedConversation
-      ? await buildConversationMatterDocumentEvidence({
-          userId: frontendUserId,
-          chatId: ownedConversation.chatId,
-        })
-      : {
-          evidence: { documents: [] },
-          manifest: [],
-        };
+    } = workspaceContext.documents;
+    const customerDocumentStatus = workspaceContext.documents.status;
 
     if (turnStart.status === "proceed") {
       // Only the lease holder runs the Legal Check research stage; renew the
@@ -1040,7 +1053,17 @@ async function handleWidgetRequest(request: Request, requestId: string) {
 
     const responseLanguage: ResponseLanguage =
       requestedResponseLanguage ?? detectResponseLanguage(question);
-    const policyTopicContext = await getPolicyTopicContextEntry(policySlug);
+    /**
+     * R1: the topic hint comes from the persisted binding snapshot, not from a
+     * live lookup of the bound slug. An archived, withdrawn or superseded
+     * publication must not erase the conversation's topic, and a newer revision
+     * is reported separately instead of silently replacing it.
+     */
+    const policyTopicContext = await resolveConversationPolicyTopicContextEntry(
+      {
+        binding: workspaceContext.policyBinding,
+      }
+    );
 
     const legalServiceUrl =
       process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000";
@@ -1081,6 +1104,12 @@ async function handleWidgetRequest(request: Request, requestId: string) {
           ...(policyTopicContext ? [policyTopicContext] : []),
         ],
         customer_document_evidence: customerDocumentEvidence,
+        /**
+         * Bounded availability counts + filenames of this conversation's files.
+         * Not evidence: it prevents an answer from implying it read a file whose
+         * extraction produced nothing usable.
+         */
+        customer_document_summary: customerDocumentStatus,
       },
     });
 
@@ -1097,10 +1126,20 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     const documentProvenance = acknowledgedCustomerDocumentProvenance(
       customerDocumentManifest,
       data.customer_document_evidence_used,
-      publicAnswer.preservedBackendAnswer
+      publicAnswer.preservedBackendAnswer,
+      data.customer_document_used_ids
     );
     const customerDocumentEvidenceUsed = documentProvenance.used;
     const answeredCustomerDocumentManifest = documentProvenance.manifest;
+    /**
+     * R1: the backend tri-state distinguishes "no file supplied" from "file
+     * supplied but use unverified". The customer-visible used-claim stays gated
+     * on the verified boolean, and this state is never upgraded client-side.
+     */
+    const customerDocumentUsage = customerDocumentUsageState(
+      data.customer_document_usage,
+      customerDocumentEvidenceUsed
+    );
     const finalText = publicAnswer.text;
     const normalizedCitations = (data.citations ?? []).map((c) => ({
       source_id: c.source_id ?? null,
@@ -1117,8 +1156,21 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       compactSources,
       citations: normalizedCitations,
       customerDocumentEvidenceUsed,
-      ...(customerDocumentEvidenceUsed
-        ? { customerDocumentManifest: answeredCustomerDocumentManifest }
+      customerDocumentUsage,
+      /**
+       * R2: persist the *packaged* manifest this turn's request carried, plus
+       * the acknowledged id subset. Lawyer review can then show which files were
+       * attached to the conversation while never claiming an unacknowledged
+       * file was used by the answer.
+       */
+      ...(customerDocumentManifest.length > 0
+        ? {
+            customerDocumentManifest,
+            customerDocumentUsedIds: persistedCustomerDocumentUsedIds(
+              answeredCustomerDocumentManifest,
+              customerDocumentEvidenceUsed
+            ),
+          }
         : {}),
       confidence: data.confidence ?? null,
       researchStatus: data.research_status ?? null,
@@ -1207,6 +1259,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       responseLanguage: finalResponseLanguage,
       citations: normalizedCitations,
       customerDocumentEvidenceUsed,
+      customerDocumentUsage,
       customerDocumentSources: customerDocumentSources(
         answeredCustomerDocumentManifest
       ),

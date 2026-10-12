@@ -67,6 +67,49 @@ class CustomerDocumentEvidence(BaseSchema):
                 raise ValueError("customer document locator manifest must match included units")
         return self
 
+
+# A long-lived conversation may legitimately hold far more files than one model
+# turn can package. The counts are bounded only to keep a hostile or corrupt
+# payload finite: they must never reject an ordinary legal question merely
+# because the conversation's stored document count is large.
+MAX_CUSTOMER_DOCUMENT_COUNT = 100_000
+
+
+class CustomerDocumentSummary(BaseSchema):
+    """Bounded availability of the conversation's uploaded customer files.
+
+    This is control data for truthful answering, not evidence. It lets the
+    backend distinguish "no files" from "files exist but no usable text was
+    extracted", so an answer never implies it read a file whose extraction
+    produced nothing. It carries counts and bounded filenames only, and it can
+    never support or display a legal citation.
+
+    ``total``/``usable`` describe *all* stored files of the conversation, while
+    ``packaged`` describes the subset whose text was actually supplied to this
+    turn's model call. The two must stay distinct: a conversation with 200
+    usable files still packages at most a handful per turn.
+    """
+
+    total: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    usable: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    usableTruncated: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    noUsableContent: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    processing: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    failed: int = Field(default=0, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    # Usable files actually packaged into this turn's evidence packet. ``None``
+    # means an older sender that did not report it, which must not be rendered
+    # as either full or partial packaging.
+    packaged: int | None = Field(default=None, ge=0, le=MAX_CUSTOMER_DOCUMENT_COUNT)
+    unusableFilenames: list[str] = Field(default_factory=list, max_length=3)
+
+    @field_validator("unusableFilenames")
+    @classmethod
+    def bounded_filenames(cls, values: list[str]) -> list[str]:
+        for value in values:
+            if len(value) > 120:
+                raise ValueError("customer document summary filename exceeds its bounds")
+        return values
+
 class QueryRequest(BaseSchema):
     question: str = Field(min_length=1, max_length=4000)
 
@@ -100,6 +143,11 @@ class QueryRequest(BaseSchema):
     # Optional full frontend-visible message history.
     frontend_messages: list[dict[str, Any]] = Field(default_factory=list)
     customer_document_evidence: CustomerDocumentEvidence = Field(default_factory=CustomerDocumentEvidence)
+    # Bounded availability of the conversation's uploaded files. Not evidence:
+    # it exists so an answer never claims to have read a file that produced no
+    # usable extracted text. Absent (older/direct callers) means "unknown", which
+    # must not be rendered as either availability or unavailability.
+    customer_document_summary: CustomerDocumentSummary | None = None
 
     @field_validator("question")
     @classmethod
@@ -112,7 +160,24 @@ class QueryRequest(BaseSchema):
 class QueryResponse(BaseSchema):
     matter_id: str | None = None
     answer: str
+    # ``customer_document_usage`` is the authoritative document-usage state;
+    # ``customer_document_evidence_used`` is the strict boolean view of it and is
+    # True only for a *verified* use. Availability, packaging or the mere
+    # existence of an answer never makes either field claim that a file was read.
     customer_document_evidence_used: bool = False
+    customer_document_usage: Literal[
+        "not_supplied", "supplied_unconfirmed", "confirmed"
+    ] = "not_supplied"
+    # Bounded ids of the customer documents that the answering model *acknowledged*
+    # relying on **and** that this request actually authorized. This is
+    # acknowledgement-based provenance: the model's own report, validated against
+    # this request's document manifest. It is **not** independent verification
+    # that a document was read and it is not evidence for any legal claim. The
+    # list is non-empty only for the "confirmed" state; serving paths without an
+    # acknowledgement channel (Fast, Premium, legacy reasoning) always leave it
+    # empty. Downstream consumers must still subset it against their own
+    # request-scoped manifest and must never widen it into "every packaged file".
+    customer_document_used_ids: list[str] = Field(default_factory=list, max_length=8)
     response_language: Literal["en", "zh"] = "en"
     confidence: Literal["low", "medium", "high"]
     user_display_mode: Literal[

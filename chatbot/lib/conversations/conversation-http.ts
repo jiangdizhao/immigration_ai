@@ -1,3 +1,4 @@
+import type { ConversationPolicyBindingView } from "../policy-intelligence/conversation-policy-binding";
 import {
   extractAssistantMetadata,
   extractTextFromParts,
@@ -53,11 +54,43 @@ export type ConversationHistoryRepository = {
   createConversation(input: {
     userId: string;
     title: string;
-  }): Promise<ConversationSummaryRecord>;
+    policySlug?: string | null;
+    policyLaunchId?: string | null;
+  }): Promise<
+    | {
+        ok: true;
+        conversation: ConversationSummaryRecord;
+        policyBinding: ConversationPolicyBindingView | null;
+      }
+    /**
+     * A policy launch that cannot be honoured fails explicitly. The handler
+     * turns this into a localized recoverable error instead of creating an
+     * apparently successful but unbound conversation.
+     */
+    | {
+        ok: false;
+        status: number;
+        code: string;
+        retryable: boolean;
+        unavailable?: "policy_binding_schema";
+      }
+  >;
   getConversation(input: {
     chatId: string;
     userId: string;
   }): Promise<ConversationSummaryRecord | null>;
+  /**
+   * Phase 12 Stage 2: the persisted policy binding for an owned conversation.
+   * `null` covers both "no binding" and "binding schema not deployed yet".
+   */
+  getPolicyBinding?(input: {
+    chatId: string;
+    userId: string;
+  }): Promise<ConversationPolicyBindingView | null>;
+  listPolicyBindings?(input: {
+    userId: string;
+    chatIds: string[];
+  }): Promise<Map<string, ConversationPolicyBindingView>>;
   listMessages(input: {
     chatId: string;
     userId: string;
@@ -106,6 +139,7 @@ function storedMessageFields(message: StoredMessageRecord) {
     compactSources: metadata.compactSources,
     citations: metadata.citations,
     customerDocumentEvidenceUsed: metadata.customerDocumentEvidenceUsed,
+    customerDocumentUsage: metadata.customerDocumentUsage,
     customerDocumentSources: metadata.customerDocumentSources,
     confidence: metadata.confidence,
     researchStatus: metadata.researchStatus,
@@ -160,8 +194,23 @@ export function createConversationHistoryHandlers(deps: {
         userId: access.userId,
       });
       const last = page.conversations.at(-1);
+      /**
+       * Phase 12 Stage 2: the list carries each conversation's policy topic
+       * identity so history reopened on any device can render the correct card
+       * without a second round trip. It never carries the snapshot text of a
+       * conversation the caller does not own (the repository filters by owner).
+       */
+      const bindings = deps.repository.listPolicyBindings
+        ? await deps.repository.listPolicyBindings({
+            userId: access.userId,
+            chatIds: page.conversations.map((item) => item.chatId),
+          })
+        : new Map<string, ConversationPolicyBindingView>();
       return jsonResponse({
-        conversations: page.conversations.map(conversationFields),
+        conversations: page.conversations.map((item) => ({
+          ...conversationFields(item),
+          policyBinding: bindings.get(item.chatId) ?? null,
+        })),
         hasMore: page.hasMore,
         nextCursor:
           page.hasMore && last
@@ -180,19 +229,51 @@ export function createConversationHistoryHandlers(deps: {
         return access.response;
       }
       let title = "New immigration conversation";
+      let policySlug: string | null = null;
+      let policyLaunchId: string | null = null;
       try {
         const body = await request.json();
         if (typeof body?.title === "string" && body.title.trim()) {
           title = body.title.trim().slice(0, 120);
         }
+        if (typeof body?.policySlug === "string") {
+          policySlug = body.policySlug.trim();
+        }
+        if (typeof body?.policyLaunchId === "string") {
+          policyLaunchId = body.policyLaunchId.trim();
+        }
       } catch {
         // Empty body is allowed.
       }
-      const conversation = await deps.repository.createConversation({
+      /**
+       * A policy launch is only a *request*: the server resolves the slug
+       * against the trusted published policy read and stores its own snapshot.
+       * A slug that cannot be resolved fails explicitly instead of silently
+       * producing an unbound conversation that looks policy-launched.
+       */
+      const created = await deps.repository.createConversation({
         userId: access.userId,
         title,
+        policySlug: policySlug?.length ? policySlug : null,
+        policyLaunchId: policyLaunchId?.length ? policyLaunchId : null,
       });
-      return jsonResponse(conversationFields(conversation));
+      if (!created.ok) {
+        return jsonResponse(
+          {
+            error:
+              created.code === "policy_launch_in_progress"
+                ? "Policy launch is already in progress."
+                : "Policy topic is unavailable.",
+            code: created.code,
+            retryable: created.retryable,
+          },
+          created.status
+        );
+      }
+      return jsonResponse({
+        ...conversationFields(created.conversation),
+        policyBinding: created.policyBinding,
+      });
     },
 
     async detail(request: Request, chatId: string) {
@@ -235,9 +316,21 @@ export function createConversationHistoryHandlers(deps: {
         olderThan,
       });
       const oldest = page.messages.at(0);
+      /**
+       * Phase 12 Stage 2: the detail response is the authoritative recovery path
+       * for the policy topic card — reload, history reopening and a second
+       * device all read it from here rather than from client state.
+       */
+      const policyBinding = deps.repository.getPolicyBinding
+        ? await deps.repository.getPolicyBinding({
+            chatId,
+            userId: access.userId,
+          })
+        : null;
 
       return jsonResponse({
         ...conversationFields(conversation),
+        policyBinding,
         messages: page.messages.map(storedMessageFields),
         hasOlderMessages: page.hasOlder,
         olderMessagesCursor:

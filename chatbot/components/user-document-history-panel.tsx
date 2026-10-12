@@ -1,8 +1,9 @@
 "use client";
 
 import { Download, FileText, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { matterDocumentDisplayStatus } from "@/lib/matter-documents/display-status";
 import { cn } from "@/lib/utils";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
@@ -42,9 +43,23 @@ function formatBytes(bytes: number) {
 export function UserDocumentHistoryPanel({
   copy,
   compact = false,
+  refreshToken = 0,
+  accountAccess = true,
 }: {
   copy: WorkspaceCopy;
   compact?: boolean;
+  /**
+   * Phase 12 Stage 2: a guest account cannot own documents, so the account file
+   * index is unavailable. When false the panel says so plainly and never calls
+   * the document API (which would answer with a raw authorisation error).
+   */
+  accountAccess?: boolean;
+  /**
+   * Phase 12 Stage 2: incremented by the workspace whenever server-side document
+   * state changes, so this list re-reads itself after an upload, delete or
+   * reprocess without the user pressing refresh.
+   */
+  refreshToken?: number;
 }) {
   const labels = copy.fileHistory;
   const [documents, setDocuments] = useState<UserDocumentRecord[]>([]);
@@ -57,6 +72,11 @@ export function UserDocumentHistoryPanel({
 
   const load = useCallback(
     async (mode: "reset" | "more", next?: string | null) => {
+      if (!accountAccess) {
+        setDocuments([]);
+        setLoading(false);
+        return;
+      }
       if (mode === "more") {
         setLoadingMore(true);
       } else {
@@ -100,12 +120,21 @@ export function UserDocumentHistoryPanel({
         setLoadingMore(false);
       }
     },
-    [labels.error]
+    [accountAccess, labels.error]
   );
 
+  const lastRefreshTokenRef = useRef(refreshToken);
   useEffect(() => {
     load("reset").catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (lastRefreshTokenRef.current === refreshToken) {
+      return;
+    }
+    lastRefreshTokenRef.current = refreshToken;
+    load("reset").catch(() => undefined);
+  }, [load, refreshToken]);
 
   const download = async (document: UserDocumentRecord) => {
     setBusyId(document.id);
@@ -135,17 +164,25 @@ export function UserDocumentHistoryPanel({
     }
   };
 
+  /**
+   * Phase 12 Stage 2: the account-wide file index knows only the pipeline
+   * status, not whether extraction produced usable text, so it never claims a
+   * file is "ready for AI". It states what it can actually verify.
+   */
   const statusLabel = (document: UserDocumentRecord) => {
-    if (document.processingStatus === "processing") {
+    const status = matterDocumentDisplayStatus({
+      processingStatus: document.processingStatus,
+    });
+    if (status === "processing") {
       return labels.processing;
     }
-    if (document.processingStatus === "failed") {
+    if (status === "failed") {
       return labels.failed;
     }
-    if (document.processingStatus === "complete") {
-      return labels.ready;
+    if (status === "not_started") {
+      return labels.saved;
     }
-    return labels.saved;
+    return labels.extractionFinished;
   };
 
   return (
@@ -180,6 +217,15 @@ export function UserDocumentHistoryPanel({
           )}
         </Button>
       </div>
+
+      {accountAccess ? null : (
+        <p
+          className="mt-2 text-xs text-slate-500"
+          data-testid="account-files-guest-hint"
+        >
+          {copy.documents.signInForFiles}
+        </p>
+      )}
 
       {error ? (
         <p className="mt-2 text-xs text-red-700" role="alert">
@@ -218,7 +264,7 @@ export function UserDocumentHistoryPanel({
             <Button
               aria-label={labels.download}
               className="size-7 shrink-0"
-              disabled={busyId !== null}
+              disabled={busyId !== null || !accountAccess}
               onClick={() => download(document).catch(() => undefined)}
               size="icon"
               title={labels.download}

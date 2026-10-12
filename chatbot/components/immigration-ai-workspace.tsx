@@ -8,6 +8,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -21,11 +22,14 @@ import { resolveWorkspacePersistence } from "@/lib/conversations/persistence-not
 import { ChatbotError, type ErrorCode } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import {
-  isPolicyLinkedConversation,
-  linkedPolicySlugForConversation,
-  type PolicyWorkspaceReference,
-  shouldCreatePolicyWorkspaceConversation,
-} from "@/lib/policy-intelligence-product";
+  type ConversationPolicyBindingView,
+  normalizePolicyBindingView,
+  type PolicyLaunchRequestState,
+  policyLaunchKey,
+  policyWorkspaceReferenceFromBinding,
+  shouldApplyPolicyBinding,
+} from "@/lib/policy-intelligence/conversation-policy-binding";
+import type { PolicyWorkspaceReference } from "@/lib/policy-intelligence-product";
 import { getPolicyProductCopy } from "@/lib/policy-intelligence-product-copy";
 import {
   blockedResponseForLocale,
@@ -41,6 +45,12 @@ import {
   shouldApplyConversationDetail,
   shouldApplyOlderMessages,
 } from "@/lib/workspace/conversation-origin";
+import {
+  clearPolicyLaunchId,
+  decodePolicyLaunchFailure,
+  type PolicyLaunchFailure,
+  readOrCreatePolicyLaunchId,
+} from "@/lib/workspace/policy-launch";
 import {
   buildWorkspaceCaseSummary,
   shouldClearWorkspaceCaseSummary,
@@ -70,7 +80,6 @@ import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
-import { Textarea } from "./ui/textarea";
 import { UserDocumentHistoryPanel } from "./user-document-history-panel";
 
 const TYPEWRITER_TICK_MS = 38;
@@ -321,6 +330,8 @@ type ImmigrationConversationSummary = {
    * conversation record does not exist, so the chat is read-only in the UI.
    */
   origin?: ConversationOrigin;
+  /** Phase 12 Stage 2: the conversation's persisted policy topic, if any. */
+  policyBinding?: ConversationPolicyBindingView | null;
 };
 
 type ImmigrationStoredMessage = {
@@ -336,6 +347,7 @@ type ImmigrationStoredMessage = {
   matterId?: string | null;
   retrievalDebug?: WidgetAssistantMessage["retrievalDebug"];
   customerDocumentEvidenceUsed?: boolean;
+  customerDocumentUsage?: "not_supplied" | "supplied_unconfirmed" | "confirmed";
   customerDocumentSources?: WidgetAssistantMessage["customerDocumentSources"];
 };
 
@@ -372,6 +384,7 @@ function assistantFromStoredMessage(
     citations: message.citations ?? [],
     compactSources: message.compactSources ?? [],
     customerDocumentEvidenceUsed: message.customerDocumentEvidenceUsed === true,
+    customerDocumentUsage: message.customerDocumentUsage ?? "not_supplied",
     customerDocumentSources: message.customerDocumentSources ?? [],
     userDisplayMode: null,
     followUpQuestions: message.followUpQuestions ?? [],
@@ -418,6 +431,36 @@ function setWorkspaceChatParam(
     url.searchParams.delete("policy");
   }
   window.history.replaceState(null, "", url.toString());
+}
+
+/**
+ * Conversation requests in the workspace carry a typed reason when they fail, so
+ * a refused policy launch can be explained and retried instead of being shown as
+ * an apparently successful blank conversation.
+ */
+class WorkspaceConversationError extends Error {
+  readonly failure: PolicyLaunchFailure;
+
+  constructor(message: string, failure: PolicyLaunchFailure) {
+    super(message);
+    this.name = "WorkspaceConversationError";
+    this.failure = failure;
+  }
+}
+
+export function normalizeConversationListPage(
+  page: ConversationListPage
+): ImmigrationConversationSummary[] {
+  return (page.conversations ?? []).map((conversation) => ({
+    ...conversation,
+    // The list payload carries each conversation's own persisted policy topic so
+    // a reopened history entry shows the correct card without another request.
+    policyBinding: normalizePolicyBindingView(conversation.policyBinding),
+  }));
+}
+
+function conversationFailureFrom(error: unknown): PolicyLaunchFailure | null {
+  return error instanceof WorkspaceConversationError ? error.failure : null;
 }
 
 function blockedWidgetResponse(
@@ -483,12 +526,23 @@ export function ImmigrationAIWorkspace({
   assistantMode = "default",
   policyReference = null,
   policyLaunch = false,
+  policyLaunchState = "resolved",
+  requestedPolicySlug = null,
   initialChatId = null,
+  userType = "regular",
 }: {
   assistantMode?: AssistantMode;
   policyReference?: PolicyWorkspaceReference | null;
   policyLaunch?: boolean;
+  /** Explicit policy launch state resolved by the server page. */
+  policyLaunchState?: PolicyLaunchRequestState;
+  requestedPolicySlug?: string | null;
   initialChatId?: string | null;
+  /**
+   * Phase 12 Stage 2: the authenticated account type. A guest account cannot own
+   * documents, so the workspace states that instead of surfacing an API error.
+   */
+  userType?: "guest" | "regular";
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
@@ -500,14 +554,19 @@ export function ImmigrationAIWorkspace({
   const [conversationOrigin, setConversationOrigin] =
     useState<ConversationOrigin>("immigration");
   const conversationOriginRef = useRef<ConversationOrigin>("immigration");
-  const [linkedPolicyReference, setLinkedPolicyReference] =
-    useState<PolicyWorkspaceReference | null>(
-      initialChatId && !policyLaunch ? policyReference : null
-    );
-  const linkedPolicyChatIdRef = useRef<string | null>(
-    initialChatId && !policyLaunch && policyReference ? initialChatId : null
-  );
-  const policyLaunchStartedRef = useRef(false);
+  /**
+   * Phase 12 Stage 2: the visible policy card is driven by the server-persisted
+   * binding, not by transient launch props. `policyBinding` is the conversation's
+   * own recorded topic; `pendingPolicyReference` only previews a launch that has
+   * not been persisted yet.
+   */
+  const [policyBinding, setPolicyBinding] =
+    useState<ConversationPolicyBindingView | null>(null);
+  const [policyLaunchFailure, setPolicyLaunchFailure] =
+    useState<PolicyLaunchFailure | null>(null);
+  const [launchingPolicy, setLaunchingPolicy] = useState(false);
+  const policyLaunchInFlightRef = useRef<string | null>(null);
+  const appliedPolicyLaunchKeyRef = useRef<string | null>(null);
   const initializationStartedRef = useRef(false);
   const [conversations, setConversations] = useState<
     ImmigrationConversationSummary[]
@@ -548,13 +607,58 @@ export function ImmigrationAIWorkspace({
   const [caseSummarySnapshot, setCaseSummarySnapshot] = useState<ReturnType<
     typeof buildWorkspaceCaseSummary
   > | null>(null);
+  /**
+   * Phase 12 Stage 2: one revision counter tells every context panel that
+   * server-side document state changed (upload, delete, reprocess), so the
+   * conversation file list and the account-wide file history refresh themselves
+   * instead of waiting for a manual reload.
+   */
+  const [documentsRevision, setDocumentsRevision] = useState(0);
+  const [activePanel, setActivePanel] = useState<
+    "none" | "history" | "conversationFiles" | "accountFiles" | "caseSummary"
+  >("none");
   const listRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = useRef(true);
 
   const latestAssistant = useMemo(
     () => [...messages].reverse().find(isAssistantMessage) ?? null,
     [messages]
   );
+  /**
+   * The card's reference: the conversation's own persisted binding once it
+   * exists, otherwise the topic the current launch resolved server-side.
+   */
+  const activePolicyReference = useMemo<PolicyWorkspaceReference | null>(() => {
+    if (policyBinding) {
+      return policyWorkspaceReferenceFromBinding(policyBinding);
+    }
+    if (policyLaunch && policyLaunchState === "resolved") {
+      return policyReference;
+    }
+    return null;
+  }, [policyBinding, policyLaunch, policyLaunchState, policyReference]);
+  const notifyDocumentsChanged = useCallback(() => {
+    setDocumentsRevision((current) => current + 1);
+  }, []);
+  /** Guest accounts cannot own documents; files require an account. */
+  const canUseDocuments = userType !== "guest";
+  /**
+   * Desktop keeps the three-column layout. Narrow viewports get the chat as the
+   * primary area plus one labelled panel strip, instead of squeezing a
+   * right-hand column into a phone width.
+   */
+  const [isWideViewport, setIsWideViewport] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+    const query = window.matchMedia("(min-width: 1280px)");
+    const apply = () => setIsWideViewport(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
   /**
    * Phase 12 Stage 1 R3: one contract decides whether this conversation accepts
    * new work. Read-only is derived from the origin that was applied together
@@ -619,6 +723,23 @@ export function ImmigrationAIWorkspace({
     scrollToBottom();
   }, [scrollToBottom]);
 
+  /**
+   * Phase 12 Stage 2: the composer grows only as far as it needs to and then
+   * scrolls internally, so a long question can never push the conversation out
+   * of view. It is measured after the DOM has the new value, which also covers
+   * the send/clear path.
+   */
+  const resizeComposer = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const element = composerRef.current;
+      if (!element) {
+        return;
+      }
+      element.style.height = "auto";
+      element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
+    });
+  }, []);
+
   useEffect(() => {
     if (status !== "submitted" || submittedAt === null) {
       return;
@@ -644,7 +765,7 @@ export function ImmigrationAIWorkspace({
         }
       );
       const data = (await response.json()) as ConversationListPage;
-      const conversationsFromPage = data.conversations ?? [];
+      const conversationsFromPage = normalizeConversationListPage(data);
       setConversations(conversationsFromPage);
       setConversationCursor(data.nextCursor ?? null);
       setConversationHasMore(data.hasMore === true);
@@ -677,7 +798,7 @@ export function ImmigrationAIWorkspace({
         { method: "GET" }
       );
       const data = (await response.json()) as ConversationListPage;
-      const page = data.conversations ?? [];
+      const page = normalizeConversationListPage(data);
       setConversations((current) => {
         const seen = new Set(current.map((item) => item.chatId));
         return [...current, ...page.filter((item) => !seen.has(item.chatId))];
@@ -735,19 +856,23 @@ export function ImmigrationAIWorkspace({
         const nextOrigin = normalizeConversationOrigin(data.origin);
         conversationOriginRef.current = nextOrigin;
         setConversationOrigin(nextOrigin);
-        const keepPolicy = isPolicyLinkedConversation(
-          data.chatId,
-          linkedPolicyChatIdRef.current,
-          linkedPolicyReference
+        /**
+         * Phase 12 Stage 2: the policy card is recovered from the conversation
+         * itself on every read path — reload, history reopening and a second
+         * device all take the same persisted binding, and a delayed response from
+         * another conversation can never paint it here.
+         */
+        const loadedBinding = normalizePolicyBindingView(data.policyBinding);
+        setPolicyBinding(
+          shouldApplyPolicyBinding({
+            binding: loadedBinding,
+            activeChatId: data.chatId,
+            requestedChatId: chatIdToLoad,
+          })
+            ? loadedBinding
+            : null
         );
-        if (!keepPolicy) {
-          linkedPolicyChatIdRef.current = null;
-          setLinkedPolicyReference(null);
-        }
-        setWorkspaceChatParam(
-          data.chatId,
-          keepPolicy ? (linkedPolicyReference?.slug ?? null) : null
-        );
+        setWorkspaceChatParam(data.chatId, loadedBinding?.policySlug ?? null);
         setMatterId(data.legalMatterId ?? null);
         setMessages(
           sanitizePoliticalHistory(
@@ -771,7 +896,7 @@ export function ImmigrationAIWorkspace({
         }
       }
     },
-    [linkedPolicyReference, refreshConversationList]
+    [refreshConversationList]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -822,35 +947,61 @@ export function ImmigrationAIWorkspace({
   const createConversation = useCallback(
     async (options?: {
       title?: string;
-      policyReference?: PolicyWorkspaceReference | null;
+      policySlug?: string | null;
+      policyLaunchId?: string | null;
     }) => {
       setConversationLoading(true);
       try {
-        const response = await fetchWithErrorHandlers(
-          "/api/immigration-conversations",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: options?.title ?? "New immigration conversation",
-            }),
-          }
-        );
-        const data = (await response.json()) as ImmigrationConversationSummary;
+        /**
+         * Phase 12 Stage 2: conversation creation is a plain, explicitly decoded
+         * request. A policy launch that the server refuses (unresolvable topic,
+         * missing binding schema, duplicate launch) must surface as a typed
+         * recoverable failure — never as an apparently successful blank chat.
+         */
+        const response = await fetch("/api/immigration-conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: options?.title ?? "New immigration conversation",
+            policySlug: options?.policySlug ?? null,
+            policyLaunchId: options?.policyLaunchId ?? null,
+          }),
+        });
+        const body = (await response.json().catch(() => null)) as
+          | (ImmigrationConversationSummary & { code?: string })
+          | null;
+        if (!response.ok || !body?.chatId) {
+          throw new WorkspaceConversationError(
+            response.ok
+              ? "Unable to create a new conversation."
+              : copy.history.createFailed,
+            decodePolicyLaunchFailure({ status: response.status, body })
+          );
+        }
+        const data = body;
         setCaseSummarySnapshot(null);
-        linkedPolicyChatIdRef.current = options?.policyReference
-          ? data.chatId
-          : null;
-        setLinkedPolicyReference(options?.policyReference ?? null);
+        /**
+         * The binding returned by the API is the server's own resolved snapshot.
+         * It is accepted only when it names this conversation, so a malformed or
+         * foreign payload cannot paint a policy card.
+         */
+        const createdBinding = normalizePolicyBindingView(data.policyBinding);
+        setPolicyBinding(
+          shouldApplyPolicyBinding({
+            binding: createdBinding,
+            activeChatId: data.chatId,
+            requestedChatId: data.chatId,
+          })
+            ? createdBinding
+            : null
+        );
+        setPolicyLaunchFailure(null);
         conversationIdRef.current = data.chatId;
         setConversationId(data.chatId);
         // A conversation created here is always a normal, writable conversation.
         conversationOriginRef.current = "immigration";
         setConversationOrigin("immigration");
-        setWorkspaceChatParam(
-          data.chatId,
-          options?.policyReference?.slug ?? null
-        );
+        setWorkspaceChatParam(data.chatId, createdBinding?.policySlug ?? null);
         setMatterId(data.legalMatterId ?? null);
         setMessages([]);
         setDraftFacts({});
@@ -862,7 +1013,7 @@ export function ImmigrationAIWorkspace({
         setConversationLoading(false);
       }
     },
-    [refreshConversationList]
+    [copy.history.createFailed, refreshConversationList]
   );
 
   /**
@@ -880,46 +1031,160 @@ export function ImmigrationAIWorkspace({
     });
   }, [createConversation]);
 
-  useEffect(() => {
-    if (initializationStartedRef.current) {
+  /**
+   * Phase 12 Stage 2: launch a policy conversation.
+   *
+   * The launch is keyed by the policy entry the workspace is currently on, so a
+   * hot client-side navigation to a different policy starts that policy's
+   * conversation, while a re-render of the same entry cannot create a second
+   * one. The browser remembers the launch id per policy, so a retry after a
+   * failed request resolves to the same server-side launch.
+   */
+  const launchPolicyConversation = useCallback(
+    async (input: { slug: string; title: string; launchKey: string }) => {
+      if (policyLaunchInFlightRef.current === input.launchKey) {
+        return;
+      }
+      policyLaunchInFlightRef.current = input.launchKey;
+      setLaunchingPolicy(true);
+      setPolicyLaunchFailure(null);
+      try {
+        const launchId = readOrCreatePolicyLaunchId(
+          window.sessionStorage,
+          input.slug,
+          generateUUID
+        );
+        await createConversation({
+          title: input.title,
+          policySlug: input.slug,
+          policyLaunchId: launchId,
+        });
+        clearPolicyLaunchId(window.sessionStorage, input.slug);
+      } catch (launchError) {
+        const failure =
+          conversationFailureFrom(launchError) ??
+          decodePolicyLaunchFailure({ status: undefined, body: null });
+        setPolicyLaunchFailure(failure);
+        // A failed launch must not be presented as a usable workspace: the
+        // conversation stays empty and the user gets an explicit recovery path.
+        setMessages([]);
+        setConversationReady(true);
+        if (!failure.schemaUnavailable) {
+          toast.error(
+            failure.retryable
+              ? copy.policy.launchFailedTitle
+              : copy.policy.sourceUnavailableTitle
+          );
+        }
+      } finally {
+        policyLaunchInFlightRef.current = null;
+        setLaunchingPolicy(false);
+      }
+    },
+    [
+      copy.policy.launchFailedTitle,
+      copy.policy.sourceUnavailableTitle,
+      createConversation,
+    ]
+  );
+
+  /**
+   * Retries a policy launch that failed. The same launch id is reused (it is
+   * remembered per policy), so a retry can never create a duplicate
+   * conversation for a launch the server may already have accepted.
+   */
+  const retryPolicyLaunch = useCallback(() => {
+    const slug = requestedPolicySlug;
+    if (!slug) {
       return;
     }
-    initializationStartedRef.current = true;
+    const titleBase = (policyReference?.title[locale] ?? "")
+      .trim()
+      .slice(0, 90);
+    launchPolicyConversation({
+      slug,
+      title: (locale === "zh-CN"
+        ? `政策咨询：${titleBase || slug}`
+        : `Policy question: ${titleBase || slug}`
+      ).slice(0, 120),
+      launchKey: policyLaunchKey({
+        chatId: null,
+        launchIntent: "policy",
+        policySlug: slug,
+      }),
+    }).catch(() => undefined);
+  }, [launchPolicyConversation, locale, policyReference, requestedPolicySlug]);
+
+  useEffect(() => {
+    const requestedChatId = initialChatId;
+    const launchKey = policyLaunchKey({
+      chatId: requestedChatId,
+      launchIntent: policyLaunch ? "policy" : null,
+      policySlug: policyLaunch ? (requestedPolicySlug ?? null) : null,
+    });
+    /**
+     * Initialization runs once per launch identity instead of once per mount.
+     * The previous one-shot guard meant a policy opened while the workspace was
+     * already mounted never initialized, which is exactly how an unrelated
+     * historical conversation stayed on screen.
+     */
+    const isFirstRun = !initializationStartedRef.current;
+    if (isFirstRun) {
+      initializationStartedRef.current = true;
+    } else if (appliedPolicyLaunchKeyRef.current === launchKey) {
+      return;
+    }
+    appliedPolicyLaunchKeyRef.current = launchKey;
 
     async function initializeConversation() {
       try {
         const conversationsFromApi = await refreshConversationList();
-        const url = new URL(window.location.href);
-        const requestedChatId = initialChatId ?? url.searchParams.get("chatId");
-        if (
-          shouldCreatePolicyWorkspaceConversation({
-            policyReference,
-            launchIntent: policyLaunch ? "policy" : null,
-            chatId: requestedChatId,
-          }) &&
-          !policyLaunchStartedRef.current
-        ) {
-          policyLaunchStartedRef.current = true;
-          try {
-            const titleBase = policyReference?.title[locale]
-              .trim()
-              .slice(0, 90);
-            const title =
-              locale === "zh-CN"
-                ? `政策咨询：${titleBase}`
-                : `Policy question: ${titleBase}`;
-            await createConversation({
-              title: title.slice(0, 120),
-              policyReference,
+        const url =
+          typeof window === "undefined" ? null : new URL(window.location.href);
+        const urlChatId = url?.searchParams.get("chatId") ?? null;
+        const targetChatId = requestedChatId ?? urlChatId;
+
+        if (policyLaunch && !targetChatId) {
+          if (policyLaunchState === "unavailable") {
+            /**
+             * The published topic could not be resolved. Never fall through to a
+             * historical chat or a generic blank one: report the explicit,
+             * recoverable state and stop.
+             */
+            setPolicyLaunchFailure({
+              code: "policy_topic_unavailable",
+              retryable: true,
+              schemaUnavailable: false,
             });
-          } catch (launchError) {
-            policyLaunchStartedRef.current = false;
-            throw launchError;
+            setConversationReady(true);
+            return;
           }
+          if (!requestedPolicySlug) {
+            setPolicyLaunchFailure({
+              code: "policy_topic_unavailable",
+              retryable: true,
+              schemaUnavailable: false,
+            });
+            setConversationReady(true);
+            return;
+          }
+          const titleBase = (policyReference?.title[locale] ?? "")
+            .trim()
+            .slice(0, 90);
+          const title =
+            locale === "zh-CN"
+              ? `政策咨询：${titleBase || requestedPolicySlug}`
+              : `Policy question: ${titleBase || requestedPolicySlug}`;
+          await launchPolicyConversation({
+            slug: requestedPolicySlug,
+            title: title.slice(0, 120),
+            launchKey,
+          });
           return;
         }
+
         const target =
-          requestedChatId ||
+          targetChatId ||
           conversationsFromApi[0]?.chatId ||
           (await createConversation());
         if (target) {
@@ -940,11 +1205,14 @@ export function ImmigrationAIWorkspace({
   }, [
     createConversation,
     initialChatId,
+    launchPolicyConversation,
     loadConversation,
     locale,
     policyLaunch,
+    policyLaunchState,
     policyReference,
     refreshConversationList,
+    requestedPolicySlug,
   ]);
 
   const appendAssistantMessage = async (
@@ -1012,6 +1280,7 @@ export function ImmigrationAIWorkspace({
       citations: data.citations ?? [],
       compactSources: data.compactSources ?? [],
       customerDocumentEvidenceUsed: data.customerDocumentEvidenceUsed === true,
+      customerDocumentUsage: data.customerDocumentUsage ?? "not_supplied",
       customerDocumentSources: data.customerDocumentSources ?? [],
       userDisplayMode: data.userDisplayMode ?? null,
       followUpQuestions: data.followUpQuestions ?? [],
@@ -1065,6 +1334,7 @@ export function ImmigrationAIWorkspace({
 
   const appendBlockedResponse = async (decision: PoliticalGateResult) => {
     setInput("");
+    resizeComposer();
     setDraftFacts({});
     setError(null);
     await appendAssistantMessage(blockedWidgetResponse(decision));
@@ -1080,6 +1350,16 @@ export function ImmigrationAIWorkspace({
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
+    /**
+     * Phase 12 Stage 2: the request-scoped policy topic is the conversation's own
+     * persisted binding. It is only a topic hint for the backend; the backend
+     * resolves it again from the stored binding, so this value can never widen
+     * access or invent a policy identity.
+     */
+    const requestPolicySlug =
+      policyBinding?.chatId === stableConversationId
+        ? policyBinding.policySlug
+        : null;
     const body = JSON.stringify({
       id: stableConversationId,
       frontendChatId: stableConversationId,
@@ -1090,11 +1370,7 @@ export function ImmigrationAIWorkspace({
       answerPreference,
       selectedChatModel: DEFAULT_CHAT_MODEL,
       assistantMode,
-      policySlug: linkedPolicySlugForConversation(
-        stableConversationId,
-        linkedPolicyChatIdRef.current,
-        linkedPolicyReference
-      ),
+      policySlug: requestPolicySlug,
       messages: nextMessages.map((message) => ({
         id: message.id,
         role: message.role,
@@ -1217,6 +1493,7 @@ export function ImmigrationAIWorkspace({
     setMessages(nextMessages);
     scrollToBottom(true);
     setInput("");
+    resizeComposer();
     const requestStartedAt = Date.now();
     setStatus("submitted");
     setSubmittedAt(requestStartedAt);
@@ -1473,8 +1750,60 @@ export function ImmigrationAIWorkspace({
         </div>
       </header>
 
+      {/*
+        Phase 12 Stage 2: below the desktop breakpoint the chat keeps the whole
+        width and one labelled panel is available at a time, instead of forcing a
+        narrow right-hand column. The panel components stay mounted, so switching
+        tabs never refetches or loses state.
+      */}
+      {isWideViewport ? null : (
+        <div
+          aria-label={copy.panels.label}
+          className="mb-2 flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-sm"
+          data-testid="workspace-panel-tabs"
+          role="tablist"
+        >
+          {(
+            [
+              ["history", copy.panels.history],
+              ["conversationFiles", copy.panels.conversationFiles],
+              ["accountFiles", copy.panels.accountFiles],
+              ["caseSummary", copy.panels.caseSummary],
+            ] as const
+          ).map(([panelId, label]) => (
+            <button
+              aria-selected={activePanel === panelId}
+              className={cn(
+                "shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                activePanel === panelId
+                  ? "bg-[#001736] text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              )}
+              data-testid={`workspace-panel-tab-${panelId}`}
+              key={panelId}
+              onClick={() =>
+                setActivePanel((current) =>
+                  current === panelId ? "none" : panelId
+                )
+              }
+              role="tab"
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[250px_minmax(0,1fr)_290px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
-        <aside className="order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
+        <aside
+          className={cn(
+            "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4",
+            isWideViewport || activePanel === "history" ? "block" : "hidden",
+            isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
+          )}
+          data-testid="workspace-history-panel"
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">
@@ -1525,6 +1854,18 @@ export function ImmigrationAIWorkspace({
                   {conversation.title || copy.history.unnamed}
                   {conversation.origin === "legacy_chat" ? (
                     <LegacyConversationBadge copy={copy} />
+                  ) : null}
+                  {conversation.policyBinding ? (
+                    <span
+                      className="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900"
+                      data-testid="conversation-policy-badge"
+                      title={
+                        conversation.policyBinding.title[locale] ||
+                        copy.history.policyTopicBadge
+                      }
+                    >
+                      {copy.history.policyTopicBadge}
+                    </span>
                   ) : null}
                 </span>
                 <span className="mt-1 block text-[11px] opacity-75">
@@ -1602,7 +1943,14 @@ export function ImmigrationAIWorkspace({
           </div>
         </aside>
 
-        <div className="order-1 flex h-[min(72dvh,780px)] min-h-[560px] min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:order-2 xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none">
+        <div
+          className={cn(
+            "order-1 flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:order-2 xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
+            isWideViewport
+              ? "h-auto min-h-[560px] xl:h-full"
+              : "h-[min(66dvh,620px)] min-h-[320px]"
+          )}
+        >
           <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1646,12 +1994,12 @@ export function ImmigrationAIWorkspace({
             onScroll={handleMessageListScroll}
             ref={listRef}
           >
-            {linkedPolicyReference &&
-            isPolicyLinkedConversation(
-              conversationId,
-              linkedPolicyChatIdRef.current,
-              linkedPolicyReference
-            ) ? (
+            {activePolicyReference &&
+            shouldApplyPolicyBinding({
+              binding: policyBinding,
+              activeChatId: conversationId,
+              requestedChatId: conversationId,
+            }) ? (
               <section
                 className="mb-5 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3"
                 data-policy-continuity="topic-reference-only"
@@ -1662,23 +2010,111 @@ export function ImmigrationAIWorkspace({
                       {policyCopy.askAi}
                     </p>
                     <h2 className="mt-1 break-words text-sm font-semibold text-slate-900">
-                      {linkedPolicyReference.title[locale]}
+                      {activePolicyReference.title[locale]}
                     </h2>
                     <p className="mt-1 text-xs leading-5 text-slate-600">
                       {policyCopy.workspaceOpener}
                     </p>
+                    <p className="mt-2 text-[11px] font-medium text-violet-900">
+                      {activePolicyReference.revision?.number
+                        ? `${copy.policy.revision}: r${activePolicyReference.revision.number}`
+                        : copy.policy.revisionUnknown}
+                      {policyBinding?.boundAt
+                        ? ` · ${copy.policy.boundAt}: ${formatConversationUpdatedAt(
+                            policyBinding.boundAt,
+                            null,
+                            locale,
+                            copy.history.updatedUnavailable
+                          )}`
+                        : null}
+                    </p>
+                    {/*
+                      The snapshot is a topic reference, never verified current
+                      law. This distinction is always visible with the card.
+                    */}
+                    <p className="mt-1 text-[11px] leading-4 text-violet-800/90">
+                      {copy.policy.snapshotNotice}
+                    </p>
                   </div>
                   <a
                     className="shrink-0 text-xs font-semibold text-violet-900 underline"
-                    href={linkedPolicyReference.officialUrl}
+                    href={activePolicyReference.officialUrl}
                     rel="noreferrer"
                     target="_blank"
                   >
                     {policyCopy.officialSource}:{" "}
-                    {linkedPolicyReference.officialTitle}
+                    {activePolicyReference.officialTitle}
                   </a>
                 </div>
               </section>
+            ) : null}
+            {policyLaunchFailure ? (
+              /**
+               * Phase 12 Stage 2: a policy launch that could not be persisted is
+               * reported explicitly, with honest recovery paths. It is never
+               * silently replaced by an unrelated chat or a blank one.
+               */
+              <section
+                className="mb-5 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm"
+                data-policy-launch-state={policyLaunchFailure.code}
+                role="alert"
+              >
+                <h2 className="font-semibold text-amber-900">
+                  {policyLaunchFailure.schemaUnavailable
+                    ? copy.policy.launchSchemaTitle
+                    : policyLaunchFailure.retryable
+                      ? copy.policy.launchFailedTitle
+                      : copy.policy.sourceUnavailableTitle}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-amber-900/90">
+                  {policyLaunchFailure.schemaUnavailable
+                    ? copy.policy.launchSchemaBody
+                    : policyLaunchFailure.retryable
+                      ? copy.policy.launchFailedBody
+                      : copy.policy.sourceUnavailableBody}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {policyLaunchFailure.retryable && requestedPolicySlug ? (
+                    <Button
+                      data-testid="policy-launch-retry"
+                      onClick={() => retryPolicyLaunch()}
+                      size="sm"
+                      type="button"
+                    >
+                      {copy.policy.retry}
+                    </Button>
+                  ) : null}
+                  {requestedPolicySlug ? (
+                    <Button asChild size="sm" type="button" variant="outline">
+                      <Link href={`/intelligence/${requestedPolicySlug}`}>
+                        {copy.policy.openPolicy}
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button
+                    data-testid="policy-launch-continue-without"
+                    onClick={() => {
+                      // Explicit user choice: an ordinary conversation. This is
+                      // the only path that may drop the policy topic.
+                      setPolicyLaunchFailure(null);
+                      startNewConversation();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {copy.policy.continueWithoutPolicy}
+                  </Button>
+                </div>
+              </section>
+            ) : null}
+            {launchingPolicy ? (
+              <p
+                className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-900"
+                data-testid="policy-launch-progress"
+              >
+                {copy.status.loading}
+              </p>
             ) : null}
             {messages.length === 0 ? (
               <div className="flex min-h-full items-center justify-center py-8">
@@ -1968,7 +2404,7 @@ export function ImmigrationAIWorkspace({
             </div>
           ) : null}
 
-          <div className="border-t border-slate-100 bg-white p-3 sm:p-4">
+          <div className="border-t border-slate-100 bg-white p-2 sm:p-3">
             {isReadOnlyConversation ? (
               // Archived history: no composer exists here, only reading and the
               // explicit path to a new conversation.
@@ -1978,188 +2414,283 @@ export function ImmigrationAIWorkspace({
                 onStartNewConversation={startNewConversation}
               />
             ) : (
-              <div className="rounded-2xl bg-slate-100/80 p-3">
-                <Textarea
-                  aria-label={copy.consultation.placeholder}
-                  className="min-h-[76px] max-h-40 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
-                  data-testid="workspace-input"
-                  disabled={!interaction.canSubmitMessage}
-                  onChange={(event) => setInput(event.target.value)}
-                  placeholder={copy.consultation.placeholder}
-                  value={input}
-                />
-                <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <MatterDocumentsPanel
-                      chatId={conversationId}
-                      compact
-                      copy={copy}
-                      disabled={!interaction.canUploadDocuments}
-                    />
-                    <p className="min-w-0 text-xs leading-5 text-slate-500">
-                      {copy.consultation.composerHelp}
-                    </p>
-                  </div>
+              /*
+                Phase 12 Stage 2 interactive composer: one bounded auto-growing
+                input, the upload control next to it and an always-reachable send
+                button. Uploaded files are managed in the conversation file panel
+                so no attachment list grows under the composer.
+              */
+              <div className="rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
+                <div className="flex min-w-0 items-end gap-1.5">
+                  <MatterDocumentsPanel
+                    accountAccess={canUseDocuments}
+                    chatId={conversationId}
+                    compact
+                    copy={copy}
+                    disabled={!interaction.canUploadDocuments}
+                    onDocumentsChanged={notifyDocumentsChanged}
+                  />
+                  <textarea
+                    aria-label={copy.consultation.placeholder}
+                    className="max-h-[120px] min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-2 py-2 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 focus-visible:ring-0"
+                    data-testid="workspace-input"
+                    disabled={!interaction.canSubmitMessage}
+                    onChange={(event) => {
+                      setInput(event.target.value);
+                      resizeComposer();
+                    }}
+                    onKeyDown={(event) => {
+                      // Enter sends; Shift+Enter adds a line. IME composition
+                      // (Chinese input) never submits a half-composed character.
+                      if (
+                        event.key !== "Enter" ||
+                        event.shiftKey ||
+                        event.nativeEvent.isComposing
+                      ) {
+                        return;
+                      }
+                      event.preventDefault();
+                      submitMessage(input);
+                    }}
+                    placeholder={copy.consultation.placeholder}
+                    ref={composerRef}
+                    rows={1}
+                    value={input}
+                  />
                   <Button
-                    className="rounded-xl bg-[#001736] px-5 text-white hover:bg-[#002b5b]"
+                    aria-label={copy.consultation.send}
+                    className="shrink-0 rounded-xl bg-[#001736] px-3 text-white hover:bg-[#002b5b] sm:px-4"
                     data-testid="workspace-send"
                     disabled={!input.trim() || !interaction.canSubmitMessage}
                     onClick={() => submitMessage(input)}
+                    size="sm"
                     type="button"
                   >
                     {status === "ready" ? (
-                      <Send className="mr-2 size-4" />
+                      <Send className="size-4 sm:mr-2" />
                     ) : (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin sm:mr-2" />
                     )}
-                    {copy.consultation.send}
+                    <span className="hidden sm:inline">
+                      {copy.consultation.send}
+                    </span>
                   </Button>
                 </div>
+                <p className="px-2 pt-1 text-[11px] leading-4 text-slate-500">
+                  {status === "ready"
+                    ? copy.consultation.composerHelp
+                    : status === "submitted"
+                      ? copy.status.submitted
+                      : copy.status.typing}
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        <aside className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4">
-          <UserDocumentHistoryPanel copy={copy} />
-          <section className="rounded-xl bg-white p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="mt-1 font-semibold text-slate-950">
-                  {copy.matter.knownFacts}
-                </h3>
-              </div>
-              <Badge
-                className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
-                variant="secondary"
-              >
-                {copy.matter.factsCount(
-                  latestWorkspaceCaseSummary.knownFacts.length
-                )}
-              </Badge>
-            </div>
-            {latestWorkspaceCaseSummary.knownFacts.length ? (
-              <div className="space-y-2">
-                {latestWorkspaceCaseSummary.knownFacts.map((fact) => (
-                  <div
-                    className="rounded-lg bg-slate-50 p-3 text-sm"
-                    key={fact.key}
-                  >
-                    <p className="text-xs text-slate-500">{fact.label}</p>
-                    <p className="mt-1 font-medium text-slate-800">
-                      {fact.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm leading-6 text-slate-500">
-                {copy.matter.noFacts}
-              </p>
+        <aside
+          className={cn(
+            "order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4",
+            isWideViewport ||
+              activePanel === "conversationFiles" ||
+              activePanel === "accountFiles" ||
+              activePanel === "caseSummary"
+              ? "block"
+              : "hidden",
+            isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
+          )}
+          data-testid="workspace-context-panel"
+        >
+          {/*
+            This conversation's own files are the AI evidence scope. They are
+            managed here, next to the composer, instead of growing under it.
+          */}
+          <section
+            className={cn(
+              "rounded-xl bg-white",
+              isWideViewport || activePanel === "conversationFiles"
+                ? ""
+                : "hidden"
             )}
-            <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {copy.matter.toConfirm}
-            </h4>
-            {latestWorkspaceCaseSummary.requestedFacts.length ? (
-              <div className="space-y-2">
-                {latestWorkspaceCaseSummary.requestedFacts.map((fact) => (
-                  <div
-                    className="rounded-lg bg-cyan-50 p-3 text-sm"
-                    key={fact.key}
-                  >
-                    <p className="font-medium text-cyan-950">{fact.prompt}</p>
-                    {fact.prompt !== fact.label ? (
-                      <p className="mt-1 text-xs text-cyan-900">{fact.label}</p>
-                    ) : null}
-                    {fact.whyNeeded ? (
-                      <p className="mt-2 text-xs leading-5 text-cyan-900">
-                        <span className="font-medium">
-                          {copy.matter.whyNeeded}:{" "}
-                        </span>
-                        {fact.whyNeeded}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm leading-6 text-slate-500">
-                {copy.matter.noRequestedFacts}
-              </p>
-            )}
-            <Button
-              className="mt-4 w-full"
-              onClick={() => setCaseSummarySnapshot(latestWorkspaceCaseSummary)}
-              type="button"
-              variant="outline"
-            >
-              {caseSummarySnapshot
-                ? copy.matter.regenerateSummary
-                : copy.matter.generateSummary}
-            </Button>
+            data-testid="workspace-conversation-files"
+          >
+            <MatterDocumentsPanel
+              accountAccess={canUseDocuments}
+              chatId={conversationId}
+              copy={copy}
+              disabled={!interaction.canUploadDocuments}
+              onDocumentsChanged={notifyDocumentsChanged}
+            />
+            <p className="px-4 pb-3 text-[11px] leading-4 text-slate-500">
+              {copy.panels.conversationFilesHint}
+            </p>
           </section>
 
-          {caseSummarySnapshot ? (
-            <section
-              className="rounded-xl border border-slate-200 bg-white p-4"
-              data-testid="workspace-case-summary-snapshot"
-            >
-              <h3 className="text-sm font-semibold text-slate-950">
-                {copy.matter.summaryGenerated}
-              </h3>
-              <div className="mt-3 space-y-3 text-sm">
+          <div
+            className={cn(
+              isWideViewport || activePanel === "accountFiles" ? "" : "hidden"
+            )}
+            data-testid="workspace-account-files"
+          >
+            <UserDocumentHistoryPanel
+              accountAccess={canUseDocuments}
+              copy={copy}
+              refreshToken={documentsRevision}
+            />
+          </div>
+
+          <div
+            className={cn(
+              "space-y-3",
+              isWideViewport || activePanel === "caseSummary" ? "" : "hidden"
+            )}
+            data-testid="workspace-case-summary"
+          >
+            <section className="rounded-xl bg-white p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="font-medium text-slate-700">
+                  <h3 className="mt-1 font-semibold text-slate-950">
                     {copy.matter.knownFacts}
-                  </h4>
-                  {caseSummarySnapshot.knownFacts.length ? (
-                    <dl className="mt-2 space-y-2">
-                      {caseSummarySnapshot.knownFacts.map((fact) => (
-                        <div key={fact.key}>
-                          <dt className="text-xs text-slate-500">
-                            {fact.label}
-                          </dt>
-                          <dd className="text-slate-800">{fact.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : (
-                    <p className="mt-1 text-slate-500">{copy.matter.noFacts}</p>
-                  )}
+                  </h3>
                 </div>
-                <div>
-                  <h4 className="font-medium text-slate-700">
-                    {copy.matter.toConfirm}
-                  </h4>
-                  {caseSummarySnapshot.requestedFacts.length ? (
-                    <ul className="mt-2 space-y-2">
-                      {caseSummarySnapshot.requestedFacts.map((fact) => (
-                        <li key={fact.key}>
-                          <p className="font-medium text-slate-800">
-                            {fact.prompt}
-                          </p>
-                          {fact.prompt !== fact.label ? (
-                            <p className="text-xs text-slate-500">
-                              {fact.label}
-                            </p>
-                          ) : null}
-                          {fact.whyNeeded ? (
-                            <p className="mt-1 text-xs text-slate-600">
-                              {copy.matter.whyNeeded}: {fact.whyNeeded}
-                            </p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-1 text-slate-500">
-                      {copy.matter.noRequestedFacts}
-                    </p>
+                <Badge
+                  className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
+                  variant="secondary"
+                >
+                  {copy.matter.factsCount(
+                    latestWorkspaceCaseSummary.knownFacts.length
                   )}
-                </div>
+                </Badge>
               </div>
+              {latestWorkspaceCaseSummary.knownFacts.length ? (
+                <div className="space-y-2">
+                  {latestWorkspaceCaseSummary.knownFacts.map((fact) => (
+                    <div
+                      className="rounded-lg bg-slate-50 p-3 text-sm"
+                      key={fact.key}
+                    >
+                      <p className="text-xs text-slate-500">{fact.label}</p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {fact.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm leading-6 text-slate-500">
+                  {copy.matter.noFacts}
+                </p>
+              )}
+              <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {copy.matter.toConfirm}
+              </h4>
+              {latestWorkspaceCaseSummary.requestedFacts.length ? (
+                <div className="space-y-2">
+                  {latestWorkspaceCaseSummary.requestedFacts.map((fact) => (
+                    <div
+                      className="rounded-lg bg-cyan-50 p-3 text-sm"
+                      key={fact.key}
+                    >
+                      <p className="font-medium text-cyan-950">{fact.prompt}</p>
+                      {fact.prompt !== fact.label ? (
+                        <p className="mt-1 text-xs text-cyan-900">
+                          {fact.label}
+                        </p>
+                      ) : null}
+                      {fact.whyNeeded ? (
+                        <p className="mt-2 text-xs leading-5 text-cyan-900">
+                          <span className="font-medium">
+                            {copy.matter.whyNeeded}:{" "}
+                          </span>
+                          {fact.whyNeeded}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm leading-6 text-slate-500">
+                  {copy.matter.noRequestedFacts}
+                </p>
+              )}
+              <Button
+                className="mt-4 w-full"
+                onClick={() =>
+                  setCaseSummarySnapshot(latestWorkspaceCaseSummary)
+                }
+                type="button"
+                variant="outline"
+              >
+                {caseSummarySnapshot
+                  ? copy.matter.regenerateSummary
+                  : copy.matter.generateSummary}
+              </Button>
             </section>
-          ) : null}
+
+            {caseSummarySnapshot ? (
+              <section
+                className="rounded-xl border border-slate-200 bg-white p-4"
+                data-testid="workspace-case-summary-snapshot"
+              >
+                <h3 className="text-sm font-semibold text-slate-950">
+                  {copy.matter.summaryGenerated}
+                </h3>
+                <div className="mt-3 space-y-3 text-sm">
+                  <div>
+                    <h4 className="font-medium text-slate-700">
+                      {copy.matter.knownFacts}
+                    </h4>
+                    {caseSummarySnapshot.knownFacts.length ? (
+                      <dl className="mt-2 space-y-2">
+                        {caseSummarySnapshot.knownFacts.map((fact) => (
+                          <div key={fact.key}>
+                            <dt className="text-xs text-slate-500">
+                              {fact.label}
+                            </dt>
+                            <dd className="text-slate-800">{fact.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="mt-1 text-slate-500">
+                        {copy.matter.noFacts}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-slate-700">
+                      {copy.matter.toConfirm}
+                    </h4>
+                    {caseSummarySnapshot.requestedFacts.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {caseSummarySnapshot.requestedFacts.map((fact) => (
+                          <li key={fact.key}>
+                            <p className="font-medium text-slate-800">
+                              {fact.prompt}
+                            </p>
+                            {fact.prompt !== fact.label ? (
+                              <p className="text-xs text-slate-500">
+                                {fact.label}
+                              </p>
+                            ) : null}
+                            {fact.whyNeeded ? (
+                              <p className="mt-1 text-xs text-slate-600">
+                                {copy.matter.whyNeeded}: {fact.whyNeeded}
+                              </p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-slate-500">
+                        {copy.matter.noRequestedFacts}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            ) : null}
+          </div>
         </aside>
       </div>
       <p className="mt-3 px-1 text-xs leading-5 text-slate-500">

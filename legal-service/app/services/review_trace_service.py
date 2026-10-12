@@ -13,6 +13,10 @@ from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.state import MatterState
 from app.schemas.agent import AgentExecutionMetrics
 from app.services.agent_observability_service import AgentObservabilityService
+from app.services.customer_document_context import (
+    filename_free_customer_document_summary,
+    sanitized_customer_document_summary,
+)
 from app.services.experience_archive_service import (
     ExperienceArchiveService,
     is_eligible_live_experience_archive_mode,
@@ -54,7 +58,7 @@ class ReviewTraceService:
         trace_id: str | None = None
         active_observability: dict[str, Any] | None = None
         archive_matter: Any = matter
-        archive_payload = payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()}) if payload.customer_document_evidence.documents else payload
+        archive_payload = self._trace_safe_payload(payload)
         archive_response = response
         try:
             state_dump = self._safe_json(state)
@@ -64,15 +68,29 @@ class ReviewTraceService:
             if metrics_dump is None and active_observability is not None:
                 metrics_dump = active_observability.get("execution_metrics")
             trace_payload = {
-                "request": self._safe_json(
-                    payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()})
-                ),
+                "request": self._safe_json(self._trace_safe_payload(payload)),
                 "customer_document_evidence_summary": {
                     "selected_document_count": len(payload.customer_document_evidence.documents),
                     "selected_unit_count": sum(len(document.units) for document in payload.customer_document_evidence.documents),
                     "packet_char_count": sum(len(unit.text) for document in payload.customer_document_evidence.documents for unit in document.units),
                     "packet_truncated": any(document.truncated for document in payload.customer_document_evidence.documents),
+                    # Availability/packaging for this turn, then the honest
+                    # verified-use state and the strict boolean view of it.
+                    "packaged_document_count": len(payload.customer_document_evidence.documents),
+                    # R2: counts/states only — never a customer filename.
+                    "customer_document_summary": sanitized_customer_document_summary(
+                        payload.customer_document_summary
+                    ),
                     "customer_document_evidence_used": bool(response.customer_document_evidence_used),
+                    "customer_document_usage": getattr(
+                        response, "customer_document_usage", "not_supplied"
+                    ),
+                    # R2: acknowledgement-based ids, bounded to this request's
+                    # authorized manifest; empty for paths without an
+                    # acknowledgement channel.
+                    "customer_document_used_ids": list(
+                        getattr(response, "customer_document_used_ids", []) or []
+                    ),
                 },
                 "response": response_dump,
                 "state": state_dump,
@@ -120,7 +138,9 @@ class ReviewTraceService:
                             visa_type=getattr(matter, "visa_type", None),
                             status=getattr(matter, "status", None),
                         )
-                        archive_payload = payload.model_copy(update={"matter_id": None})
+                        archive_payload = self._trace_safe_payload(
+                            payload, update={"matter_id": None}
+                        )
                         archive_response = response.model_copy(update={"matter_id": None})
                     else:
                         trace = AnswerTrace(
@@ -182,6 +202,32 @@ class ReviewTraceService:
         except Exception:
             logger.exception("Experience archive capture failed; public response is unchanged.")
         return trace_id
+
+    @staticmethod
+    def _trace_safe_payload(
+        payload: QueryRequest, update: dict[str, Any] | None = None
+    ) -> QueryRequest:
+        """Request copy that is safe for ordinary traces and the archive.
+
+        The customer document *evidence packet* is dropped (its text is customer
+        content), and the document *summary* is reduced to non-sensitive counts
+        and availability/packaging states. A stored filename can itself be
+        personal data, and traces/archives are read far more widely than the
+        authenticated customer's own UI — which keeps its own filenames from the
+        application database and never depends on this copy.
+        """
+        changes: dict[str, Any] = {
+            "customer_document_evidence": type(payload.customer_document_evidence)()
+        }
+        if payload.customer_document_summary is not None:
+            changes["customer_document_summary"] = (
+                filename_free_customer_document_summary(
+                    payload.customer_document_summary
+                )
+            )
+        if update:
+            changes.update(update)
+        return payload.model_copy(update=changes)
 
     @staticmethod
     def _verified_matter_id(db: Any, matter: Any) -> str | None:

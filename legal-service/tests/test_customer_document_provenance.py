@@ -16,13 +16,16 @@ def _payload():
     }]})
 
 
-def test_default_document_only_success_acknowledges_usage():
+def test_default_document_only_success_reports_supplied_unconfirmed():
     service = object.__new__(ReasoningService)
     service.model = "test"
     service.max_context_chunks = 2
     service._client = SimpleNamespace(responses=SimpleNamespace(create=lambda **kwargs: SimpleNamespace(output_text="It appears to say this.")))
     response = service.answer_from_chunks(_payload(), [], {})
-    assert response.customer_document_evidence_used is True
+    # R1: the packet was supplied and an answer exists, but nothing in this
+    # single-shot path verifies that the document was actually used.
+    assert response.customer_document_evidence_used is False
+    assert response.customer_document_usage == "supplied_unconfirmed"
     assert response.answer == "It appears to say this."
     assert response.citations == []
 
@@ -36,6 +39,7 @@ def test_default_document_only_provider_fallback_does_not_acknowledge_usage():
     service._client = SimpleNamespace(responses=SimpleNamespace(create=fail))
     response = service.answer_from_chunks(_payload(), [], {})
     assert response.customer_document_evidence_used is False
+    assert response.customer_document_usage == "not_supplied"
     assert "could not assess" in response.answer
 
 
@@ -57,7 +61,7 @@ def test_experience_archive_build_receives_document_sanitized_query_request(monk
     assert persistence.snapshot_json == {"ok": True}
 
 
-def test_default_final_synthesis_uses_documents_only_when_nonempty_answer_returns():
+def test_default_final_synthesis_reports_supplied_unconfirmed_not_verified_use():
     from app.schemas.source import CitationOut
     service = object.__new__(ReasoningService)
     service.model = "test"
@@ -74,7 +78,8 @@ def test_default_final_synthesis_uses_documents_only_when_nonempty_answer_return
     service._synthesize_answer = synthesize
     response = service.answer_from_chunks(_payload(), [object()], {})
     assert captured["payload"].customer_document_evidence.documents
-    assert response.customer_document_evidence_used is True
+    assert response.customer_document_evidence_used is False
+    assert response.customer_document_usage == "supplied_unconfirmed"
 
 
 def test_default_evidence_extraction_fallback_does_not_acknowledge_ignored_documents():
@@ -86,6 +91,7 @@ def test_default_evidence_extraction_fallback_does_not_acknowledge_ignored_docum
     service._extract_evidence = lambda **_kwargs: None
     response = service.answer_from_chunks(_payload(), [object()], {})
     assert response.customer_document_evidence_used is False
+    assert response.customer_document_usage == "not_supplied"
     assert response.retrieval_debug["reasoning_mode"] == "fallback_insufficient"
 
 

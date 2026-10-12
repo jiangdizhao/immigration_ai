@@ -2,6 +2,10 @@ import "server-only";
 
 import { MANUAL_POLICY_ENTRIES } from "../content/policy-intelligence/registry";
 import {
+  type ConversationPolicyBindingView,
+  conversationPolicyTopicContextEntry,
+} from "./policy-intelligence/conversation-policy-binding";
+import {
   getPublishedPolicyIntelligenceHistory,
   getPublishedPolicyIntelligenceList,
 } from "./policy-intelligence/read-service";
@@ -107,4 +111,33 @@ export async function getPolicyTopicContextEntry(
     return null;
   }
   return policyTopicContextEntry(await getPolicyWorkspaceReference(slug));
+}
+
+/**
+ * Phase 12 Stage 2 R1 — the model-side topic context for a bound conversation.
+ *
+ * It is built from the server-persisted binding snapshot, so the topic survives
+ * the original publication being withdrawn, archived or superseded. The live
+ * published revision is looked up *best effort*: a failure or a missing entry
+ * adds nothing and, critically, never removes the conversation's topic. The
+ * current revision is reported as a separate line so a historical snapshot is
+ * never silently presented as current law.
+ */
+export async function resolveConversationPolicyTopicContextEntry(input: {
+  binding: ConversationPolicyBindingView | null;
+}): Promise<ReturnType<typeof conversationPolicyTopicContextEntry>> {
+  if (!input.binding) {
+    return null;
+  }
+  let current: Awaited<ReturnType<typeof getPolicyWorkspaceReference>> = null;
+  try {
+    current = await getPolicyWorkspaceReference(input.binding.policySlug);
+  } catch {
+    // A live publication read must never remove the durable topic context.
+    current = null;
+  }
+  return conversationPolicyTopicContextEntry({
+    binding: input.binding,
+    current,
+  });
 }

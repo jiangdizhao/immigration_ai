@@ -1,6 +1,183 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-11
+**Updated:** 2026-10-12 (Stage 2 R1 review corrections)
+**Stage 2 branch:** `codex/phase12-stage2-context-ui` (implementation branch; NOT committed, NOT merged, NOT pushed)
+**Stage 2 HEAD:** `ce4e803bcbdd29535d0da0924de55600a87a9827` (unchanged; the Stage 2 change set **and** the R1 corrections are uncommitted in the working tree)
+**Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of HEAD; the only extra commit is `ce4e803` `chore: stop tracking generated Next.js declaration`
+**Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
+
+## Phase 12 Stage 2 closure — explicit lawyer attachment consent (OWNER-APPROVED OPTION A; IMPLEMENTED 2026-10-12)
+
+**Status:** owner-selected **Option A** implemented: before a lawyer-review request is submitted, the customer sees the eligible documents and explicitly chooses which ones to share. **Gate 2 is still NOT claimed as passed.** No commit, push, merge, deploy or migration; migration `0026` remains unapplied outside the isolated test DB.
+
+### Task 1 — explicit attachment selection
+
+- **Customer UI** (`components/lawyer-request-action.tsx` + new presentational `components/lawyer-request-attachment-consent.tsx`): opening 请求律师审阅此答复 now shows the saved question/answer previews and a bounded list of that answer's eligible documents with filename, run status and whether the AI answer acknowledged using them. Every checkbox starts **unchecked**; the panel states that only checked documents and their permitted excerpts are shared; the selection count (`已选择 / Selected: n / 4`) is always visible; AI-acknowledged documents the customer left unchecked are named as withheld ("the lawyer will not receive any part of them"); a request without attachments stays valid; more than four selections is blocked with a clear error and a disabled submit. All copy exists in Chinese and English.
+- **Server contract** (`app/api/lawyer-requests/route.ts`): the POST body accepts `attachments: { consent: true, selectedDocumentIds: [...] }` (schema bounded to 4 ids, each ≤64 chars). Absent ⇒ nothing is shared — permission is never inferred from the button. Selection is validated against the **server-persisted manifest of that answered turn** (`customer_document_used_ids` never trusted from the client), then re-validated against the owner's own rows: ownership, conversation, document/run identity, retained status (`stored` + `clean` + not deleted), the limit and exact hash-verified reconstruction. Forged, cross-conversation, stale, deleted or duplicate selections are rejected with explicit errors.
+- **New GET eligibility** (`GET /api/lawyer-requests?chatId=…&assistantMessageId=…`, no new route directory): returns `questionPreview`, `answerPreview` and `attachmentSelection` (`documents[]` with authoritative filenames from the application rows, `maxSelectable: 4`, acknowledged counts, `unavailableCount`). An existing request for that message returns `status: "already_requested"` and no documents.
+- **Persisted evidence of the decision** (`buildCustomerDocumentSelectionEvidence`): one bounded, filename-free `customer_document_selection` record per request — version, mode (`explicit_selection` / `no_selection` / `no_documents`), eligible/acknowledged/selected/acknowledged-shared/acknowledged-withheld counts and the limit. No ids of withheld documents, no filenames, no excerpts.
+- **Customer review**: `customerLawyerRequestView` now exposes `sharedDocuments` (their own filenames + acknowledged flag) and `documentSharing` counts, so the customer can review exactly what was disclosed.
+- **Lawyer view**: `used_by_answer` plus the new sharing counts — acknowledged-and-shared, customer-selected (not acknowledged), and "N acknowledged document(s) withheld by customer choice" as counts only. Withheld filenames and excerpts are never rendered for the lawyer.
+- **Idempotency**: the duplicate-request lookup runs before any attachment work or insert, so a retry with a different selection returns the stored request unchanged (asserted by ordering test + the unique index on (user, assistantMessageId)).
+- **Legacy answers**: keep their stored manifest meaning (no per-document ids ⇒ marked as acknowledged), but the new explicit selection rule applies to any new request; existing submitted requests are untouched.
+- No migration: the snapshot version constant is now `phase12.s2.consent.v1` and the selection record travels inside the existing `evidenceSnapshot` JSON.
+
+### Task 2 — attachment limit and no silent truncation
+
+`selectLawyerDocumentAttachments()` no longer slices. It takes `selectedDocumentIds` and returns either the exact selected attachments or an explicit error: more than the limit (`You can share at most 4 documents with the lawyer.`), unknown/foreign/duplicate ids, a non-array selection or a missing manifest. Nothing is ever auto-included, so an acknowledged fifth document the customer did not check is explained as withheld instead of being added; `slice(0, 4)` no longer appears in the route (asserted). The 4-document cap, the 12 000-character excerpt budget, the exact reconstruction and the hash verification are unchanged; a selected document that can no longer be reconstructed fails the request with "uncheck it and try again" rather than disappearing.
+
+### Validation actually run (exact, closure)
+
+- `cd chatbot && pnpm test:unit` → **732 passed, 0 failed, 0 skipped** (R2 close 715; +17: 5 selector/limit/wiring cases, 7 consent/view/projection/copy cases, 5 bilingual consent-panel render cases). `attachment-consent.test.ts` and `lawyer-request-attachment-consent.test.tsx` are part of the `test:unit` list.
+- `pnpm exec tsc --noEmit` → **45 errors — identical to base `ce4e803`'s 45**, all in pre-existing unrelated test files.
+- `pnpm build` → **exit 0**.
+- Changed-file `biome check` → **clean** (14 files); `git diff --check` → **clean**.
+- `cd legal-service && pytest tests -q` → re-run for regression only (no legal-service file changed in this closure); result recorded in the completion message.
+
+### Not run / still blocked (do not read as passing)
+
+- No browser run for the new consent panel: the panel is covered by static markup rendering in both locales, and the workspace browser spec was not re-run (no workspace surface changed).
+- No live end-to-end lawyer request with real documents (needs the owner's host application DB and a VIP account); the route's DB-dependent branches are covered by pure-function tests plus source/wiring assertions.
+- Owner-host acceptance items from R1/R2 are unchanged: durable policy card with `0026` applied, AWS staging S3/DOCX checks, cross-device continuity, Stage 1 owner acceptance.
+
+### Immediate next action (closure)
+
+Independent final review of the owner-approved Option A implementation, then owner host verification. Do not commit, push, merge or deploy until the owner authorizes it; migration `0026` stays unapplied outside the isolated test DB.
+
+
+
+## Phase 12 Stage 2 R2 — final focused corrections (IMPLEMENTED 2026-10-12; awaiting final review)
+
+**Status:** R2 corrections IMPLEMENTED on top of the uncommitted Stage 2 + R1 work. R1-2 and R1-3 were accepted at the static design level and were **not** redesigned. **Gate 2 is NOT claimed as passed.** No commit, push, merge, deploy or live migration happened; migration `0026` is still **unapplied** outside the isolated test DB.
+
+### R2-A — per-document provenance (one acknowledged document no longer claims the packet)
+
+The reviewer found that the widget routes passed the **entire** packaged manifest to `acknowledgedCustomerDocumentProvenance()` whenever the backend's boolean was true, so one acknowledged document made every packaged file look used.
+
+- `QueryResponse` gained **`customer_document_used_ids`** (bounded ≤8): the ids the answering model **acknowledged** *and* that this request actually authorized. `default_agent_serving_service` returns them only for the `confirmed` state, and its telemetry now names the basis (`usage_basis: "model_acknowledged" | "none"`) so a reviewer never reads "confirmed" as independent evidence verification. Single-shot paths (Fast, Premium, legacy reasoning, V2) have no acknowledgement channel and always return an empty list — their `supplied_unconfirmed` semantics are unchanged.
+- `acknowledgedCustomerDocumentProvenance(manifest, used, preserved, acknowledgedIds)` now returns the **acknowledged subset** of this turn's own manifest. A forged, cross-conversation or stale id can never introduce a document, and a boolean without matching ids downgrades to not-used instead of claiming the packet.
+- All three widget routes pass `data.customer_document_used_ids`; only the acknowledged subset is served to the customer (`customerDocumentSources(answeredCustomerDocumentManifest)`), while the persisted metadata now carries **both** the packaged manifest (the conversation-authorized attachments of that turn) and `customerDocumentUsedIds` (the acknowledged subset).
+- Reload (`extractAssistantMetadata`) exposes only the acknowledged subset; answers stored before per-document acknowledgements have no ids and keep exactly what they stored — nothing is invented retroactively, and no new answer can reach that path.
+
+### R2-A lawyer-request compatibility (implemented, not a silent widening)
+
+R1's stricter flag **did** remove all customer-document context from Fast/Premium lawyer requests, because the snapshot keyed off the same conflated boolean. R2 keeps the two categories distinct instead of dropping one:
+
+- New pure selector `selectLawyerDocumentAttachments()` reads **only** the bounded manifest persisted with the answered turn (so no document outside that turn's authorized scope can reach a lawyer) and marks every entry `used_by_answer` — true only for the acknowledged subset, false for an authorized attachment the answer never claimed.
+- `LawyerRequestEvidenceItem` gained `used_by_answer`; both lawyer views (staff portal detail and the lawyer workspace evidence panel) now state per document whether the AI answer acknowledged using it, and the heading already says "bounded excerpts supplied to the AI, not full documents".
+- Bounds are unchanged or tighter: at most 4 documents (acknowledged first so the answer's stated basis always survives), the same 12 000-character excerpt budget, and the same exact-reconstruction contract (`getMatterDocumentEvidenceForLawyerSnapshot`: owner + same conversation + run + ordinals + hash-verified text).
+- Integrity rules: an acknowledged document that cannot be reconstructed keeps the strict 409; an unacknowledged attachment that has since been removed is skipped rather than blocking the request; an acknowledged id with no usable manifest entry is an integrity error. The previous `manifest.length > 4 → 409` rejection (which would have blocked lawyer requests for 5+ packaged files) is gone — the selector bounds instead of failing.
+- Old stored answers have no ids; they keep their stored (pre-R2) meaning and are marked used, so existing lawyer requests behave exactly as before.
+
+### R2-B — file-name privacy in review traces and archives
+
+The reviewer found that the review trace recorded `customer_document_summary`, which carries `unusableFilenames`, and that `_safe_json()` does not redact PII.
+
+- New deterministic helpers in `customer_document_context.py`: `sanitized_customer_document_summary()` (counts, availability/packaging and the **number** of withheld filenames only) and `filename_free_customer_document_summary()` (same type as the input, every filename removed) — both covered by 4 unit tests.
+- `review_trace_service.py` now writes every request copy through `_trace_safe_payload()` (drops the evidence packet, blanks the summary filenames) — for the trace `request` dump, the explicit `customer_document_evidence_summary.customer_document_summary` field (counts only), the `matter_id=None` fallback path and the archive hand-off; the trace also records `customer_document_used_ids` for R2-A provenance.
+- `experience_archive_service.py` sanitizes the summary in `_build_persistence_payload` **and** in `build_snapshot` (so any caller is covered), and the archived request now carries the sanitized counts plus the acknowledged-use state and count instead of the raw summary.
+- Test with the synthetic name `Client_Passport_12345678.pdf` proves it never appears anywhere in the trace JSON, the archived request or the archived snapshot request, while counts (`total`, `usable`, `packaged`, `unusableFilenameCount`, …) survive. The authenticated app's own file display is untouched: it reads the application database (the customer's own uploads), not these traces.
+
+
+
+
+### Validation actually run (exact, R2)
+
+- `cd chatbot && pnpm test:unit` → **715 passed, 0 failed, 0 skipped** (R1 close 699; +16 after R2: 6 provenance + 9 lawyer-selection + 1 reload test, and the R1-era contract tests updated to the corrected contract). Both R2 test files are now part of the `test:unit` list.
+- `cd legal-service && /home/rico/anaconda3/envs/torch/bin/python -m pytest tests -q` → **1286 passed, 0 failed** (2 pre-existing pydantic deprecation warnings; R1 close 1273; +13 R2 tests).
+- Focused: `test_phase12_stage2_r2_document_usage_ids.py` (9) + `test_phase12_stage2_r2_trace_privacy.py` (4) + R1 usage tests = 26 passed; `r2-document-provenance.test.ts` + `lawyer-document-selection.test.ts` = 15 passed; `message-parts` / `conversation-http` / provenance / public-answer-preservation = 29 passed.
+- `pnpm exec tsc --noEmit` → **45 errors — identical to base `ce4e803`'s 45**; changed-file `biome check` → **clean** (17 files); `git diff --check` → **clean**.
+- `pnpm build` → **exit 0** (route/type integrity only; no DB or browser side effects).
+- **Not run in R2:** the committed Playwright workspace spec. R2 touched no workspace surface (server routes, lawyer portal components, lib helpers), so it was not re-run rather than reported as passing; the R1 run remains 20/20. No paid/live model call; no migration applied; the canonical legal corpus untouched; the isolated test DB was not needed for R2.
+
+
+## Phase 12 Stage 2 R1 — independent review corrections (IMPLEMENTED 2026-10-12; awaiting re-review)
+
+**Status:** R1 corrections IMPLEMENTED on top of the uncommitted Stage 2 work. Awaiting independent re-review. **Gate 2 is NOT claimed as passed.** No commit, push, merge, deploy or live migration happened. Migration `0026` remains **unapplied** to `chatbot`, `immigration_legal`, staging and production.
+
+
+
+### R1-1 — document use is verified, never assumed
+
+The reviewer found that the Default serving path reported `customer_document_evidence_used=True` whenever a packet was present and a non-safety answer existed, conflating availability with use.
+
+- `AgentSubmissionV2` gained an explicit, separately typed **`customer_documents_used: list[str]`** acknowledgement (optional, ≤8 items, each ≤64 chars, unique), advertised in the `submit_answer` tool schema **only as an optional property**, and requested by a deterministic instruction inside the customer-document prompt section ("leave `customer_documents_used` empty when you did not rely on any supplied document; never list a document you did not receive").
+- `matched_document_acknowledgements()` keeps only ids that are verbatim members of **this request's authorized manifest**, so an invented or cross-request id can never claim use.
+- New tri-state **`customer_document_usage`** on `QueryResponse` (`not_supplied` / `supplied_unconfirmed` / `confirmed`) is the authoritative state; `customer_document_evidence_used` is now strictly `usage == "confirmed"`. A safety block or an empty answer resets both to the honest non-claim state.
+- The same honest semantics now apply to **Fast, Premium direct, legacy reasoning and V2**: those single-shot paths have no acknowledgement channel, so a supplied packet is reported as `supplied_unconfirmed` with the strict boolean `False` — never asserted as used.
+- Deterministic helpers live in `legal-service/app/services/customer_document_context.py` (`customer_document_usage_state`, `customer_document_usage_fields`, `matched_document_acknowledgements`); telemetry records usage plus authorized/acknowledged/unmatched counts without retaining document text.
+- Bot side: `customerDocumentUsageState()` (never upgrades a state; `confirmed` requires the backend's verified boolean) is carried through route metadata, the response payload, resume/replay branches, `extractAssistantMetadata`, `conversation-http.ts` and the workspace types, so a reload preserves the honest state. Every customer-visible "used your file" surface (evidence card, lawyer-request manifest) remains gated on the strict verified boolean.
+- **Residual risk for the owner (DECISION REQUIRED, not silently changed):** because the lawyer-request snapshot forwards the manifest only when `customer_document_evidence_used === true`, a Fast/Premium answer no longer auto-attaches the customer's document evidence to a lawyer request. That is the honest consequence of R1-1 (the old behaviour rested on the conflation). Widening it would need a separate approved provenance rule; nothing was changed.
+
+
+### R1-2 — the policy topic survives unpublication
+
+The reviewer found that the widget routes rebuilt the model-side topic from a **live** lookup of the bound slug, so an archived/withdrawn/superseded publication erased the topic and follow-ups such as "这项政策" stopped resolving.
+
+- New pure builder `buildConversationPolicyTopicContext()` (`chatbot/lib/policy-intelligence/conversation-policy-binding.ts`) renders the topic **from the persisted binding snapshot**: slug, bilingual titles, official source title/URL, creation-time revision, publication date and publication status. It is labelled *topic context only — never proof of current law and never legal evidence*, and it carries no `evidence_ref`/`canonical_source_id`.
+- When the live publication still resolves, the current revision is added as a **separate line** (plus an explicit "the topic has been revised since this conversation started" note) instead of silently replacing the user's original topic; a `snapshot: true` reference never claims to be current. When it no longer resolves, the text states that the original publication is not currently available in the published index and must be re-confirmed, while the topic stays intact.
+- New server resolver `resolveConversationPolicyTopicContextEntry({ binding })` performs the live lookup **best effort** inside a `try/catch`: a failed or missing live read can never remove the durable topic. All three widget routes now call it with `workspaceContext.policyBinding` and no longer use `getPolicyTopicContextEntry(slug)` or `workspaceContext.policyTopic.slug`.
+
+### R1-3 — a long-lived conversation is no longer rejected
+
+The reviewer found that `CustomerDocumentSummary` capped every count at 64 while the widget reports real counts, so a conversation with 65+ files rejected an otherwise valid legal question.
+
+- Counts are now bounded at `MAX_CUSTOMER_DOCUMENT_COUNT = 100_000` (finite but not artificially small); evidence text, filenames (≤3 × 120 chars) and packet size stay bounded exactly as before.
+- New **`packaged`** field distinguishes the usable files whose text was actually supplied to this turn from **all** stored/usable files (`total`/`usable`). The widget sets it from the evidence packet it built (`manifest.length`, clamped to `usable`), and the deterministic status renderer states "Only N of the M readable file(s) were supplied to you for this turn … do not claim to have read any file that was not supplied".
+- Reading cost no longer grows with conversation length: one batched `selectDistinctOn` query returns the latest processing run **per stored document**, and extraction text is only fetched lazily for the bounded packet. Documents that are not fully stored, or not security-clean, never carry a run status into the summary.
+- **Reviewer's regression check closed:** a conversation with one readable and one unreadable file now states both facts (`Of N file(s), X produced readable text but Y did not … do not claim to have read them`) instead of silently returning nothing whenever `usable > 0`.
+
+### Committed browser checks (replacing the temporary external script)
+
+`chatbot/tests/e2e/phase12-stage2-workspace.test.ts` + `playwright.phase12-stage2.config.ts` (script `pnpm run test:phase12:stage2:browser`, requires `P12_STAGE2_E2E_BASE_URL`) run five real-browser checks at 1920×1080 / 1366×768 / 768×1024 / 390×844: bounded single-row composer with no attachment list, upload affordance adjacent to the composer with a reachable send control, the chat keeping the primary reading area, labelled panels below 1280px (and the three-column context panel above it), and the guest file hint appearing instead of a raw authorisation error. Test ids were added where a check needed a stable hook (`composer-upload`, `conversation-files-upload`; existing `workspace-*` ids are reused).
+
+
+### Validation actually run (exact, R1)
+
+- `cd chatbot && pnpm test:unit` → **699 passed, 0 failed, 0 skipped** (Stage 2 close was 673; +26 R1 tests).
+- `PHASE12_TEST_DATABASE_URL=… pnpm run test:phase12:stage2:documents:integration` (isolated disposable DB) → **1 passed, 0 failed**, process exits cleanly. The same test **failed before the fix** with `8 !== 66`, which is how the reviewer's 65+ case exposed a real truthfulness defect in the first R1 attempt (the summary had only seen the packaged subset): the fixture now proves total=70 / usable=66 / noUsableContent=2 / failed=2 with a bounded packet (≤8 documents, ≤64 units, ≤64 000 chars).
+- `PHASE12_TEST_DATABASE_URL=… pnpm run test:phase12:stage2:integration` → **1 passed, 0 failed** (owner-scoped bindings, idempotent launch, cross-user isolation, cascade delete, unresolvable slug creates nothing).
+- `P12_STAGE2_E2E_BASE_URL=… pnpm run test:phase12:stage2:browser` → **20 passed / 0 failed, exit 0** (5 checks × 4 viewports).
+- `cd legal-service && /home/rico/anaconda3/envs/torch/bin/python -m pytest tests -q` → **1273 passed, 0 failed** (2 pre-existing pydantic deprecation warnings; Stage 1 close 1247, Stage 2 close 1260).
+- `pnpm exec tsc --noEmit` → **45 errors — identical to base `ce4e803`'s 45** (worktree-compared; unchanged by R1).
+- Changed-file `biome check` → **clean** (20 files); `git diff --check` → **clean**.
+- No paid/live model call was made; no migration was applied; the canonical legal corpus was untouched.
+
+### Test-environment artefacts removed (recorded honestly)
+
+- The four-viewport browser runs created **80 guest sessions and 40 conversations** in the development database (multiple Playwright contexts per check). Exactly those rows (guest users created inside the run window and their chats/conversations/messages/documents) were deleted and verified; the 255 pre-existing guest rows were left untouched.
+- An earlier failed documents-integration seed left one orphan `p12s2docs-*` test user; it was deleted and verified (`leftover: 0`).
+- `git diff --check` flagged two trailing-blank-line-at-EOF issues (one Stage 2 source file, one memory document); both were trimmed.
+
+### Not run / still blocked (do not read as passing)
+
+- Repository Playwright E2E suites other than the Stage 2 workspace spec (`pnpm test`, `playwright.stage3.config.ts`, `playwright.political-gate.config.ts`).
+- Durable policy-card behaviour after refresh/history/second device **with `0026` applied** in a *browser* (the integration test covers the binding; topic survival is proven by the legal-service model-input test plus the bot request-construction test).
+- AWS-case policy launch, real staging S3 preflight/download, DOCX extraction end-to-end and cross-device continuity remain **owner-host verification** items.
+- Stage 1 owner cross-device acceptance remains incomplete; Gate 1 is still not claimed as passed.
+
+### Immediate next action
+
+Independent **re-review of the R1 corrections**, then owner host verification and the owner cross-device procedure. Do not commit, push, merge or deploy until the owner authorizes it.
+
+
+## Phase 12 Stage 2 — Context, policy handoff and compact workspace UI (IMPLEMENTED 2026-10-12; awaiting independent review + owner acceptance)
+
+**Status:** IMPLEMENTED. Awaiting independent code review and owner host/cross-device acceptance. **Gate 2 is NOT claimed as passed.** No commit, push, merge, deploy or live migration happened. The canonical legal corpus and the authoritative application database were not modified.
+
+### A. Durable policy-to-conversation binding (server-persisted)
+
+A policy launch used to live only in transient React state (`linkedPolicyReference` + `linkedPolicyChatIdRef`), so a hot client-side navigation kept an unrelated conversation on screen, a reload/history reopening lost the visible topic, and a launch that failed to persist could appear to succeed.
+
+- New additive table **`ConversationPolicyBinding`** (`chatbot/lib/db/schema.ts`) stores, per owned conversation: `policySlug`, `policyOrigin`, `policyItemId`, `policyRevisionNumber`, `policyPublishedAt`, `policySourceStatus`, `policyRevisionToken`, bilingual title snapshot (`titleZh`/`titleEn`), `officialTitle`, `officialUrl`, `launchId`, `boundAt`/`updatedAt`. Migration source: **`chatbot/lib/db/migrations/0026_phase12_stage2_conversation_policy_binding.sql`** (drizzle-kit generated, renamed to the repository's descriptive convention, journal tag updated).
+- **The client may only request a policy by slug.** `POST /api/immigration-conversations` resolves the slug server-side through the same trusted publication gate the policy detail page uses, then writes chat + conversation + snapshot **in one transaction** (`createImmigrationConversationWithPolicyBinding`). A slug that does not resolve returns `404 policy_topic_unavailable` and creates nothing.
+- **Recovery on every read path.** The detail and list responses carry `policyBinding`, so refresh, history reopening and a second device render the card from the stored snapshot. The client accepts a binding only when it names the conversation on screen (`shouldApplyPolicyBinding`).
+- **Idempotent launch.** `launchId` (browser-remembered per slug, `lib/workspace/policy-launch.ts`) plus a unique index on `(userId, launchId)` makes a retried or racing launch resolve to the same conversation instead of a second empty one; a genuinely new launch uses a new id, so the explicit "new conversation" ability is preserved. A unique-index race (`23505`) is caught and resolved to the winning row.
+- **One-time initialization defect fixed.** Initialization is now keyed by launch identity (`policyLaunchKey` = intent + slug + chatId, tracked in `appliedPolicyLaunchKeyRef`) instead of a one-shot `initializationStartedRef` boolean, so navigating from one policy to another while the workspace is already mounted actually launches that policy.
+- **No silent downgrade.** The server page reports an explicit `policyLaunchState` (`requested`/`resolved`/`unavailable`) instead of redirecting an unresolvable policy to a plain workspace. The workspace renders an explicit, recoverable card (`data-policy-launch-state`) with retry / open-policy / explicit "continue without the policy" actions. Browser-verified: a launch that cannot be persisted shows `policy_binding_unavailable` and **creates no conversation** (count unchanged).
+- **Topic ≠ law.** The card shows the creation-time revision and the snapshot notice and never presents the snapshot as currently effective law. Widget routes resolve the topic hint from the stored binding (`resolveConversationPolicyTopicContext`); a client slug is used only while the binding schema is absent, and only for a conversation the caller owns.
+- **Rollout compatibility.** `conversationPolicyBindingSchemaAvailable()` probes the catalog once (`to_regclass`) and the API answers `503 policy_binding_unavailable` when migration `0026` is not deployed, so the code runs safely against a database that has not received it.
+
 **Branch:** `codex/phase12-stage1-user-data-reliability` (implementation branch; NOT merged)
 **Stage 1 implementation commit:** `0a0a82be36ac2133bd98c91fb2b5c1df477b9181` (remote-verified before the docs-only SHA record)
 **R3 final-closure commit:** `dc4492169edeea70bd0123b9ef65cff5c20db93b` — `fix(phase12): retained-VIP typing and legacy read-only workspace (R3)` (remote-verified)
@@ -19,6 +196,48 @@
 **P11-004 verified checkpoint:** `f2d941734d256c9e0a0e42988cd67cdb828d0dc6`
 **Git-state rule:** verify the live branch tip with `git rev-parse HEAD`; documentation-only memory commits may advance HEAD without runtime changes  
 **Milestone:** Phase 11 — Chinese-first Immigration & Study Service Platform UI Rebase
+
+### B. One typed context resolver and real customer-document evidence in every mode
+
+- New **`chatbot/lib/workspace/context-resolver.ts`** (server-only, `projectId: null` reserved) is the single authenticated resolver used by **all three** widget routes (Fast, Legal Check, Premium): account/user, authorized conversation, optional matter, server-persisted policy binding, bounded message history, conversation-scoped document evidence, processing/availability summary, provenance/use status. An unowned chat resolves to an empty context, never to widened scope.
+- New **`buildConversationDocumentContext`** returns the bounded evidence packet **and** a bounded availability summary (`total`, `usable`, `usableTruncated`, `noUsableContent`, `processing`, `failed`, ≤3 sanitized filenames) from the same owner-authorized read, so the panel and the model can never disagree.
+- The summary travels as `customer_document_summary` — **control data, not evidence** — and the legal service renders a deterministic limitation when a conversation has files but no usable text (`format_customer_document_status_context`): do not describe/summarise the file, do not claim to have read it, plus the concrete recovery step. This closes the reported defect where an answer appeared to discuss a PDF while the UI said "已保存，但未提取到可用内容".
+- **The reported Legal Check gap is fixed:** `AgentRuntimeRequest` previously carried no customer document evidence at all, so the Default AgentRuntime never received the customer's own file even though Fast and Premium did. It now carries a rendered, bounded `customer_document_context` + `customer_document_evidence_present`; `AgentRuntimeService._build_user_message` renders it as clearly labelled **untrusted customer data, not legal authority**; `DefaultAgentServingService` reports `customer_document_evidence_used` truthfully (evidence present + a real accepted answer + not safety-blocked).
+- All four legacy serving paths (Fast, Premium direct, reasoning service, V2 verified answer) now call the single `format_customer_document_prompt_section`, so every mode renders the same view of the customer's files.
+
+### C. Compact, usable AI workspace UI
+
+The mode toolbar is one row (the permanent description block became a hidden-on-small text hint). The chat is the primary reading area: desktop keeps the three-column grid; below 1280px a labelled tab strip (`历史对话 / 本对话文件 / 我的历史文件 / 案件摘要`, `role="tablist"` + `aria-selected`) reveals one panel at a time under the chat instead of forcing a narrow right column. The composer is a single bounded row: upload control adjacent to a `rows={1}` auto-growing textarea (measured, capped at 120px), send button always reachable, Enter sends / Shift+Enter adds a line, IME composition never submits, and **no attachment list grows under it**. The right-hand context panel owns current-conversation files (download/delete/retry/reprocess with truthful status labels), the account-wide file history and the known-facts/case-summary blocks. Upload, delete, reprocess and retry notify the workspace (`onDocumentsChanged` → `documentsRevision`), which refreshes both the conversation file panel **and** the account-wide history automatically. Guest accounts see a localized "sign in to manage files" hint instead of an unlocalized API authorisation error, and the document APIs are not called at all for guests.
+
+### Validation actually run (exact)
+
+- `cd chatbot && pnpm test:unit` → **673 passed, 0 failed, 0 skipped** (Stage 1 close was 634; +39 Stage 2 tests).
+- `PHASE12_TEST_DATABASE_URL=… pnpm run test:phase12:stage2:integration` (isolated disposable database `immigration_ai_phase12_stage1_test`) → **1 passed, 0 failed, exit 0**.
+- `pnpm exec tsc --noEmit` → **45 errors**, verified against the same **45** errors at base `ce4e803` (temporary worktree comparison; no new error, none in Stage 2 files).
+- `pnpm build` → **exit 0**.
+- `git diff --check` → **clean**; changed-file `biome check` → **clean**.
+- `cd legal-service && /home/rico/anaconda3/envs/torch/bin/python -m pytest tests -q` → **1247 passed, 0 failed** (2 pre-existing pydantic deprecation warnings). Stage 2 file alone: 10 passed.
+- Real browser checks (out-of-repo Playwright script against a local dev server; screenshots kept in `/tmp/stage2-shots`): **26/26 checks passed** — 1920×1080 and 1366×768 desktop (3-column, right context panel visible, bounded 40px composer, 597/285px message area), 768×1024 and 390×844 (tab strip present, chat primary, conversation-files panel reachable via tab, bounded composer), no attachment list under the composer, and the pre-migration policy launch behaving exactly as designed.
+- `pnpm run s3:preflight` → now runnable: without configuration it exits **2** with its own message and no `TransformError`; with a non-existent bucket it performed the read-only describe calls, failed closed (`ok:false`) and exited 1. Regression test added.
+
+### Environment incidents recorded honestly (no customer data affected)
+
+- **Migration status:** `0026` is **NOT applied** to `chatbot`, `immigration_legal`, staging or production. It was applied **only** to the isolated disposable test database (authorized) so the integration test could run. Verified afterwards: the `chatbot` database has **no** `ConversationPolicyBinding` relation, and the migrate operator script refuses any target whose `current_database()` is not the isolated test database.
+- **Wrong-database test run (contained):** the first integration-test invocation passed a URL whose database substitution silently did not match, so the test ran against the `chatbot` development database. It created 6 synthetic `p12s2%@example.test` users and no chats/conversations/messages (the binding insert failed and rolled back). Detected immediately, cleaned up exactly those 6 synthetic users, verified `0` remained, then re-ran against the isolated database (passed). No customer row was read, modified or deleted.
+- **Browser-check artefacts (contained):** the browser runs created 13 guest sessions (3 with one auto-created empty conversation each) in the development database. Exactly those 13 guest rows and their 3 chats/conversations were removed (0 messages); the 255 pre-existing guest rows were left untouched.
+- `psql` prompted for a password while inspecting the migration ledger; it was stopped and the application's own database client was used instead. No credential was printed, logged or written.
+
+### Not run / still blocked (do not read as passing)
+
+- Repository Playwright E2E suites (`pnpm test`, `playwright.stage3.config.ts`, `playwright.political-gate.config.ts`) were **not** run; the four-viewport evidence above comes from an out-of-repo script.
+- Durable policy-card behaviour after refresh / history reopening / second device **with `0026` applied** is proven by the isolated-database integration test, not by a local browser run (the local application database has not received the migration).
+- AWS-case policy launch, real staging S3 preflight against the owner's bucket, original-byte download, DOCX extraction end-to-end and cross-device continuity remain **owner-host verification** items.
+- No paid/live model call was made in this task. Legal Check/Premium document consumption is covered by deterministic contract tests, not by a live answer-quality run.
+- Stage 1 owner cross-device acceptance remains incomplete (per the owner's update: R1–R3 reviewed, `0024`/`0025` applied locally, S3 upload and account file history visually confirmed; cross-device, original-byte download, DOCX and failure-path acceptance outstanding). Stage 1 Gate 1 is still **not** claimed as passed.
+
+### Immediate next action
+
+Independent review of the uncommitted Stage 2 diff, then owner **host** verification against a database that has received `0026` (disposable/migrated environment or an explicitly authorized application-database migration), then the owner cross-device/cross-browser procedure. Do not commit, push, merge or deploy until the owner authorizes it. If the owner authorizes a commit, the expected sequence is a normal `git add`/`git commit` on `codex/phase12-stage2-context-ui`, a normal (non-force) `git push`, then remote SHA verification.
 
 ## Phase 12 Stage 1 — Account-centred durable history and documents (IMPLEMENTED 2026-10-11; awaiting external review)
 

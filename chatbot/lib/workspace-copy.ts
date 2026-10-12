@@ -23,6 +23,8 @@ export type WorkspaceCopy = {
     loadOlder: string;
     allLoaded: string;
     loadFailed: string;
+    createFailed: string;
+    policyTopicBadge: string;
   };
   messages: {
     loadEarlier: string;
@@ -68,6 +70,8 @@ export type WorkspaceCopy = {
     ready: string;
     failed: string;
     saved: string;
+    /** Pipeline finished; usability is still shown in the conversation panel. */
+    extractionFinished: string;
   };
   quickQuestions: readonly string[];
   consultation: {
@@ -123,6 +127,8 @@ export type WorkspaceCopy = {
     needsReview: string;
     failed: string;
     notStarted: string;
+    /** Stored durably but extraction has not produced usable text yet. */
+    stored: string;
     availableToAI: string;
     uploaded: string;
     noEvidence: string;
@@ -137,6 +143,40 @@ export type WorkspaceCopy = {
     customerEvidence: string;
     warning: string;
     visionUnavailable: string;
+    /** Guest accounts cannot own documents, so files require an account. */
+    signInForFiles: string;
+  };
+  /**
+   * Phase 12 Stage 2 compact workspace: the chat is the primary reading area and
+   * the side panels are reachable through one labelled tab strip on narrow
+   * viewports instead of a forced right-hand column.
+   */
+  panels: {
+    label: string;
+    history: string;
+    conversationFiles: string;
+    accountFiles: string;
+    caseSummary: string;
+    close: string;
+    conversationFilesEmpty: string;
+    conversationFilesHint: string;
+  };
+  policy: {
+    /** The card is a topic reference, not verified current law. */
+    snapshotNotice: string;
+    revision: string;
+    revisionUnknown: string;
+    boundAt: string;
+    sourceUnavailableTitle: string;
+    sourceUnavailableBody: string;
+    launchFailedTitle: string;
+    launchFailedBody: string;
+    launchSchemaTitle: string;
+    launchSchemaBody: string;
+    retry: string;
+    continueWithoutPolicy: string;
+    openPolicy: string;
+    listBadge: string;
   };
   lawyerRequest: {
     reviewPrompt: string;
@@ -148,10 +188,23 @@ export type WorkspaceCopy = {
     submitted: string;
     viewStatus: string;
     details: string;
+    questionPreview: string;
     answerPreview: string;
     optionalNote: string;
     submitting: string;
     submit: string;
+    attachmentsTitle: string;
+    attachmentsIntro: string;
+    attachmentsNone: string;
+    attachmentsLoading: string;
+    attachmentsLoadError: string;
+    attachmentsUnavailable: string;
+    attachmentsSelectedPrefix: string;
+    attachmentsAcknowledged: string;
+    attachmentsNotAcknowledged: string;
+    attachmentsWithheldWarning: string;
+    attachmentsLimitError: string;
+    attachmentsNoSelection: string;
     consultationTitle: string;
     consultationDescription: string;
     consultationLink: string;
@@ -181,6 +234,8 @@ const zh: WorkspaceCopy = {
     loadOlder: "加载更早的对话",
     allLoaded: "已加载全部对话。",
     loadFailed: "无法加载更早的对话，请重试。",
+    createFailed: "无法创建对话，请重试。",
+    policyTopicBadge: "政策主题",
   },
   messages: {
     loadEarlier: "加载更早的消息",
@@ -224,6 +279,7 @@ const zh: WorkspaceCopy = {
     ready: "处理完成",
     failed: "处理失败",
     saved: "已保存到您的账号",
+    extractionFinished: "解析流程已完成（是否可用于 AI 请见本对话文件列表）",
   },
   quickQuestions: [
     "完成授课型硕士后，申请 485 签证需要考虑哪些条件？",
@@ -304,6 +360,7 @@ const zh: WorkspaceCopy = {
     needsReview: "需要检查",
     failed: "处理失败",
     notStarted: "尚未处理",
+    stored: "已保存，等待解析",
     availableToAI: "可供 AI 使用",
     uploaded: "上传成功",
     noEvidence: "已保存，但未提取到可用内容，暂不能用于 AI 分析",
@@ -318,7 +375,39 @@ const zh: WorkspaceCopy = {
     incomplete: "提取内容可能不完整。",
     customerEvidence: "客户文件证据",
     visionUnavailable: "需要视觉提取服务",
+    signInForFiles: "登录账号后即可上传并管理文件。",
     warning: "仅向 AI 提供了文件中有界的提取内容。文件可能还包含其他信息。",
+  },
+  panels: {
+    label: "上下文面板",
+    history: "历史对话",
+    conversationFiles: "本对话文件",
+    accountFiles: "我的历史文件",
+    caseSummary: "案件摘要",
+    close: "收起面板",
+    conversationFilesEmpty: "本对话还没有文件。",
+    conversationFilesHint:
+      "在此管理本对话的文件。只有本对话的文件会提供给 AI；账号历史文件仅用于您自己查看与下载。",
+  },
+  policy: {
+    snapshotNotice:
+      "此卡片记录本对话最初提问的政策主题（创建时快照），不是当前有效法律的证明。请以官方来源与回答中的来源为准。",
+    revision: "创建时版本",
+    revisionUnknown: "创建时版本未记录",
+    boundAt: "关联时间",
+    sourceUnavailableTitle: "该政策主题当前不可用",
+    sourceUnavailableBody:
+      "本对话关联的政策主题已无法在已发布列表中解析（可能已下架、被撤回或尚未发布）。历史对话仍然保留，您可以继续追问，但请勿把该主题当作现行法律。",
+    launchFailedTitle: "无法打开该政策对话",
+    launchFailedBody:
+      "我们无法把这次政策提问保存到您的账号，因此没有创建新对话。您可以重试，或直接开始一个普通对话。",
+    launchSchemaTitle: "政策关联功能尚未在此环境中启用",
+    launchSchemaBody:
+      "当前数据库尚未包含政策关联结构，因此这次政策提问无法保存。请联系管理员或稍后重试；您也可以开始一个普通对话。",
+    retry: "重试",
+    continueWithoutPolicy: "不带政策并开始普通对话",
+    openPolicy: "查看政策页面",
+    listBadge: "政策",
   },
   lawyerRequest: {
     reviewPrompt: "需要进一步专业审核？",
@@ -330,11 +419,26 @@ const zh: WorkspaceCopy = {
     submitted: "律师审阅请求已提交。查看进度：",
     viewStatus: "律师请求",
     details:
-      "律师会收到已保存的问题、答复、可见上下文及本次对话允许传递的证据。",
+      "律师会收到已保存的问题、答复、可见上下文，以及你在下方勾选共享的文件摘录。未勾选的文件不会发送。",
+    questionPreview: "问题预览：",
     answerPreview: "答复预览：",
     optionalNote: "给律师的补充说明（选填）",
     submitting: "正在提交…",
     submit: "提交审阅请求",
+    attachmentsTitle: "选择要共享给律师的文件",
+    attachmentsIntro:
+      "默认不共享任何文件。只有你勾选的文件及其允许的证据摘录（受现有摘录上限限制）会发送给律师。你可以不勾选任何文件，仍提交审阅请求。",
+    attachmentsNone: "本次对话没有可作为附件共享的文件。",
+    attachmentsLoading: "正在加载可共享文件…",
+    attachmentsLoadError: "无法加载可共享文件，请重试。",
+    attachmentsUnavailable: "部分文件当前不可共享，已从列表中移除。",
+    attachmentsSelectedPrefix: "已选择",
+    attachmentsAcknowledged: "AI 答复声明使用过此文件",
+    attachmentsNotAcknowledged: "AI 答复未声明使用此文件",
+    attachmentsWithheldWarning:
+      "以下 AI 答复声明使用过的文件你没有勾选，律师将不会收到它们的任何内容：",
+    attachmentsLimitError: "最多只能共享 4 个文件，请取消勾选多余的文件。",
+    attachmentsNoSelection: "未选择任何文件，律师将不会收到文件摘录。",
     consultationTitle: "预约一对一律师咨询",
     consultationDescription: "律师审阅此答复与一对一咨询是两项独立服务。",
     consultationLink: "预约一对一咨询",
@@ -367,6 +471,8 @@ const en: WorkspaceCopy = {
     loadOlder: "Load older conversations",
     allLoaded: "All conversations are loaded.",
     loadFailed: "Could not load older conversations. Please retry.",
+    createFailed: "The conversation could not be created. Please try again.",
+    policyTopicBadge: "Policy topic",
   },
   messages: {
     loadEarlier: "Load earlier messages",
@@ -418,6 +524,8 @@ const en: WorkspaceCopy = {
     ready: "Processing complete",
     failed: "Processing failed",
     saved: "Saved to your account",
+    extractionFinished:
+      "Extraction finished (AI usability is shown in this conversation's file list)",
   },
   quickQuestions: [
     "After a coursework master’s degree, what should I check for a 485 visa?",
@@ -504,6 +612,7 @@ const en: WorkspaceCopy = {
     needsReview: "Needs review",
     failed: "Processing failed",
     notStarted: "Not processed",
+    stored: "Saved, awaiting extraction",
     availableToAI: "Available to AI",
     uploaded: "Upload complete",
     noEvidence:
@@ -520,8 +629,40 @@ const en: WorkspaceCopy = {
     incomplete: "Extracted content may be incomplete.",
     customerEvidence: "Customer document evidence",
     visionUnavailable: "Vision extraction unavailable",
+    signInForFiles: "Sign in to your account to upload and manage files.",
     warning:
       "Only bounded extracted portions of this file were supplied to the AI. The document may contain additional information.",
+  },
+  panels: {
+    label: "Context panels",
+    history: "Conversations",
+    conversationFiles: "This conversation",
+    accountFiles: "My files",
+    caseSummary: "Case summary",
+    close: "Collapse panel",
+    conversationFilesEmpty: "No files in this conversation yet.",
+    conversationFilesHint:
+      "Manage this conversation's files here. Only this conversation's files are supplied to the AI; your account-wide files are for your own review and download.",
+  },
+  policy: {
+    snapshotNotice:
+      "This card records the policy topic this conversation started from (a snapshot taken at creation). It is not proof of the law currently in force — rely on the official source and the sources shown in answers.",
+    revision: "Revision at creation",
+    revisionUnknown: "Revision at creation not recorded",
+    boundAt: "Linked",
+    sourceUnavailableTitle: "This policy topic is currently unavailable",
+    sourceUnavailableBody:
+      "The policy topic linked to this conversation can no longer be resolved in the published list (it may have been withdrawn, superseded or unpublished). The retained conversation is unchanged and you can keep asking, but do not treat that topic as current law.",
+    launchFailedTitle: "This policy conversation could not be opened",
+    launchFailedBody:
+      "Your policy question could not be saved to your account, so no new conversation was created. You can retry, or start an ordinary conversation instead.",
+    launchSchemaTitle: "Policy linking is not enabled in this environment yet",
+    launchSchemaBody:
+      "This database does not include the policy-linking structure yet, so this policy launch cannot be saved. Ask an administrator or try again later; you can also start an ordinary conversation.",
+    retry: "Retry",
+    continueWithoutPolicy: "Continue without the policy topic",
+    openPolicy: "Open the policy page",
+    listBadge: "Policy",
   },
   lawyerRequest: {
     reviewPrompt: "Need professional review?",
@@ -534,11 +675,32 @@ const en: WorkspaceCopy = {
       "Your lawyer review request has been submitted. View its status in",
     viewStatus: "lawyer requests",
     details:
-      "The lawyer will receive the saved question, answer, visible context, and allowlisted evidence from this conversation.",
+      "The lawyer will receive the saved question, answer, visible context, and the document excerpts you choose to share below. Documents you do not check are not sent.",
+    questionPreview: "Question preview: ",
     answerPreview: "Answer preview: ",
     optionalNote: "Optional note for the lawyer",
     submitting: "Submitting…",
     submit: "Submit review request",
+    attachmentsTitle: "Choose the documents to share with the lawyer",
+    attachmentsIntro:
+      "Nothing is shared by default. Only the documents you check, and their permitted evidence excerpts (within the existing excerpt limit), are sent to the lawyer. You can submit the request without sharing any document.",
+    attachmentsNone:
+      "No document from this conversation can be shared as an attachment.",
+    attachmentsLoading: "Loading the documents you can share…",
+    attachmentsLoadError:
+      "Unable to load the documents you can share. Please try again.",
+    attachmentsUnavailable:
+      "Some documents cannot be shared right now and were removed from this list.",
+    attachmentsSelectedPrefix: "Selected",
+    attachmentsAcknowledged: "The AI answer said it used this document",
+    attachmentsNotAcknowledged:
+      "The AI answer did not claim to use this document",
+    attachmentsWithheldWarning:
+      "You have not checked these documents that the AI answer said it used; the lawyer will not receive any part of them:",
+    attachmentsLimitError:
+      "You can share at most four documents. Uncheck the extra ones.",
+    attachmentsNoSelection:
+      "No document selected; the lawyer will not receive document excerpts.",
     consultationTitle: "Book a one-to-one lawyer consultation",
     consultationDescription:
       "A lawyer review of this answer and a one-to-one consultation are separate services.",

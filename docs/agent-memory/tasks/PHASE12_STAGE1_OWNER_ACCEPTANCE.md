@@ -144,3 +144,29 @@ typings unrelated to Stage 1; they are listed in the R3 handoff section.
 
 **Gate rule:** Stage 1 is not accepted until this procedure has been executed
 and recorded, in addition to independent code review of the Stage 1 diff.
+
+## Owner-executed progress recorded so far (2026-10-12)
+
+The owner reported (via the Stage 2 task context) that R1–R3 were reviewed and
+that migrations `0024`/`0025` were applied locally, S3 upload works, and the
+account file history is visible in the UI. **That is partial evidence, not a
+completed gate.** The following procedure lines remain **NOT EXECUTED** and must
+not be recorded as passing:
+
+- cross-device continuity (Ubuntu ⇄ Windows ⇄ Android) for history and files;
+- download of the **original** uploaded bytes on a second device and byte/hash
+  comparison against the uploaded file;
+- DOCX upload **and** successful text extraction end-to-end on the owner host
+  (a correctly accepted DOCX that yields usable text, not only MIME acceptance);
+- documented failure paths: failed/empty extraction, oversized file, rejected
+  MIME/macro, interrupted upload, and the recovery step shown to the customer;
+- archived/deleted conversation behaviour on a second device.
+
+Note also that the local `chatbot` database has **not** received migration
+`0026` (Phase 12 Stage 2 binding table) and the Stage 2 durable policy-binding
+behaviour with that migration applied is likewise an owner-host verification
+item. See `CURRENT_HANDOFF.md` for the Stage 2 record.
+
+**Stage 2 relationship:** Stage 2 was implemented on `codex/phase12-stage2-context-ui`
+while Stage 1's owner acceptance is still open; that sequencing does not transfer
+or imply Stage 1 acceptance.

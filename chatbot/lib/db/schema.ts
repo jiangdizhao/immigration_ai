@@ -1130,6 +1130,72 @@ export const policyIntelligenceAnalysisRevision = pgTable(
   })
 );
 
+/**
+ * Phase 12 Stage 2 durable policy-to-conversation binding.
+ *
+ * A policy launch used to live only in transient client state, so a reload, a
+ * second device or a history reopening lost the visible topic. The binding is
+ * the authoritative server-side record of "this conversation was started from
+ * this published policy topic".
+ *
+ * The stored title/source snapshot is a *topic reference* captured at binding
+ * time. It intentionally survives later policy revisions, publication changes
+ * or source unavailability so historical continuity is preserved without ever
+ * claiming the snapshot is currently effective law.
+ */
+export const conversationPolicyBinding = pgTable(
+  "ConversationPolicyBinding",
+  {
+    chatId: uuid("chatId")
+      .primaryKey()
+      .notNull()
+      .references(() => chat.id, { onDelete: "cascade" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    policySlug: varchar("policySlug", { length: 120 }).notNull(),
+    policyOrigin: varchar("policyOrigin", { enum: ["automated", "manual"] })
+      .notNull()
+      .default("automated"),
+    policyItemId: varchar("policyItemId", { length: 64 }),
+    policyRevisionNumber: integer("policyRevisionNumber"),
+    policyPublishedAt: timestamp("policyPublishedAt"),
+    policySourceStatus: varchar("policySourceStatus", { length: 64 }),
+    /** Canonical identity of the published revision captured at bind time. */
+    policyRevisionToken: varchar("policyRevisionToken", { length: 160 }),
+    titleZh: text("titleZh").notNull(),
+    titleEn: text("titleEn").notNull(),
+    officialTitle: text("officialTitle").notNull(),
+    officialUrl: text("officialUrl").notNull(),
+    /**
+     * Client-provided idempotency key for one launch attempt. A retried or
+     * racing launch with the same key resolves to the same conversation
+     * instead of creating a second empty one. A genuinely new launch uses a
+     * new key, so the user keeps the explicit ability to start a separate
+     * conversation.
+     */
+    launchId: varchar("launchId", { length: 64 }),
+    boundAt: timestamp("boundAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    launchIdUnique: uniqueIndex(
+      "ConversationPolicyBinding_user_launch_unique"
+    ).on(table.userId, table.launchId),
+    userBoundIndex: index("ConversationPolicyBinding_user_bound_idx").on(
+      table.userId,
+      table.boundAt
+    ),
+    policySlugIndex: index("ConversationPolicyBinding_policy_slug_idx").on(
+      table.policySlug
+    ),
+  })
+);
+
+export type ConversationPolicyBinding = InferSelectModel<
+  typeof conversationPolicyBinding
+>;
+
 export const policyIntelligenceSyncRun = pgTable(
   "PolicyIntelligenceSyncRun",
   {

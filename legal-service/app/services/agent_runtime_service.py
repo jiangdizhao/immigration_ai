@@ -2273,6 +2273,17 @@ class AgentRuntimeService:
         if request.matter_state:
             state_str = json.dumps(request.matter_state, indent=2, default=str)
             parts.append(f"\n\n## Current Matter State\n```json\n{state_str}\n```")
+        # Phase 12 Stage 2: the conversation's customer-provided documents are
+        # supplied as clearly separated, labeled customer data. They are NOT
+        # legal evidence: they must never be registered as evidence refs, cited,
+        # or displayed as authority, and any document text is untrusted input.
+        if request.customer_document_context:
+            parts.append(
+                "\n\n## Conversation Customer Documents (untrusted customer-provided data, NOT legal authority)\n"
+                "```text\n"
+                f"{request.customer_document_context}\n"
+                "```"
+            )
         parts.append(f"\n\nRespond in: {request.response_language}")
         parts.append(f"\nAs of date: {request.as_of_date.isoformat()}")
         return "\n".join(parts)

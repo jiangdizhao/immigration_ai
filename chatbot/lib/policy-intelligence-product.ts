@@ -507,6 +507,18 @@ export type PolicyWorkspaceReference = {
   title: LocalizedValue;
   officialTitle: string;
   officialUrl: string;
+  /**
+   * Phase 12 Stage 2: identity of the published revision this reference was
+   * resolved from. `snapshot: true` marks a reference rebuilt from a persisted
+   * conversation binding, i.e. the topic the conversation started from rather
+   * than the currently published revision.
+   */
+  revision?: {
+    number: number | null;
+    publishedAt: string | null;
+    sourceStatus: string | null;
+    snapshot: boolean;
+  } | null;
 };
 
 export const POLICY_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,119}$/;
@@ -632,6 +644,15 @@ export async function resolvePublishedWorkspaceReference(
     title: { "zh-CN": policy.copy["zh-CN"].title, en: policy.copy.en.title },
     officialTitle: policy.source.officialTitle,
     officialUrl: policy.source.officialUrl,
+    revision: {
+      number:
+        typeof policy.revision.number === "number"
+          ? policy.revision.number
+          : null,
+      publishedAt: policy.revision.publishedAt ?? null,
+      sourceStatus: policy.sourceStatus ?? null,
+      snapshot: false,
+    },
   };
 }
 

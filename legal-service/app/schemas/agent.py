@@ -99,6 +99,22 @@ class AgentSubmissionV2(StrictContract):
     research_status: Literal["not_required", "complete", "incomplete"]
     # Phase 1 freezes the envelope only. Patch authorization/semantics arrive in Phase 3.
     state_patch: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    # Phase 12 Stage 2 R1: explicit, separately typed customer-document usage
+    # acknowledgement. The model lists the document ids it actually relied on.
+    # The serving adapter validates them against the request's authorized
+    # document manifest, so an id the model did not receive can never claim use.
+    # An empty list is the honest "I did not use any supplied document" answer
+    # and is what an unrelated general question must return.
+    customer_documents_used: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("customer_documents_used")
+    @classmethod
+    def bounded_document_acknowledgements(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() or len(value) > 64 for value in values):
+            raise ValueError("customer document acknowledgement exceeds its bounds")
+        if len(set(values)) != len(values):
+            raise ValueError("customer document acknowledgement ids must be unique")
+        return values
 
     @model_validator(mode="after")
     def validate_claim_spans_and_ids(self):
@@ -162,6 +178,15 @@ class AgentRuntimeRequest(StrictContract):
     experiment_arm: Literal["A", "B", "L", "N", "C", "D"] | None = None
     # Default-only applicability A/B switch. Premium ignores this field.
     applicability_protocol_enabled: bool = True
+    # Phase 12 Stage 2: bounded, already-rendered customer document context.
+    #
+    # This is customer-provided *untrusted data*, never legal authority, never a
+    # citation and never registered in the RequestEvidenceRegistry. It is passed
+    # as a prompt section only, so the Default runtime sees the same conversation
+    # files that Fast and Premium see. ``customer_document_evidence_present``
+    # records whether usable evidence was supplied without exposing the packet.
+    customer_document_context: str = Field(default="", max_length=72_000)
+    customer_document_evidence_present: bool = False
 
 
 class DeadlineCheckpoint(StrictContract):

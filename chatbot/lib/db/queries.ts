@@ -29,6 +29,7 @@ import {
   MatterDocumentCleanupPendingError,
 } from "../matter-documents/chat-deletion";
 import { createS3MatterDocumentStorage } from "../matter-documents/storage";
+import type { ConversationPolicyBindingDraft } from "../policy-intelligence/conversation-policy-binding";
 import { generateUUID } from "../utils";
 import {
   calculateVipWindow,
@@ -42,12 +43,15 @@ import {
 import { getLazyDatabase } from "./runtime-client";
 import {
   type Chat,
+  type ConversationPolicyBinding,
   type ConversationTurnRow,
   chat,
+  conversationPolicyBinding,
   conversationTurn,
   type DBMessage,
   document,
   emailVerificationToken,
+  type ImmigrationConversation,
   immigrationConversation,
   type LawyerClarificationRequest,
   lawyerClarificationRequest,
@@ -250,6 +254,48 @@ export async function getLatestMatterDocumentProcessing(input: {
     .orderBy(desc(matterDocumentProcessingRun.startedAt))
     .limit(1);
   return run?.run ?? null;
+}
+
+/**
+ * Phase 12 Stage 2 R1 — the latest processing run of every stored document in
+ * one conversation, in a single owner-authorized read.
+ *
+ * A long-lived conversation can hold far more files than one model turn can
+ * package, and the availability summary must describe *all* of them. Reading the
+ * runs one document at a time made that summary cost grow with conversation
+ * history; this returns the same information in one bounded query (one row per
+ * document, latest run first).
+ */
+export async function listLatestMatterDocumentProcessingRunsForConversation(input: {
+  userId: string;
+  chatId: string;
+}) {
+  return await db
+    .selectDistinctOn([matterDocumentProcessingRun.documentId], {
+      documentId: matterDocumentProcessingRun.documentId,
+      runId: matterDocumentProcessingRun.id,
+      status: matterDocumentProcessingRun.status,
+      extractionMethod: matterDocumentProcessingRun.extractionMethod,
+      truncated: matterDocumentProcessingRun.truncated,
+      unitCount: matterDocumentProcessingRun.unitCount,
+    })
+    .from(matterDocumentProcessingRun)
+    .innerJoin(
+      matterDocument,
+      eq(matterDocumentProcessingRun.documentId, matterDocument.id)
+    )
+    .innerJoin(chat, eq(matterDocument.chatId, chat.id))
+    .where(
+      and(
+        eq(matterDocument.userId, input.userId),
+        eq(chat.userId, input.userId),
+        eq(matterDocument.chatId, input.chatId)
+      )
+    )
+    .orderBy(
+      matterDocumentProcessingRun.documentId,
+      desc(matterDocumentProcessingRun.startedAt)
+    );
 }
 
 export async function getLatestMatterDocumentProcessingAttempt(input: {
@@ -2329,6 +2375,158 @@ export async function getImmigrationConversationByChatId({
     .limit(1);
 
   return conversation ?? null;
+}
+
+/**
+ * Phase 12 Stage 2 — atomic owner-authorized conversation creation with a
+ * durable policy binding.
+ *
+ * The conversation row and its binding are written in one transaction so a
+ * policy launch can never leave a conversation that claims a policy without the
+ * stored snapshot, or a snapshot pointing at a conversation that does not exist.
+ */
+export async function createImmigrationConversationWithPolicyBinding({
+  userId,
+  title = "New immigration conversation",
+  binding,
+}: {
+  userId: string;
+  title?: string;
+  binding: ConversationPolicyBindingDraft;
+}): Promise<{
+  conversation: ImmigrationConversation;
+  binding: ConversationPolicyBinding;
+}> {
+  const id = generateUUID();
+  const now = new Date();
+  return await db.transaction(async (tx) => {
+    await tx.insert(chat).values({
+      id,
+      createdAt: now,
+      userId,
+      title,
+      visibility: "private",
+    });
+    const [conversation] = await tx
+      .insert(immigrationConversation)
+      .values({
+        chatId: id,
+        legalMatterId: null,
+        title,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    const [createdBinding] = await tx
+      .insert(conversationPolicyBinding)
+      .values({
+        chatId: id,
+        userId,
+        policySlug: binding.policySlug,
+        policyOrigin: binding.policyOrigin,
+        policyItemId: binding.policyItemId,
+        policyRevisionNumber: binding.policyRevisionNumber,
+        policyPublishedAt: binding.policyPublishedAt
+          ? new Date(binding.policyPublishedAt)
+          : null,
+        policySourceStatus: binding.policySourceStatus,
+        policyRevisionToken: binding.policyRevisionToken,
+        titleZh: binding.titleZh,
+        titleEn: binding.titleEn,
+        officialTitle: binding.officialTitle,
+        officialUrl: binding.officialUrl,
+        launchId: binding.launchId,
+        boundAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return { conversation, binding: createdBinding };
+  });
+}
+
+/**
+ * Resolves a repeated (retried or racing) launch with the same idempotency key
+ * to the conversation that launch already created. Ownership is part of the
+ * lookup, so one account can never resolve another account's launch.
+ */
+export async function findOwnedConversationByPolicyLaunchId({
+  userId,
+  launchId,
+}: {
+  userId: string;
+  launchId: string;
+}) {
+  const [record] = await db
+    .select({
+      chatId: immigrationConversation.chatId,
+      legalMatterId: immigrationConversation.legalMatterId,
+      title: immigrationConversation.title,
+      chatTitle: chat.title,
+      createdAt: immigrationConversation.createdAt,
+      updatedAt: immigrationConversation.updatedAt,
+      binding: conversationPolicyBinding,
+    })
+    .from(conversationPolicyBinding)
+    .innerJoin(
+      immigrationConversation,
+      eq(immigrationConversation.chatId, conversationPolicyBinding.chatId)
+    )
+    .innerJoin(chat, eq(chat.id, conversationPolicyBinding.chatId))
+    .where(
+      and(
+        eq(conversationPolicyBinding.userId, userId),
+        eq(conversationPolicyBinding.launchId, launchId),
+        eq(chat.userId, userId)
+      )
+    )
+    .limit(1);
+  return record ?? null;
+}
+
+export async function getOwnedConversationPolicyBinding({
+  chatId,
+  userId,
+}: {
+  chatId: string;
+  userId: string;
+}) {
+  const [record] = await db
+    .select({ binding: conversationPolicyBinding })
+    .from(conversationPolicyBinding)
+    .innerJoin(chat, eq(chat.id, conversationPolicyBinding.chatId))
+    .where(
+      and(
+        eq(conversationPolicyBinding.chatId, chatId),
+        eq(conversationPolicyBinding.userId, userId),
+        eq(chat.userId, userId)
+      )
+    )
+    .limit(1);
+  return record?.binding ?? null;
+}
+
+export async function listOwnedConversationPolicyBindings({
+  userId,
+  chatIds,
+}: {
+  userId: string;
+  chatIds: string[];
+}): Promise<ConversationPolicyBinding[]> {
+  if (!chatIds.length) {
+    return [];
+  }
+  const rows = await db
+    .select({ binding: conversationPolicyBinding })
+    .from(conversationPolicyBinding)
+    .innerJoin(chat, eq(chat.id, conversationPolicyBinding.chatId))
+    .where(
+      and(
+        eq(conversationPolicyBinding.userId, userId),
+        inArray(conversationPolicyBinding.chatId, chatIds),
+        eq(chat.userId, userId)
+      )
+    );
+  return rows.map((row) => row.binding);
 }
 
 export async function createMatterDocumentRecord(

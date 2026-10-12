@@ -820,6 +820,15 @@ test("server resolution accepts only a current published policy returned for the
       : bilingual("", ""),
     officialTitle: current.source.officialTitle,
     officialUrl: current.source.officialUrl,
+    // Phase 12 Stage 2 adds the identity of the resolved published revision.
+    // `snapshot: false` marks a live resolution; a persisted conversation
+    // binding reports `snapshot: true` instead.
+    revision: {
+      number: current.revision.number,
+      publishedAt: current.revision.publishedAt,
+      sourceStatus: current.sourceStatus,
+      snapshot: false,
+    },
   });
   assert.equal(
     await resolvePublishedWorkspaceReference("held-policy", async () => null),

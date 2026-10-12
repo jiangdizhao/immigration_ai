@@ -21,6 +21,10 @@ from app.db.models import ExperienceRecord, Matter
 from app.db.session import SessionLocal
 from app.schemas.learning import ExperienceOrigin, ExperienceSnapshot
 from app.schemas.query import QueryRequest, QueryResponse
+from app.services.customer_document_context import (
+    filename_free_customer_document_summary,
+    sanitized_customer_document_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +163,24 @@ class ExperienceArchiveService:
 
     def _build_persistence_payload(self, **kwargs: Any) -> ExperiencePersistencePayload:
         payload: QueryRequest = kwargs["payload"]
-        if payload.customer_document_evidence.documents:
-            payload = payload.model_copy(update={"customer_document_evidence": type(payload.customer_document_evidence)()})
+        # R2: the archived request must never carry the customer document evidence
+        # packet or a document filename. The document summary is reduced to
+        # non-sensitive counts and availability/packaging states.
+        sanitized_summary = sanitized_customer_document_summary(
+            payload.customer_document_summary
+        )
+        if (
+            payload.customer_document_evidence.documents
+            or payload.customer_document_summary is not None
+        ):
+            payload = payload.model_copy(
+                update={
+                    "customer_document_evidence": type(payload.customer_document_evidence)(),
+                    "customer_document_summary": filename_free_customer_document_summary(
+                        payload.customer_document_summary
+                    ),
+                }
+            )
             kwargs = {**kwargs, "payload": payload}
         response: QueryResponse = kwargs["response"]
         matter = kwargs.get("matter")
@@ -252,6 +272,11 @@ class ExperienceArchiveService:
         metrics = execution_metrics or (
             observability.get("execution_metrics") if observability else None
         )
+        # R2: counts and availability/packaging states only; a customer filename
+        # is never archived, whichever caller reached this snapshot.
+        sanitized_summary = sanitized_customer_document_summary(
+            payload.customer_document_summary
+        )
         effective_request_id = request_id or (
             observability.get("request_id") if observability else None
         )
@@ -275,6 +300,13 @@ class ExperienceArchiveService:
                 "response_language": response.response_language,
                 "assistant_mode": payload.assistant_mode,
                 "as_of_date": self._first_value(response_debug, "as_of_date"),
+                # R2: availability/packaging counts only — customer filenames are
+                # never archived, and the acknowledged-use state stays explicit.
+                "customer_document_summary": sanitized_summary,
+                "customer_document_usage": getattr(response, "customer_document_usage", None),
+                "customer_document_used_count": len(
+                    list(getattr(response, "customer_document_used_ids", []) or [])
+                ),
             },
             matter={
                 "matter_id": matter_id,

@@ -112,6 +112,63 @@ test("a document manifest is not surfaced when evidence use is not acknowledged"
   assert.deepEqual(metadata.customerDocumentSources, []);
 });
 
+test("R1: a supplied-but-unconfirmed packet reloads as unconfirmed", () => {
+  const metadata = extractAssistantMetadata([
+    { type: "text", text: "Answer" },
+    {
+      type: "metadata",
+      customerDocumentEvidenceUsed: false,
+      customerDocumentUsage: "supplied_unconfirmed",
+      customerDocumentManifest: [],
+    },
+  ]);
+  assert.equal(metadata.customerDocumentEvidenceUsed, false);
+  assert.equal(metadata.customerDocumentUsage, "supplied_unconfirmed");
+  // The visible evidence card stays hidden without verified use.
+  assert.deepEqual(metadata.customerDocumentSources, []);
+});
+
+test("R1: legacy metadata without a usage state reloads as not supplied", () => {
+  const metadata = extractAssistantMetadata([
+    { type: "text", text: "Answer" },
+    { type: "metadata", customerDocumentEvidenceUsed: false },
+  ]);
+  assert.equal(metadata.customerDocumentUsage, "not_supplied");
+  assert.equal(metadata.customerDocumentEvidenceUsed, false);
+});
+
+test("R1: a stored confirmed usage still requires the verified boolean", () => {
+  const untrusted = extractAssistantMetadata([
+    { type: "text", text: "Answer" },
+    { type: "metadata", customerDocumentUsage: "confirmed" },
+  ]);
+  assert.equal(untrusted.customerDocumentUsage, "not_supplied");
+  assert.equal(untrusted.customerDocumentEvidenceUsed, false);
+
+  const verified = extractAssistantMetadata([
+    { type: "text", text: "Answer" },
+    {
+      type: "metadata",
+      customerDocumentEvidenceUsed: true,
+      customerDocumentUsage: "confirmed",
+      customerDocumentManifest: [
+        {
+          documentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          runId: "rrrrrrrr-rrrr-4rrr-8rrr-rrrrrrrrrrrr",
+          originalFilename: "grant.pdf",
+          runStatus: "complete",
+          extractionMethod: "native",
+          truncated: false,
+          locators: [],
+        },
+      ],
+    },
+  ]);
+  assert.equal(verified.customerDocumentUsage, "confirmed");
+  assert.equal(verified.customerDocumentEvidenceUsed, true);
+  assert.equal(verified.customerDocumentSources.length, 1);
+});
+
 test("stored document sources are bounded and sanitized", () => {
   const sources = sanitizeCustomerDocumentSources(
     Array.from({ length: MAX_PERSISTED_MANIFEST_SOURCES + 6 }, (_, index) => ({
@@ -155,4 +212,66 @@ test("malformed or missing parts degrade to an empty answer instead of throwing"
   assert.deepEqual(metadata.compactSources, []);
   assert.equal(metadata.matterId, null);
   assert.equal(metadata.customerDocumentEvidenceUsed, false);
+});
+
+test("R2: reload exposes only the acknowledged document subset", () => {
+  const source = (documentId: string) => ({
+    documentId,
+    runId: `run-${documentId}`,
+    originalFilename: `${documentId}.pdf`,
+    runStatus: "complete",
+    extractionMethod: "native",
+    truncated: false,
+    locators: [{ kind: "page", page: 1 }],
+  });
+  const parts = [
+    {
+      type: "metadata",
+      compactSources: [],
+      citations: [],
+      customerDocumentEvidenceUsed: true,
+      customerDocumentManifest: [
+        source("doc-1"),
+        source("doc-2"),
+        source("doc-3"),
+      ],
+      customerDocumentUsedIds: ["doc-2", "doc-99"],
+    },
+  ];
+  const metadata = extractAssistantMetadata(parts);
+  // Only the acknowledged, request-authorized document is exposed as used.
+  assert.deepEqual(
+    metadata.customerDocumentSources.map((entry) => entry.documentId),
+    ["doc-2"]
+  );
+
+  // No acknowledged ids: nothing may be reported as used, even when the stored
+  // manifest and the verified boolean are present.
+  const unacknowledged = extractAssistantMetadata([
+    {
+      type: "metadata",
+      compactSources: [],
+      citations: [],
+      customerDocumentEvidenceUsed: true,
+      customerDocumentManifest: [source("doc-1")],
+      customerDocumentUsedIds: [],
+    },
+  ]);
+  assert.deepEqual(unacknowledged.customerDocumentSources, []);
+
+  // Legacy answers (stored before per-document acknowledgements) keep what they
+  // stored; no new answer can reach this path.
+  const legacy = extractAssistantMetadata([
+    {
+      type: "metadata",
+      compactSources: [],
+      citations: [],
+      customerDocumentEvidenceUsed: true,
+      customerDocumentManifest: [source("doc-1")],
+    },
+  ]);
+  assert.deepEqual(
+    legacy.customerDocumentSources.map((entry) => entry.documentId),
+    ["doc-1"]
+  );
 });

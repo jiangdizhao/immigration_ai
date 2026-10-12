@@ -19,7 +19,10 @@ from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.schemas.state import LiveSourceChunk
 from app.services.live_retrieval_service import LiveRetrievalService
-from app.services.customer_document_context import format_customer_document_context
+from app.services.customer_document_context import (
+    customer_document_usage_fields,
+    format_customer_document_prompt_section,
+)
 from app.services.retrieval_service import RetrievalService
 from app.services.review_trace_service import ReviewTraceService
 
@@ -299,8 +302,16 @@ class QueryServiceV2:
             rendered, general_debug = self._general_response(payload, scope)
             response = self._to_response(payload, matter, rendered, [])
             response.response_language = scope.response_language
-            response.customer_document_evidence_used = bool(general_debug.get("customer_document_evidence_used"))
             document_selected = bool(payload.customer_document_evidence.documents)
+            # Phase 12 Stage 2 R1: this path has no document acknowledgement
+            # channel, so a supplied packet is reported as unconfirmed instead of
+            # being asserted as used.
+            _document_used, _document_usage = customer_document_usage_fields(
+                evidence_supplied=document_selected,
+                answer_present=bool(response.answer.strip()),
+            )
+            response.customer_document_evidence_used = _document_used
+            response.customer_document_usage = _document_usage
             response.retrieval_debug = ({
                 "engine_version": "v2_verified_answer",
                 "customer_document_evidence_summary": self._document_summary(payload, response.customer_document_evidence_used),
@@ -310,7 +321,7 @@ class QueryServiceV2:
                 "general_response": general_debug,
                 "stage_timing": timing,
             })
-            safe_general_debug = ({"mode": general_debug.get("mode"), "customer_document_evidence_used": response.customer_document_evidence_used, "customer_document_evidence_summary": self._document_summary(payload, response.customer_document_evidence_used)} if document_selected else general_debug)
+            safe_general_debug = ({"mode": general_debug.get("mode"), "customer_document_evidence_used": response.customer_document_evidence_used, "customer_document_usage": response.customer_document_usage, "customer_document_evidence_summary": self._document_summary(payload, response.customer_document_evidence_used)} if document_selected else general_debug)
             self._update_matter(matter, payload, response, {"engine_version": "v2_verified_answer", "scope_gate": scope.model_dump(), "latest_topic": scope.scope})
             db.commit(); db.refresh(matter)
             self._trace(matter, payload, response, timing, ({"trace_path": "v2_general_allowed", "customer_document_evidence_summary": self._document_summary(payload, response.customer_document_evidence_used)} if document_selected else {"trace_path": "v2_general_allowed", "scope_gate": scope.model_dump(), "general_response": safe_general_debug}))
@@ -333,7 +344,12 @@ class QueryServiceV2:
         response = self._to_response(payload, matter, rendered, citations)
         response.response_language = contract.response_language
         document_selected = bool(payload.customer_document_evidence.documents)
-        response.customer_document_evidence_used = bool(document_selected and not draft_debug.get("fallback") and response.answer.strip())
+        _document_used, _document_usage = customer_document_usage_fields(
+            evidence_supplied=bool(document_selected and not draft_debug.get("fallback")),
+            answer_present=bool(response.answer.strip()),
+        )
+        response.customer_document_evidence_used = _document_used
+        response.customer_document_usage = _document_usage
         if document_selected:
             summary = self._document_summary(payload, response.customer_document_evidence_used)
             response.retrieval_debug = {"engine_version": "v2_verified_answer", "customer_document_evidence_summary": summary}
@@ -390,14 +406,14 @@ class QueryServiceV2:
                     if lang == "zh"
                     else "I see you selected a document. What would you like me to look for in it?"
                 )
-                return V2RenderedAnswer(answer=text, confidence="high", issue_type="general_allowed"), {"mode": "document_followup", "customer_document_evidence_used": False}
+                return V2RenderedAnswer(answer=text, confidence="high", issue_type="general_allowed"), {"mode": "document_followup", "customer_document_evidence_used": False, "customer_document_usage": "supplied_unconfirmed"}
             text = (
                 "你好，我可以协助澳洲移民法律、预约律师，也可以回答一般非政治敏感问题。你想咨询什么？"
                 if lang == "zh"
                 else "Hi — I can help with Australian immigration-law questions, lawyer appointments, and ordinary non-politically-sensitive general questions. What would you like to ask?"
             )
-            return V2RenderedAnswer(answer=text, confidence="high", issue_type="general_allowed"), {"mode": "deterministic_greeting", "customer_document_evidence_used": False}
-        document_context = format_customer_document_context(payload.customer_document_evidence)
+            return V2RenderedAnswer(answer=text, confidence="high", issue_type="general_allowed"), {"mode": "deterministic_greeting", "customer_document_evidence_used": False, "customer_document_usage": "not_supplied"}
+        document_context = format_customer_document_prompt_section(payload)
         user_content = payload.question
         prompt = self._general_prompt(lang)
         if document_context:
@@ -414,7 +430,7 @@ class QueryServiceV2:
             text = (result.output_text or "").strip()
             if not text:
                 raise ValueError("empty general response")
-            return V2RenderedAnswer(answer=self._clean(text), confidence="medium", issue_type="general_allowed"), {"mode": "general_llm", "model": self.general_model, "customer_document_evidence_used": bool(document_context)}
+            return V2RenderedAnswer(answer=self._clean(text), confidence="medium", issue_type="general_allowed"), {"mode": "general_llm", "model": self.general_model, "customer_document_evidence_used": False, "customer_document_usage": "supplied_unconfirmed" if document_context else "not_supplied"}
         except Exception as exc:
             fallback = (
                 "这个问题可以讨论，但我现在无法生成可靠回复。你也可以继续咨询澳洲移民法律或预约律师相关问题。"
@@ -466,7 +482,7 @@ class QueryServiceV2:
 
     # ---------- draft / verify / guard / render ----------
     def _draft_contract(self, payload: QueryRequest, context: V2Context, language: str, lessons: list[V2LawyerLesson]) -> tuple[V2AnswerContract, dict[str, Any]]:
-        document_context = format_customer_document_context(payload.customer_document_evidence)
+        document_context = format_customer_document_prompt_section(payload)
         data = {"latest_user_question": payload.question, "response_language_hint": language, "answer_preference": payload.answer_preference, "intake_facts": payload.intake_facts or {}, "minimal_conversation_context": context.model_dump(), "relevant_lawyer_lessons": [x.model_dump() for x in lessons]}
         if document_context:
             data["customer_document_evidence_context"] = document_context

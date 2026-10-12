@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { matterDocumentDisplayStatus } from "@/lib/matter-documents/display-status";
+import { matterDocumentStatusLabel } from "@/lib/matter-documents/status-labels";
 import { cn } from "@/lib/utils";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
@@ -52,11 +53,25 @@ export function MatterDocumentsPanel({
   copy,
   disabled = false,
   compact = false,
+  accountAccess = true,
+  onDocumentsChanged,
 }: {
   chatId: string | null;
   copy: WorkspaceCopy;
   disabled?: boolean;
   compact?: boolean;
+  /**
+   * Phase 12 Stage 2: a guest account cannot own documents. When access is not
+   * available the panel states that plainly instead of surfacing a raw API
+   * authorisation error, and it never calls the document API.
+   */
+  accountAccess?: boolean;
+  /**
+   * Phase 12 Stage 2: called after a mutation that changes server-side document
+   * state (upload, delete, reprocess) so the workspace can refresh the related
+   * panels without a manual reload.
+   */
+  onDocumentsChanged?: () => void;
 }) {
   const labels = copy.documents;
   const _zh = copy.identity.title === "AI 工作台";
@@ -67,7 +82,7 @@ export function MatterDocumentsPanel({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
-    if (!chatId) {
+    if (!(chatId && accountAccess)) {
       setDocuments([]);
       setRuns({});
       return;
@@ -111,7 +126,7 @@ export function MatterDocumentsPanel({
       })
     );
     setRuns(Object.fromEntries(entries));
-  }, [chatId, labels.uploadError]);
+  }, [accountAccess, chatId, labels.uploadError]);
   useEffect(() => {
     setDocuments([]);
     setRuns({});
@@ -137,6 +152,7 @@ export function MatterDocumentsPanel({
         throw new Error(body.error ?? labels.uploadError);
       }
       await load();
+      onDocumentsChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : labels.uploadError);
     } finally {
@@ -144,7 +160,7 @@ export function MatterDocumentsPanel({
     }
   };
   const upload = async (file: File) => {
-    if (!chatId) {
+    if (!(chatId && accountAccess)) {
       return;
     }
     setBusy("upload");
@@ -174,6 +190,7 @@ export function MatterDocumentsPanel({
       // step, so the two states stay distinguishable in the UI.
       setUploadState("uploaded");
       await load();
+      onDocumentsChanged?.();
       await process(doc);
     } catch (e) {
       setUploadState(null);
@@ -193,6 +210,7 @@ export function MatterDocumentsPanel({
         throw new Error(labels.uploadError);
       }
       await load();
+      onDocumentsChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : labels.uploadError);
     } finally {
@@ -226,33 +244,15 @@ export function MatterDocumentsPanel({
       runStatus: run?.status ?? null,
       unitCount: run?.unitCount ?? null,
     });
-    if (status === "available_to_ai") {
-      return labels.availableToAI;
-    }
-    if (status === "no_usable_evidence") {
-      return labels.noEvidence;
-    }
-    if (status === "incomplete") {
-      return labels.partial;
-    }
-    if (status === "processing") {
-      return labels.processing;
-    }
-    if (status === "failed") {
-      return run?.errorCode === "vision_unavailable"
-        ? labels.visionUnavailable
-        : labels.failed;
-    }
-    if (status === "not_started") {
-      return labels.notStarted;
-    }
-    return labels.needsReview;
+    return matterDocumentStatusLabel(copy, status, {
+      visionUnavailable: run?.errorCode === "vision_unavailable",
+    });
   };
   return (
     <section
       className={
         compact
-          ? "flex min-w-0 max-w-[52%] flex-wrap items-center gap-1"
+          ? "flex min-w-0 shrink-0 flex-wrap items-center gap-1"
           : "border-b border-slate-100 px-4 py-3 sm:px-5"
       }
       data-testid="matter-documents-panel"
@@ -273,7 +273,10 @@ export function MatterDocumentsPanel({
         <Button
           aria-label={labels.upload}
           className={compact ? "size-8 shrink-0 rounded-full" : undefined}
-          disabled={!chatId || disabled || busy !== null}
+          data-testid={
+            compact ? "composer-upload" : "conversation-files-upload"
+          }
+          disabled={!(chatId && accountAccess) || disabled || busy !== null}
           onClick={() => inputRef.current?.click()}
           size={compact ? "icon" : "sm"}
           title={compact ? labels.upload : undefined}
@@ -312,6 +315,18 @@ export function MatterDocumentsPanel({
           {labels.formats} {labels.unverified}
         </p>
       )}
+      {accountAccess ? null : (
+        <p
+          className={
+            compact
+              ? "basis-full text-[11px] text-slate-500"
+              : "mt-2 text-xs text-slate-500"
+          }
+          data-testid="matter-documents-guest-hint"
+        >
+          {labels.signInForFiles}
+        </p>
+      )}
       {error ? (
         <p
           className={
@@ -336,14 +351,8 @@ export function MatterDocumentsPanel({
           {labels.uploaded}
         </p>
       ) : null}
-      {documents.length ? (
-        <ul
-          className={
-            compact
-              ? "flex min-w-0 max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto"
-              : "mt-3 grid gap-2 sm:grid-cols-2"
-          }
-        >
+      {documents.length && !compact ? (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {documents.map((doc) => {
             const run = runs[doc.id];
             const status = run?.status;
@@ -463,9 +472,19 @@ export function MatterDocumentsPanel({
             );
           })}
         </ul>
-      ) : compact ? null : (
+      ) : null}
+      {compact && documents.length ? (
+        <span
+          className="shrink-0 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600"
+          data-testid="matter-documents-count"
+          title={copy.panels.conversationFilesHint}
+        >
+          {documents.length}
+        </span>
+      ) : null}
+      {!compact && !documents.length ? (
         <p className="mt-2 text-xs text-slate-500">{labels.documents}: —</p>
-      )}
+      ) : null}
     </section>
   );
 }

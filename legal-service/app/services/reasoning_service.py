@@ -10,7 +10,10 @@ from app.core.config import get_settings
 from app.db.models import SourceChunk
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
-from app.services.customer_document_context import format_customer_document_context
+from app.services.customer_document_context import (
+    customer_document_usage_fields,
+    format_customer_document_prompt_section,
+)
 from app.schemas.state import EvidencePackage, SufficiencyGateResult
 from app.services.operation_profiles import (
     ANSWER_MODE_ESCALATE,
@@ -144,11 +147,16 @@ class ReasoningService:
         citations = [self._to_citation(chunk) for chunk in chunks]
 
         if not chunks and payload.customer_document_evidence.documents:
-            answer, document_used = self._answer_customer_document_only(payload)
+            answer, document_answered = self._answer_customer_document_only(payload)
+            document_used, document_usage = customer_document_usage_fields(
+                evidence_supplied=True,
+                answer_present=document_answered,
+            )
             return QueryResponse(
                 matter_id=payload.matter_id,
                 answer=answer,
                 customer_document_evidence_used=document_used,
+                customer_document_usage=document_usage,
                 confidence="low",
                 issue_type=issue_type,
                 missing_facts=[],
@@ -202,10 +210,15 @@ class ReasoningService:
 
         if not bool(evidence.get("is_in_domain", False)):
             if payload.customer_document_evidence.documents:
-                answer, document_used = self._answer_customer_document_only(payload)
+                answer, document_answered = self._answer_customer_document_only(payload)
+                document_used, document_usage = customer_document_usage_fields(
+                    evidence_supplied=True,
+                    answer_present=document_answered,
+                )
                 return QueryResponse(
                     matter_id=payload.matter_id, answer=answer,
-                    customer_document_evidence_used=document_used, confidence="low",
+                    customer_document_evidence_used=document_used,
+                    customer_document_usage=document_usage, confidence="low",
                     issue_type=issue_type, citations=[], next_action="answer",
                     retrieval_debug={**retrieval_debug, "reasoning_model": self.model, "reasoning_mode": "customer_document_context_only_out_of_domain"},
                 )
@@ -319,6 +332,7 @@ class ReasoningService:
                     "reasoning_model": self.model,
                     "reasoning_mode": "python_grounded_fallback",
                     "customer_document_evidence_used": False,
+                    "customer_document_usage": "not_supplied",
                     "evidence": evidence,
                 },
             )
@@ -332,12 +346,17 @@ class ReasoningService:
                 missing_facts=missing_facts, follow_up_questions=follow_up_questions,
                 citations=citations[: self.max_context_chunks], escalate=bool(missing_facts),
                 next_action="ask_followup" if missing_facts else "answer",
-                retrieval_debug={**retrieval_debug, "reasoning_model": self.model, "reasoning_mode": "empty_synthesis_fallback", "customer_document_evidence_used": False, "evidence": evidence},
+                retrieval_debug={**retrieval_debug, "reasoning_model": self.model, "reasoning_mode": "empty_synthesis_fallback", "customer_document_evidence_used": False, "customer_document_usage": "not_supplied", "evidence": evidence},
             )
+        _document_used, _document_usage = customer_document_usage_fields(
+            evidence_supplied=bool(payload.customer_document_evidence.documents),
+            answer_present=bool(answer_text.strip()),
+        )
         return QueryResponse(
             matter_id=payload.matter_id,
             answer=answer_text,
-            customer_document_evidence_used=bool(payload.customer_document_evidence.documents),
+            customer_document_evidence_used=_document_used,
+            customer_document_usage=_document_usage,
             confidence=self._normalize_confidence(final_answer.get("confidence")),
             issue_type=final_answer.get("issue_type") or evidence.get("issue_type") or issue_type,
             missing_facts=missing_facts,
@@ -544,7 +563,7 @@ class ReasoningService:
             f"Schedule-aware criterion reasoning JSON:\n{schedule_assessment_json}\n\n"
             f"Focused current-policy finding JSON:\n{focused_policy_finding_json}\n\n"
             f"Evidence package JSON (official retrieved support):\n{evidence_json}\n\n"
-            f"{format_customer_document_context(payload.customer_document_evidence)}"
+            f"{format_customer_document_prompt_section(payload)}"
         )
         try:
             response = self.client.responses.create(
@@ -581,7 +600,7 @@ class ReasoningService:
             "Do not state legal rules as verified without authoritative support. Describe claims as what the document appears to say. "
             "Mention that the packet may be partial or incomplete when material."
         ) + self._response_language_instruction(payload.response_language)
-        context = format_customer_document_context(payload.customer_document_evidence)
+        context = format_customer_document_prompt_section(payload)
         try:
             response = self.client.responses.create(
                 model=self.model,

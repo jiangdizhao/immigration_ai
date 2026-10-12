@@ -9,13 +9,21 @@ import { persistedCustomerDocumentManifestForReload } from "@/lib/matter-documen
  * source of truth for reading and writing that shape.
  */
 
+import {
+  type CustomerDocumentUsageState,
+  customerDocumentUsageState,
+} from "@/lib/matter-documents/customer-document-provenance";
+
 export type StoredTextPart = { type: "text"; text: string };
 export type StoredMetadataPart = {
   type: "metadata";
   compactSources: string[];
   citations: unknown[];
   customerDocumentEvidenceUsed: boolean;
+  customerDocumentUsage?: unknown;
   customerDocumentManifest?: unknown;
+  /** R2: bounded acknowledged document ids (this request's authorized subset). */
+  customerDocumentUsedIds?: unknown;
   confidence: string | null;
   researchStatus: "not_required" | "complete" | "incomplete" | null;
   followUpQuestions: string[];
@@ -27,6 +35,8 @@ export type StoredAssistantMetadata = {
   compactSources: string[];
   citations: unknown[];
   customerDocumentEvidenceUsed: boolean;
+  /** R1: verified use vs supplied-but-unconfirmed, preserved across reload. */
+  customerDocumentUsage: CustomerDocumentUsageState;
   customerDocumentSources: BoundedCustomerDocumentSource[];
   confidence: string | null;
   researchStatus: "not_required" | "complete" | "incomplete" | null;
@@ -170,6 +180,7 @@ export function extractAssistantMetadata(
       compactSources: [],
       citations: [],
       customerDocumentEvidenceUsed: false,
+      customerDocumentUsage: "not_supplied",
       customerDocumentSources: [],
       confidence: null,
       researchStatus: null,
@@ -183,10 +194,15 @@ export function extractAssistantMetadata(
     citations: Array.isArray(metadata.citations) ? metadata.citations : [],
     customerDocumentEvidenceUsed:
       metadata.customerDocumentEvidenceUsed === true,
+    customerDocumentUsage: customerDocumentUsageState(
+      metadata.customerDocumentUsage,
+      metadata.customerDocumentEvidenceUsed
+    ),
     customerDocumentSources: sanitizeCustomerDocumentSources(
       persistedCustomerDocumentManifestForReload(
         metadata.customerDocumentManifest,
-        metadata.customerDocumentEvidenceUsed
+        metadata.customerDocumentEvidenceUsed,
+        metadata.customerDocumentUsedIds
       )
     ),
     confidence:

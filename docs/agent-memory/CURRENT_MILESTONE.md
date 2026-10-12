@@ -1,8 +1,40 @@
 # CURRENT_MILESTONE
 
 **Milestone:** Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence  
-**Status:** STAGE 1 IMPLEMENTED + R1 REVIEW CORRECTIONS — AWAITING EXTERNAL REVIEW AND OWNER CROSS-DEVICE ACCEPTANCE
-**Updated:** 2026-10-11
+**Status:** STAGE 2 IMPLEMENTED — AWAITING INDEPENDENT REVIEW AND OWNER HOST/CROSS-DEVICE ACCEPTANCE (Stage 1 review R1–R3 done; Stage 1 owner cross-device acceptance still incomplete)
+**Updated:** 2026-10-12
+
+## Phase 12 Stage 2 closure — explicit lawyer attachment consent implemented (2026-10-12, uncommitted)
+
+Owner-selected **Option A (D-060)**: a lawyer-review request now requires explicit per-document customer consent. The customer sees the eligible documents of the selected answer (filename, status, whether the AI answer acknowledged using it), every checkbox starts unchecked, only checked documents and their permitted excerpts are shared, the count and any withheld AI-acknowledged documents are shown before submission, submitting without attachments stays valid, and both Chinese and English are supported. The API accepts an explicit `attachments { consent: true, selectedDocumentIds }` decision validated against the server-persisted manifest of that answered turn plus the owner's own rows; forged/cross-conversation/stale/deleted/duplicate/over-limit selections are explicit errors (never silent truncation); the four-document cap, 12 000-character excerpt budget and exact hash-verified reconstruction are unchanged; the decision is persisted as a bounded filename-free record; repeat submissions return the stored request unchanged.
+
+Evidence: chatbot unit **732/732**, `tsc --noEmit` **45 = base**, `pnpm build` **exit 0**, changed-file Biome clean, `git diff --check` clean, legal-service **1286/1286** re-run as a regression check (no legal-service change). Gate 2 is still NOT claimed as passed; no commit, push, merge, deploy or migration.
+
+## Phase 12 Stage 2 R2 — final focused corrections implemented (2026-10-12, uncommitted)
+
+The second review accepted R1-2/R1-3 at the static design level and required two bounded corrections. **R2-A**: the serving response returns the bounded, request-authorized acknowledged document ids; the widget routes subset their own manifest by them, so one acknowledged document no longer claims the whole packaged packet and forged or cross-conversation ids are dropped; lawyer requests keep the two categories distinct — authorized attachments of the conversation (marked `used_by_answer: false`) versus documents the answer acknowledged using. **R2-B**: customer filenames can no longer reach review traces or the experience archive; those copies keep numeric counts, availability/packaging states and the count of withheld filenames only, while the authenticated app still shows customers their own filenames.
+
+Evidence: chatbot unit **715/715**, legal-service **1286/1286**, focused R2 suites **26 Python + 15 TS + 29 TS regression**, `tsc --noEmit` **45 = base 45**, `pnpm build` exit 0, changed-file Biome clean, `git diff --check` clean. Gate 2 is still NOT claimed as passed; no commit, push, merge, deploy or migration.
+
+## Phase 12 Stage 2 R1 — independent review corrections implemented (2026-10-12, uncommitted)
+
+The independent reviewer returned REWORK with three findings, all corrected in the same uncommitted working tree: **R1-1** document use is now verified by an explicit acknowledgement matched against the request's authorized manifest (tri-state `customer_document_usage`; single-shot modes report `supplied_unconfirmed`, never asserted use); **R1-2** the model-side policy topic is rebuilt from the persisted binding snapshot so it survives unpublication/supersession, with the current revision kept separate and the snapshot never treated as current law; **R1-3** document availability counts are bounded at 100 000 instead of 64, and the summary now distinguishes all usable files from the packaged subset while stating partial packaging and mixed readable/unreadable status honestly.
+
+Evidence: chatbot unit **699/699**, documents integration **1/1** on the isolated disposable DB (it caught a real summary defect with `8 !== 66` before the fix), policy-binding integration **1/1**, committed Playwright workspace checks **20/20 across 4 viewports**, legal-service **1273/1273**, `tsc --noEmit` **45 = base 45**, changed-file Biome clean, `git diff --check` clean. Gate 2 is still NOT claimed as passed; no commit, push, merge, deploy or migration.
+
+## Phase 12 Stage 2 — implemented on a dedicated branch (2026-10-12, uncommitted)
+
+**Implementation branch:** `codex/phase12-stage2-context-ui`, HEAD `ce4e803bcbdd29535d0da0924de55600a87a9827` (the Stage 2 work itself is **uncommitted**). Parent/expected start commit: `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd`. No merge, deploy or live migration.
+
+**Scope delivered:** server-persisted policy-to-conversation binding (new additive table + migration source `0026`, resolved server-side, idempotent launch, explicit recoverable failure, snapshot-is-not-law card); one typed authenticated context resolver shared by Fast / Legal Check (AgentRuntime + legacy) / Premium; real customer-document evidence delivered to the Default AgentRuntime for the first time, plus a bounded non-evidentiary availability summary that stops an answer from implying it read a file with no usable extraction; compact workspace UI (one-row mode toolbar, chat-first layout, tabbed panels below 1280px, bounded auto-growing composer with the upload control beside it, right-hand panel owning conversation files + account files + case facts with automatic refresh); guest accounts told files need an account instead of receiving an unlocalized API error.
+
+**Evidence:** chatbot unit suite **673/673 pass, 0 fail, 0 skip**; Stage 2 PostgreSQL integration test **pass** on the isolated disposable database (owner-scoped bindings, idempotent launch, cross-user isolation, snapshot stability, cascade delete, unresolvable slug creates nothing, resolver scoping); legal-service suite **1247 pass, 0 fail**; `tsc --noEmit` **45 errors — identical to base `ce4e803`'s 45**; `pnpm build` **passes**; `git diff --check` clean; changed-file Biome clean; out-of-repo Playwright browser checks **26/26** at 1920×1080 / 1366×768 / 768×1024 / 390×844 plus the pre-migration policy launch state; `pnpm run s3:preflight` fixed and covered by a regression test.
+
+**Migration status:** `0026_phase12_stage2_conversation_policy_binding.sql` exists as a source artifact and is **unapplied** everywhere except the isolated disposable test database. Verified: the `chatbot` database has no `ConversationPolicyBinding` relation.
+
+**Not verified (owner-host):** refresh/history/second-device durable card with `0026` applied, AWS-case policy launch, real staging S3, original-byte download, DOCX end-to-end, cross-device continuity, and any live model answer quality. No paid model call was made.
+
+**Gate rule (unchanged):** Stage 2 is not accepted until independent review and owner acceptance are recorded. Gate 2 is NOT claimed as passed. Do not merge/apply migrations without explicit owner authorization.
 
 ## Phase 12 Stage 1 — implemented on a dedicated branch (2026-10-11)
 

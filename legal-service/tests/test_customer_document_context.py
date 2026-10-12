@@ -112,7 +112,7 @@ def _document_payload(question="What does this say?"):
     }]})
 
 
-def test_v2_general_allowed_document_question_passes_document_context_and_acknowledges_use():
+def test_v2_general_allowed_document_question_passes_context_and_reports_unconfirmed():
     from types import SimpleNamespace
     from app.services.v2.verified_answer_service import QueryServiceV2, V2ScopeResult
 
@@ -130,7 +130,9 @@ def test_v2_general_allowed_document_question_passes_document_context_and_acknow
     call = service._client.responses.captured
     assert "document secret phrase" in call["input"][1]["content"]
     assert rendered.answer
-    assert debug["customer_document_evidence_used"] is True
+    # R1: context reached the model; verified use is still unknown here.
+    assert debug["customer_document_evidence_used"] is False
+    assert debug["customer_document_usage"] == "supplied_unconfirmed"
 
 
 def test_v2_greeting_with_selected_document_asks_intent_without_claiming_use():
@@ -139,6 +141,7 @@ def test_v2_greeting_with_selected_document_asks_intent_without_claiming_use():
     rendered, debug = service._general_response(_document_payload("Hi"), V2ScopeResult(in_scope=True, scope="service_greeting", response_language="en"))
     assert "What would you like me to look for" in rendered.answer
     assert debug["customer_document_evidence_used"] is False
+    assert debug["customer_document_usage"] == "supplied_unconfirmed"
 
 
 def test_v2_document_selected_turn_does_not_promote_contract_known_facts():

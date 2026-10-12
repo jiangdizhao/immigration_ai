@@ -15,13 +15,23 @@ test("preserved backend answer may retain acknowledged document provenance", () 
     text: "The letter appears to say this.",
     preservedBackendAnswer: true,
   });
+  // R2: provenance needs the acknowledged id list, and then only that subset.
+  assert.deepEqual(
+    acknowledgedCustomerDocumentProvenance(
+      manifest,
+      true,
+      answer.preservedBackendAnswer,
+      ["doc"]
+    ),
+    { used: true, manifest }
+  );
   assert.deepEqual(
     acknowledgedCustomerDocumentProvenance(
       manifest,
       true,
       answer.preservedBackendAnswer
     ),
-    { used: true, manifest }
+    { used: false, manifest: [] }
   );
 });
 

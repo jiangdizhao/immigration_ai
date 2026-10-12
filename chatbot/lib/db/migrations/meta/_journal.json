@@ -183,6 +183,13 @@
       "when": 1791687409232,
       "tag": "0025_phase12_stage1_turn_execution_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791743365910,
+      "tag": "0026_phase12_stage2_conversation_policy_binding",
+      "breakpoints": true
     }
   ]
 }

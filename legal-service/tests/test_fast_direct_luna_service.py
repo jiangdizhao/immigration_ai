@@ -374,7 +374,12 @@ def _payload_with_customer_document() -> QueryRequest:
     })
 
 
-def test_fast_document_usage_acknowledgement_is_true_only_on_completed_model_answer(monkeypatch):
+def test_fast_document_packet_is_reported_as_supplied_but_unconfirmed(monkeypatch):
+    """Phase 12 Stage 2 R1: a single-shot answer is not proof of document use.
+
+    Fast has no document acknowledgement channel, so the honest state is
+    "supplied_unconfirmed" and the strict boolean stays False in every case.
+    """
     monkeypatch.setattr(fast_module, "get_settings", _settings)
     class _Responses:
         def create(self, **kwargs): return _Response()
@@ -382,7 +387,10 @@ def test_fast_document_usage_acknowledgement_is_true_only_on_completed_model_ans
         def __init__(self, **kwargs): self.responses = _Responses()
     monkeypatch.setattr(fast_module, "OpenAI", _Client)
     ok = FastDirectLunaService().answer(payload=_payload_with_customer_document(), deadline=AbsoluteTurnDeadline(started_at=0, turn_deadline_ms=45000, clock=lambda: 1))
-    assert ok.customer_document_evidence_used is True
+    assert ok.customer_document_evidence_used is False
+    assert ok.customer_document_usage == "supplied_unconfirmed"
+    # R2: no acknowledgement channel exists here, so no id may be claimed.
+    assert ok.customer_document_used_ids == []
 
     class _FailingResponses:
         def create(self, **kwargs): raise TimeoutError("provider timeout")
@@ -391,3 +399,5 @@ def test_fast_document_usage_acknowledgement_is_true_only_on_completed_model_ans
     monkeypatch.setattr(fast_module, "OpenAI", _FailingClient)
     failed = FastDirectLunaService().answer(payload=_payload_with_customer_document(), deadline=AbsoluteTurnDeadline(started_at=0, turn_deadline_ms=45000, clock=lambda: 1))
     assert failed.customer_document_evidence_used is False
+    assert failed.customer_document_usage == "not_supplied"
+    assert failed.customer_document_used_ids == []

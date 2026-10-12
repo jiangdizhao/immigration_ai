@@ -2,7 +2,12 @@ import { redirect } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteHeader } from "@/components/site-header";
-import { workspaceGuestRedirectUrl } from "@/lib/policy-intelligence-product";
+import type { PolicyLaunchRequestState } from "@/lib/policy-intelligence/conversation-policy-binding";
+import {
+  POLICY_SLUG_PATTERN,
+  type PolicyWorkspaceReference,
+  workspaceGuestRedirectUrl,
+} from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
 
 export default async function AIWorkspacePage({
@@ -14,14 +19,18 @@ export default async function AIWorkspacePage({
   const validChatId =
     chatId && /^[0-9a-f-]{36}$/iu.test(chatId) ? chatId : null;
   const isPolicyEntry = launch === "policy" || Boolean(validChatId);
-  if (policy && !isPolicyEntry) {
-    redirect(
-      validChatId ? `/ai-workspace?chatId=${validChatId}` : "/ai-workspace"
-    );
-  }
+  // A `policy` parameter without the launch intent is not a policy entry, but a
+  // well-formed slug is still carried through so a reload of a policy
+  // conversation keeps its topic parameter.
+  const requestedSlug =
+    policy && POLICY_SLUG_PATTERN.test(policy) ? policy : null;
+  const policyLaunchRequested = Boolean(
+    requestedSlug && isPolicyEntry && launch === "policy" && !validChatId
+  );
+
   if (!(await auth())?.user) {
     const redirectUrl = workspaceGuestRedirectUrl(
-      policy ?? null,
+      requestedSlug,
       launch ?? null,
       validChatId
     );
@@ -30,16 +39,20 @@ export default async function AIWorkspacePage({
     );
   }
 
-  const policyReference =
-    policy && isPolicyEntry ? await getPolicyWorkspaceReference(policy) : null;
-  if (policy && isPolicyEntry && !policyReference) {
-    redirect(
-      validChatId ? `/ai-workspace?chatId=${validChatId}` : "/ai-workspace"
-    );
+  /**
+   * Phase 12 Stage 2: a policy launch either resolves the published topic or
+   * reports an explicit, recoverable launch state. It must never silently
+   * downgrade into an unrelated historical conversation or an apparently
+   * successful generic blank chat.
+   */
+  let policyReference: PolicyWorkspaceReference | null = null;
+  let policyLaunchState: PolicyLaunchRequestState = "resolved";
+  if (requestedSlug && isPolicyEntry) {
+    policyReference = await getPolicyWorkspaceReference(requestedSlug);
+    if (!policyReference) {
+      policyLaunchState = "unavailable";
+    }
   }
-  const policyLaunch = Boolean(
-    policyReference && launch === "policy" && !validChatId
-  );
 
   return (
     <div className="min-h-dvh bg-[#f3f5f7] text-slate-900 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
@@ -47,8 +60,10 @@ export default async function AIWorkspacePage({
       <main className="min-h-[calc(100dvh-72px)] xl:min-h-0 xl:flex-1 xl:overflow-hidden">
         <PremiumAnswerModeWorkspace
           initialChatId={validChatId}
-          policyLaunch={policyLaunch}
+          policyLaunch={policyLaunchRequested}
+          policyLaunchState={policyLaunchState}
           policyReference={policyReference}
+          requestedPolicySlug={requestedSlug}
         />
       </main>
     </div>

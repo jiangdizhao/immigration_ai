@@ -165,6 +165,16 @@ export function LawyerPortalDetail({ id }: { id: string }) {
                         {JSON.stringify(evidence.locator)}
                       </p>
                     ) : null}
+                    {evidence.used_by_answer === true ? (
+                      <p className="mt-1 text-xs font-medium text-amber-900">
+                        The AI answer acknowledged using this document.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-amber-800">
+                        Selected by the customer to share with you; the AI
+                        answer did not claim to use it.
+                      </p>
+                    )}
                     {typeof evidence.quote === "string" ? (
                       <p className="mt-2 whitespace-pre-wrap">
                         {evidence.quote}

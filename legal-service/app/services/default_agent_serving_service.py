@@ -20,6 +20,11 @@ from app.schemas.agent import AgentRuntimeRequest, ExecutionBudget
 from app.schemas.query import QueryRequest, QueryResponse
 from app.schemas.source import CitationOut
 from app.services.agent_observability_service import AbsoluteTurnDeadline, AgentObservabilityService
+from app.services.customer_document_context import (
+    customer_document_usage_fields,
+    format_customer_document_prompt_section,
+    matched_document_acknowledgements,
+)
 from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
 from app.services.request_evidence_registry import RequestEvidenceRegistry, create_registry
 
@@ -87,6 +92,13 @@ class DefaultAgentServingService:
                 matter=matter,
                 query_service=query_service,
             )
+            # Phase 12 Stage 2: the Default runtime receives the same bounded
+            # customer document context as Fast and Premium. It is customer
+            # data — never registry evidence, never a citation.
+            customer_document_context = format_customer_document_prompt_section(payload)
+            customer_document_evidence_present = bool(
+                payload.customer_document_evidence.documents
+            )
             runtime_request = AgentRuntimeRequest(
                 request_id=request_id,
                 turn_id=turn_id,
@@ -100,6 +112,8 @@ class DefaultAgentServingService:
                 applicability_protocol_enabled=(
                     settings.default_applicability_protocol_enabled
                 ),
+                customer_document_context=customer_document_context,
+                customer_document_evidence_present=customer_document_evidence_present,
             )
             registry = create_registry(request_id)
 
@@ -153,6 +167,11 @@ class DefaultAgentServingService:
                 submission=result.submission,
                 result=result,
                 registry=registry,
+                customer_document_evidence_present=customer_document_evidence_present,
+                authorized_document_ids=frozenset(
+                    document.documentId
+                    for document in payload.customer_document_evidence.documents
+                ),
             )
             state = self._state_after_answer(
                 query_service=query_service,
@@ -245,6 +264,8 @@ class DefaultAgentServingService:
         submission: Any,
         result: Any,
         registry: RequestEvidenceRegistry,
+        customer_document_evidence_present: bool = False,
+        authorized_document_ids: frozenset[str] = frozenset(),
     ) -> QueryResponse:
         citations: list[CitationOut] = []
         compact_sources: list[str] = []
@@ -298,9 +319,49 @@ class DefaultAgentServingService:
         display_mode = submission.user_display_mode or (
             "escalate_with_brief_reason" if next_action == "suggest_consultation" else "direct_short"
         )
+        # Phase 12 Stage 2 R1: availability is not use. The runtime was given a
+        # bounded packet, and the model may only *acknowledge* the documents it
+        # actually relied on. Usage is confirmed only when an acknowledgement
+        # matches a document id from this request's authorized manifest, the
+        # answer is real, and the turn was not safety-blocked. Otherwise the
+        # honest state is "supplied but unconfirmed", and the strict boolean
+        # stays False so no customer-visible surface can claim a file was read.
+        acknowledged_document_ids = matched_document_acknowledgements(
+            getattr(submission, "customer_documents_used", []), authorized_document_ids
+        )
+        document_evidence_used, document_usage = customer_document_usage_fields(
+            evidence_supplied=customer_document_evidence_present,
+            matched_acknowledgements=acknowledged_document_ids,
+            answer_present=bool(submission.draft_markdown.strip()),
+            is_safety_blocked=is_safety,
+        )
+        unmatched_acknowledgements = {
+            str(value).strip()
+            for value in getattr(submission, "customer_documents_used", [])
+            if isinstance(value, str) and str(value).strip()
+        } - authorized_document_ids
+        # R2: return the bounded, request-authorized acknowledged ids themselves.
+        # The boolean alone cannot tell a consumer *which* documents were used, so
+        # sending it alone invites "every packaged file was used". The ids are
+        # acknowledgement-based provenance (model self-report validated against
+        # this request's manifest), never independent verification, and they are
+        # reported only for the confirmed state.
+        used_document_ids = list(acknowledged_document_ids) if document_evidence_used else []
+        debug["customer_document_usage"] = {
+            "usage": document_usage,
+            # R2: name the provenance basis so a reviewer never reads
+            # "confirmed" as independent evidence verification.
+            "usage_basis": "model_acknowledged" if document_evidence_used else "none",
+            "authorized_document_count": len(authorized_document_ids),
+            "acknowledged_document_count": len(acknowledged_document_ids),
+            "unmatched_acknowledgement_count": len(unmatched_acknowledgements),
+        }
         return QueryResponse(
             matter_id=matter_id,
             answer=submission.draft_markdown,
+            customer_document_evidence_used=document_evidence_used,
+            customer_document_usage=document_usage,
+            customer_document_used_ids=used_document_ids,
             response_language="zh" if response_language == "zh" else "en",
             confidence="medium" if submission.answer_class == "substantive_legal" else "high",
             user_display_mode=display_mode,

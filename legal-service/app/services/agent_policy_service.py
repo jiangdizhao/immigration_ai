@@ -182,6 +182,16 @@ SUBMIT_ANSWER_TOOL = {
                 "description": "Proposed state updates (shadow only, not applied to real Matter)",
                 "items": {"type": "object"},
             },
+            "customer_documents_used": {
+                "type": "array",
+                "maxItems": 8,
+                "description": (
+                    "Only when conversation customer documents were supplied: the exact document_id values whose "
+                    "contents your answer actually relied on. Leave empty when the answer does not use any supplied "
+                    "document, for example an unrelated general question."
+                ),
+                "items": {"type": "string", "maxLength": 64},
+            },
         },
         "required": ["schema_version", "answer_class", "draft_markdown", "claims", "citations", "research_status", "state_patch"],
         "additionalProperties": False,

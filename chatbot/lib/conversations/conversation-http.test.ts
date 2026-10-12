@@ -123,7 +123,7 @@ function makeRepository(options: {
         updatedAt: new Date(baseTime()),
       };
       options.conversations.push(created);
-      return created;
+      return { ok: true as const, conversation: created, policyBinding: null };
     },
     async getConversation({ chatId, userId }) {
       return (
@@ -264,9 +264,13 @@ test("a single page without a cursor keeps the backward compatible response shap
     "createdAt",
     "legalMatterId",
     "origin",
+    "policyBinding",
     "title",
     "updatedAt",
   ]);
+  // Phase 12 Stage 2 adds the conversation's own persisted policy topic. It is
+  // additive and null for a conversation that was not started from a policy.
+  assert.equal(body.conversations[0].policyBinding, null);
 });
 
 test("a detail response carries the legacy origin the read-only UI depends on", async () => {

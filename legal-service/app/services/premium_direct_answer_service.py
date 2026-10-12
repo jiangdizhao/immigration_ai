@@ -11,7 +11,10 @@ from openai import OpenAI
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.agent_observability_service import AbsoluteTurnDeadline
-from app.services.customer_document_context import format_customer_document_context
+from app.services.customer_document_context import (
+    customer_document_usage_fields,
+    format_customer_document_prompt_section,
+)
 from app.services.openai_responses_adapter import (
     ResponsesStreamAccumulator,
     consume_responses_stream,
@@ -319,7 +322,7 @@ class PremiumDirectAnswerService:
             is_zh=is_zh,
         )
         instructions = self._model_instructions(is_zh=is_zh)
-        document_context = format_customer_document_context(payload.customer_document_evidence)
+        document_context = format_customer_document_prompt_section(payload)
         if document_context:
             model_input = f"{model_input}\n\n{document_context}"
         high_risk = self._looks_high_risk(original_question) or self._looks_high_risk(
@@ -389,14 +392,24 @@ class PremiumDirectAnswerService:
             live_web_search_used=bool(web_sources) or salvage is not None,
         )
 
-        return QueryResponse(
-            matter_id=matter_id,
-            answer=answer_text,
-            customer_document_evidence_used=bool(
-                payload.customer_document_evidence.documents
+        # Phase 12 Stage 2 R1/R2: a completed single-shot answer with a supplied
+        # packet is *not* proof that the file was used, so the honest state is
+        # "supplied but unconfirmed" unless a document was acknowledged, and
+        # `customer_document_used_ids` stays empty until this path has an explicit
+        # acknowledgement channel.
+        _document_used, _document_usage = customer_document_usage_fields(
+            evidence_supplied=bool(payload.customer_document_evidence.documents),
+            answer_present=bool(
+                answer_text.strip()
                 and model_debug.get("completion_status") == "complete"
                 and bool(model_debug.get("serving_model"))
             ),
+        )
+        return QueryResponse(
+            matter_id=matter_id,
+            answer=answer_text,
+            customer_document_evidence_used=_document_used,
+            customer_document_usage=_document_usage,
             response_language="zh" if is_zh else "en",
             confidence="medium" if not high_risk else "low",
             user_display_mode="general_with_warning",
