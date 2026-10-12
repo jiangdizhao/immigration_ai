@@ -1,5 +1,5 @@
 import { ipAddress } from "@vercel/functions";
-import { z } from "zod";
+import type { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
 import {
@@ -14,6 +14,10 @@ import {
   type WidgetTurnStart,
   widgetFieldsFromAssistantParts,
 } from "@/lib/conversations/widget-turn";
+import {
+  type messageSchema,
+  premiumWidgetRequestSchema as widgetDirectRequestBodySchema,
+} from "@/lib/conversations/widget-turn-schemas";
 import {
   getImmigrationConversationByChatId,
   getUserEntitlementById,
@@ -48,53 +52,6 @@ export const maxDuration = 390;
 
 const SHOW_WIDGET_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
 const LEGAL_SERVICE_DIRECT_TIMEOUT_MS = 370_000;
-
-const textPartSchema = z.object({
-  type: z.literal("text"),
-  text: z.string().min(1).max(4000),
-});
-
-const filePartSchema = z.object({
-  type: z.literal("file"),
-  mediaType: z.enum(["image/jpeg", "image/png"]),
-  name: z.string().min(1).max(100),
-  url: z.string().url(),
-});
-
-const messageSchema = z.object({
-  id: z.string(),
-  role: z.enum(["user", "assistant", "system"]),
-  parts: z.array(z.union([textPartSchema, filePartSchema, z.any()])),
-});
-
-const widgetDirectRequestBodySchema = z.object({
-  id: z.string().uuid(),
-  frontendChatId: z.string().uuid().optional(),
-  clientTurnId: z
-    .string()
-    .min(8)
-    .max(128)
-    .regex(/^[A-Za-z0-9._:-]+$/u)
-    .optional(),
-  policySlug: z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,119}$/u)
-    .optional(),
-  matterId: z.string().uuid().nullable().optional(),
-  messages: z.array(messageSchema).min(1),
-  selectedChatModel: z.string().optional(),
-  assistantMode: z
-    .enum(["premium", "premium_direct_gpt55_high"])
-    .optional()
-    .default("premium"),
-  intakeFacts: z.record(z.string(), z.any()).optional().default({}),
-  currentIntakeFacts: z.record(z.string(), z.any()).optional(),
-  responseLanguage: z.enum(["en", "zh"]).optional(),
-  answerPreference: z
-    .enum(["auto", "answer_first", "continue_intake", "final_recommendation"])
-    .optional()
-    .default("answer_first"),
-});
 
 type ResponseLanguage = "en" | "zh";
 

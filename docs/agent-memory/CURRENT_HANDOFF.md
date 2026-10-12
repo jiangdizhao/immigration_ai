@@ -1,15 +1,52 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-12 (documentation correction: owner Gate 2 host evidence recorded + bounded-context wording; Gate 2 policy-topic fix still uncommitted)
-**Stage 2 branch:** `codex/phase12-stage2-context-ui` — the reviewed baseline is `e3b88435d6681db14d9890a52ef98ebd3bff8f87` (`fix(phase12): enforce lawyer attachment consent state`); the Gate 2 policy-topic fix below is **uncommitted** in the working tree.
-**Stage 2 reviewed commit:** `e3b88435d6681db14d9890a52ef98ebd3bff8f87` (working tree = that commit + this Gate 2 blocker fix)
+**Updated:** 2026-10-12 (D-061 owner-host re-test PASSED in Legal Check and Premium; D-062 uncommitted and awaiting owner browser verification; documentation-only correction)
+**Stage 2 branch:** `codex/phase12-stage2-context-ui` — the committed baseline is `b604187f924ced3084c0785c31971aaf130168e9` (`fix(phase12): preserve policy topic in Legal Check AgentRuntime`, which includes the reviewed D-061 fix and the owner-host record corrections); the null-slug hotfix below is **uncommitted** in the working tree.
+**Stage 2 reviewed commit:** `b604187f924ced3084c0785c31971aaf130168e9` (working tree = that commit + this null-slug hotfix)
 **Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of `ce4e803`; the base used for the R1/R2/closure work was `ce4e803`
 **Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
-**Gate 2 owner host status (2026-10-12):** migration `0026` was applied successfully to the local `chatbot` database and the owner verified the migration ledger, the new table, its indexes and its foreign keys; policy launch, browser refresh/history recovery and the PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C); Fast policy-context testing passed; Legal Check failed in the active AgentRuntime path and its implemented fix **awaits the owner re-test**. Cross-device acceptance, PDF/DOCX end-to-end and the remaining mode tests are **still pending**. Gate 2 remains **NOT ACCEPTED**.
+**Gate 2 owner host status (2026-10-12):** migration `0026` was applied to the local `chatbot` database and verified (ledger, table, indexes, foreign keys); policy launch, browser refresh/history recovery and the PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C); Fast policy-context testing passed. **D-061 owner-host re-test PASSED:** after restarting legal-service the owner retested the original LIN 26/061 conversation and Legal Check correctly identified the policy instead of asking for its name again; **Premium policy-context testing PASSED in the same conversation**. D-061 is committed and pushed as `b604187f924ced3084c0785c31971aaf130168e9`; only the D-062 null-slug hotfix is uncommitted. Document storage: an **independent AWS S3 local-test bucket** was created, its security preflight returned `{"ok":true,"failures":[]}`, and `test_pdf.pdf` and `test_docx.docx` were uploaded and displayed as saved — **file extraction evidence and actual AI consumption remain unverified**, and neither the AWS staging bucket nor any production environment was tested. The first Fast document question failed before model execution on the null-policy-slug contract; D-062 fixes that request-contract problem and **awaits owner browser verification**. Cross-device tests are **DEFERRED BY OWNER** (not passed), PDF/DOCX end-to-end and the remaining mode tests remain pending, and Gate 2 remains **NOT ACCEPTED**.
+
+## Phase 12 Stage 2 Gate 2 hotfix — null `policySlug` rejected ordinary conversations (FIXED 2026-10-12, uncommitted)
+
+**Status:** root cause confirmed and corrected; the change set passed independent source review and is the only uncommitted work on the branch. **Gate 2 remains NOT ACCEPTED pending the owner browser verification** of this hotfix.
+
+### Observed owner-host failure
+
+Ordinary, non-policy-linked conversation `0a8c3d1d-887d-4246-8f76-28ea613ecc55` with `test_pdf.pdf` and `test_docx.docx` uploaded (the browser shows both files saved). A Fast mode question failed **before model execution** in `app/api/widget-chat-fast/route.ts`:
+
+```text
+ZodError:
+path: ["policySlug"]
+expected: "string"
+received: "null"
+```
+
+### Confirmed root cause
+
+`components/immigration-ai-workspace.tsx` built `requestPolicySlug` as `null` when the conversation had no persisted policy binding and serialized it into the request body. All three widget routes declared `policySlug` as an optional string, so an explicit JSON `null` failed validation. Ordinary conversations must work without a policy binding: a null or omitted slug means "no client policy hint", never a failed request.
+
+### Correction (bounded change set)
+
+- `components/immigration-ai-workspace.tsx` now builds the turn body with the shared helper and omits `policySlug` entirely when there is no binding for this conversation (no invented slug, no URL parameter, no change to the persisted-binding security model).
+- `lib/conversations/widget-turn-request.ts` (new): `requestPolicySlugForConversation()` (the existing "own persisted binding only" rule) and `buildWidgetTurnRequestBody()` — the single construction path used for Fast, Legal Check and Premium.
+- `lib/policy-intelligence/request-policy-slug.ts` (new): the shared `policySlug` request rule — absent and explicit `null` both normalise to "no hint"; a present non-null value must still match the shared `POLICY_SLUG_PATTERN`, so invalid types and malformed slugs stay rejected.
+- `lib/conversations/widget-turn-schemas.ts` (new): the three widget request schemas moved out of the route files verbatim (same fields, enums, defaults and strictness) so the real request contract is importable by tests; the routes import their schema from here.
+- `app/api/widget-chat-fast/route.ts`, `app/api/widget-chat/route.ts`, `app/api/widget-chat-direct/route.ts`: use the shared schema; no local policy-slug rule remains.
+- Untouched: durable-turn, authentication, policy-binding, document-evidence and political-gate contracts, S3/AWS, database, migrations, deployment and the Python legal service.
+- **Owner-host document-storage evidence (2026-10-12):** an **independent AWS S3 local-test bucket** was created and its security preflight returned `{"ok":true,"failures":[]}`; `test_pdf.pdf` and `test_docx.docx` were uploaded to ordinary conversation `0a8c3d1d-887d-4246-8f76-28ea613ecc55` and displayed as saved. **File extraction evidence and actual AI consumption remain unverified** — the first Fast document question failed before model execution on the null-policy-slug contract this hotfix fixes. Neither the AWS staging bucket nor any production environment was tested, and no PDF/DOCX end-to-end acceptance is claimed. **Owner browser verification of this hotfix is pending.**
+
+### Validation actually run (exact)
+
+- New `lib/conversations/widget-policy-slug-contract.test.ts` (**8 tests**): omitted and explicit-null slugs parse on all three real route schemas; the real frontend builder omits the field (no `"policySlug"` key in the serialized JSON) and the same body validates on Fast, Legal Check and Premium; a bound conversation still forwards its real slug; a binding for another conversation is never adopted; malformed non-null slugs (number, boolean, object, array, empty, spaces, uppercase, leading hyphen, embedded space, unicode, 121 chars) are rejected on every route; the rest of the contract stays strict (messages, uuid, clientTurnId, per-route mode enums, required Legal Check model); the routes import the shared schema module and the workspace uses the shared builder.
+- `pnpm test:unit` → **754 passed, 0 failed, 0 skipped** (746 before + 8 new).
+- `pnpm exec tsc --noEmit` → **45 errors, identical to the documented baseline** (zero new).
+- `pnpm build` → **exit 0**; changed-file `biome check` → clean; `git diff --check` → clean.
+- Related suites (`conversation-policy-binding-http`, `widget-route-contract`, `policy-topic-request-construction`, `conversation-policy-binding`) → **40 passed**. The Stage 2 wiring test was updated to assert the new construction path (it previously matched the removed inline expression).
 
 ## Phase 12 Stage 2 Gate 2 blocker — Legal Check lost the persisted policy topic (FIXED 2026-10-12, uncommitted)
 
-**Status:** root cause confirmed and corrected; the fix passed independent source review and **awaits the owner re-test of the Fast → Legal Check sequence**. **Gate 2 remains NOT ACCEPTED.** Owner host evidence so far (2026-10-12): migration `0026` applied successfully to the local `chatbot` database with the ledger, table, indexes and foreign keys verified; policy launch, browser refresh/history recovery and PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C); Fast policy-context testing passed. This fix needs no migration and does not touch any database. Still pending: Legal Check owner re-test, cross-device acceptance, PDF/DOCX end-to-end and the remaining mode tests.
+**Status:** root cause confirmed and corrected; the fix passed independent source review, is committed and pushed as `b604187`, and its **owner-host re-test PASSED** — after restarting legal-service the owner retested the original LIN 26/061 conversation and Legal Check correctly identified the policy instead of asking for its name again; **Premium policy-context testing also PASSED in the same conversation**. **Gate 2 remains NOT ACCEPTED.** Owner host evidence (2026-10-12): migration `0026` applied to the local `chatbot` database with the ledger, table, indexes and foreign keys verified; policy launch, browser refresh/history recovery and PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C). This fix needs no migration and does not touch any database. Still pending: owner browser verification of D-062, cross-device tests (**DEFERRED BY OWNER**), PDF/DOCX extraction and actual AI consumption, and the remaining mode tests.
 
 ### Observed owner-host failure
 

@@ -101,8 +101,18 @@ test("a policy launch is idempotent and never duplicates a blank conversation", 
 test("the request-scoped policy topic comes from the persisted binding", () => {
   assert.match(
     workspace,
-    /policyBinding\?\.chatId === stableConversationId/u,
+    /requestPolicySlugForConversation\(\{/u,
     "the slug sent to the answer route must belong to this conversation"
+  );
+  assert.match(
+    workspace,
+    /bindingChatId: policyBinding\?\.chatId \?\? null/u,
+    "the slug sent to the answer route must belong to this conversation"
+  );
+  assert.match(
+    workspace,
+    /buildWidgetTurnRequestBody\(\{/u,
+    "the turn body must be built by the shared request-construction helper"
   );
 });
 

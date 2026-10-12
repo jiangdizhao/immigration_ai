@@ -12,13 +12,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import {
   type AssistantMode,
   widgetRouteForAssistantMode,
 } from "@/lib/assistant-mode";
 import { consultationCreateHref } from "@/lib/consultations/customer-ui";
 import { resolveWorkspacePersistence } from "@/lib/conversations/persistence-notice";
+import {
+  buildWidgetTurnRequestBody,
+  requestPolicySlugForConversation,
+} from "@/lib/conversations/widget-turn-request";
 import { ChatbotError, type ErrorCode } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import {
@@ -1354,29 +1357,31 @@ export function ImmigrationAIWorkspace({
      * Phase 12 Stage 2: the request-scoped policy topic is the conversation's own
      * persisted binding. It is only a topic hint for the backend; the backend
      * resolves it again from the stored binding, so this value can never widen
-     * access or invent a policy identity.
+     * access or invent a policy identity. A conversation without a binding sends
+     * no `policySlug` field at all (an explicit JSON `null` used to be rejected).
      */
-    const requestPolicySlug =
-      policyBinding?.chatId === stableConversationId
-        ? policyBinding.policySlug
-        : null;
-    const body = JSON.stringify({
-      id: stableConversationId,
-      frontendChatId: stableConversationId,
-      clientTurnId,
-      matterId,
-      intakeFacts: facts,
-      currentIntakeFacts: currentFacts,
-      answerPreference,
-      selectedChatModel: DEFAULT_CHAT_MODEL,
-      assistantMode,
-      policySlug: requestPolicySlug,
-      messages: nextMessages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        parts: [{ type: "text", text: message.text }],
-      })),
+    const requestPolicySlug = requestPolicySlugForConversation({
+      conversationId: stableConversationId,
+      bindingChatId: policyBinding?.chatId ?? null,
+      bindingSlug: policyBinding?.policySlug ?? null,
     });
+    const body = JSON.stringify(
+      buildWidgetTurnRequestBody({
+        conversationId: stableConversationId,
+        clientTurnId,
+        matterId: matterId ?? null,
+        intakeFacts: facts,
+        currentIntakeFacts: currentFacts,
+        answerPreference,
+        assistantMode,
+        policySlug: requestPolicySlug,
+        messages: nextMessages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          text: message.text,
+        })),
+      })
+    );
 
     /**
      * A duplicate submission (double click, network retry, second device) is
