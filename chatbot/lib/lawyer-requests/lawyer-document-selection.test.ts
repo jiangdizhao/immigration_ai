@@ -410,8 +410,10 @@ test("idempotent retries cannot change an existing request's selection", () => {
   // a retry with a different selection returns the stored request unchanged.
   assert.equal(duplicateIndex < selectionIndex, true);
   assert.equal(selectionIndex < insertIndex, true);
+  // The stored summary is returned with an explicit marker so a repeat
+  // submission is never presented as a new request with a new selection.
   assert.match(
     route,
-    /return Response\.json\(customerLawyerRequestSummary\(existing\)\)/u
+    /\.\.\.customerLawyerRequestSummary\(existing\),\s*\n\s*existingRequest: true/u
   );
 });

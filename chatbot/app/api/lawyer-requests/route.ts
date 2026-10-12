@@ -197,12 +197,22 @@ export async function GET(request: Request) {
     }
   );
   if (existing) {
+    /**
+     * A request already exists for this answer.
+     *
+     * Backward compatible: the `status`/`documents` contract is unchanged. The
+     * id and the persisted `documentSharing` summary are additive, so the client
+     * can show the authoritative shared-document count instead of guessing from
+     * its current checkbox state.
+     */
     return Response.json({
       ...payload,
       attachmentSelection: {
         status: "already_requested",
         maxSelectable: LAWYER_DOCUMENT_ATTACHMENT_LIMIT,
         documents: [],
+        requestId: existing.id,
+        documentSharing: customerLawyerRequestView(existing).documentSharing,
       },
     });
   }
@@ -304,7 +314,16 @@ export async function POST(request: Request) {
     }
   );
   if (existing && existing.chatId === chatId) {
-    return Response.json(customerLawyerRequestSummary(existing));
+    /**
+     * Idempotent repeat: the stored request is returned unchanged, with an
+     * explicit marker (and its persisted `documentSharing`) so the client never
+     * presents this as a new submission with a new attachment selection.
+     * Backward compatible: the response body remains the stored summary.
+     */
+    return Response.json({
+      ...customerLawyerRequestSummary(existing),
+      existingRequest: true,
+    });
   }
   if (existing) {
     return Response.json(

@@ -205,6 +205,12 @@ export type WorkspaceCopy = {
     attachmentsWithheldWarning: string;
     attachmentsLimitError: string;
     attachmentsNoSelection: string;
+    attachmentsRetry: string;
+    attachmentsLoadBlocked: string;
+    attachmentsAlreadyRequested: string;
+    attachmentsViewExisting: string;
+    sharedDocumentsLabel: string;
+    attachmentsCountUnknown: string;
     consultationTitle: string;
     consultationDescription: string;
     consultationLink: string;
@@ -439,6 +445,13 @@ const zh: WorkspaceCopy = {
       "以下 AI 答复声明使用过的文件你没有勾选，律师将不会收到它们的任何内容：",
     attachmentsLimitError: "最多只能共享 4 个文件，请取消勾选多余的文件。",
     attachmentsNoSelection: "未选择任何文件，律师将不会收到文件摘录。",
+    attachmentsRetry: "重新加载附件",
+    attachmentsLoadBlocked: "在文件列表成功加载之前，无法提交审阅请求。",
+    attachmentsAlreadyRequested:
+      "此答复已提交过律师审阅请求，无法再次提交，也无法修改已共享的附件。",
+    attachmentsViewExisting: "查看已有律师请求",
+    sharedDocumentsLabel: "已共享附件",
+    attachmentsCountUnknown: "未记录",
     consultationTitle: "预约一对一律师咨询",
     consultationDescription: "律师审阅此答复与一对一咨询是两项独立服务。",
     consultationLink: "预约一对一咨询",
@@ -701,6 +714,14 @@ const en: WorkspaceCopy = {
       "You can share at most four documents. Uncheck the extra ones.",
     attachmentsNoSelection:
       "No document selected; the lawyer will not receive document excerpts.",
+    attachmentsRetry: "Retry loading attachments",
+    attachmentsLoadBlocked:
+      "You cannot submit the review request until the document list has loaded.",
+    attachmentsAlreadyRequested:
+      "This answer already has a lawyer review request; it cannot be submitted again and its shared attachments cannot be changed.",
+    attachmentsViewExisting: "View the existing lawyer request",
+    sharedDocumentsLabel: "Shared attachments",
+    attachmentsCountUnknown: "not recorded",
     consultationTitle: "Book a one-to-one lawyer consultation",
     consultationDescription:
       "A lawyer review of this answer and a one-to-one consultation are separate services.",

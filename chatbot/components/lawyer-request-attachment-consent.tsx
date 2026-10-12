@@ -1,13 +1,7 @@
 "use client";
 
+import type { LawyerAttachmentOption } from "@/lib/lawyer-requests/attachment-consent-state";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
-
-export type LawyerAttachmentOption = {
-  documentId: string;
-  filename: string;
-  runStatus: string | null;
-  usedByAnswer: boolean;
-};
 
 export type LawyerAttachmentCopy = WorkspaceCopy["lawyerRequest"];
 

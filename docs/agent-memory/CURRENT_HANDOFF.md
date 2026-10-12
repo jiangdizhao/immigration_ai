@@ -1,10 +1,48 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-12 (Stage 2 R1 review corrections)
-**Stage 2 branch:** `codex/phase12-stage2-context-ui` (implementation branch; NOT committed, NOT merged, NOT pushed)
-**Stage 2 HEAD:** `ce4e803bcbdd29535d0da0924de55600a87a9827` (unchanged; the Stage 2 change set **and** the R1 corrections are uncommitted in the working tree)
-**Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of HEAD; the only extra commit is `ce4e803` `chore: stop tracking generated Next.js declaration`
+**Updated:** 2026-10-12 (Stage 2 final review corrections A + B; uncommitted)
+**Stage 2 branch:** `codex/phase12-stage2-context-ui` — Stage 2 is committed and pushed as `54ec8e3a65fe8c707b2c9bcaeb6283eab6459223` (`feat(phase12): implement stage2 context, policy binding and lawyer consent`); the final review corrections below are **uncommitted** in the working tree.
+**Stage 2 reviewed commit:** `54ec8e3a65fe8c707b2c9bcaeb6283eab6459223` (the SHA the reviewer inspected; working tree = that commit + this correction set)
+**Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of `ce4e803`; the base used for the R1/R2/closure work was `ce4e803`
 **Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
+
+## Phase 12 Stage 2 final review corrections A + B (IMPLEMENTED 2026-10-12, uncommitted; awaiting final review)
+
+**Status:** the two defects found in the independent review of `54ec8e3` are corrected. **Gate 2 is still NOT claimed as passed.** No commit, push, merge, deploy or migration; migration `0026` remains unapplied to the real application database.
+
+### Defect A — a failed attachment load must not permit submission
+
+- New pure module `chatbot/lib/lawyer-requests/attachment-consent-state.ts` owns the whole load/decision contract: `loadAttachmentConsentState()` (injectable fetcher, never throws — a network error, an error response, invalid JSON, a missing `attachmentSelection` block, an unknown status or a malformed body all become the explicit `failed` state), `attachmentConsentStateFromResponse()`, `canSubmitLawyerRequestWithAttachments()` (only `ready` allows submission) and `attachmentDecisionPayload()` (returns the explicit `{ consent: true, selectedDocumentIds }`, or `null` when the customer may not submit — malformed, duplicated and over-limit selections are refused, never sliced).
+- `chatbot/components/lawyer-request-action.tsx`: the submit control is disabled unless the list loaded successfully (`disabled={submitting || !readyForSubmission || overLimit}`), and `submit()` re-derives the decision from the state — so a failed load can no longer fall through to "no `attachments` field", i.e. it is never read as consent to share zero documents. While the list is loading or idle an explicit "cannot submit until the document list has loaded" notice sits next to the disabled control.
+- New bilingual status UI (`chatbot/components/lawyer-request-attachment-status.tsx`): `LawyerAttachmentLoadFailure` shows the localized load error (`role="alert"`), the blocked-submission notice and a clearly labelled retry control (**重新加载附件 / Retry loading attachments**) that re-runs the loader; the previously mislabelled retry button (which reused the "ask a lawyer" label) is gone.
+- Zero eligible documents still loads as `ready` with an empty list, so the customer can submit an explicit `selectedDocumentIds: []` decision; checkboxes still start unchecked; the four-document limit and all server-side ownership checks are untouched.
+
+### Defect B — an existing request is its own state
+
+- The frontend no longer treats any non-`selectable` status as an empty ready list. `attachmentConsentStateFromResponse()` maps `already_requested` to a dedicated state (`sharedDocumentCount`, `requestId`); unknown or missing shapes now fail closed instead of enabling a fresh submission.
+- `chatbot/app/api/lawyer-requests/route.ts` (backward compatible, additive only): the GET `already_requested` block now also returns `requestId: existing.id` and `documentSharing: customerLawyerRequestView(existing).documentSharing` (the persisted consent summary); the POST duplicate path returns the stored summary plus `existingRequest: true`. The `status`/`documents`/`maxSelectable` contract and the idempotent short-circuit order (duplicate lookup → selection → reconstruction → insert) are unchanged.
+- New notice UI (`LawyerAttachmentExistingNotice`): explains in Chinese and English that the answer already has a lawyer-review request, shows the shared-document count taken from the persisted `documentSharing.selectedDocumentCount` (`null`/missing → "未记录 / not recorded", never a fabricated 0 and never the current checkbox state) and links to `/lawyer-requests/<id>` (falling back to `/lawyer-requests`). When this state applies the new-request interface (list, checkboxes, submit, note) is not rendered at all.
+- The post-submission success card also reads its count from the server response's `documentSharing`, so a repeat submission can never imply that newly ticked documents were added to an existing request.
+
+
+### Validation actually run (exact, this correction)
+
+- `cd chatbot && pnpm test:unit` → **746 passed, 0 failed, 0 skipped** (Stage 2 baseline 732; +14: 9 in the new `lib/lawyer-requests/attachment-consent-state.test.ts`, 5 in the new `components/lawyer-request-attachment-status.test.tsx`). Both new files are in the `test:unit` list.
+- Focused: `node --conditions=react-server --import tsx --test lib/lawyer-requests/lawyer-document-selection.test.ts lib/lawyer-requests/attachment-consent.test.ts lib/lawyer-requests/attachment-consent-state.test.ts` → **30 passed, 0 failed**; `node --import tsx --test components/lawyer-request-attachment-consent.test.tsx components/lawyer-request-attachment-status.test.tsx` → **10 passed, 0 failed**.
+- `pnpm exec tsc --noEmit` → **45 errors, identical to the documented baseline** (same nine pre-existing unrelated test files) ⇒ **zero new errors**. An intermediate run showed 58 because the new test file needed explicit types; that was fixed before the final run.
+- `pnpm build` → **exit 0** (run after all source changes).
+- Changed-file `biome check` → **clean** (11 files); `git diff --check` → **clean**.
+- `cd legal-service && pytest tests` was **not** re-run for this correction (no legal-service file changed); the last recorded legal-service result stands at 1286/1286.
+
+### Not run / still blocked (do not read as passing)
+
+- No browser/DOM interaction test: the interaction rules (disabled submit, retry, existing-request state) are covered by driving the real loader through an injected fetcher, by the extracted pure state/payload functions and by static markup rendering in both locales. This repository has no jsdom/Testing-Library harness, so no click-level test is claimed.
+- No live end-to-end lawyer request against the owner's host database.
+- Owner-host acceptance items are unchanged: durable policy card with `0026` applied, AWS staging S3/DOCX checks, cross-device continuity, Stage 1 owner acceptance.
+
+### Immediate next action
+
+Independent final review of this correction set, then the owner-host acceptance procedure. Do not commit, push, merge or deploy until the owner authorizes it; migration `0026` stays unapplied to the real database.
 
 ## Phase 12 Stage 2 closure — explicit lawyer attachment consent (OWNER-APPROVED OPTION A; IMPLEMENTED 2026-10-12)
 
