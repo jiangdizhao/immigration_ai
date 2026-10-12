@@ -1,11 +1,17 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-13 (Stage 2 owner functional closeout at c97bb259; D-064 retains isolated local-test S3 Bucket for future regression; docs-only update)
+**Updated:** 2026-10-13 (D-065 lawyer final editorial authority recorded; Stage 2 functional closeout and D-064 local-test S3 retention preserved; docs-only update)
 **Stage 2 branch:** `codex/phase12-stage2-context-ui` — committed/pushed code checkpoint `7031b37292410597c4411b8a9b60f10bdf35b823` (D-061 and D-062 both included); current change is documentation-only.
 **Stage 2 implementation checkpoint:** `7031b37292410597c4411b8a9b60f10bdf35b823` (D-062 source independently reviewed; owner-host Fast/Legal Check/Premium document test PASSED).
 **Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of `ce4e803`; the base used for the R1/R2/closure work was `ce4e803`
 **Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
 **Gate 2 owner host status (updated 2026-10-13):** Stage 2 core functionality OWNER SIGNED OFF. D-061 policy-topic test PASSED in Legal Check and Premium; D-062 regression on ordinary no-policy conversations PASSED in Fast, Legal Check and Premium with the same saved PDF/DOCX. Migration `0026` applied to local `chatbot` database and verified. Original Gate 2 still NOT ACCEPTED due to deferred and unexecuted items. See current closeout section immediately below; earlier entries are preserved as historical implementation notes.
+
+## Phase 12 Stage 3 — D-065 Lawyer Final Editorial Authority (2026-10-13; docs only)
+
+**Approved design correction:** An expressly authorized Policy Editor lawyer has the final decision on legal-content relevance, editing and publication. The Stage 3 implementation must offer a real lawyer-initiated `forcePublish=true` for AI-held/rejected/verification-failed items without requiring AI re-evaluation, positive evidence sufficiency or an automatic publication-gate PASS. An independent manual draft/preview/publish path remains entirely AI-free, including for transparently attributed lawyer commentary without an official citation. Preserve clear attribution between lawyer commentary and authenticated official law; no invented citation, source, verified-law badge or commencement date. Backend retains **technical** authorization, tenant isolation, input/URL/HTML/CSRF safety, revision concurrency and immutable audit; it cannot turn the AI's legal judgment into a veto. Trusted automated publication continues unchanged and has no compulsory lawyer gate.
+
+**Precedence and work status:** D-065 supersedes the earlier conflicting Stage 3 prohibition on `forcePublish=true`; see `DECISIONS.md` and `tasks/PHASE12_USER_DATA_WORKSPACE_POLICY_2026-10-11.md`. **Stage 3 remains NOT STARTED / NOT AUTHORIZED to implement.** Stage 2 core scope stays OWNER SIGNED OFF, original Gate 2 remains NOT ACCEPTED, and Stage 1 Gate 1 remains open. This record makes no application-code, DB, S3, AWS, payment, migration, branch-merge or deployment change.
 
 ## Phase 12 local S3 test storage — retained for future regression testing (2026-10-13)
 
