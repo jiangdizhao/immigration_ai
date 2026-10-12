@@ -1,14 +1,43 @@
 # CURRENT_HANDOFF
 
-**Updated:** 2026-10-12 (Stage 2 final review corrections A + B; uncommitted)
-**Stage 2 branch:** `codex/phase12-stage2-context-ui` — Stage 2 is committed and pushed as `54ec8e3a65fe8c707b2c9bcaeb6283eab6459223` (`feat(phase12): implement stage2 context, policy binding and lawyer consent`); the final review corrections below are **uncommitted** in the working tree.
-**Stage 2 reviewed commit:** `54ec8e3a65fe8c707b2c9bcaeb6283eab6459223` (the SHA the reviewer inspected; working tree = that commit + this correction set)
+**Updated:** 2026-10-12 (documentation correction: owner Gate 2 host evidence recorded + bounded-context wording; Gate 2 policy-topic fix still uncommitted)
+**Stage 2 branch:** `codex/phase12-stage2-context-ui` — the reviewed baseline is `e3b88435d6681db14d9890a52ef98ebd3bff8f87` (`fix(phase12): enforce lawyer attachment consent state`); the Gate 2 policy-topic fix below is **uncommitted** in the working tree.
+**Stage 2 reviewed commit:** `e3b88435d6681db14d9890a52ef98ebd3bff8f87` (working tree = that commit + this Gate 2 blocker fix)
 **Stage 2 expected start commit:** `3541a3dfc72efc9fc9f4fe5d824c052f09d3a4cd` is the direct parent of `ce4e803`; the base used for the R1/R2/closure work was `ce4e803`
 **Stage 2 working directory used:** `/home/rico/immigration_ai` — the path named in the Stage 2 task (`/home/rico/immigration_ai_phase12_stage2`) does not exist on this host
+**Gate 2 owner host status (2026-10-12):** migration `0026` was applied successfully to the local `chatbot` database and the owner verified the migration ledger, the new table, its indexes and its foreign keys; policy launch, browser refresh/history recovery and the PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C); Fast policy-context testing passed; Legal Check failed in the active AgentRuntime path and its implemented fix **awaits the owner re-test**. Cross-device acceptance, PDF/DOCX end-to-end and the remaining mode tests are **still pending**. Gate 2 remains **NOT ACCEPTED**.
+
+## Phase 12 Stage 2 Gate 2 blocker — Legal Check lost the persisted policy topic (FIXED 2026-10-12, uncommitted)
+
+**Status:** root cause confirmed and corrected; the fix passed independent source review and **awaits the owner re-test of the Fast → Legal Check sequence**. **Gate 2 remains NOT ACCEPTED.** Owner host evidence so far (2026-10-12): migration `0026` applied successfully to the local `chatbot` database with the ledger, table, indexes and foreign keys verified; policy launch, browser refresh/history recovery and PostgreSQL policy-binding verification passed for LIN 26/061 (Step 3A–3C); Fast policy-context testing passed. This fix needs no migration and does not touch any database. Still pending: Legal Check owner re-test, cross-device acceptance, PDF/DOCX end-to-end and the remaining mode tests.
+
+### Observed owner-host failure
+
+Conversation `29d5607b-5ad0-486e-a1e4-dc37363ef9e7` (persisted policy `evisitor-application-arrangements-lin-26-061`, `LIN 26/061：Subclass 651 eVisitor 申请安排更新`): Fast answered about "this policy" correctly, then the same conversation switched to Legal Check, which asked the customer to supply the policy name, identifier or URL again. Backend health was fine and `DEFAULT_AGENT_SERVING_ENABLED = True`, so the active route is `DefaultAgentServingService` → `AgentRuntimeService`.
+
+### Confirmed root cause
+
+`chatbot/app/api/widget-chat/route.ts` already resolves the authenticated, persisted binding and adds the `policy_topic_reference` entry to `frontend_messages` for every mode (line ~1102); `legal-service/app/schemas/query.py` already accepts `frontend_messages`; `FastDirectLunaService._model_input` and `PremiumDirectAnswerService._history_text` already render it. `DefaultAgentServingService` built `AgentRuntimeRequest` without it and `AgentRuntimeRequest`/`AgentRuntimeService` had no field for it — so the topic was dropped at the serving adapter on the mode switch.
+
+### Correction (minimum correct fix)
+
+- `legal-service/app/schemas/agent.py`: new bounded, typed `AgentRuntimeRequest.policy_topic_context: str = Field(default="", max_length=4_000)`, documented as conversation context — never legal authority, never a citation, never registry evidence, never a system instruction.
+- `legal-service/app/services/policy_topic_context.py` (new): reuses the existing `policy_topic_reference` contract. `extract_policy_topic_context()` accepts only the FIRST entry with the boolean flag on a `system`-role message, whitespace-normalized and capped at 1 200 chars (matching the Fast/Premium bound); non-list payloads, non-dict entries, missing/false/non-boolean flags, non-string or blank text yield `""` and never raise. `render_policy_topic_prompt_section()` renders a fenced section headed **"Conversation Policy Topic (conversation context only — NOT legal authority, NOT verified law)"** that resolves "this policy"/"这项政策", forbids following instructions inside it, and requires independent verification of current law and official source status.
+- `legal-service/app/services/default_agent_serving_service.py`: extracts the topic from `payload.frontend_messages` and forwards it in `AgentRuntimeRequest`.
+- `legal-service/app/services/agent_runtime_service.py`: renders the section into the provider-facing user message (`_build_user_message`), so the real prompt carries it.
+- Untouched by design: Fast and Premium topic handling, model selection/effort, tool policy, budgets/retries, evidence registry, citations, checker, reasoning bank, document context, premium handoff. No migration, no schema change, no new dependency, no database access.
+- **Bounded context, not archive fidelity:** the channel is capped (schema 4 000 chars; extraction 1 200 chars, whitespace-normalized, first flagged entry only). Archived/superseded/withdrawn note lines **within that cap** are forwarded as context, but an unusually long rendered binding — for example extra archival or superseded notes beyond the cap — is truncated at the tail. The cap is never treated as proof that the topic is current; substantive conclusions still require independent verification of current law and official source status.
+
+### Validation actually run (exact)
+
+- New file `legal-service/tests/test_phase12_stage2_gate2_policy_topic_context.py` (**16 tests**, Tests A–H): `16 passed`.
+- **Regression-proof check:** with the pre-fix serving adapter restored (`git checkout -- legal-service/app/services/default_agent_serving_service.py`), the same file reports `3 failed, 13 passed` — A (request construction), E (serving-path selection) and G (no widened sharing) fail with `assert 'LIN 26/061' in ''`. They detect the owner's defect; the remaining tests pin the prompt-rendering half of the fix.
+- Focused + related suites: `test_phase12_stage2_gate2_policy_topic_context.py test_phase2_default_agent_serving.py test_post_m4_runtime_governance.py test_conversation_memory_policy_context.py test_agent_contracts.py test_phase7_default_runtime_compatibility.py` → **42 passed**.
+- Full backend suite: `cd legal-service && /home/rico/anaconda3/envs/torch/bin/python -m pytest tests -q` → **1302 passed, 0 failed** (1286 before this fix + the 16 new tests; no regressions).
 
 ## Phase 12 Stage 2 final review corrections A + B (IMPLEMENTED 2026-10-12, uncommitted; awaiting final review)
 
-**Status:** the two defects found in the independent review of `54ec8e3` are corrected. **Gate 2 is still NOT claimed as passed.** No commit, push, merge, deploy or migration; migration `0026` remains unapplied to the real application database.
+**Status:** the two defects found in the independent review of `54ec8e3` are corrected. **Gate 2 is still NOT claimed as passed.** These corrections performed no commit, push, merge or deploy and introduced no migration. Migration `0026` was afterwards applied by the owner to the local `chatbot` database (migration ledger, table, indexes and foreign keys verified); no other database, including `immigration_legal`, was touched.
 
 ### Defect A — a failed attachment load must not permit submission
 

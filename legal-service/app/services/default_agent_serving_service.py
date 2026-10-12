@@ -26,6 +26,7 @@ from app.services.customer_document_context import (
     matched_document_acknowledgements,
 )
 from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
+from app.services.policy_topic_context import extract_policy_topic_context
 from app.services.request_evidence_registry import RequestEvidenceRegistry, create_registry
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,14 @@ class DefaultAgentServingService:
             customer_document_evidence_present = bool(
                 payload.customer_document_evidence.documents
             )
+            # Phase 12 Stage 2 Gate 2 fix: forward the persisted policy topic of a
+            # policy-launched conversation so "this policy" / "这项政策" resolve
+            # after a Fast → Legal Check switch. Bounded conversation context only:
+            # never registry evidence, never a citation, never a system
+            # instruction, and never proof of the topic's current status.
+            policy_topic_context = extract_policy_topic_context(
+                getattr(payload, "frontend_messages", None)
+            )
             runtime_request = AgentRuntimeRequest(
                 request_id=request_id,
                 turn_id=turn_id,
@@ -114,6 +123,7 @@ class DefaultAgentServingService:
                 ),
                 customer_document_context=customer_document_context,
                 customer_document_evidence_present=customer_document_evidence_present,
+                policy_topic_context=policy_topic_context,
             )
             registry = create_registry(request_id)
 

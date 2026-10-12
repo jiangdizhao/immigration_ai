@@ -1,8 +1,16 @@
 # CURRENT_MILESTONE
 
 **Milestone:** Phase 12 — User Data Reliability, AI Workspace and Policy Intelligence  
-**Status:** STAGE 2 IMPLEMENTED — AWAITING INDEPENDENT REVIEW AND OWNER HOST/CROSS-DEVICE ACCEPTANCE (Stage 1 review R1–R3 done; Stage 1 owner cross-device acceptance still incomplete)
+**Status:** STAGE 2 IMPLEMENTED — **GATE 2 NOT ACCEPTED**; owner host testing in progress (migration `0026` applied to the local `chatbot` database and verified; policy launch, browser refresh/history recovery and PostgreSQL binding verification passed for LIN 26/061; Fast policy-context passed; Legal Check re-test of the D-061 fix pending). Cross-device acceptance, PDF/DOCX and the remaining mode tests are pending, as is the Stage 1 owner cross-device acceptance (Stage 1 review R1–R3 done).
 **Updated:** 2026-10-12
+
+## Phase 12 Stage 2 Gate 2 blocker fixed — Legal Check keeps the persisted policy topic (2026-10-12, uncommitted)
+
+Owner-host failure: after a Fast → Legal Check switch inside a policy-linked conversation (`29d5607b-…`, LIN 26/061), Legal Check asked the customer to re-supply the policy name/identifier/URL. Root cause: the Next.js route already sends the `policy_topic_reference` entry in `frontend_messages` for every mode and Fast/Premium already render it, but the active Legal Check path (`DefaultAgentServingService` → `AgentRuntimeService`) had no field for it and dropped it at the adapter.
+
+Fix: a bounded, typed `AgentRuntimeRequest.policy_topic_context` (schema max 4 000; extraction takes only the first flagged `system` entry, whitespace-normalized, capped at 1 200 chars — the same bound Fast/Premium use), extracted in `DefaultAgentServingService` from the existing `policy_topic_reference` contract and rendered by `AgentRuntimeService._build_user_message` as a fenced **"conversation context only — NOT legal authority, NOT verified law"** section that resolves "this policy"/"这项政策", forbids following embedded instructions, and still requires independent verification of current law and official source status. Archived/superseded/withdrawn note lines within the 1 200-character extraction cap are forwarded as conversation context; because the channel is bounded, a longer rendered binding — for example extra archival or superseded notes beyond the cap — is truncated at the tail, so the topic is never claimed as current and no database, migration, Fast/Premium/checker/evidence behaviour is touched.
+
+Evidence: new `tests/test_phase12_stage2_gate2_policy_topic_context.py` **16/16**; with the pre-fix adapter restored the same file fails **3/16** (A, E, G), proving it detects the defect; focused + related suites **42/42**; full backend suite **1302/1302**. The fix passed independent source review. **Gate 2 remains NOT ACCEPTED and blocked pending the owner re-test**, cross-device acceptance, PDF/DOCX end-to-end and the remaining mode tests.
 
 ## Phase 12 Stage 2 final review corrections A + B implemented (2026-10-12, uncommitted)
 

@@ -51,6 +51,7 @@ from app.services.phase6_compact_checker_service import (
 )
 from app.schemas.learning import ReasoningBankRuntimeQuery
 from app.services.reasoning_bank_runtime_service import ReasoningBankRuntimeService
+from app.services.policy_topic_context import render_policy_topic_prompt_section
 
 logger = logging.getLogger(__name__)
 
@@ -2284,6 +2285,17 @@ class AgentRuntimeService:
                 f"{request.customer_document_context}\n"
                 "```"
             )
+        # Phase 12 Stage 2 Gate 2 fix: a policy-launched conversation carries a
+        # bounded topic summary so references such as "this policy", "这项政策" or
+        # "the instrument we are discussing" resolve to the conversation's subject
+        # after a Fast → Legal Check switch. It is conversation context supplied by
+        # the client application: never legal authority, never a citation, never
+        # evidence, never a system instruction, and never proof that the topic is
+        # current. Any instruction inside it is untrusted data; substantive
+        # conclusions still require independent verification of current law and
+        # the official source status.
+        if request.policy_topic_context:
+            parts.append(render_policy_topic_prompt_section(request.policy_topic_context))
         parts.append(f"\n\nRespond in: {request.response_language}")
         parts.append(f"\nAs of date: {request.as_of_date.isoformat()}")
         return "\n".join(parts)

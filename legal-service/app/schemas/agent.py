@@ -187,6 +187,18 @@ class AgentRuntimeRequest(StrictContract):
     # records whether usable evidence was supplied without exposing the packet.
     customer_document_context: str = Field(default="", max_length=72_000)
     customer_document_evidence_present: bool = False
+    # Phase 12 Stage 2 Gate 2 fix: bounded, already-rendered *conversation topic*
+    # context for a policy-launched conversation (the persisted policy binding that
+    # the Next.js app sends as a ``policy_topic_reference`` frontend message).
+    #
+    # This is conversation context supplied by the client application so that
+    # references such as "this policy" or "这项政策" resolve to the conversation's
+    # subject. It is NEVER legal authority, never a citation, never registered in
+    # the RequestEvidenceRegistry, never a system instruction and never proof of
+    # the topic's current legislative status — the runtime must still verify
+    # current law and official source status independently before any substantive
+    # conclusion. Absent/empty for conversations without a policy binding.
+    policy_topic_context: str = Field(default="", max_length=4_000)
 
 
 class DeadlineCheckpoint(StrictContract):
