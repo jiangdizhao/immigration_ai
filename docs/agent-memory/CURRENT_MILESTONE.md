@@ -1,5 +1,20 @@
 # CURRENT_MILESTONE
 
+
+<!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+## LATEST: Phase 12 Stage 3 — AWS Staging rollout complete (2026-10-14)
+
+**Milestone status:** **STAGE 3 CORE FUNCTIONALITY OWNER ACCEPTED; AWS STAGING DEPLOYMENT COMPLETED AND OWNER ACCEPTED.** Implementation branch `codex/phase12-stage3-policy-intelligence`; deployed code SHA `b760c028674efe4fd40190d8b212167729e74348`. See [full deployment record](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md) for immutable digests, verified AWS outputs, restore anchors, and subsequent operating boundaries.
+
+- Secure RDS `chatbot` Drizzle ledger migrated `0023 → 0029`, confirmed `current`; encrypted pre-migration snapshot `immigration-ai-staging-secure-pre-stage3-20261014` available.
+- Web ECS `immigration-ai-staging-web:44` **COMPLETED**, one running, ALB `healthy`; two Stage 3 images. `gpt-6-luna` configured for Default/Fast/checker family and `gpt-6.1-sol` for Premium family. Owner's Fast, Legal Check and Premium browser smoke was successful; Legal Service logs confirm HTTP 200.
+- Policy Sync `immigration-ai-staging-policy-sync:11` registered with explicit `POLICY_INTELLIGENCE_MODEL=gpt-6.1-sol`; EventBridge Scheduler `immigration-ai-staging-policy-sync-daily` is **ENABLED**, targets `:11` at `cron(0 6 * * ? *)`. First actual scheduled run is **unobserved**, not a runtime PASS.
+- **Owner decision:** Stop additional broad tests and end deployment now. Accept untested ancillary functionality by waiver, not fabricated test evidence. **Formal Gate 3 and prior Gate 1/2 deferred checks remain NOT ACCEPTED**, unless separately signed off in future; **production rollout was NOT performed**. No more work until an observed defect or new owner requirement.
+
+Historical sections below reflect earlier development phases, not current AWS deployment status.
+<!-- END AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+
+
 <!-- BEGIN PHASE12_STAGE3_OWNER_SIGNOFF_2026_10_14 -->
 ## LATEST: Stage 3 core functionality owner signed off — 2026-10-14
 
