@@ -1,5 +1,19 @@
 # CURRENT_HANDOFF
 
+
+<!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+## LATEST: Phase 12 Stage 3 — AWS Staging deployment COMPLETED / owner accepted (2026-10-14)
+
+**This is the current continuation state** and supersedes historical notes below saying Stage 3 was uncommitted, undeployed or awaiting staging. **Code commit:** `b760c028674efe4fd40190d8b212167729e74348` on `codex/phase12-stage3-policy-intelligence`. **Full deployment and recovery record:** [AWS Staging Stage 3 deployment](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md). The repository update containing this section is **docs-only**, after the application image release.
+
+- **Database:** `immigration-ai-staging-postgres-secure`, `chatbot` DB, migrated **0023 → 0029** (all 0024–0029); preflight exit 0 and `ledgerStatus=current`. Encrypted, available pre-migration snapshot: `immigration-ai-staging-secure-pre-stage3-20261014`. Legal Service separately connects to `immigration_legal` on the same Secure RDS. No secrets were published.
+- **Web:** `immigration-ai-staging-web:44` deployed from `b760c02`; ECS rolling deployment `COMPLETED` at 1 running / 1 desired, ALB `healthy`; previous `:43` retained for app rollback, circuit breaker + automatic rollback enabled. Both containers `RUNNING`; ECS health `UNKNOWN` is expected with absent container-level probes. Default/Fast/checker settings → `gpt-6-luna`, Premium → `gpt-6.1-sol`; six named model vars changed, other task settings held constant. `GENERAL_QA_MODEL`/`REASONING_MODEL` remain `gpt-5.4-mini`.
+- **Owner acceptance:** All three AI answer modes manually answered successfully. New Legal Service query logs showed **three HTTP 200 responses** (8.1, 30.8, 40.7 seconds); Chatbot → Legal Service `/api/v1/query` integration confirmed in route code. Owner explicitly **accepted staging and waived further optional smoke/regression tests**. Waived tests must not be reported as executed PASS.
+- **Policy Intelligence:** separate `immigration-ai-staging-policy-sync:11` registered using Stage 3 policy-sync image, with explicit `POLICY_INTELLIGENCE_MODEL=gpt-6.1-sol`, `POLICY_INTELLIGENCE_ENABLED=true`. EventBridge Scheduler `default/immigration-ai-staging-policy-sync-daily` **ENABLED**, now points to `:11`, expression `cron(0 6 * * ? *)`; timezone unverified. The first future scheduled `:11` job has **not** been observed; do not claim scheduled runtime PASS or manually trigger it without new owner request.
+- **Boundaries / next turn:** **Staging deployment accepted**, not production deployment or formal comprehensive Gates 1–3 acceptance. No further testing, billing activation, forced ECS restart, policy sync run, AWS cleanup, DB writes or deployment is requested. Await a specific new development instruction or observed issue. Preserve `:43`, Policy Sync `:10`, and the pre-migration snapshot. A Fargate platform retirement email needs no force-redeploy for the Web task launched on 2026-10-14; other affected resources were not audited.
+<!-- END AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+
+
 <!-- BEGIN PHASE12_STAGE3_OWNER_SIGNOFF_2026_10_14 -->
 ## LATEST: Phase 12 Stage 3 — owner functional closeout (2026-10-14)
 
