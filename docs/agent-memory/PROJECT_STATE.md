@@ -1,5 +1,17 @@
 # PROJECT_STATE
 
+
+<!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+**Latest operational state (2026-10-14): Stage 3 SOURCE COMMITTED + AWS STAGING DEPLOYED / OWNER ACCEPTED.** Branch `codex/phase12-stage3-policy-intelligence`, deployed commit `b760c028674efe4fd40190d8b212167729e74348`. The old sections below describing Stage 3 as uncommitted or undeployed are historical. [Detailed AWS staging deployment and rollback handoff](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md).
+
+- Staging AWS `747452892291`, `ap-southeast-2`; Web ECS `immigration-ai-staging-web:44` deployed successfully (1/1 running, ALB healthy); old `:43` kept for reference. Default/Checker/Fast family `gpt-6-luna`, Premium `gpt-6.1-sol`; underlying Legal Service and Chatbot image digests are in the deployment record.
+- Secure RDS chatbot DB `0029` verified post-migration; backup `immigration-ai-staging-secure-pre-stage3-20261014` encrypted and available. Policy Sync task `immigration-ai-staging-policy-sync:11` configured for `gpt-6.1-sol`; enabled EventBridge Scheduler points to `:11` (`cron(0 6 * * ? *)`).
+- Fast/Legal Check/Premium owner smoke and Chatbot → Legal Service HTTP 200 evidence: **PASS**. Other optional broad tests: **owner waived**. First scheduled sync execution: **not observed**. Formal Gate 3 (and older Gate 1/2) NOT retrospectively certified; production not deployed. Owner directed STOP testing and avoid further AWS work until new request or observed defect. Refer to deployment record for precise evidence and recoverability limits.
+
+---
+<!-- END AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+
+
 **Updated:** 2026-10-13 (Stage 3 R2 corrections recorded; D-068)
 **Project:** Immigration AI / Australian immigration & study service platform  
 **Repository:** `jiangdizhao/immigration_ai`
