@@ -1,5 +1,17 @@
 # DECISIONS
 
+
+<!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+## Operational decision — Phase 12 Stage 3 AWS Staging accepted (2026-10-14)
+
+**Owner decision: ACCEPT the completed Stage 3 AWS Staging deployment and stop further optional testing for this rollout.** This operational acceptance updates the older Stage 3 closeout note stating staging was not yet deployed; it **does not** turn unexecuted tests into PASS, approve production, authorize follow-up AWS activity, or close formal Gates 1–3.
+
+Evidence: Secure RDS `chatbot` migration **0023 → 0029** verified current after an encrypted snapshot; ECS Web `:44` rolling deployment `COMPLETED` with healthy ALB; Fast/Legal Check/Premium owner-browser answers and Legal Service HTTP 200; Policy Sync `:11` configured for `gpt-6.1-sol`, EventBridge Scheduler enabled and retargeted to `:11`. **First scheduled Policy Sync run is not observed**. Optional persistence/editorial browser test expansion was waived by owner; none is falsely reported as performed. Source commit `b760c028674efe4fd40190d8b212167729e74348` on `codex/phase12-stage3-policy-intelligence`.
+
+**Operational boundary:** No production deploy, Stripe/WeChat/Alipay activation, extra regression runs, forced restart, ad hoc Policy Sync execution or migration is authorized by this record. Keep old ECS `:43`, Policy Sync `:10` and encrypted snapshot as recovery references; AWS Fargate routine maintenance notice does not call for a new Web rollout. See [deployment and handoff record](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md). Future concrete defects are triaged individually on request.
+<!-- END AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
+
+
 <!-- BEGIN PHASE12_STAGE3_OWNER_SIGNOFF_2026_10_14 -->
 ## Stage 3 owner acceptance — 2026-10-14 (supersedes historical stage-in-progress notes)
 
