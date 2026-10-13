@@ -5,35 +5,55 @@ import {
 import type { PolicyProductAvailability } from "./policy-intelligence-product";
 import type { SiteLocale } from "./site-locale";
 
-export type PolicyPresentationGroup = "published" | "proposed";
+/**
+ * Phase 12 Stage 3 D-073 — public presentation groups.
+ *
+ * Every valid public status belongs to exactly one visible group. This is a
+ * total function on the status vocabulary: an unmapped future status defaults
+ * to `official_update` so an authentic official update can never silently
+ * disappear from the product merely because its status is new or unverified.
+ */
+export type PolicyPresentationGroup =
+  | "published"
+  | "proposed"
+  | "official_update";
 
 export function getPolicyPresentationGroup(
   status: PolicySourceStatus
-): PolicyPresentationGroup | null {
-  if (
-    status === "in_force" ||
-    status === "published_guidance" ||
-    status === "announced"
-  ) {
-    return "published";
+): PolicyPresentationGroup {
+  switch (status) {
+    case "in_force":
+    case "published_guidance":
+    case "announced":
+      return "published";
+    case "proposed":
+    case "consultation":
+      return "proposed";
+    case "enacted_not_commenced":
+    case "superseded":
+    case "withdrawn":
+    case "unknown":
+      return "official_update";
+    default:
+      // Default publication: keep an unrecognized status visible as an
+      // official update (with its own honest status label) instead of hiding it.
+      return "official_update";
   }
-  if (status === "proposed" || status === "consultation") {
-    return "proposed";
-  }
-  return null;
 }
 
 export function getPolicyPresentationGroupLabel(
   group: PolicyPresentationGroup,
   locale: SiteLocale
 ): string {
-  return group === "published"
-    ? locale === "zh-CN"
-      ? "已发布或现行"
-      : "Published or in force"
-    : locale === "zh-CN"
-      ? "拟议 / 计划中"
-      : "Proposed / Planned";
+  if (group === "published") {
+    return locale === "zh-CN" ? "已发布或现行" : "Published or in force";
+  }
+  if (group === "proposed") {
+    return locale === "zh-CN" ? "拟议 / 计划中" : "Proposed / Planned";
+  }
+  return locale === "zh-CN"
+    ? "官方更新（尚未生效或待确认）"
+    : "Official updates (not in force or awaiting confirmation)";
 }
 
 export function getPolicyPresentationStatusLabel(
@@ -41,9 +61,13 @@ export function getPolicyPresentationStatusLabel(
   locale: SiteLocale
 ): string {
   const group = getPolicyPresentationGroup(status);
-  return group
-    ? getPolicyPresentationGroupLabel(group, locale)
-    : getPolicySourceStatusLabel(status, locale);
+  // The coarse group label is used only when it states the same thing as the
+  // status. Official updates always display their exact, honest status
+  // (enacted but not commenced, superseded, withdrawn, legal effect not yet
+  // verified) rather than a "published" bucket label.
+  return group === "official_update"
+    ? getPolicySourceStatusLabel(status, locale)
+    : getPolicyPresentationGroupLabel(group, locale);
 }
 
 const copy = {
@@ -55,16 +79,43 @@ const copy = {
       LIVE_UNAVAILABLE: "政策情报尚未启用",
     },
     availabilityDescription: {
-      LIVE_AVAILABLE: "内容来自当前已发布的政策分析及其官方来源记录。",
+      LIVE_AVAILABLE:
+        "内容来自当前已发布的政策分析及其官方来源记录，并同时显示已审核的兼容内容条目；每条内容都会标注其来源方式。",
       LIVE_AVAILABLE_EMPTY: "实时政策库已启用，目前没有可公开展示的现行内容。",
       LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK:
-        "当前没有可公开展示的实时条目；以下显示已审核的人工发布政策内容。",
-      LIVE_UNAVAILABLE: "实时政策库尚不可用，且目前没有已发布的兼容内容。",
+        "当前没有可公开展示的实时条目；以下显示已审核的兼容内容。",
+      LIVE_UNAVAILABLE: "实时政策库尚不可用，且目前没有可展示的兼容内容。",
     },
     liveOrigin: "实时发布",
     manualOrigin: "人工兼容内容",
+    provenanceCuratedReviewed: "已审核的兼容内容（人工汇编，非官方原文）",
+    provenanceOfficialSourceUpdate: "官方来源更新（AI 解读待补充）",
+    analysisPendingLabel: "官方来源更新",
+    analysisPendingNotice:
+      "这是已核验的官方来源更新。结构化 AI 解读尚未生成或不完整，因此暂不提供解读内容，也不会以解读形式呈现未经核实的说法；法律效力状态仅在可以确认时标注，否则如实显示为待确认。",
+    sourceExcerptNotice: "以下文字为官方来源原文摘录，不是 AI 解读。",
+    provenanceAutomatedVerified: "AI 生成解读（已核验来源）",
+    provenanceLawyerOverride: "经授权律师修订并由律师发布",
+    provenanceLawyerAuthored: "由授权律师撰写",
+    provenanceLawyerAuthoredNotice:
+      "本页面内容由平台授权 Policy Editor 律师撰写，属专业分析与评论，不是官方原文，也不代表政府立场。",
+    provenanceLawyerOverrideNotice:
+      "本页面内容由授权律师在 AI 分析基础上修订后发布；AI 核验结论可能与律师最终发布内容不一致。",
+    newerSourcePendingReview:
+      "已获取该官方来源的更新版本，目前正在审核中；本页面内容可能尚未反映最新来源文本，请在采取行动前核对官方来源。",
+    humanPublicationProtectedNotice:
+      "本页内容由授权律师审定发布。之后获取到的新官方更新会作为待审核版本保留，不会自动替换本页内容。",
+    editorialDates: "律师标注日期",
+    officialSourceDate: "来源标注日期",
+    commencementDate: "生效 / 实施日期",
+    commencementDateNotEstablished: "尚未确立生效日期",
+    reviewedAsOfDate: "法律复核基准日",
+    sourceReferences: "作者提供的官方来源引用",
+    authorAttribution: "作者署名",
+    noOfficialSource: "作者未提供官方来源链接。",
     manualSummary: "政策摘要",
     aiLabel: "AI 生成的解读",
+    bodyContent: "详细内容",
     aiDisclaimer:
       "这是对官方来源的 AI 生成解读，不是官方原文，也不是律师意见。",
     officialSource: "官方来源",
@@ -155,18 +206,47 @@ const copy = {
     },
     availabilityDescription: {
       LIVE_AVAILABLE:
-        "Content comes from currently published policy analysis and its recorded official source.",
+        "Content comes from currently published policy analysis and its recorded official source, and reviewed compatibility entries are listed alongside them; every entry states how it was produced.",
       LIVE_AVAILABLE_EMPTY:
         "The live policy store is available, with no current public items.",
       LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK:
-        "There are currently no public live items; reviewed manually published policy content is shown below.",
+        "There are currently no public live items; the reviewed compatibility entries are shown below.",
       LIVE_UNAVAILABLE:
         "The live policy store is unavailable and there is no published compatibility content.",
     },
     liveOrigin: "Live publication",
     manualOrigin: "Manual compatibility content",
+    provenanceCuratedReviewed:
+      "Reviewed compatibility entry (human-compiled, not official source text)",
+    provenanceOfficialSourceUpdate:
+      "Official source update (AI analysis pending)",
+    analysisPendingLabel: "Official source update",
+    analysisPendingNotice:
+      "This is a verified official source update. The structured AI analysis is not available yet, so no analysis is shown and no unverified interpretation is presented; the legal-effect status is only stated when it can be verified and is otherwise shown as not yet verified.",
+    sourceExcerptNotice:
+      "The text below is a verbatim excerpt of the official source, not AI interpretation.",
+    provenanceAutomatedVerified: "AI-generated analysis (source-verified)",
+    provenanceLawyerOverride: "Revised and published by an authorized lawyer",
+    provenanceLawyerAuthored: "Written by an authorized lawyer",
+    provenanceLawyerAuthoredNotice:
+      "This page is commentary written by an authorized Policy Editor lawyer. It is professional analysis, not official source text, and it does not represent a government position.",
+    provenanceLawyerOverrideNotice:
+      "This page was published by an authorized lawyer after revising the AI analysis. The AI verification outcome may not match the lawyer's final published content.",
+    newerSourcePendingReview:
+      "A newer version of this official source has been captured and is pending review. This page may not yet reflect the newest source text; check the official source before acting.",
+    humanPublicationProtectedNotice:
+      "This page was reviewed and published by an authorized lawyer. Newer official updates are kept as pending review and will not automatically replace this page.",
+    editorialDates: "Editor-stated dates",
+    officialSourceDate: "Stated source date",
+    commencementDate: "Commencement / effective date",
+    commencementDateNotEstablished: "No commencement date established",
+    reviewedAsOfDate: "Law reviewed as of",
+    sourceReferences: "Official references provided by the author",
+    authorAttribution: "Attribution",
+    noOfficialSource: "No official source link was provided by the author.",
     manualSummary: "Policy summary",
     aiLabel: "AI-generated interpretation",
+    bodyContent: "Detailed content",
     aiDisclaimer:
       "This is an AI-generated interpretation of an official source, not official wording or legal advice from a lawyer.",
     officialSource: "Official source",

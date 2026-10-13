@@ -8,14 +8,17 @@ import {
   policyIntelligenceSyncRun,
 } from "@/lib/db/schema";
 import type {
+  AdminPolicyCompatibilityDurability,
   AdminPolicyIntelligenceItem,
   AdminPolicyIntelligenceService,
 } from "./admin-api";
 import {
   ADMIN_SYNC_RUNS_PER_SOURCE,
   ADMIN_SYNC_SOURCE_LIMIT,
+  projectAdminCompatibilityEntries,
   projectAdminPolicyIntelligenceSyncRun,
 } from "./admin-api";
+import { listCompatibilitySourceEntries } from "./compatibility-import";
 import { policyAnalysisSchema } from "./contracts";
 import {
   readAnalysisAttemptDiagnostics,
@@ -24,10 +27,40 @@ import {
 import {
   buildAdminPublicationDiagnostics,
   buildAdminSourceSyncDiagnostic,
+  buildAdminSourceSyncPublicationMetrics,
 } from "./publication-diagnostics";
+import {
+  getPolicyIntelligenceDurabilityRows,
+  getPublishedPolicyIntelligenceList,
+} from "./read-service";
 import { db } from "./server-db";
 
 export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
+  /**
+   * Owner-host correction: the bundled compatibility registry that the public
+   * page lists alongside durable items, with its storage/provenance and whether
+   * a durable item already owns the slug (and in which state).
+   */
+  async listCompatibilityEntries() {
+    const [durabilityRows, published] = await Promise.all([
+      getPolicyIntelligenceDurabilityRows(),
+      getPublishedPolicyIntelligenceList(),
+    ]);
+    const publishedSlugs = new Set(published.map((row) => row.slug));
+    const durableState = new Map<string, AdminPolicyCompatibilityDurability>();
+    for (const row of durabilityRows) {
+      if (publishedSlugs.has(row.slug)) {
+        durableState.set(row.slug, "published");
+      } else if (row.everPublished) {
+        durableState.set(row.slug, "withdrawn");
+      } else {
+        durableState.set(row.slug, "draft");
+      }
+    }
+    const entries = listCompatibilitySourceEntries();
+    return projectAdminCompatibilityEntries({ entries, durableState });
+  },
+
   async listSourceSyncRuns() {
     const sources = await db
       .selectDistinct({
@@ -53,6 +86,7 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
               heldCount: policyIntelligenceSyncRun.heldCount,
               failureCount: policyIntelligenceSyncRun.failureCount,
               safeErrorCode: policyIntelligenceSyncRun.safeErrorCode,
+              metadata: policyIntelligenceSyncRun.metadata,
             })
             .from(policyIntelligenceSyncRun)
             .where(eq(policyIntelligenceSyncRun.sourceConfigId, sourceConfigId))
@@ -64,8 +98,14 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
       )
     );
     return runsBySource.flatMap((runs) =>
-      runs.map((run) =>
-        projectAdminPolicyIntelligenceSyncRun({
+      runs.map((run) => {
+        const metrics = buildAdminSourceSyncPublicationMetrics({
+          publishedCount: run.publishedCount,
+          heldCount: run.heldCount,
+          failureCount: run.failureCount,
+          metadata: run.metadata,
+        });
+        return projectAdminPolicyIntelligenceSyncRun({
           sourceConfigId: run.sourceConfigId,
           status: run.status,
           startedAt: run.startedAt.toISOString(),
@@ -74,12 +114,16 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
           snapshottedCount: run.snapshottedCount,
           unchangedCount: run.unchangedCount,
           analyzedCount: run.analyzedCount,
-          publishedCount: run.publishedCount,
-          heldCount: run.heldCount,
-          failureCount: run.failureCount,
+          publishedCount: metrics.publishedCount,
+          heldCount: metrics.heldCount,
+          failureCount: metrics.failureCount,
           safeErrorCode: run.safeErrorCode,
-        })
-      )
+          fullAnalysisPublishedCount: metrics.fullAnalysisPublishedCount,
+          sourceFirstPublishedCount: metrics.sourceFirstPublishedCount,
+          advisoryCount: metrics.advisoryCount,
+          advisoryReasons: metrics.advisoryReasons,
+        });
+      })
     );
   },
 
@@ -117,42 +161,30 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
       .orderBy(desc(policyIntelligenceItem.updatedAt));
 
     const itemIds = rows.map(({ item }) => item.id);
-    const latestSnapshotByItem = new Map(
-      rows.flatMap(({ item, snapshot }) =>
-        snapshot ? [[item.id, snapshot.id] as const] : []
-      )
-    );
-    const snapshotIds = rows.flatMap(({ snapshot }) =>
-      snapshot ? [snapshot.id] : []
-    );
     const revisions =
-      itemIds.length > 0 && snapshotIds.length > 0
+      itemIds.length > 0
         ? await db
             .select()
             .from(policyIntelligenceAnalysisRevision)
-            .where(
-              and(
-                inArray(policyIntelligenceAnalysisRevision.itemId, itemIds),
-                inArray(
-                  policyIntelligenceAnalysisRevision.snapshotId,
-                  snapshotIds
-                )
-              )
-            )
+            .where(inArray(policyIntelligenceAnalysisRevision.itemId, itemIds))
             .orderBy(desc(policyIntelligenceAnalysisRevision.revisionNumber))
         : [];
+    // Phase 12 Stage 3: the newest revision per item is shown regardless of
+    // which snapshot it belongs to, so a held newer analysis stays visible in
+    // the admin diagnostics even while an older revision is published.
     const latestRevisionByItem = new Map<string, (typeof revisions)[number]>();
     for (const revision of revisions) {
-      if (
-        revision.snapshotId === latestSnapshotByItem.get(revision.itemId) &&
-        !latestRevisionByItem.has(revision.itemId)
-      ) {
+      if (!latestRevisionByItem.has(revision.itemId)) {
         latestRevisionByItem.set(revision.itemId, revision);
       }
     }
 
     const sourceConfigIds = [
-      ...new Set(rows.map(({ item }) => item.primarySourceConfigId)),
+      ...new Set(
+        rows.flatMap(({ item }) =>
+          item.primarySourceConfigId ? [item.primarySourceConfigId] : []
+        )
+      ),
     ];
     const sourceRunEntries = await Promise.all(
       sourceConfigIds.map(async (sourceConfigId) => {
@@ -181,6 +213,8 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
 
     return rows.map(({ item, snapshot, publishedRevision }) => {
       const revision = latestRevisionByItem.get(item.id) ?? null;
+      const sourceConfigId = item.primarySourceConfigId ?? "";
+      const latestRun = latestRunBySource.get(sourceConfigId);
       const parsedAnalysis = revision
         ? policyAnalysisSchema.safeParse(revision.analysis)
         : null;
@@ -228,23 +262,23 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
             }
           : null,
         pipelineFailures: readCandidateFailureDiagnostics(
-          latestRunBySource.get(item.primarySourceConfigId)?.metadata,
+          latestRun?.metadata,
           item.id,
-          item.primarySourceConfigId
+          sourceConfigId
         ),
         analysisAttempts: readAnalysisAttemptDiagnostics(
-          latestRunBySource.get(item.primarySourceConfigId)?.metadata,
+          latestRun?.metadata,
           item.id,
-          item.primarySourceConfigId
+          sourceConfigId
         ),
-        sourceSyncDiagnostic: buildAdminSourceSyncDiagnostic(
-          latestRunBySource.get(item.primarySourceConfigId)
-        ),
+        sourceSyncDiagnostic: buildAdminSourceSyncDiagnostic(latestRun),
         publicationDiagnostics: buildAdminPublicationDiagnostics({
           editorialStatus: item.editorialStatus,
           analysis: revision?.analysis ?? null,
           verification: revision?.verification ?? null,
           evidence,
+          contentKind: revision?.contentKind ?? null,
+          revisionMetadata: revision?.modelMetadata ?? null,
         }),
       };
     }) satisfies AdminPolicyIntelligenceItem[];
@@ -270,38 +304,29 @@ export const adminPolicyIntelligenceService: AdminPolicyIntelligenceService = {
           return { status: "not_archived" as const };
         }
 
-        const [currentPublishedRevision] =
-          item.latestPublishedRevisionId && item.latestSnapshotId
-            ? await tx
-                .select({ id: policyIntelligenceAnalysisRevision.id })
-                .from(policyIntelligenceAnalysisRevision)
-                .innerJoin(
-                  policyIntelligenceSourceSnapshot,
+        // Phase 12 Stage 3 restore semantics (mirrors the audited editorial
+        // service): an intact published revision returns to `published`, even
+        // when a newer source snapshot is awaiting review — that is a
+        // currentness signal, not suppression.
+        const [currentPublishedRevision] = item.latestPublishedRevisionId
+          ? await tx
+              .select({ id: policyIntelligenceAnalysisRevision.id })
+              .from(policyIntelligenceAnalysisRevision)
+              .where(
+                and(
                   eq(
-                    policyIntelligenceSourceSnapshot.id,
-                    policyIntelligenceAnalysisRevision.snapshotId
+                    policyIntelligenceAnalysisRevision.id,
+                    item.latestPublishedRevisionId
+                  ),
+                  eq(policyIntelligenceAnalysisRevision.itemId, item.id),
+                  eq(
+                    policyIntelligenceAnalysisRevision.editorialStatus,
+                    "published"
                   )
                 )
-                .where(
-                  and(
-                    eq(
-                      policyIntelligenceAnalysisRevision.id,
-                      item.latestPublishedRevisionId
-                    ),
-                    eq(policyIntelligenceAnalysisRevision.itemId, item.id),
-                    eq(
-                      policyIntelligenceAnalysisRevision.editorialStatus,
-                      "published"
-                    ),
-                    eq(
-                      policyIntelligenceAnalysisRevision.snapshotId,
-                      item.latestSnapshotId
-                    ),
-                    eq(policyIntelligenceSourceSnapshot.itemId, item.id)
-                  )
-                )
-                .limit(1)
-            : [];
+              )
+              .limit(1)
+          : [];
         editorialStatus = currentPublishedRevision
           ? "published"
           : "review_required";

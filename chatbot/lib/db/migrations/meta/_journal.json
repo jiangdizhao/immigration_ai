@@ -190,6 +190,27 @@
       "when": 1791743365910,
       "tag": "0026_phase12_stage2_conversation_policy_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791849617608,
+      "tag": "0027_phase12_stage3_policy_editorial",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791855068952,
+      "tag": "0028_phase12_stage3_r1_publication_protection",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791859265355,
+      "tag": "0029_phase12_stage3_r2_draft_snapshot_history",
+      "breakpoints": true
     }
   ]
 }

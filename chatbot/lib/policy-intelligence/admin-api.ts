@@ -25,7 +25,8 @@ export type AdminPolicyIntelligenceItem = {
   slug: string;
   title: string | null;
   authority: string | null;
-  sourceConfigId: string;
+  /** Null for lawyer-authored items that have no crawler source config. */
+  sourceConfigId: string | null;
   sourceStatus: string;
   editorialStatus: string;
   publishedAt: string | null;
@@ -51,6 +52,15 @@ export type AdminPolicyIntelligenceSyncRun = {
   heldCount: number;
   failureCount: number;
   safeErrorCode: string | null;
+  /**
+   * Phase 12 Stage 3 D-072 — publication metrics that separate successful
+   * automatic releases (full analysis and source-first fallback) from genuine
+   * technical holds, plus the recorded non-blocking advisories.
+   */
+  fullAnalysisPublishedCount: number;
+  sourceFirstPublishedCount: number;
+  advisoryCount: number;
+  advisoryReasons: Array<{ reasonCode: string; count: number }>;
 };
 
 export const ADMIN_SYNC_RUNS_PER_SOURCE = 5;
@@ -76,6 +86,17 @@ export function projectAdminPolicyIntelligenceSyncRun(
       /^[a-z0-9][a-z0-9._-]{0,99}$/i.test(run.safeErrorCode)
         ? run.safeErrorCode
         : null,
+    fullAnalysisPublishedCount: run.fullAnalysisPublishedCount,
+    sourceFirstPublishedCount: run.sourceFirstPublishedCount,
+    advisoryCount: run.advisoryCount,
+    advisoryReasons: run.advisoryReasons
+      .filter(
+        (entry) =>
+          /^[a-z0-9_]{1,100}$/.test(entry.reasonCode) &&
+          Number.isInteger(entry.count) &&
+          entry.count > 0
+      )
+      .slice(0, 20),
   };
 }
 
@@ -87,8 +108,86 @@ export type AdminPolicyIntelligenceUpdate =
   | { status: "not_found" }
   | { status: "not_archived" };
 
+/**
+ * Phase 12 Stage 3 owner-host correction — compatibility registry view.
+ *
+ * The Admin page must show *both* data sources with their storage/provenance:
+ * durable database-backed items and the bundled compatibility registry that the
+ * public page also lists. Compatibility entries have no database identity, so
+ * they are listed separately and can only be brought under normal editorial
+ * management through the controlled import action.
+ */
+export type AdminPolicyCompatibilityDurability =
+  | "not_managed"
+  | "draft"
+  | "published"
+  | "withdrawn";
+
+export type AdminCompatibilitySourceEntry = {
+  slug: string;
+  sourceStatus: string;
+  source: {
+    authority: string;
+    officialTitle: string;
+    officialUrl: string;
+    sourceDate: string;
+    effectiveDate: string | null;
+    category: string;
+  };
+  copy: {
+    "zh-CN": { title: string; summary: string };
+    en: { title: string; summary: string };
+  };
+};
+
+export type AdminPolicyCompatibilityEntry = {
+  slug: string;
+  title: { "zh-CN": string; en: string };
+  summary: { "zh-CN": string; en: string };
+  authority: string;
+  officialTitle: string;
+  officialUrl: string;
+  sourceDate: string;
+  effectiveDate: string | null;
+  sourceStatus: string;
+  category: string;
+  /** Storage label: these entries live in the bundled registry, not the DB. */
+  storage: "bundled_registry";
+  /** Provenance label: human-compiled reviewed compatibility content. */
+  provenance: "curated_reviewed";
+  editorialStatus: "published";
+  /** Whether a durable item with this slug exists, and in which state. */
+  durableState: AdminPolicyCompatibilityDurability;
+};
+
+export function projectAdminCompatibilityEntries(input: {
+  entries: readonly AdminCompatibilitySourceEntry[];
+  durableState: ReadonlyMap<string, AdminPolicyCompatibilityDurability>;
+}): AdminPolicyCompatibilityEntry[] {
+  return input.entries.map((entry) => ({
+    slug: entry.slug,
+    title: { "zh-CN": entry.copy["zh-CN"].title, en: entry.copy.en.title },
+    summary: {
+      "zh-CN": entry.copy["zh-CN"].summary,
+      en: entry.copy.en.summary,
+    },
+    authority: entry.source.authority,
+    officialTitle: entry.source.officialTitle,
+    officialUrl: entry.source.officialUrl,
+    sourceDate: entry.source.sourceDate,
+    effectiveDate: entry.source.effectiveDate,
+    sourceStatus: entry.sourceStatus,
+    category: entry.source.category,
+    storage: "bundled_registry",
+    provenance: "curated_reviewed",
+    editorialStatus: "published",
+    durableState: input.durableState.get(entry.slug) ?? "not_managed",
+  }));
+}
+
 export type AdminPolicyIntelligenceService = {
   listItems(): Promise<AdminPolicyIntelligenceItem[]>;
+  listCompatibilityEntries(): Promise<AdminPolicyCompatibilityEntry[]>;
   listSourceSyncRuns(): Promise<AdminPolicyIntelligenceSyncRun[]>;
   updateItem(
     itemId: string,
@@ -115,23 +214,33 @@ export async function handleAdminPolicyIntelligenceGet({
   requireAdmin: PolicyAdminAuthenticator;
   service: Pick<
     AdminPolicyIntelligenceService,
-    "listItems" | "listSourceSyncRuns"
+    "listItems" | "listSourceSyncRuns" | "listCompatibilityEntries"
   >;
 }): Promise<Response> {
   const admin = await requireAdmin();
   if (admin instanceof Response) {
     return admin;
   }
-  const [items, sourceSyncRuns] = await Promise.all([
+  const [items, sourceSyncRuns, compatibilityEntries] = await Promise.all([
     service.listItems(),
     service.listSourceSyncRuns(),
+    service.listCompatibilityEntries(),
   ]);
   return Response.json({
     items,
     sourceSyncRuns: sourceSyncRuns.map(projectAdminPolicyIntelligenceSyncRun),
+    compatibilityEntries,
   });
 }
 
+/**
+ * Legacy Admin update path kept for its existing contract tests. The live
+ * Admin page does NOT use this function: `app/api/admin/policy-intelligence`
+ * routes archive/restore through the audited editorial handler
+ * (`handleAdminPolicyItemAction`), which is the single validation path for the
+ * Admin `{ itemId, action }` payload. Do not re-wire the page here without
+ * moving the audit semantics with it.
+ */
 export async function handleAdminPolicyIntelligenceUpdate({
   requireAdmin,
   service,

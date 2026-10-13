@@ -57,8 +57,12 @@ export type ConversationPolicyBindingView = {
   policySourceStatus: string | null;
   policyRevisionToken: string | null;
   title: { "zh-CN": string; en: string };
-  officialTitle: string;
-  officialUrl: string;
+  /**
+   * Official source title/URL. Null for lawyer-authored commentary that
+   * deliberately has no official source; the binding row stores '' in that case.
+   */
+  officialTitle: string | null;
+  officialUrl: string | null;
   boundAt: string;
   /**
    * Always true in Stage 2: the snapshot was captured when the conversation was
@@ -89,6 +93,17 @@ export function normalizePolicyBindingOrigin(
   value: unknown
 ): ConversationPolicyBindingOrigin {
   return value === "manual" ? "manual" : "automated";
+}
+
+/** '' in a NOT NULL column means "no official source was provided". */
+export function nullableBindingText(
+  value: string | null | undefined
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export function normalizePolicyLaunchId(value: unknown): string | null {
@@ -133,11 +148,15 @@ export function conversationPolicyBindingDraft(input: {
   launchId?: string | null;
 }): ConversationPolicyBindingDraft | null {
   const { policy } = input;
-  const officialUrl = policy.source.officialUrl?.trim();
-  const officialTitle = policy.source.officialTitle?.trim();
+  // An official source is optional (lawyer-authored commentary may have none),
+  // but the topic identity (bilingual title) must exist for the card to be
+  // meaningful. Nothing is invented to fill the gap: absent source fields are
+  // stored as '' and normalized back to null on read.
+  const officialUrl = policy.source.officialUrl?.trim() ?? "";
+  const officialTitle = policy.source.officialTitle?.trim() ?? "";
   const titleZh = policy.copy["zh-CN"]?.title?.trim();
   const titleEn = policy.copy.en?.title?.trim();
-  if (!(officialUrl && officialTitle && titleZh && titleEn)) {
+  if (!(titleZh && titleEn)) {
     return null;
   }
   const publishedAt = toIsoTimestamp(policy.revision.publishedAt);
@@ -176,8 +195,8 @@ export function projectPolicyBindingView(
     policySourceStatus: row.policySourceStatus ?? null,
     policyRevisionToken: row.policyRevisionToken ?? null,
     title: { "zh-CN": row.titleZh, en: row.titleEn },
-    officialTitle: row.officialTitle,
-    officialUrl: row.officialUrl,
+    officialTitle: nullableBindingText(row.officialTitle),
+    officialUrl: nullableBindingText(row.officialUrl),
     boundAt: toIsoTimestamp(row.boundAt) ?? new Date(0).toISOString(),
     snapshot: true,
   };
@@ -242,8 +261,16 @@ export function normalizePolicyBindingView(
   if (
     typeof candidate.chatId !== "string" ||
     typeof candidate.policySlug !== "string" ||
-    typeof candidate.officialTitle !== "string" ||
-    typeof candidate.officialUrl !== "string" ||
+    !(
+      candidate.officialTitle === null ||
+      candidate.officialTitle === undefined ||
+      typeof candidate.officialTitle === "string"
+    ) ||
+    !(
+      candidate.officialUrl === null ||
+      candidate.officialUrl === undefined ||
+      typeof candidate.officialUrl === "string"
+    ) ||
     typeof candidate.boundAt !== "string" ||
     !title ||
     typeof title["zh-CN"] !== "string" ||
@@ -276,8 +303,14 @@ export function normalizePolicyBindingView(
         ? candidate.policyRevisionToken
         : null,
     title: { "zh-CN": title["zh-CN"], en: title.en },
-    officialTitle: candidate.officialTitle,
-    officialUrl: candidate.officialUrl,
+    officialTitle: nullableBindingText(
+      typeof candidate.officialTitle === "string"
+        ? candidate.officialTitle
+        : null
+    ),
+    officialUrl: nullableBindingText(
+      typeof candidate.officialUrl === "string" ? candidate.officialUrl : null
+    ),
     boundAt: candidate.boundAt,
     snapshot: true,
   };
@@ -329,19 +362,26 @@ export function buildConversationPolicyTopicContext(
   }
   const titleZh = boundedTopicText(binding.title["zh-CN"], 180);
   const titleEn = boundedTopicText(binding.title.en, 180);
-  const officialTitle = boundedTopicText(binding.officialTitle, 240);
-  let officialUrl: string;
-  try {
-    const parsed = new URL(binding.officialUrl);
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+  const officialTitle = boundedTopicText(
+    binding.officialTitle ?? binding.title.en,
+    240
+  );
+  // Lawyer-authored commentary may carry no official URL; that is recorded
+  // honestly rather than dropping the durable topic.
+  let officialUrl: string | null = null;
+  if (binding.officialUrl) {
+    try {
+      const parsed = new URL(binding.officialUrl);
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+        return null;
+      }
+      officialUrl = parsed.toString();
+      if (officialUrl.length > 500) {
+        return null;
+      }
+    } catch {
       return null;
     }
-    officialUrl = parsed.toString();
-    if (officialUrl.length > 500) {
-      return null;
-    }
-  } catch {
-    return null;
   }
   if (!titleZh || !titleEn || !officialTitle) {
     return null;
@@ -361,7 +401,9 @@ export function buildConversationPolicyTopicContext(
     `Topic title (English): ${titleEn}`,
     `Topic title (Chinese): ${titleZh}`,
     `Official source title: ${officialTitle}`,
-    `Official source URL: ${officialUrl}`,
+    officialUrl
+      ? `Official source URL: ${officialUrl}`
+      : "Official source URL: none provided by the author (lawyer-authored commentary)",
     `Topic snapshot captured when this conversation was created: ${snapshotRevision}`,
   ];
   const current = input.current;

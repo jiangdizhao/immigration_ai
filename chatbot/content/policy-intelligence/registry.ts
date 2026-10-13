@@ -6,6 +6,13 @@ import type { PolicyEntry } from "@/lib/policy-intelligence";
  * Reviewed production fallback content. These entries are sourced from
  * published Australian Government material and remain separate from the
  * automated ingestion pipeline.
+ *
+ * Phase 12 Stage 3 owner-host correction: the public intelligence page lists
+ * these bundled "compatibility" entries *alongside* durable published policies
+ * (durable wins on a matching slug, and a withdrawn durable policy suppresses
+ * its compatibility entry). An authorized editor can bring a single entry under
+ * normal Policy Editor management through the controlled, idempotent import
+ * action, which creates a draft and never publishes by itself.
  */
 export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
   {
@@ -34,7 +41,8 @@ export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
           "该变化影响相关技术签证申请的处理先后顺序；具体适用范围应以官方页面及相应部长指示为准。",
       },
       en: {
-        title: "Skilled visa processing priorities updated from 19 September 2026",
+        title:
+          "Skilled visa processing priorities updated from 19 September 2026",
         summary:
           "The Department of Home Affairs states that processing priorities for certain skilled visa applications are now set by Ministerial Directions 121 and 122. Both directions took effect on 19 September 2026 and replaced the relevant priorities under Ministerial Direction 119.",
         affectedGroup:
@@ -113,17 +121,16 @@ export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
         title: "LIN 26/061：Subclass 651 eVisitor 申请安排更新",
         summary:
           "该立法文书规定 Subclass 651 eVisitor 申请使用 Form 1362 (Internet)，并要求以 internet application 方式递交；同时废止 2016 年旧版 eVisitor 申请安排文书。",
-        affectedGroup:
-          "计划申请 Subclass 651 eVisitor visa 的申请人。",
+        affectedGroup: "计划申请 Subclass 651 eVisitor visa 的申请人。",
         practicalRelevance:
           "申请人应按照现行线上申请安排递交 Subclass 651 申请，并以 Federal Register 上的现行文书核对正式要求。",
       },
       en: {
-        title: "LIN 26/061 updates Subclass 651 eVisitor application arrangements",
+        title:
+          "LIN 26/061 updates Subclass 651 eVisitor application arrangements",
         summary:
           "The instrument specifies Form 1362 (Internet) for a Subclass 651 eVisitor application and requires the application to be made as an internet application. It also repeals the previous 2016 eVisitor arrangements instrument.",
-        affectedGroup:
-          "Applicants seeking a Subclass 651 eVisitor visa.",
+        affectedGroup: "Applicants seeking a Subclass 651 eVisitor visa.",
         practicalRelevance:
           "Applicants should follow the current online application arrangement and check the in-force Federal Register instrument when lodging.",
       },
@@ -161,7 +168,8 @@ export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
           "对于健康要求仍在评估中的新申请和未最终决定申请，应核对 LIN 26/090 的现行指定国家清单及其适用条款。",
       },
       en: {
-        title: "LIN 26/090 updates specified countries for migration health criteria",
+        title:
+          "LIN 26/090 updates specified countries for migration health criteria",
         summary:
           "The instrument specifies countries for subparagraph 2.25A(1)(b) of the Migration Regulations 1994. It applies to visa applications made on or after commencement and to applications made earlier that had not been finally determined before commencement.",
         affectedGroup:
@@ -175,5 +183,5 @@ export const MANUAL_POLICY_ENTRIES: readonly PolicyEntry[] = [
       method: "manual-reviewed-official-source",
       discoveredAt: "2026-10-01T00:00:00.000Z",
     },
-  }
+  },
 ];

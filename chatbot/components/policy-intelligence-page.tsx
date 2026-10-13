@@ -41,7 +41,12 @@ const sourceStatusClasses: Record<PolicySourceStatus, string> = {
   announced: "bg-sky-50 text-sky-800 ring-sky-200",
   proposed: "bg-amber-50 text-amber-800 ring-amber-200",
   consultation: "bg-violet-50 text-violet-800 ring-violet-200",
+  enacted_not_commenced: "bg-teal-50 text-teal-800 ring-teal-200",
   superseded: "bg-slate-100 text-slate-700 ring-slate-200",
+  // Phase 12 Stage 3 D-072: an honest "not established" status is displayed
+  // neutrally; it never implies legal force.
+  unknown: "bg-slate-100 text-slate-600 ring-slate-200",
+  withdrawn: "bg-slate-100 text-slate-700 ring-slate-200",
 };
 
 function StatusPill({

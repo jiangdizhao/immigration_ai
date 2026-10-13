@@ -52,12 +52,19 @@ export type DiscoveryStrategy =
   | "listing_links"
   | "sitemap_links"
   | "federal_register_api"
-  | "home_affairs_site_alerts";
+  | "home_affairs_site_alerts"
+  | "operator_submission";
 
 export type PolicyDiscoverySource = {
   id: string;
   authority: string;
   allowedHostnames: readonly string[];
+  /**
+   * Additional allowlisted hostname suffixes (Phase 12 Stage 3). Used only by
+   * the authorized operator-submission source so staff can submit any official
+   * Australian Government URL; every other source keeps an exact host list.
+   */
+  allowedHostnameSuffixes?: readonly string[];
   seedUrls: readonly string[];
   strategy: DiscoveryStrategy;
   topicHint?: string;
@@ -89,7 +96,9 @@ export type DiscoveryCandidate = {
     alertUpdateDate?: string;
     alertUrl?: string;
     alertPreviewTruncated?: boolean;
-    urlProvenance: "alert" | "seed" | "fetched_page";
+    /** Set for candidates produced from an authorized operator submission. */
+    operatorSubmissionId?: string;
+    urlProvenance: "alert" | "seed" | "fetched_page" | "operator_submission";
   };
 };
 
@@ -123,6 +132,9 @@ export class DiscoveryError extends Error {
   }
 }
 
+export const OPERATOR_SUBMISSION_SOURCE_ID =
+  "operator-submitted-official-url" as const;
+
 export const POLICY_DISCOVERY_SOURCES: readonly PolicyDiscoverySource[] = [
   {
     id: "home-affairs-guidance",
@@ -153,6 +165,57 @@ export const POLICY_DISCOVERY_SOURCES: readonly PolicyDiscoverySource[] = [
     seedUrls: ["https://www.art.gov.au/about-us/news-and-updates"],
     strategy: "listing_links",
     topicHint: "review_procedure",
+  },
+  {
+    id: "home-affairs-announcements",
+    authority: "Department of Home Affairs",
+    allowedHostnames: ["homeaffairs.gov.au", "www.homeaffairs.gov.au"],
+    seedUrls: ["https://www.homeaffairs.gov.au/news-media"],
+    strategy: "listing_links",
+    topicHint: "policy_announcement",
+  },
+  {
+    id: "home-affairs-consultations",
+    authority: "Department of Home Affairs",
+    allowedHostnames: ["homeaffairs.gov.au", "www.homeaffairs.gov.au"],
+    seedUrls: ["https://www.homeaffairs.gov.au/consultations"],
+    strategy: "listing_links",
+    topicHint: "consultation_paper",
+  },
+  {
+    id: "ministerial-announcements",
+    authority: "Ministerial media centre (Home Affairs portfolio)",
+    allowedHostnames: [
+      "minister.homeaffairs.gov.au",
+      "www.minister.homeaffairs.gov.au",
+    ],
+    seedUrls: ["https://minister.homeaffairs.gov.au/"],
+    strategy: "listing_links",
+    topicHint: "ministerial_announcement",
+  },
+  {
+    id: "parliamentary-bills",
+    authority: "Parliament of Australia",
+    allowedHostnames: ["aph.gov.au", "www.aph.gov.au"],
+    seedUrls: [
+      "https://www.aph.gov.au/Parliamentary_Business/Bills_Legislation",
+    ],
+    strategy: "listing_links",
+    topicHint: "parliamentary_bill",
+  },
+  {
+    // Authorized staff may submit an official Australian Government URL that
+    // the standing sources did not discover. The hostname must still be an
+    // exact allowlisted host or an allowlisted official suffix (.gov.au), and
+    // the fetch path keeps every existing protection (DNS/IP checks, redirect
+    // allowlist, byte limits, request deadline).
+    id: OPERATOR_SUBMISSION_SOURCE_ID,
+    authority: "Australian Government official source",
+    allowedHostnames: [],
+    allowedHostnameSuffixes: [".gov.au"],
+    seedUrls: [],
+    strategy: "operator_submission",
+    topicHint: "operator_submission",
   },
 ] as const;
 
@@ -306,7 +369,11 @@ export function assertOfficialUrlAllowed(
   const parsed = new URL(canonicalUrl);
   const hostname = parsed.hostname.toLowerCase();
 
-  if (!source.allowedHostnames.includes(hostname)) {
+  const exactMatch = source.allowedHostnames.includes(hostname);
+  const suffixMatch = (source.allowedHostnameSuffixes ?? []).some((suffix) =>
+    hostname.endsWith(suffix)
+  );
+  if (!(exactMatch || suffixMatch)) {
     throw new DiscoveryError(
       "disallowed_host",
       `Host is not allowlisted for ${source.id}: ${hostname}`
@@ -680,6 +747,260 @@ export function parseSitemapLinks(
   return links;
 }
 
+/**
+ * Phase 12 Stage 3 D-073 — minimal structural exclusion of website
+ * presentation components.
+ *
+ * The crawler must not publish display chrome (site banners, navigation
+ * wrappers, promotional blocks) as if it were policy intelligence. Only
+ * explicit structure qualifies for exclusion:
+ *
+ * - navigation/header/footer regions and elements with an explicit
+ *   presentational ARIA role or `aria-hidden`;
+ * - containers whose own `class`/`id` carries a structural display token
+ *   (banner, masthead, hero, promo, carousel, breadcrumb, nav, menu, ...);
+ * - anchors that are pure same-page/fragment navigation wrappers;
+ * - Home Affairs alert items whose source-provided `type`/`category` names an
+ *   explicit display component.
+ *
+ * Everything else is kept by default: an AI opinion, an uncertain legal
+ * effect, a proposed/consultative status, a promotional-sounding or
+ * "banner"-containing *title*, low estimated importance or a procedural topic
+ * is never a reason to exclude a candidate. No keywords from the candidate
+ * text, no scoring and no ranking are involved. Ambiguity keeps the candidate.
+ * Destinations referenced from a substantive (non-presentation) link or alert
+ * remain discoverable; only the presentation component itself is dropped.
+ */
+export const DISCOVERY_PRESENTATION_CONTAINER_TOKENS: readonly string[] = [
+  "banner",
+  "masthead",
+  "hero",
+  "promo",
+  "promos",
+  "promotion",
+  "promotions",
+  "carousel",
+  "slider",
+  "breadcrumb",
+  "breadcrumbs",
+  "skip",
+  "skiplink",
+  "nav",
+  "navbar",
+  "navigation",
+  "menu",
+  "megamenu",
+  "subnav",
+  "topbar",
+];
+
+/** Explicit ARIA roles that declare a presentational component. */
+export const DISCOVERY_PRESENTATION_ROLES: readonly string[] = [
+  "navigation",
+  "banner",
+  "presentation",
+  "none",
+  "search",
+  "menu",
+  "menubar",
+];
+
+/** Source-provided component types that name a display element outright. */
+export const DISCOVERY_PRESENTATION_COMPONENT_TYPES: readonly string[] = [
+  "banner",
+  "site-banner",
+  "campaign-banner",
+  "advertisement",
+  "advertisement-banner",
+  "promotion",
+  "promotional",
+  "display",
+  "navigation",
+  "menu",
+];
+
+const PRESENTATION_REGION_TAGS = ["nav", "header", "footer"] as const;
+const PRESENTATION_BLOCK_TAGS = [
+  "div",
+  "section",
+  "aside",
+  "ul",
+  "ol",
+  "figure",
+  "span",
+] as const;
+const PRESENTATION_MAX_REGION_CHARS = 200_000;
+
+/** Splits a class/id/role value into comparable lowercase structural tokens. */
+function structuralTokens(value: string): string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function hasPresentationToken(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  return structuralTokens(value).some((token) =>
+    DISCOVERY_PRESENTATION_CONTAINER_TOKENS.includes(token)
+  );
+}
+
+function attributesDeclarePresentation(
+  attributes: Record<string, string>
+): boolean {
+  const role = attributes.role?.trim().toLowerCase();
+  if (role && DISCOVERY_PRESENTATION_ROLES.includes(role)) {
+    return true;
+  }
+  if (attributes["aria-hidden"]?.trim().toLowerCase() === "true") {
+    return true;
+  }
+  return (
+    hasPresentationToken(attributes.class) ||
+    hasPresentationToken(attributes.id) ||
+    hasPresentationToken(attributes["data-component"]) ||
+    hasPresentationToken(attributes["data-block"])
+  );
+}
+
+/** Removes explicit navigation/header/footer regions (bounded, non-greedy). */
+export function stripPresentationRegions(html: string): string {
+  let result = html;
+  for (const tag of PRESENTATION_REGION_TAGS) {
+    result = result.replace(
+      new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}\\s*>`, "gi"),
+      " "
+    );
+  }
+  return result;
+}
+
+/**
+ * Returns the end index of the balanced element starting at `startIndex`, or
+ * null when the element is not closed inside the bounded window.
+ */
+function findBalancedElementEnd(
+  html: string,
+  tag: string,
+  startIndex: number
+): number | null {
+  const openExpression = new RegExp(`<${tag}\\b[^>]*>`, "gi");
+  const closeExpression = new RegExp(`</${tag}\\s*>`, "gi");
+  const limit = Math.min(
+    html.length,
+    startIndex + PRESENTATION_MAX_REGION_CHARS
+  );
+  let depth = 0;
+  let cursor = startIndex;
+  while (cursor < limit) {
+    openExpression.lastIndex = cursor;
+    closeExpression.lastIndex = cursor;
+    const open = openExpression.exec(html);
+    const close = closeExpression.exec(html);
+    const next =
+      close && open
+        ? open.index < close.index
+          ? open
+          : close
+        : (open ?? close);
+    if (!next || next.index >= limit) {
+      return null;
+    }
+    if (next === open) {
+      depth += 1;
+      cursor = open.index + open[0].length;
+    } else if (close) {
+      depth -= 1;
+      const end = close.index + close[0].length;
+      if (depth === 0) {
+        return end;
+      }
+      cursor = end;
+    } else {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Removes block elements whose own opening tag declares a presentation token
+ * in `class`/`id`/`role`/`data-*`.
+ */
+export function stripPresentationTokenRegions(html: string): string {
+  const openExpression = new RegExp(
+    `<(${PRESENTATION_BLOCK_TAGS.join("|")})\\b([^>]*)>`,
+    "gi"
+  );
+  let output = "";
+  let cursor = 0;
+  let match = openExpression.exec(html);
+  while (match !== null) {
+    if (attributesDeclarePresentation(parseTagAttributes(match[2]))) {
+      const end = findBalancedElementEnd(
+        html,
+        match[1].toLowerCase(),
+        match.index
+      );
+      if (end !== null) {
+        output += `${html.slice(cursor, match.index)} `;
+        cursor = end;
+        openExpression.lastIndex = end;
+      }
+    }
+    match = openExpression.exec(html);
+  }
+  return output + html.slice(cursor);
+}
+
+/** Removes every structurally identified presentation component region. */
+export function stripPresentationComponents(html: string): string {
+  return stripPresentationTokenRegions(stripPresentationRegions(html));
+}
+
+/**
+ * True when a link is a website navigation wrapper rather than content: an
+ * empty or fragment-only href, or a helper script link.
+ */
+export function isNavigationOnlyHref(href: string | undefined): boolean {
+  const value = href?.trim();
+  if (!value) {
+    return true;
+  }
+  return value.startsWith("#") || /^javascript:/i.test(value);
+}
+
+/** True when the anchor itself declares presentation semantics. */
+export function isPresentationAnchor(
+  attributes: Record<string, string>
+): boolean {
+  return attributesDeclarePresentation(attributes);
+}
+
+/**
+ * True only when the source itself labels an alert item as a display
+ * component. Unknown or absent values keep the item (default publication).
+ */
+export function isPresentationOnlyAlertComponent(
+  item: Record<string, unknown>
+): boolean {
+  for (const field of ["type", "category"] as const) {
+    const value = normalizedAlertText(item[field]);
+    if (!value) {
+      continue;
+    }
+    const normalized = value.toLowerCase().replace(/\s+/g, "-");
+    if (DISCOVERY_PRESENTATION_COMPONENT_TYPES.includes(normalized)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function parseListingLinks(
   html: string,
   baseUrl: string,
@@ -687,15 +1008,24 @@ export function parseListingLinks(
   maxLinks: number = DISCOVERY_LIMITS.maxLinksPerPage
 ): string[] {
   const links: string[] = [];
-  for (const match of html.matchAll(
-    /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi
-  )) {
+  // D-073: extract links from content only. Navigation/header/footer regions
+  // and elements that declare themselves as presentation components are
+  // website chrome, not content pages.
+  const contentHtml = stripPresentationComponents(html);
+  for (const match of contentHtml.matchAll(/<a\b([^>]*)>/gi)) {
     if (links.length >= maxLinks) {
       break;
     }
+    const attributes = parseTagAttributes(match[1]);
+    if (isPresentationAnchor(attributes)) {
+      continue;
+    }
+    if (isNavigationOnlyHref(attributes.href)) {
+      continue;
+    }
     try {
       const canonicalUrl = assertOfficialUrlAllowed(
-        new URL(decodeHtmlEntities(match[1]), baseUrl).toString(),
+        new URL(decodeHtmlEntities(attributes.href), baseUrl).toString(),
         source
       );
       if (!links.includes(canonicalUrl)) {
@@ -1755,9 +2085,14 @@ export async function discoverPolicyCandidates(
     }
 
     if (source.strategy === "home_affairs_site_alerts") {
-      const rankedGroups = rankHomeAffairsAlerts(
+      // D-073: a source-provided component type that names a display element
+      // (banner/promotional/navigation) is excluded as a presentation
+      // component. Its destination is not blacklisted: a substantive alert or
+      // listing that references the same URL still discovers it.
+      const alertItems = rankHomeAffairsAlerts(
         parseHomeAffairsAlertItems(page.body, limits.maxAlertItems)
-      ).map((item) =>
+      ).filter((item) => !isPresentationOnlyAlertComponent(item));
+      const rankedGroups = alertItems.map((item) =>
         candidatesFromHomeAffairsAlert(
           item,
           page,
@@ -1877,4 +2212,70 @@ export async function discoverPolicyCandidates(
       limits.maxCandidates
     ),
   };
+}
+
+/**
+ * Phase 12 Stage 3 — authorized operator submissions.
+ *
+ * Fetch each submitted official URL through exactly the same protected fetch
+ * path as every other source (host allowlist incl. the official `.gov.au`
+ * suffix, DNS/IP safety, redirect allowlist, byte and timeout limits) and turn
+ * it into a normal discovery candidate for the existing pipeline.
+ */
+export type OperatorSubmissionInput = {
+  id: string;
+  submittedUrl: string;
+};
+
+export type OperatorSubmissionDiscoveryResult = {
+  candidates: DiscoveryCandidate[];
+  failures: {
+    submissionId: string;
+    errorCode: DiscoveryFetchErrorCode | "unknown_error";
+  }[];
+};
+
+export async function discoverOperatorSubmissionCandidates(input: {
+  submissions: readonly OperatorSubmissionInput[];
+  fetchOptions?: DiscoveryFetchOptions;
+  now?: () => string;
+  maxCandidates?: number;
+}): Promise<OperatorSubmissionDiscoveryResult> {
+  const source = getPolicyDiscoverySource(OPERATOR_SUBMISSION_SOURCE_ID);
+  const now = input.now ?? (() => new Date().toISOString());
+  const limit = Math.min(
+    DISCOVERY_LIMITS.maxCandidates,
+    Math.max(1, input.maxCandidates ?? DISCOVERY_LIMITS.maxCandidates)
+  );
+  const candidates: DiscoveryCandidate[] = [];
+  const failures: OperatorSubmissionDiscoveryResult["failures"] = [];
+  for (const submission of input.submissions.slice(0, limit)) {
+    try {
+      const safeUrl = assertOfficialUrlAllowed(submission.submittedUrl, source);
+      const page = await fetchOfficialPage(safeUrl, source, input.fetchOptions);
+      const candidate = candidateFromPage(
+        page,
+        source,
+        now(),
+        "operator_submission"
+      );
+      candidates.push({
+        ...candidate,
+        sourceMetadata: {
+          ...candidate.sourceMetadata,
+          operatorSubmissionId: submission.id,
+          urlProvenance: "operator_submission",
+        },
+      });
+    } catch (error) {
+      // One bad submission must not abort the others. The failure is recorded
+      // against that submission so the operator sees an honest status.
+      failures.push({
+        submissionId: submission.id,
+        errorCode:
+          error instanceof DiscoveryError ? error.code : "unknown_error",
+      });
+    }
+  }
+  return { candidates: deduplicateCandidates(candidates), failures };
 }

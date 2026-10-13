@@ -6,9 +6,15 @@ import {
   policyIntelligenceSourceSnapshot,
   policyIntelligenceSyncRun,
 } from "@/lib/db/schema";
-import { policyAnalysisSchema, policyVerificationSchema } from "./contracts";
-import { PolicyItemArchivedError } from "./pipeline";
+import {
+  declaredSourceStatusFromMetadata,
+  deriveSourceFirstSourceStatus,
+  policyAnalysisSchema,
+  policyVerificationSchema,
+} from "./contracts";
+import { resolveHeldRevisionItemStatus } from "./editorial-core";
 import type {
+  PolicyCandidateWarning,
   PolicyIntelligenceRepository,
   PolicyItemRecord,
   PolicyRevisionRecord,
@@ -16,22 +22,33 @@ import type {
   PolicyRunRecord,
   PolicySnapshotRecord,
 } from "./pipeline";
+import { PolicyItemArchivedError } from "./pipeline";
 import { db } from "./server-db";
 import { restoreSnapshotAuditMetadata } from "./snapshot-metadata";
+import { advisoryReasonCounts } from "./publication-diagnostics";
 
 const asItem = (
   row: typeof policyIntelligenceItem.$inferSelect
-): PolicyItemRecord => ({
-  id: row.id,
-  slug: row.slug,
-  sourceConfigId: row.primarySourceConfigId,
-  sourceId: row.primarySourceId,
-  canonicalOfficialUrl: row.canonicalOfficialUrl,
-  sourceStatus: row.sourceStatus,
-  editorialStatus: row.editorialStatus,
-  latestSnapshotId: row.latestSnapshotId,
-  latestPublishedRevisionId: row.latestPublishedRevisionId,
-});
+): PolicyItemRecord => {
+  if (
+    !row.primarySourceConfigId ||
+    !row.primarySourceId ||
+    !row.canonicalOfficialUrl
+  ) {
+    throw new Error("policy_item_source_identity_missing");
+  }
+  return {
+    id: row.id,
+    slug: row.slug,
+    sourceConfigId: row.primarySourceConfigId,
+    sourceId: row.primarySourceId,
+    canonicalOfficialUrl: row.canonicalOfficialUrl,
+    sourceStatus: row.sourceStatus,
+    editorialStatus: row.editorialStatus,
+    latestSnapshotId: row.latestSnapshotId,
+    latestPublishedRevisionId: row.latestPublishedRevisionId,
+  };
+};
 
 const asSnapshot = (
   row: typeof policyIntelligenceSourceSnapshot.$inferSelect
@@ -74,9 +91,17 @@ function runValues(run: PolicyRunRecord) {
     heldCount: run.heldCount,
     failureCount: run.failureCount,
     safeErrorCode: run.safeErrorCode,
+    // Phase 12 Stage 3 D-072: the new counters and the non-blocking advisories
+    // live in the existing bounded metadata JSON, so no schema migration is
+    // required. `sourceFirstPublishedCount` is a subset of `publishedCount`;
+    // `advisoryReasons` counts every recorded advisory for operator reporting.
     metadata: {
       candidateFailures: run.candidateFailures,
       analysisAttempts: run.analysisAttempts,
+      candidateWarnings: run.candidateWarnings,
+      sourceFirstPublishedCount: run.sourceFirstPublishedCount,
+      advisoryCount: run.candidateWarnings.length,
+      advisoryReasons: advisoryReasonCounts(run.candidateWarnings),
     },
   };
 }
@@ -84,15 +109,31 @@ function runValues(run: PolicyRunRecord) {
 function revisionResult(
   row: typeof policyIntelligenceAnalysisRevision.$inferSelect
 ): PolicyRevisionRecord {
+  if (!row.snapshotId) {
+    // Only the automated pipeline maps rows through this projection; human
+    // editorial revisions are handled by the editorial repository.
+    throw new Error("policy_revision_metadata_missing");
+  }
+  const contentKind = row.contentKind === "source_first" ? "source_first" : "ai_analysis";
+  if (contentKind === "ai_analysis") {
+    if (!row.analysis || !row.verification || !row.modelMetadata) {
+      throw new Error("policy_revision_metadata_missing");
+    }
+  }
   return {
     id: row.id,
     itemId: row.itemId,
     snapshotId: row.snapshotId,
     analysisFingerprint: row.analysisFingerprint,
     revisionNumber: row.revisionNumber,
-    analysis: policyAnalysisSchema.parse(row.analysis),
-    verification: policyVerificationSchema.parse(row.verification),
-    modelMetadata: row.modelMetadata as PolicyRevisionRecord["modelMetadata"],
+    contentKind,
+    schemaVersion: row.schemaVersion,
+    analysis: row.analysis ? policyAnalysisSchema.parse(row.analysis) : null,
+    verification: row.verification
+      ? policyVerificationSchema.parse(row.verification)
+      : null,
+    modelMetadata: (row.modelMetadata ??
+      {}) as PolicyRevisionRecord["modelMetadata"],
     editorialStatus:
       row.editorialStatus === "published"
         ? "published"
@@ -113,7 +154,14 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
       mode: run.mode,
       status: "running",
       startedAt: new Date(run.startedAt),
-      metadata: { candidateFailures: [], analysisAttempts: [] },
+      metadata: {
+        candidateFailures: [],
+        analysisAttempts: [],
+        candidateWarnings: [],
+        sourceFirstPublishedCount: 0,
+        advisoryCount: 0,
+        advisoryReasons: {},
+      },
     });
   },
   async finishRun(run) {
@@ -331,6 +379,7 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
           snapshotId: revision.snapshotId,
           analysisFingerprint: revision.analysisFingerprint,
           revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+          contentKind: "ai_analysis",
           schemaVersion: revision.analysis.schemaVersion,
           analysis: revision.analysis,
           verification: revision.verification,
@@ -343,13 +392,33 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
         item.latestSnapshotId === revision.snapshotId &&
         item.editorialStatus !== "archived"
       ) {
-        await tx
-          .update(policyIntelligenceItem)
-          .set({
-            editorialStatus: "review_required",
-            updatedAt: new Date(revision.generatedAt),
-          })
-          .where(eq(policyIntelligenceItem.id, item.id));
+        // Phase 12 Stage 3 R2: a held AI analysis must not rewrite the meaning of
+        // an editor-approved publication. On an editor-protected item that
+        // already publishes a human revision the item status stays as it is; the
+        // held revision itself remains `review_required`, so the pending-review
+        // signal and the public currentness warning stay honest.
+        const nextStatus = resolveHeldRevisionItemStatus({
+          currentStatus: item.editorialStatus,
+          publicationMode:
+            item.publicationMode === "human_protected"
+              ? "human_protected"
+              : "automatic",
+          hasPublishedRevision: item.latestPublishedRevisionId !== null,
+        });
+        if (nextStatus !== item.editorialStatus) {
+          await tx
+            .update(policyIntelligenceItem)
+            .set({
+              editorialStatus: nextStatus,
+              updatedAt: new Date(revision.generatedAt),
+            })
+            .where(eq(policyIntelligenceItem.id, item.id));
+        } else {
+          await tx
+            .update(policyIntelligenceItem)
+            .set({ updatedAt: new Date(revision.generatedAt) })
+            .where(eq(policyIntelligenceItem.id, item.id));
+        }
       }
       return { revision: revisionResult(row), created: true };
     });
@@ -366,7 +435,10 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
         throw new Error("policy_item_missing");
       }
       const [snapshot] = await tx
-        .select({ id: policyIntelligenceSourceSnapshot.id })
+        .select({
+          id: policyIntelligenceSourceSnapshot.id,
+          sourceMetadata: policyIntelligenceSourceSnapshot.sourceMetadata,
+        })
         .from(policyIntelligenceSourceSnapshot)
         .where(
           and(
@@ -403,6 +475,55 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
       }
       if (item.latestSnapshotId !== revision.snapshotId) {
         throw new Error("revision_snapshot_not_latest");
+      }
+      /**
+       * Phase 12 Stage 3 R1 — durable human-publication protection.
+       *
+       * The item is `human_protected` because an authorized Policy Editor
+       * reviewed and published the current revision. An eligible automated
+       * revision must never silently replace or unpublish that approved
+       * revision: the new revision is stored as pending review while the
+       * editor-approved revision stays public, and the public page reports the
+       * newer source as pending review.
+       */
+      if (item.publicationMode === "human_protected") {
+        const [latestHeld] = await tx
+          .select({
+            revisionNumber: policyIntelligenceAnalysisRevision.revisionNumber,
+          })
+          .from(policyIntelligenceAnalysisRevision)
+          .where(eq(policyIntelligenceAnalysisRevision.itemId, item.id))
+          .orderBy(desc(policyIntelligenceAnalysisRevision.revisionNumber))
+          .limit(1);
+        const [heldRow] = await tx
+          .insert(policyIntelligenceAnalysisRevision)
+          .values({
+            itemId: revision.itemId,
+            snapshotId: revision.snapshotId,
+            analysisFingerprint: revision.analysisFingerprint,
+            revisionNumber: (latestHeld?.revisionNumber ?? 0) + 1,
+            contentKind: revision.contentKind,
+            schemaVersion: revision.schemaVersion,
+            analysis: revision.analysis,
+            verification: revision.verification,
+            modelMetadata: revision.modelMetadata,
+            editorialStatus: "review_required",
+            generatedAt: new Date(revision.generatedAt),
+          })
+          .returning();
+        // The item keeps its published pointer, its `published` status and its
+        // editor-approved source status. Only recency metadata advances.
+        if (item.latestSnapshotId === revision.snapshotId) {
+          await tx
+            .update(policyIntelligenceItem)
+            .set({ updatedAt: new Date(revision.generatedAt) })
+            .where(eq(policyIntelligenceItem.id, item.id));
+        }
+        return {
+          revision: revisionResult(heldRow),
+          created: true,
+          heldForHumanProtection: true,
+        };
       }
       let current:
         | typeof policyIntelligenceAnalysisRevision.$inferSelect
@@ -450,9 +571,10 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
         .values({
           itemId: revision.itemId,
           snapshotId: revision.snapshotId,
+          contentKind: revision.contentKind,
+          schemaVersion: revision.schemaVersion,
           analysisFingerprint: revision.analysisFingerprint,
           revisionNumber: (latest?.revisionNumber ?? 0) + 1,
-          schemaVersion: revision.analysis.schemaVersion,
           analysis: revision.analysis,
           verification: revision.verification,
           modelMetadata: revision.modelMetadata,
@@ -461,10 +583,23 @@ export const policyIntelligenceRepository: PolicyIntelligenceRepository = {
           publishedAt: now,
         })
         .returning();
+      // Source-first publications never assert a legal effect that could not
+      // be established: the item status is derived honestly (unknown unless the
+      // acquisition recorded an explicit allowlisted declared status).
+      const publishedSourceStatus =
+        revision.contentKind === "source_first"
+          ? deriveSourceFirstSourceStatus({
+              declaredSourceStatus: declaredSourceStatusFromMetadata(
+                snapshot.sourceMetadata
+              ),
+            })
+          : revision.analysis
+            ? revision.analysis.sourceStatus.value
+            : item.sourceStatus;
       await tx
         .update(policyIntelligenceItem)
         .set({
-          sourceStatus: revision.analysis.sourceStatus.value,
+          sourceStatus: publishedSourceStatus,
           editorialStatus: "published",
           latestPublishedRevisionId: row.id,
           updatedAt: now,

@@ -18,6 +18,7 @@ import {
   fingerprintContent,
   getPolicyDiscoverySource,
   HOME_AFFAIRS_ALERT_LIMITS,
+  isPresentationOnlyAlertComponent,
   parseArtNewsUpdateLinks,
   parseHomeAffairsAlertItems,
   parseListingLinks,
@@ -1339,4 +1340,93 @@ test("production editorial registry contains reviewed official fallback and publ
       /policy-intelligence-discovery|policy-discover|candidates/
     );
   }
+});
+
+test("D-073: presentation components are skipped while content and destinations stay discoverable", () => {
+  const source = getPolicyDiscoverySource("home-affairs-announcements");
+  const listing = `
+    <html><body>
+      <header><a href="/nav/global-login">Global login</a></header>
+      <nav><a href="/nav/189-visa">189 visa page banner</a></nav>
+      <div class="site-banner">
+        <a href="/nav/mfa">MFA to SkillSelect</a>
+      </div>
+      <div class="content">
+        <a href="/news-media/substantive-update">Substantive policy update</a>
+        <a href="/visa/189" title="189 visa landing page banner">Visa 189</a>
+        <a href="#top" role="navigation">Back to top</a>
+        <a aria-hidden="true" href="/nav/hidden-link">Hidden</a>
+        <a class="promo-cta" href="/promo/cta">Promotional call to action</a>
+      </div>
+      <footer><a href="/legal/privacy">Privacy</a></footer>
+    </body></html>`;
+  assert.deepEqual(parseListingLinks(listing, source.seedUrls[0], source), [
+    "https://www.homeaffairs.gov.au/news-media/substantive-update",
+    "https://www.homeaffairs.gov.au/visa/189",
+  ]);
+  // A URL that is also linked from substantive content is never blacklisted
+  // just because a banner referenced it as well.
+  const sharedDestination = `
+    <div class="banner"><a href="/news-media/announcement">Announcement</a></div>
+    <div class="content"><a href="/news-media/announcement">Announcement</a></div>`;
+  assert.deepEqual(
+    parseListingLinks(sharedDestination, source.seedUrls[0], source),
+    ["https://www.homeaffairs.gov.au/news-media/announcement"]
+  );
+});
+
+test("D-073: only source-provided display types exclude an alert component", () => {
+  assert.equal(isPresentationOnlyAlertComponent({ type: "Banner" }), true);
+  assert.equal(
+    isPresentationOnlyAlertComponent({ category: "Site banner" }),
+    true
+  );
+  assert.equal(
+    isPresentationOnlyAlertComponent({ type: "Advertisement" }),
+    true
+  );
+  // Substantive, procedural or simply unknown types are always kept.
+  assert.equal(isPresentationOnlyAlertComponent({ type: "Alert" }), false);
+  assert.equal(isPresentationOnlyAlertComponent({ type: "News" }), false);
+  assert.equal(isPresentationOnlyAlertComponent({}), false);
+  // A title is never structural evidence: "banner" in the text keeps the item.
+  assert.equal(
+    isPresentationOnlyAlertComponent({
+      title: "189 visa landing page banner",
+      content: "Banner text",
+    }),
+    false
+  );
+});
+
+test("D-073: a banner-typed Home Affairs alert is excluded from discovery", async () => {
+  const source = getPolicyDiscoverySource("home-affairs-guidance");
+  const html = `<script id="siteData" type="application/json">${JSON.stringify({
+    alertItems: [
+      {
+        title: "189 visa landing page banner",
+        content: "Promotional display component for the 189 visa page.",
+        urls: ["/discovery-fixture/banner-component"],
+        type: "Banner",
+      },
+      {
+        title: "Skilled visa processing priorities update",
+        content: "The department published updated processing priorities.",
+        urls: ["/discovery-fixture/announcement"],
+      },
+    ],
+  })}</script>`;
+  const result = await discoverPolicyCandidates({
+    sourceId: source.id,
+    now: () => "2026-10-06T00:00:00.000Z",
+    fetchOptions: {
+      lookupHost: publicLookup,
+      fetchImpl: () => Promise.resolve(response(html)),
+    },
+  });
+  assert.equal(result.candidates.length, 1);
+  assert.equal(
+    result.candidates[0].discoveredTitle,
+    "Skilled visa processing priorities update"
+  );
 });

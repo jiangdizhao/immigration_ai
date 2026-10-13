@@ -7,6 +7,11 @@ const expectedSourceOrder = [
   "home-affairs-guidance",
   "federal-register-legislation",
   "art-immigration-review",
+  "home-affairs-announcements",
+  "home-affairs-consultations",
+  "ministerial-announcements",
+  "parliamentary-bills",
+  "operator-submitted-official-url",
 ];
 
 test("all configured policy sources run serially in the required order", async () => {
@@ -44,13 +49,15 @@ test("a source failure does not prevent later sources and yields aggregate failu
   assert.deepEqual(result, {
     status: "partial_failure",
     exitCode: 1,
-    sources: [
-      { sourceId: expectedSourceOrder[0], status: "failed" },
-      { sourceId: expectedSourceOrder[1], status: "succeeded" },
-      { sourceId: expectedSourceOrder[2], status: "succeeded" },
-    ],
+    sources: expectedSourceOrder.map((sourceId, index) => ({
+      sourceId,
+      status: index === 0 ? "failed" : "succeeded",
+    })),
   });
-  assert.doesNotMatch(JSON.stringify(result), /provider_secret|raw source payload/);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /provider_secret|raw source payload/
+  );
 });
 
 test("an all-success aggregate contains only bounded source status", async () => {
@@ -64,5 +71,11 @@ test("an all-success aggregate contains only bounded source status", async () =>
       status: "succeeded",
     })),
   });
-  assert.equal(JSON.stringify(result).length < 500, true);
+  // The aggregate carries only bounded per-source status: no provider text,
+  // payloads or candidate content, so its size stays proportional to the
+  // configured source count (eight sources today).
+  assert.equal(
+    JSON.stringify(result).length < 100 * result.sources.length + 200,
+    true
+  );
 });

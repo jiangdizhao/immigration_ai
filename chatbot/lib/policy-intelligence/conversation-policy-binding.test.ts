@@ -28,6 +28,7 @@ function policyFixture(
     id: "item-1",
     slug: "evisitor-application-arrangements-lin-26-061",
     origin: "automated",
+    analysisPending: false,
     sourceStatus: "announced",
     source: {
       authority: "Department of Home Affairs",
@@ -37,6 +38,7 @@ function policyFixture(
       effectiveDate: null,
       jurisdiction: "Cth",
       category: { "zh-CN": "签证安排", en: "Visa arrangements" },
+      sourceReferences: [],
     },
     copy: {
       "zh-CN": { title: "eVisitor 申请安排更新", summary: "摘要" },
@@ -59,6 +61,12 @@ function policyFixture(
     aiGenerated: true,
     officialExcerpt: null,
     lawyerCommentary: null,
+    provenance: "automated_verified",
+    body: null,
+    publicAttribution: null,
+    editorialDates: null,
+    humanPublicationProtected: false,
+    newerSourcePendingReview: false,
     ...overrides,
   };
 }
@@ -112,22 +120,31 @@ test("the persisted snapshot keeps the original bilingual topic identity", () =>
   );
 });
 
-test("a policy without a usable official source cannot produce a binding", () => {
-  const broken = [
-    policyFixture({ source: { ...policyFixture().source, officialUrl: "" } }),
-    policyFixture({
-      source: { ...policyFixture().source, officialTitle: "  " },
-    }),
-    policyFixture({
-      copy: {
-        "zh-CN": { title: " ", summary: "" },
-        en: { title: "Title", summary: "" },
+test("a policy without an official source still binds as a topic, but a titleless policy cannot", () => {
+  // Phase 12 Stage 3: lawyer-authored commentary legitimately has no official
+  // source. The binding stores '' for the absent source fields (normalized
+  // back to null on read) and the topic identity remains usable.
+  const withoutSource = conversationPolicyBindingDraft({
+    policy: policyFixture({
+      source: {
+        ...policyFixture().source,
+        officialUrl: null,
+        officialTitle: null,
       },
     }),
-  ];
-  for (const entry of broken) {
-    assert.equal(conversationPolicyBindingDraft({ policy: entry }), null);
-  }
+  });
+  assert.ok(withoutSource);
+  assert.equal(withoutSource.officialUrl, "");
+  assert.equal(withoutSource.officialTitle, "");
+  // A policy with no usable bilingual topic title still cannot produce a
+  // binding: the card would have nothing honest to display.
+  const titleless = policyFixture({
+    copy: {
+      "zh-CN": { title: " ", summary: "" },
+      en: { title: "Title", summary: "" },
+    },
+  });
+  assert.equal(conversationPolicyBindingDraft({ policy: titleless }), null);
 });
 
 test("launch ids are bounded idempotency keys, never identity", () => {

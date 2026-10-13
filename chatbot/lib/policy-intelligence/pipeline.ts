@@ -1,27 +1,33 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  classifyPolicyAnalysisFailure,
-  PolicyAnalysisDiagnosticError,
-} from "./analysis-diagnostics";
+import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
+import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import type {
   PolicyAnalysisAttemptTelemetry,
   PolicyAnalysisExecutionResult,
 } from "./analysis-diagnostics";
-import type { OfficialSourceAcquisition } from "../../scripts/policy-intelligence-acquisition";
-import type { DiscoveryCandidate } from "../../scripts/policy-intelligence-discovery";
 import {
-  evaluatePublicationGate,
+  classifyPolicyAnalysisFailure,
+  PolicyAnalysisDiagnosticError,
+  sourceFirstReasonForAnalysisFailure,
+  sourceFirstReasonForVerifierFailure,
+} from "./analysis-diagnostics";
+import {
+  evaluatePolicyPublicationDecision,
   POLICY_ANALYSIS_SCHEMA,
   POLICY_ANALYZER_VERSION,
+  POLICY_SOURCE_FIRST_SCHEMA,
   POLICY_VERIFICATION_SCHEMA,
   POLICY_VERIFIER_VERSION,
   type PolicyAnalysis,
   type PolicyEvidencePacketItem,
+  type PolicySourceFirstReason,
   type PolicyVerification,
+  type PolicyWithheldUnit,
   policyAnalysisSchema,
   validatePolicyVerification,
 } from "./contracts";
 import type { PolicyAnalysisVerifier, PolicyAnalyzer } from "./provider";
+import { explainPublicationReason } from "./publication-diagnostics";
 
 export type PolicyItemRecord = {
   id: string;
@@ -42,14 +48,25 @@ export type PolicySnapshotRecord = OfficialSourceAcquisition & {
   evidenceTruncated: boolean;
 };
 
+/**
+ * Phase 12 Stage 3 D-072 — stored revision metadata.
+ *
+ * `analysis`/`verification` are present for `ai_analysis` revisions and null
+ * for `source_first` revisions, which publish the authentic official source
+ * identity honestly instead of fabricating an analysis. The optional
+ * `sourceFirst`, `advisories` and `withheld` fields record the non-blocking AI
+ * signals and the prose that was withheld from publication.
+ */
 export type PolicyRevisionRecord = {
   id: string;
   analysisFingerprint: string;
   itemId: string;
   snapshotId: string;
   revisionNumber: number;
-  analysis: PolicyAnalysis;
-  verification: PolicyVerification;
+  contentKind: "ai_analysis" | "source_first";
+  schemaVersion: string;
+  analysis: PolicyAnalysis | null;
+  verification: PolicyVerification | null;
   modelMetadata: {
     provider: "openai" | "fixture";
     model: string;
@@ -58,11 +75,47 @@ export type PolicyRevisionRecord = {
     maxOutputTokens: number;
     analyzerVersion: string;
     verifierVersion: string;
+    /** Present only on `source_first` revisions. */
+    sourceFirst?: { reason: PolicySourceFirstReason };
+    /** Non-blocking AI advisories recorded for the operator/lawyer. */
+    advisories?: string[];
+    /** Analysis units withheld from the published analysis. */
+    withheld?: PolicyWithheldUnit[];
   };
   editorialStatus: "review_required" | "published" | "superseded";
   generatedAt: string;
   publishedAt: string | null;
   supersededAt: string | null;
+};
+
+/** A revision write request shared by the held and published paths. */
+export type PolicyRevisionWrite = Omit<
+  PolicyRevisionRecord,
+  "id" | "revisionNumber" | "publishedAt" | "supersededAt" | "editorialStatus"
+>;
+
+/**
+ * A held revision always stores a complete AI analysis for lawyer review:
+ * source-first falls back to publication rather than to a hold.
+ */
+export type PolicyHeldRevisionWrite = PolicyRevisionWrite & {
+  contentKind: "ai_analysis";
+  analysis: PolicyAnalysis;
+  verification: PolicyVerification;
+};
+
+/**
+ * Phase 12 Stage 3 D-072 — a non-blocking signal recorded for operators and
+ * lawyers. Warnings never cause a publication to be reported as failed.
+ */
+export type PolicyCandidateWarning = {
+  itemId: string | null;
+  snapshotId: string | null;
+  sourceConfigId: string;
+  stage: PolicyCandidateFailureStage;
+  reasonCode: string;
+  message: string;
+  timestamp: string;
 };
 
 export type PolicyRunRecord = {
@@ -76,11 +129,23 @@ export type PolicyRunRecord = {
   snapshottedCount: number;
   unchangedCount: number;
   analyzedCount: number;
+  /** All successful automatic publications (full analysis + source-first). */
   publishedCount: number;
+  /**
+   * Phase 12 Stage 3 D-072 — the subset of `publishedCount` published as a
+   * minimal official-source notice because the analysis was unavailable,
+   * unusable or unpublished by advisory verifier disagreement.
+   */
+  sourceFirstPublishedCount: number;
   heldCount: number;
   failureCount: number;
   safeErrorCode: string | null;
   candidateFailures: PolicyCandidateFailureDiagnostic[];
+  /**
+   * Non-blocking advisories. They are recorded for operator/lawyer review and
+   * must never be reported as a failed publication.
+   */
+  candidateWarnings: PolicyCandidateWarning[];
   analysisAttempts: PolicyCandidateAnalysisAttempt[];
 };
 
@@ -118,6 +183,12 @@ export type MaybePromise<T> = T | Promise<T>;
 export type PolicyRevisionWriteResult = {
   revision: PolicyRevisionRecord;
   created: boolean;
+  /**
+   * Phase 12 Stage 3 R1 — the automated write was stored as pending review
+   * because the item is under durable human-publication protection. The
+   * editor-approved revision remains the current public version.
+   */
+  heldForHumanProtection?: boolean;
 };
 
 export class PolicyItemArchivedError extends Error {
@@ -151,10 +222,12 @@ export interface PolicyIntelligenceRepository {
       | "unchangedCount"
       | "analyzedCount"
       | "publishedCount"
+      | "sourceFirstPublishedCount"
       | "heldCount"
       | "failureCount"
       | "safeErrorCode"
       | "candidateFailures"
+      | "candidateWarnings"
       | "analysisAttempts"
     >
   ): MaybePromise<void>;
@@ -183,28 +256,26 @@ export interface PolicyIntelligenceRepository {
     staleAcquisition?: boolean;
   }>;
   saveHeldRevision(
-    revision: Omit<
-      PolicyRevisionRecord,
-      "id" | "revisionNumber" | "publishedAt" | "supersededAt"
-    >
+    revision: PolicyHeldRevisionWrite
   ): MaybePromise<PolicyRevisionWriteResult>;
   publishRevision(
-    revision: Omit<
-      PolicyRevisionRecord,
-      | "id"
-      | "revisionNumber"
-      | "publishedAt"
-      | "supersededAt"
-      | "editorialStatus"
-    >
+    revision: PolicyRevisionWrite
   ): MaybePromise<PolicyRevisionWriteResult>;
 }
+
+export type PolicySyncOutcomeKind =
+  | "published"
+  | "source_first_published"
+  | "held"
+  | "unchanged"
+  | "failed"
+  | "suppressed";
 
 export type PolicySyncResult = {
   run: PolicyRunRecord;
   outcomes: Array<{
     candidateId: string;
-    outcome: "published" | "held" | "unchanged" | "failed" | "suppressed";
+    outcome: PolicySyncOutcomeKind;
     reasonCode?: string;
   }>;
 };
@@ -232,10 +303,20 @@ function stableIdentity(sourceConfigId: string, canonicalUrl: string): string {
 
 export function computePolicyAnalysisFingerprint(
   snapshotId: string,
-  metadata: PolicyRevisionRecord["modelMetadata"]
+  metadata: PolicyRevisionRecord["modelMetadata"],
+  contentMarker: {
+    contentKind: "ai_analysis" | "source_first";
+  } = {
+    contentKind: "ai_analysis",
+  }
 ): string {
   const identity = {
     snapshotId,
+    // D-073: the identity covers the content kind only. The AI failure reason
+    // for a source-first notice stays diagnostic metadata, so the same
+    // snapshot never produces two source-first revisions merely because
+    // different runs failed differently.
+    contentKind: contentMarker.contentKind,
     analysisSchemaVersion: POLICY_ANALYSIS_SCHEMA,
     verificationSchemaVersion: POLICY_VERIFICATION_SCHEMA,
     analyzerVersion: metadata.analyzerVersion,
@@ -301,15 +382,24 @@ function safeErrorCode(error: unknown): string {
 const DIAGNOSTIC_ERROR_MESSAGES: Record<string, string> = {
   provider_timeout: "The analysis provider did not return a result in time.",
   provider_error: "The analysis provider could not complete this request.",
-  pipeline_error: "The item could not be processed due to an internal pipeline error.",
-  source_config_mismatch: "The discovered candidate did not match its configured source.",
-  source_identity_incomplete: "The acquired source was missing required identity information.",
-  unknown_analysis_evidence_ref: "The analysis referred to evidence outside the retrieved snapshot.",
+  pipeline_error:
+    "The item could not be processed due to an internal pipeline error.",
+  source_config_mismatch:
+    "The discovered candidate did not match its configured source.",
+  source_identity_incomplete:
+    "The acquired source was missing required identity information.",
+  unknown_analysis_evidence_ref:
+    "The analysis referred to evidence outside the retrieved snapshot.",
 };
 
-const CANDIDATE_DIAGNOSTIC_CODES = new Set(Object.keys(DIAGNOSTIC_ERROR_MESSAGES));
+const CANDIDATE_DIAGNOSTIC_CODES = new Set(
+  Object.keys(DIAGNOSTIC_ERROR_MESSAGES)
+);
 
-function safeCandidateFailure(error: unknown, stage: PolicyCandidateFailureStage) {
+function safeCandidateFailure(
+  error: unknown,
+  stage: PolicyCandidateFailureStage
+) {
   const rawCode = safeErrorCode(error);
   const errorCode = CANDIDATE_DIAGNOSTIC_CODES.has(rawCode)
     ? rawCode
@@ -328,7 +418,7 @@ function safeCandidateFailure(error: unknown, stage: PolicyCandidateFailureStage
     errorName: null,
     message:
       errorCode === "pipeline_error"
-        ? stageMessages[stage] ?? DIAGNOSTIC_ERROR_MESSAGES.pipeline_error
+        ? (stageMessages[stage] ?? DIAGNOSTIC_ERROR_MESSAGES.pipeline_error)
         : DIAGNOSTIC_ERROR_MESSAGES[errorCode],
     retryMetadata: undefined,
   };
@@ -352,10 +442,12 @@ export async function runPolicyIntelligenceSync(
     unchangedCount: 0,
     analyzedCount: 0,
     publishedCount: 0,
+    sourceFirstPublishedCount: 0,
     heldCount: 0,
     failureCount: 0,
     safeErrorCode: null,
     candidateFailures: [],
+    candidateWarnings: [],
     analysisAttempts: [],
   };
   await dependencies.repository.startRun(run);
@@ -435,74 +527,226 @@ export async function runPolicyIntelligenceSync(
           continue;
         }
         const evidence = [toEvidencePacket(snapshot)];
-        stage = "analysis";
-        const analyzerOutput = await dependencies.analyzer.analyze({ evidence });
-        let analysisValue: unknown = analyzerOutput;
-        if (
-          typeof analyzerOutput === "object" &&
-          analyzerOutput !== null &&
-          "value" in analyzerOutput &&
-          "attempts" in analyzerOutput &&
-          Array.isArray(analyzerOutput.attempts)
-        ) {
-          const execution = analyzerOutput as PolicyAnalysisExecutionResult<unknown>;
+        const recordAttemptTelemetry = (
+          attempts: readonly PolicyAnalysisAttemptTelemetry[] | undefined
+        ) => {
+          if (!attempts?.length) {
+            return;
+          }
           run.analysisAttempts.push(
-            ...execution.attempts.map((attempt) => ({
+            ...attempts.map((attempt) => ({
               ...attempt,
               itemId: item.id,
               snapshotId: snapshot.id,
               sourceConfigId,
             }))
           );
-          analysisValue = execution.value;
-        }
-        const analysis = policyAnalysisSchema.parse(analysisValue);
-        run.analyzedCount += 1;
-        const allowedRefs = new Set(evidence.map((entry) => entry.evidenceRef));
-        const referenced = [
-          ...analysis.materialClaims.flatMap((claim) => claim.evidenceRefs),
-          ...analysis.keyChanges.flatMap((entry) => entry.evidenceRefs),
-          ...analysis.affectedGroups.flatMap((entry) => entry.evidenceRefs),
-          ...analysis.practicalImpacts.flatMap((entry) => entry.evidenceRefs),
-          ...analysis.recommendedActions.flatMap((entry) => entry.evidenceRefs),
-          ...(analysis.transitionInfo?.evidenceRefs ?? []),
-          ...analysis.sourceStatus.evidenceRefs,
-        ];
-        if (
-          referenced.some((ref) => !allowedRefs.has(ref)) ||
-          analysis.relatedSnapshotRefs.some((ref) => ref !== snapshot.id)
-        ) {
-          throw new PolicyAnalysisDiagnosticError(
-            "unknown_analysis_evidence_ref"
+        };
+        const recordWarnings = (
+          warningStage: PolicyCandidateFailureStage,
+          reasons: readonly string[]
+        ) => {
+          for (const reasonCode of reasons) {
+            run.candidateWarnings.push({
+              itemId: item.id,
+              snapshotId: snapshot.id,
+              sourceConfigId,
+              stage: warningStage,
+              reasonCode,
+              message: explainPublicationReason(reasonCode),
+              timestamp: now(),
+            });
+          }
+        };
+        /**
+         * Phase 12 Stage 3 D-072 — publish the authentic official source
+         * honestly as a source-first notice. No analysis is fabricated: the
+         * stored revision carries the snapshot identity, the official title and
+         * a bounded official excerpt, and the public page states that AI
+         * analysis is pending. Advisories are recorded, never reported as
+         * failures.
+         */
+        const publishSourceFirst = async (input: {
+          reason: PolicySourceFirstReason;
+          advisories: readonly string[];
+          withheld?: readonly PolicyWithheldUnit[];
+          warningStage: PolicyCandidateFailureStage;
+        }) => {
+          const write = await dependencies.repository.publishRevision({
+            itemId: item.id,
+            snapshotId: snapshot.id,
+            contentKind: "source_first",
+            schemaVersion: POLICY_SOURCE_FIRST_SCHEMA,
+            analysisFingerprint: computePolicyAnalysisFingerprint(
+              snapshot.id,
+              dependencies.modelMetadata,
+              { contentKind: "source_first" }
+            ),
+            analysis: null,
+            verification: null,
+            modelMetadata: {
+              ...dependencies.modelMetadata,
+              sourceFirst: { reason: input.reason },
+              advisories: [...input.advisories],
+              withheld: input.withheld ? [...input.withheld] : undefined,
+            },
+            generatedAt: now(),
+          });
+          if (!write.created) {
+            if (acquiredSnapshot.created) {
+              run.unchangedCount += 1;
+            }
+            outcomes.push({
+              candidateId: candidate.candidateId,
+              outcome: "unchanged",
+            });
+            return;
+          }
+          if (write.heldForHumanProtection) {
+            run.heldCount += 1;
+            recordWarnings(input.warningStage, [
+              "human_publication_protected",
+              ...input.advisories,
+            ]);
+            outcomes.push({
+              candidateId: candidate.candidateId,
+              outcome: "held",
+              reasonCode: "human_publication_protected",
+            });
+            return;
+          }
+          run.publishedCount += 1;
+          run.sourceFirstPublishedCount += 1;
+          recordWarnings(input.warningStage, [
+            input.reason,
+            ...input.advisories,
+          ]);
+          outcomes.push({
+            candidateId: candidate.candidateId,
+            outcome: "source_first_published",
+            reasonCode: input.reason,
+          });
+        };
+
+        stage = "analysis";
+        let analysis: PolicyAnalysis;
+        try {
+          const analyzerOutput = await dependencies.analyzer.analyze({
+            evidence,
+          });
+          let analysisValue: unknown = analyzerOutput;
+          if (
+            typeof analyzerOutput === "object" &&
+            analyzerOutput !== null &&
+            "value" in analyzerOutput &&
+            "attempts" in analyzerOutput &&
+            Array.isArray(analyzerOutput.attempts)
+          ) {
+            const execution =
+              analyzerOutput as PolicyAnalysisExecutionResult<unknown>;
+            recordAttemptTelemetry(execution.attempts);
+            analysisValue = execution.value;
+          }
+          analysis = policyAnalysisSchema.parse(analysisValue);
+          const allowedRefs = new Set(
+            evidence.map((entry) => entry.evidenceRef)
           );
+          const referenced = [
+            ...analysis.materialClaims.flatMap((claim) => claim.evidenceRefs),
+            ...analysis.keyChanges.flatMap((entry) => entry.evidenceRefs),
+            ...analysis.affectedGroups.flatMap((entry) => entry.evidenceRefs),
+            ...analysis.practicalImpacts.flatMap((entry) => entry.evidenceRefs),
+            ...analysis.recommendedActions.flatMap(
+              (entry) => entry.evidenceRefs
+            ),
+            ...(analysis.transitionInfo?.evidenceRefs ?? []),
+            ...analysis.sourceStatus.evidenceRefs,
+          ];
+          if (
+            referenced.some((ref) => !allowedRefs.has(ref)) ||
+            analysis.relatedSnapshotRefs.some((ref) => ref !== snapshot.id)
+          ) {
+            throw new PolicyAnalysisDiagnosticError(
+              "unknown_analysis_evidence_ref"
+            );
+          }
+        } catch (error) {
+          const fallbackReason = sourceFirstReasonForAnalysisFailure(error);
+          if (!fallbackReason) {
+            // Operator-disabled provider or a genuine internal error: keep the
+            // explicit failure instead of publishing a notice for every item.
+            throw error;
+          }
+          const failure = classifyPolicyAnalysisFailure(error);
+          recordAttemptTelemetry(failure.attemptTelemetry);
+          stage = "publication_gate";
+          await publishSourceFirst({
+            reason: fallbackReason,
+            advisories: [failure.errorCode],
+            warningStage: "analysis",
+          });
+          continue;
         }
+        run.analyzedCount += 1;
         stage = "verification";
-        const verification = validatePolicyVerification(
-          await dependencies.verifier.verify({ analysis, evidence }),
-          analysis,
-          allowedRefs
-        );
+        let rawVerification: PolicyVerification;
+        try {
+          rawVerification = await dependencies.verifier.verify({
+            analysis,
+            evidence,
+          });
+        } catch (error) {
+          const fallbackReason = sourceFirstReasonForVerifierFailure(error);
+          if (!fallbackReason) {
+            // D-073: an unexpected internal error stays a genuine failure
+            // instead of being published as a benign fallback notice.
+            throw error;
+          }
+          stage = "publication_gate";
+          await publishSourceFirst({
+            reason: fallbackReason,
+            advisories: [safeErrorCode(error)],
+            warningStage: "verification",
+          });
+          continue;
+        }
+        let verification: PolicyVerification;
+        try {
+          verification = validatePolicyVerification(
+            rawVerification,
+            analysis,
+            new Set(evidence.map((entry) => entry.evidenceRef))
+          );
+        } catch {
+          stage = "publication_gate";
+          await publishSourceFirst({
+            reason: "verification_unusable",
+            advisories: ["verification_invalid"],
+            warningStage: "verification",
+          });
+          continue;
+        }
         stage = "publication_gate";
-        const gate = evaluatePublicationGate({
+        const decision = evaluatePolicyPublicationDecision({
           analysis,
           verification,
           evidence,
-          acquisitionComplete: !snapshot.evidenceTruncated,
         });
-        const revisionInput = {
-          itemId: item.id,
-          snapshotId: snapshot.id,
-          analysisFingerprint,
-          analysis,
-          verification,
-          modelMetadata: dependencies.modelMetadata,
-          generatedAt: now(),
-        };
-        stage = "persistence";
-        if (!gate.eligible) {
+        if (decision.mode === "blocked") {
+          stage = "persistence";
           const write = await dependencies.repository.saveHeldRevision({
-            ...revisionInput,
-            editorialStatus: "review_required",
+            itemId: item.id,
+            snapshotId: snapshot.id,
+            contentKind: "ai_analysis",
+            schemaVersion: analysis.schemaVersion,
+            analysisFingerprint,
+            analysis,
+            verification,
+            modelMetadata: {
+              ...dependencies.modelMetadata,
+              advisories: decision.advisories,
+            },
+            generatedAt: now(),
           });
           if (!write.created) {
             if (acquiredSnapshot.created) {
@@ -515,15 +759,40 @@ export async function runPolicyIntelligenceSync(
             continue;
           }
           run.heldCount += 1;
+          recordWarnings("publication_gate", decision.advisories);
           outcomes.push({
             candidateId: candidate.candidateId,
             outcome: "held",
-            reasonCode: gate.reasons[0] ?? "review_required",
+            reasonCode: decision.blockers[0] ?? "review_required",
           });
           continue;
         }
-        const write =
-          await dependencies.repository.publishRevision(revisionInput);
+        if (decision.mode === "source_first") {
+          stage = "publication_gate";
+          await publishSourceFirst({
+            reason: decision.sourceFirstReason ?? "analysis_unusable",
+            advisories: decision.advisories,
+            withheld: decision.withheld,
+            warningStage: "publication_gate",
+          });
+          continue;
+        }
+        stage = "persistence";
+        const write = await dependencies.repository.publishRevision({
+          itemId: item.id,
+          snapshotId: snapshot.id,
+          contentKind: "ai_analysis",
+          schemaVersion: decision.analysis.schemaVersion,
+          analysisFingerprint,
+          analysis: decision.analysis,
+          verification: decision.verification,
+          modelMetadata: {
+            ...dependencies.modelMetadata,
+            advisories: decision.advisories,
+            withheld: decision.withheld,
+          },
+          generatedAt: now(),
+        });
         if (!write.created) {
           if (acquiredSnapshot.created) {
             run.unchangedCount += 1;
@@ -534,7 +803,24 @@ export async function runPolicyIntelligenceSync(
           });
           continue;
         }
+        if (write.heldForHumanProtection) {
+          // Phase 12 Stage 3 R1: the item is editor-protected, so this eligible
+          // revision was captured and held for review instead of replacing the
+          // human-approved publication.
+          run.heldCount += 1;
+          recordWarnings("publication_gate", [
+            "human_publication_protected",
+            ...decision.advisories,
+          ]);
+          outcomes.push({
+            candidateId: candidate.candidateId,
+            outcome: "held",
+            reasonCode: "human_publication_protected",
+          });
+          continue;
+        }
         run.publishedCount += 1;
+        recordWarnings("publication_gate", decision.advisories);
         outcomes.push({
           candidateId: candidate.candidateId,
           outcome: "published",

@@ -2041,15 +2041,22 @@ export function ImmigrationAIWorkspace({
                       {copy.policy.snapshotNotice}
                     </p>
                   </div>
-                  <a
-                    className="shrink-0 text-xs font-semibold text-violet-900 underline"
-                    href={activePolicyReference.officialUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {policyCopy.officialSource}:{" "}
-                    {activePolicyReference.officialTitle}
-                  </a>
+                  {activePolicyReference.officialUrl ? (
+                    <a
+                      className="shrink-0 text-xs font-semibold text-violet-900 underline"
+                      href={activePolicyReference.officialUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {policyCopy.officialSource}:{" "}
+                      {activePolicyReference.officialTitle ??
+                        activePolicyReference.title[locale]}
+                    </a>
+                  ) : (
+                    <span className="shrink-0 text-xs text-violet-900/80">
+                      {policyCopy.noOfficialSource}
+                    </span>
+                  )}
                 </div>
               </section>
             ) : null}

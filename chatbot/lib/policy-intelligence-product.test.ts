@@ -59,18 +59,27 @@ type LivePolicyFixture = LivePolicyRecord & {
     verification: { reasonCode: string; evidenceRefs: string[] }[];
   };
 };
-function livePolicy(
-  overrides: Partial<LivePolicyFixture> = {}
-): LivePolicyFixture {
-  return {
+type LivePolicyOverrides = Partial<Omit<LivePolicyFixture, "revision">> & {
+  revision?: Partial<LivePolicyRecord["revision"]>;
+};
+function livePolicy(overrides: LivePolicyOverrides = {}): LivePolicyFixture {
+  const base: LivePolicyFixture = {
     id: "internal-item-id",
     slug: "policy-update-one",
+    origin: "automated",
+    provenance: "automated_verified",
     sourceStatus: "announced",
     sourceEvidence: [{ normalizedEvidence: "PRIVATE RAW SOURCE" }],
     modelMetadata: { model: "PRIVATE MODEL" },
     analysisFingerprint: "PRIVATE FINGERPRINT",
     sourceConfigId: "home-affairs-guidance",
     sourceId: "PRIVATE SOURCE ID",
+    humanContent: null,
+    sourceFirst: null,
+    publicAttribution: null,
+    publicationMode: "automatic",
+    editorialDates: null,
+    newerSourcePendingReview: false,
     source: {
       authority: "Department of Home Affairs",
       officialTitle: "Official page title",
@@ -132,11 +141,16 @@ function livePolicy(
       ],
     },
     revision: {
+      id: "revision-2",
       number: 2,
       generatedAt: "2026-09-30T02:00:00.000Z",
       publishedAt: "2026-09-30T02:01:00.000Z",
     },
+  };
+  return {
+    ...base,
     ...overrides,
+    revision: { ...base.revision, ...(overrides.revision ?? {}) },
   };
 }
 function manualEntry(overrides: Partial<PolicyEntry> = {}): PolicyEntry {
@@ -171,9 +185,7 @@ function manualEntry(overrides: Partial<PolicyEntry> = {}): PolicyEntry {
     ...overrides,
   };
 }
-function policy(
-  overrides: Partial<LivePolicyFixture> = {}
-): PublicPolicyProduct {
+function policy(overrides: LivePolicyOverrides = {}): PublicPolicyProduct {
   return projectLivePolicy(livePolicy(overrides));
 }
 
@@ -208,7 +220,7 @@ test("schema catalog distinguishes absent schema from a partial migration", () =
   );
   assert.throws(() => policySchemaAvailableFromCatalogRows([]), /availability/);
 });
-test("available schema makes live records canonical even when manual entries exist", async () => {
+test("durable and compatibility entries coexist on the public page", async () => {
   let readCount = 0;
   const result = await loadPolicyProductState({
     checkSchema: async () => true,
@@ -216,13 +228,107 @@ test("available schema makes live records canonical even when manual entries exi
       readCount++;
       return Promise.resolve([livePolicy()]);
     },
+    readDurability: async () => [
+      { slug: "policy-update-one", everPublished: true },
+    ],
     manualEntries: [manualEntry()],
   });
   assert.equal(readCount, 1);
   assert.equal(result.availability, "LIVE_AVAILABLE");
+  // The durable publication no longer removes the bundled compatibility entry.
+  assert.deepEqual(result.policies.map((x) => x.slug).sort(), [
+    "manual-policy",
+    "policy-update-one",
+  ]);
+  const manual = result.policies.find((x) => x.slug === "manual-policy");
+  assert.equal(manual?.origin, "manual");
+  assert.equal(manual?.provenance, "curated_reviewed");
+});
+
+test("compatibility entries remain visible before the first durable publication", async () => {
+  const result = await loadPolicyProductState({
+    checkSchema: async () => true,
+    readLive: async () => [],
+    readDurability: async () => [],
+    manualEntries: [manualEntry()],
+  });
+  assert.equal(result.availability, "LIVE_UNAVAILABLE_WITH_MANUAL_FALLBACK");
   assert.deepEqual(
     result.policies.map((x) => x.slug),
-    ["policy-update-one"]
+    ["manual-policy"]
+  );
+});
+
+test("a durable publication takes precedence over a matching compatibility slug", async () => {
+  const result = await loadPolicyProductState({
+    checkSchema: async () => true,
+    readLive: async () => [livePolicy({ slug: "manual-policy" })],
+    readDurability: async () => [
+      { slug: "manual-policy", everPublished: true },
+    ],
+    manualEntries: [manualEntry()],
+  });
+  assert.deepEqual(
+    result.policies.map((x) => x.slug),
+    ["manual-policy"]
+  );
+  // Exactly one card, and it is the durable projection, not the registry copy.
+  assert.equal(result.policies[0]?.origin, "automated");
+  assert.equal(result.policies[0]?.provenance, "automated_verified");
+});
+
+test("a withdrawn durable policy is never resurrected by the compatibility entry", async () => {
+  const result = await loadPolicyProductState({
+    checkSchema: async () => true,
+    readLive: async () => [],
+    readDurability: async () => [
+      { slug: "manual-policy", everPublished: true },
+    ],
+    manualEntries: [manualEntry()],
+  });
+  assert.deepEqual(result.policies, []);
+  assert.equal(result.availability, "LIVE_AVAILABLE_EMPTY");
+});
+
+test("a never-published durable draft does not hide the compatibility entry", async () => {
+  const result = await loadPolicyProductState({
+    checkSchema: async () => true,
+    readLive: async () => [],
+    readDurability: async () => [
+      { slug: "manual-policy", everPublished: false },
+    ],
+    manualEntries: [manualEntry()],
+  });
+  assert.deepEqual(
+    result.policies.map((x) => x.slug),
+    ["manual-policy"]
+  );
+});
+
+test("duplicate slugs are rejected at the source and never duplicate public cards", async () => {
+  // Within one source a duplicate slug is a hard validation error, so a broken
+  // registry can never silently produce two identical cards.
+  await assert.rejects(
+    loadPolicyProductState({
+      checkSchema: async () => false,
+      readLive: async () => [],
+      manualEntries: [manualEntry(), manualEntry({ id: "duplicate-id" })],
+    }),
+    /Duplicate policy slug/u
+  );
+  // Across sources the durable publication takes precedence, so a slug shared
+  // by the database and the registry still renders exactly one card.
+  const result = await loadPolicyProductState({
+    checkSchema: async () => true,
+    readLive: async () => [livePolicy({ slug: "manual-policy" })],
+    readDurability: async () => [
+      { slug: "manual-policy", everPublished: true },
+    ],
+    manualEntries: [manualEntry()],
+  });
+  assert.equal(
+    result.policies.filter((policy) => policy.slug === "manual-policy").length,
+    1
   );
 });
 test("unavailable schema uses published manual entries and never queries Stage 1 tables", async () => {
@@ -316,7 +422,7 @@ test("automated public DTO excludes source text and backend/verifier/model metad
 });
 test("automated official URLs must be HTTPS and automated analysis cannot create provenance text", () => {
   const dto = projectLivePolicy(livePolicy());
-  assert.equal(dto.source.officialUrl.startsWith("https://"), true);
+  assert.equal(dto.source.officialUrl?.startsWith("https://"), true);
   assert.equal(dto.officialExcerpt, null);
   assert.equal(dto.lawyerCommentary, null);
   assert.throws(
@@ -560,7 +666,7 @@ test("published history excludes draft, review-required, held, and unpublished r
     ["rev-2", "rev-1"]
   );
 });
-test("a held latest snapshot prevents old revisions from returning as current history", () => {
+test("a held latest snapshot keeps published history visible and archived items hidden", () => {
   const item = {
     id: "item",
     editorialStatus: "review_required",
@@ -579,7 +685,44 @@ test("a held latest snapshot prevents old revisions from returning as current hi
     },
     snapshot: { id: "snap-1", itemId: "item" },
   };
-  assert.equal(currentPublicHistoryRows([row]), null);
+  // Stage 3: a newer captured snapshot does not remove the approved revision
+  // from public history; it becomes a currentness signal on the page.
+  const rows = currentPublicHistoryRows([row]);
+  assert.ok(rows);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].revision.id, "rev-1");
+  // Archive suppression is preserved.
+  assert.equal(
+    currentPublicHistoryRows([
+      { ...row, item: { ...item, editorialStatus: "archived" } },
+    ]),
+    null
+  );
+  // A revision whose snapshot does not resolve is never public.
+  assert.equal(currentPublicHistoryRows([{ ...row, snapshot: null }]), null);
+});
+test("a human-authored revision without a snapshot is public history", () => {
+  const item = {
+    id: "item",
+    editorialStatus: "published",
+    latestSnapshotId: null,
+    latestPublishedRevisionId: "rev-1",
+  };
+  const row = {
+    item,
+    revision: {
+      id: "rev-1",
+      itemId: "item",
+      snapshotId: null,
+      editorialStatus: "published",
+      revisionNumber: 1,
+      publishedAt: new Date(),
+    },
+    snapshot: null,
+  };
+  const rows = currentPublicHistoryRows([row]);
+  assert.ok(rows);
+  assert.equal(rows.length, 1);
 });
 test("deterministic diff detects stable-id additions, removals, and content changes", () => {
   const before = policy();

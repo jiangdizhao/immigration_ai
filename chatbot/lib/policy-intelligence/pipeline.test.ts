@@ -23,7 +23,7 @@ import {
   withPolicyAnalysisTimeoutRetry,
 } from "./analysis-diagnostics";
 import {
-  evaluatePublicationGate,
+  evaluatePolicyPublicationDecision,
   POLICY_ANALYSIS_SCHEMA,
   POLICY_ANALYZER_VERSION,
   POLICY_VERIFICATION_SCHEMA,
@@ -34,7 +34,10 @@ import {
   policyAnalysisSchema,
   validatePolicyVerification,
 } from "./contracts";
-import { isCurrentPublishedPolicyRevision } from "./currentness";
+import {
+  isCurrentPublishedPolicyRevision,
+  isPublishedRevisionStaleAgainstLatestSnapshot,
+} from "./currentness";
 import { createInMemoryPolicyIntelligenceRepository } from "./memory-repository";
 import {
   computePolicyAnalysisFingerprint,
@@ -308,6 +311,11 @@ test("successful unchanged sync runs remain visible in the bounded admin project
     heldCount: 0,
     failureCount: 0,
     safeErrorCode: null,
+    // Phase 12 Stage 3 D-072 publication metrics.
+    fullAnalysisPublishedCount: 0,
+    sourceFirstPublishedCount: 0,
+    advisoryCount: 0,
+    advisoryReasons: [],
   });
   const [adminItem] = await h.store.adminService.listItems();
   assert.equal(adminItem?.sourceSyncDiagnostic, null);
@@ -326,7 +334,7 @@ test("changed source hash creates immutable snapshot and superseding revision", 
   assert.equal(revisions[0].supersededAt, now);
   assert.equal(revisions[1].editorialStatus, "published");
 });
-test("a held newer analysis preserves history but is not publicly current", async () => {
+test("an uncertain newer source status publishes honestly instead of a subjective hold", async () => {
   let analyzeCount = 0;
   const h = dependencies({
     hashes: ["first", "second"],
@@ -351,27 +359,27 @@ test("a held newer analysis preserves history but is not publicly current", asyn
   assert.ok(priorPublishedId);
   const priorPublished = h.store.revisions.get(priorPublishedId);
   assert.ok(priorPublished);
-  const priorSnapshot = h.store.snapshots.get(priorPublished.snapshotId);
-  assert.ok(priorSnapshot);
 
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  const held = [...h.store.revisions.values()].find(
-    (revision) => revision.editorialStatus === "review_required"
+  // D-072: status uncertainty is an advisory, never a veto. The newer official
+  // source revision is published, the asserted (uncertain) legal force is
+  // reported honestly as `unknown`, and the prior revision is superseded.
+  const published = [...h.store.revisions.values()].filter(
+    (revision) => revision.editorialStatus === "published"
   );
-  assert.ok(held);
-  assert.equal(held.snapshotId, item.latestSnapshotId);
-  assert.equal(item.editorialStatus, "review_required");
-  assert.equal(item.latestPublishedRevisionId, priorPublishedId);
-  assert.equal(priorPublished.editorialStatus, "published");
-  assert.equal(h.store.revisions.has(priorPublishedId), true);
+  assert.equal(published.length, 1);
+  assert.equal(item.editorialStatus, "published");
+  assert.equal(item.sourceStatus, "unknown");
+  assert.equal(published[0].snapshotId, item.latestSnapshotId);
+  assert.equal(published[0].analysis?.sourceStatus.value, "unknown");
   assert.equal(
-    isCurrentPublishedPolicyRevision({
-      item,
-      revision: priorPublished,
-      snapshot: priorSnapshot,
-    }),
-    false
+    published[0].modelMetadata.advisories?.includes(
+      "source_status_recorded_as_uncertain"
+    ),
+    true
   );
+  assert.equal(priorPublished.editorialStatus, "superseded");
+  assert.equal(h.store.revisions.has(priorPublishedId), true);
 });
 
 test("a later current publication restores visibility and stale held work cannot downgrade it", async () => {
@@ -396,11 +404,16 @@ test("a later current publication restores visibility and stale held work cannot
   const originalPublished = h.store.revisions.get(originalPublishedId);
   assert.ok(originalPublished);
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  assert.equal(item.editorialStatus, "review_required");
-  const heldB = [...h.store.revisions.values()].find(
-    (revision) => revision.editorialStatus === "review_required"
+  // D-072: the second revision publishes (with the uncertain status reported as
+  // unknown) instead of being held for review.
+  assert.equal(item.editorialStatus, "published");
+  const secondPublished = [...h.store.revisions.values()].find(
+    (revision) =>
+      revision.editorialStatus === "published" &&
+      revision.snapshotId === item.latestSnapshotId
   );
-  assert.ok(heldB);
+  assert.ok(secondPublished);
+  const secondSnapshotId = secondPublished.snapshotId;
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
 
   const currentPublishedId = item.latestPublishedRevisionId;
@@ -411,7 +424,6 @@ test("a later current publication restores visibility and stale held work cannot
   assert.equal(currentC.snapshotId, item.latestSnapshotId);
   assert.equal(currentC.editorialStatus, "published");
   assert.equal(originalPublished.editorialStatus, "superseded");
-  assert.equal(h.store.revisions.has(heldB.id), true);
   const currentSnapshot = h.store.snapshots.get(currentC.snapshotId);
   assert.ok(currentSnapshot);
   assert.equal(
@@ -430,17 +442,21 @@ test("a later current publication restores visibility and stale held work cannot
     timeoutMs: 0,
     maxOutputTokens: 0,
   });
+  // A late-arriving held write for an older snapshot must never downgrade the
+  // newer published revision or move the published pointer backwards.
   const staleWrite = await h.store.repository.saveHeldRevision({
     itemId: item.id,
-    snapshotId: heldB.snapshotId,
+    snapshotId: secondSnapshotId,
+    contentKind: "ai_analysis",
+    schemaVersion: secondPublished.analysis?.schemaVersion ?? "",
     analysisFingerprint: computePolicyAnalysisFingerprint(
-      heldB.snapshotId,
+      secondSnapshotId,
       alternateMetadata
     ),
-    analysis: heldB.analysis,
-    verification: heldB.verification,
+    analysis: secondPublished.analysis ?? originalPublished.analysis!,
+    verification:
+      secondPublished.verification ?? originalPublished.verification!,
     modelMetadata: alternateMetadata,
-    editorialStatus: "review_required",
     generatedAt: "2026-09-30T02:00:00.000Z",
   });
   assert.equal(staleWrite.created, true);
@@ -478,13 +494,15 @@ test("a source reverting to an older hash at a later time creates A-B-A history"
   assert.equal(h.store.revisions.size, 3);
 });
 
-test("provider failure can be retried against the same snapshot without duplication", async () => {
+test("provider failure yields a source-first publication that is then enriched by analysis", async () => {
   let attempts = 0;
   const h = dependencies({
     analyze: (evidence) => {
       attempts++;
       if (attempts === 1) {
-        throw new Error("temporary provider issue");
+        // D-073: a recoverable provider failure (timeout/provider class), not
+        // an unexpected internal error, is what falls back to a notice.
+        throw new DOMException("temporary provider issue", "AbortError");
       }
       return analysis(evidence[0].evidenceRef);
     },
@@ -497,14 +515,30 @@ test("provider failure can be retried against the same snapshot without duplicat
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(first.run.failureCount, 1);
+  // D-072: an analyzer outage degrades to an honest source-first publication
+  // (never to an empty feed and never to a failed publication) ...
+  assert.equal(first.run.failureCount, 0);
+  assert.equal(first.run.publishedCount, 1);
+  assert.equal(first.run.sourceFirstPublishedCount, 1);
+  // ... and the later successful analysis enriches the same item without
+  // duplicating the snapshot or erasing the earlier notice.
   assert.equal(second.run.publishedCount, 1);
+  assert.equal(second.run.sourceFirstPublishedCount, 0);
   assert.equal(second.run.snapshottedCount, 0);
   assert.equal(h.store.snapshots.size, 1);
-  assert.equal(h.store.revisions.size, 1);
+  assert.equal(h.store.revisions.size, 2);
+  const revisions = [...h.store.revisions.values()];
+  assert.equal(
+    revisions.filter((revision) => revision.contentKind === "source_first").length,
+    1
+  );
+  assert.equal(
+    revisions.filter((revision) => revision.contentKind === "ai_analysis").length,
+    1
+  );
 });
 
-test("malformed analyzer output and missing bilingual fields fail closed", async () => {
+test("malformed analyzer output and schema-invalid analyses publish source-first", async () => {
   const malformed = dependencies({
     analyze: () => ({ schemaVersion: "wrong" }) as unknown as PolicyAnalysis,
   });
@@ -512,21 +546,32 @@ test("malformed analyzer output and missing bilingual fields fail closed", async
     malformed.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.failureCount, 1);
+  // D-072: malformed output must not hide an authentic official source.
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.outcomes[0].outcome, "source_first_published");
+  assert.equal(result.outcomes[0].reasonCode, "analysis_invalid");
+  const [notice] = [...malformed.store.revisions.values()];
+  assert.equal(notice.contentKind, "source_first");
+  assert.equal(notice.analysis, null);
+  assert.equal(notice.verification, null);
+  assert.equal(notice.modelMetadata.sourceFirst?.reason, "analysis_invalid");
+
   const missing = dependencies({
     analyze: (e) =>
       ({
         ...analysis(e[0].evidenceRef),
         executiveSummary: { en: "only English" },
-      }) as PolicyAnalysis,
+      }) as unknown as PolicyAnalysis,
   });
   const missingResult = await runPolicyIntelligenceSync(
     missing.deps,
     candidate.sourceConfigId
   );
-  assert.equal(missingResult.run.publishedCount, 0);
-  assert.equal(missingResult.run.failureCount, 1);
+  assert.equal(missingResult.run.publishedCount, 1);
+  assert.equal(missingResult.run.sourceFirstPublishedCount, 1);
+  assert.equal(missingResult.run.failureCount, 0);
 });
 test("AI output cannot add official excerpts or lawyer commentary", () => {
   const valid = analysis("policy-snapshot:x");
@@ -543,16 +588,28 @@ test("AI output cannot add official excerpts or lawyer commentary", () => {
     false
   );
 });
-test("unknown evidence refs fail closed before publication", async () => {
+test("unknown evidence refs publish the source instead of the unusable analysis", async () => {
   const h = dependencies({ analyze: () => analysis("invented-ref") });
   const result = await runPolicyIntelligenceSync(
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.outcomes[0].reasonCode, "unknown_analysis_evidence_ref");
+  // D-072: analysis prose that cites unretrieved evidence is never published,
+  // but the authentic source update itself still reaches the public page.
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.outcomes[0].outcome, "source_first_published");
+  assert.equal(result.outcomes[0].reasonCode, "analysis_evidence_mismatch");
+  const [notice] = [...h.store.revisions.values()];
+  assert.equal(notice.contentKind, "source_first");
+  assert.equal(notice.analysis, null);
+  assert.equal(
+    h.store.adminService.listCompatibilityEntries !== undefined,
+    true
+  );
 });
-test("unsupported decisive claim is held for review", async () => {
+
+test("an unsupported decisive claim is withheld while the source still publishes", async () => {
   const h = dependencies({
     verify: (draft) => verification(draft, { "claim-1": "unsupported" }),
   });
@@ -560,12 +617,16 @@ test("unsupported decisive claim is held for review", async () => {
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.heldCount, 1);
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(
-    [...h.store.revisions.values()][0].editorialStatus,
-    "review_required"
-  );
+  // D-072: every narrative unit depends on claim-1 in this fixture, so the
+  // unsupported claim empties the required sections and the item is published
+  // as a source-first notice - never as unverified prose and never held.
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.heldCount, 0);
+  assert.equal(result.run.failureCount, 0);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.editorialStatus, "published");
+  assert.equal(revision.contentKind, "source_first");
+  assert.equal(result.outcomes[0].reasonCode, "analysis_unusable");
 });
 test("policy relevance classification permits only verified policy-relevant material", async () => {
   const operational = dependencies({
@@ -607,14 +668,43 @@ test("policy relevance classification permits only verified policy-relevant mate
     runPolicyIntelligenceSync(uncertain.deps, candidate.sourceConfigId),
     runPolicyIntelligenceSync(unsupported.deps, candidate.sourceConfigId),
   ]);
-  assert.equal(results[0].run.publishedCount, 1);
-  for (const result of results.slice(1)) {
-    assert.equal(result.run.publishedCount, 0);
-    assert.equal(result.run.heldCount, 1);
+  // D-072: the relevance classification is advisory. Every authentic official
+  // source update publishes, and each classification is recorded for review.
+  for (const result of results) {
+    assert.equal(result.run.publishedCount, 1);
+    assert.equal(result.run.heldCount, 0);
+    assert.equal(result.run.failureCount, 0);
   }
   assert.equal(
     operational.store.items.values().next().value?.editorialStatus,
-    "review_required"
+    "published"
+  );
+  const [operationalRevision] = [
+    ...operational.store.revisions.values(),
+  ];
+  assert.equal(
+    operationalRevision.modelMetadata.advisories?.includes(
+      "publication_eligibility_operational_notice"
+    ),
+    true
+  );
+  // An uncertain classification is a recorded advisory, never a veto.
+  const [uncertainRevision] = [...uncertain.store.revisions.values()];
+  assert.equal(uncertainRevision.contentKind, "ai_analysis");
+  assert.equal(
+    uncertainRevision.modelMetadata.advisories?.includes(
+      "publication_eligibility_uncertain"
+    ),
+    true
+  );
+  // Verifier disagreement with the classification does not remove the update.
+  const [unsupportedRevision] = [...unsupported.store.revisions.values()];
+  assert.equal(unsupportedRevision.contentKind, "ai_analysis");
+  assert.equal(
+    unsupportedRevision.modelMetadata.advisories?.includes(
+      "publication_eligibility_not_verified"
+    ),
+    true
   );
 });
 
@@ -637,13 +727,20 @@ test("every visible narrative, including uncertainty units, requires verificatio
       candidate.sourceConfigId
     ),
   ]);
-  assert.equal(missing.run.failureCount, 1);
-  assert.equal(missing.run.publishedCount, 0);
-  assert.equal(unsupported.run.heldCount, 1);
-  assert.equal(unsupported.run.publishedCount, 0);
+  // D-072: structurally incomplete verification makes the analysis prose
+  // unusable, so the source publishes as a source-first notice; an unsupported
+  // uncertainty unit is withheld from the analysis. Neither is a failed
+  // publication and neither is a subjective hold.
+  assert.equal(missing.run.publishedCount, 1);
+  assert.equal(missing.run.sourceFirstPublishedCount, 1);
+  assert.equal(missing.run.failureCount, 0);
+  assert.equal(missing.run.heldCount, 0);
+  assert.equal(unsupported.run.publishedCount, 1);
+  assert.equal(unsupported.run.failureCount, 0);
+  assert.equal(unsupported.run.heldCount, 0);
 });
 
-test("unsupported narrative addition blocks publication despite its supported linked claim", async () => {
+test("an unsupported narrative addition is withheld while the source publishes", async () => {
   const h = dependencies({
     analyze: (e) => {
       const draft = analysis(e[0].evidenceRef);
@@ -660,18 +757,36 @@ test("unsupported narrative addition blocks publication despite its supported li
         ],
       };
     },
-    verify: (draft) => verification(draft, { "change-1": "unsupported" }),
+    verify: (draft) =>
+      verification(draft, { "change-1": "unsupported" }),
   });
   const result = await runPolicyIntelligenceSync(
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.heldCount, 1);
-  assert.equal(result.outcomes[0].outcome, "held");
+  // D-072: the unsupported addition is withheld; the item is never held for
+  // review solely because the verifier disagreed with one narrative unit.
+  assert.equal(result.run.heldCount, 0);
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.publishedCount, 1);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.editorialStatus, "published");
+  assert.equal(
+    revision.modelMetadata.withheld?.some(
+      (entry) => entry.unitId === "change-1" && entry.reasonCode === "unsupported_narrative_unit"
+    ),
+    true
+  );
+  if (revision.analysis) {
+    // The withheld unit is absent from the published analysis.
+    assert.equal(
+      revision.analysis.keyChanges.some((unit) => unit.id === "change-1"),
+      false
+    );
+  }
 });
 
-test("applications-to-applicants scope shift remains held by narrative verification", async () => {
+test("a scope-shifting narrative unit is withheld while the source publishes", async () => {
   const h = dependencies({
     analyze: (e) => {
       const draft = analysis(e[0].evidenceRef);
@@ -695,9 +810,17 @@ test("applications-to-applicants scope shift remains held by narrative verificat
     candidate.sourceConfigId
   );
 
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.heldCount, 1);
-  assert.equal(result.outcomes[0].outcome, "held");
+  // D-072: the scope-shifting unit is withheld from the published analysis and
+  // the official source update still publishes; nothing is held for review.
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.heldCount, 0);
+  assert.equal(result.run.failureCount, 0);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.editorialStatus, "published");
+  assert.equal(
+    revision.modelMetadata.withheld?.some((entry) => entry.unitId === "change-1"),
+    true
+  );
 });
 
 test("inferred applicant impact can publish only as a qualified practical interpretation", async () => {
@@ -771,9 +894,12 @@ test("truncated evidence stays auditable but is not a publication veto", async (
   assert.equal(result.run.publishedCount, 1);
   assert.equal(result.outcomes[0].outcome, "published");
 
-  const gate = evaluatePublicationGate({
-    analysis: analysis(`policy-snapshot:${snapshot.id}`),
-    verification: verification(analysis(`policy-snapshot:${snapshot.id}`)),
+  // D-072: truncation is bounded-acquisition metadata, never a veto. The
+  // decision publishes the full analysis and never reports it as blocked.
+  const truncatedAnalysis = analysis(`policy-snapshot:${snapshot.id}`);
+  const decision = evaluatePolicyPublicationDecision({
+    analysis: truncatedAnalysis,
+    verification: verification(truncatedAnalysis),
     evidence: [
       {
         evidenceRef: `policy-snapshot:${snapshot.id}`,
@@ -791,11 +917,10 @@ test("truncated evidence stays auditable but is not a publication veto", async (
         text: snapshot.normalizedEvidence,
       },
     ],
-    acquisitionComplete: false,
   });
-  assert.equal(gate.eligible, true);
-  assert.equal(gate.reasons.includes("source_acquisition_incomplete"), false);
-  assert.equal(gate.reasons.includes("source_evidence_truncated"), false);
+  assert.equal(decision.mode, "full_analysis");
+  assert.deepEqual(decision.blockers, []);
+  assert.equal(decision.advisories.includes("source_evidence_truncated"), false);
 });
 
 test("same-current-content concurrent requests reuse one current snapshot", async () => {
@@ -936,9 +1061,14 @@ test("revision allocation remains unique under concurrent in-memory writes", asy
   const revisions = await Promise.all([
     store.repository.saveHeldRevision({
       ...revisionInput,
-      editorialStatus: "review_required",
+      contentKind: "ai_analysis",
+      schemaVersion: draft.schemaVersion,
     }),
-    store.repository.publishRevision(revisionInput),
+    store.repository.publishRevision({
+      ...revisionInput,
+      contentKind: "ai_analysis",
+      schemaVersion: draft.schemaVersion,
+    }),
   ]);
   assert.equal(store.revisions.size, 1);
   assert.equal(revisions.filter((write) => write.created).length, 1);
@@ -1012,6 +1142,8 @@ test("cross-item snapshot/revision mismatch fails closed", async () => {
       store.repository.publishRevision({
         itemId: second.id,
         snapshotId: snapshot.id,
+        contentKind: "ai_analysis",
+        schemaVersion: POLICY_ANALYSIS_SCHEMA,
         analysisFingerprint: computePolicyAnalysisFingerprint(
           snapshot.id,
           createPolicyModelMetadata({
@@ -1140,16 +1272,16 @@ test("partial support can publish only with explicit bilingual conditional uncer
       text: "The source",
     },
   ];
-  const gate = evaluatePublicationGate({
+  const decision = evaluatePolicyPublicationDecision({
     analysis: conditional,
     verification: verification(conditional, {
       "claim-1": "partial",
       "impact-1": "partial",
     }),
     evidence,
-    acquisitionComplete: true,
   });
-  assert.equal(gate.eligible, true);
+  assert.equal(decision.mode, "full_analysis");
+  assert.deepEqual(decision.withheld, []);
   const stripped = policyAnalysisSchema.parse({
     ...conditional,
     materialClaims: [
@@ -1157,62 +1289,111 @@ test("partial support can publish only with explicit bilingual conditional uncer
       conditional.materialClaims[1],
     ],
   });
-  assert.ok(
-    evaluatePublicationGate({
-      analysis: stripped,
-      verification: verification(stripped, { "claim-1": "partial" }),
-      evidence,
-      acquisitionComplete: true,
-    }).reasons.includes("partial_claim_missing_bilingual_uncertainty")
+  // D-072: a partially supported conditional claim without its bilingual
+  // qualification is withheld from publication (never published as certain and
+  // never a whole-item veto).
+  const strippedDecision = evaluatePolicyPublicationDecision({
+    analysis: stripped,
+    verification: verification(stripped, { "claim-1": "partial" }),
+    evidence,
+  });
+  assert.equal(
+    strippedDecision.withheld.some(
+      (entry) =>
+        entry.unitId === "claim-1" &&
+        entry.reasonCode === "partial_claim_missing_bilingual_uncertainty"
+    ),
+    true
   );
+  assert.notEqual(strippedDecision.mode, "blocked");
 });
-test("verifier failure fails closed and telemetry stores only a safe code", async () => {
+test("a recoverable verifier provider failure publishes the source safely", async () => {
   const h = dependencies({
     verify: () => {
-      throw new Error("provider failed https://secret.example/?key=do-not-log");
+      // A provider outage (abort/timeout class) is recoverable; D-073 keeps the
+      // source-first fallback for it, while unexpected internal errors fail.
+      throw new DOMException(
+        "provider failed https://secret.example/?key=do-not-log",
+        "AbortError"
+      );
     },
   });
   const result = await runPolicyIntelligenceSync(
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.failureCount, 1);
-  assert.equal(result.run.safeErrorCode, "pipeline_error");
+  // D-072: an unavailable verifier must not withhold the authentic source.
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.outcomes[0].reasonCode, "verification_unavailable");
+  // Raw provider text is still never stored; only safe codes are recorded.
   assert.doesNotMatch(JSON.stringify(result.run), /secret|key=|https:/i);
+  assert.doesNotMatch(
+    JSON.stringify([...h.store.revisions.values()]),
+    /secret|key=|https:/i
+  );
 });
 
-test("analysis failure after snapshot is persisted with item and snapshot context", async () => {
+test("analysis failure after snapshot publishes source-first with item and snapshot context", async () => {
   const h = dependencies({
     analyze: () => {
-      throw new DOMException("provider timeout with private response", "AbortError");
+      throw new DOMException(
+        "provider timeout with private response",
+        "AbortError"
+      );
     },
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  const failure = result.run.candidateFailures[0];
-  assert.equal(failure.itemId, "fixture-1");
-  assert.equal(failure.snapshotId, "fixture-2");
-  assert.equal(failure.sourceConfigId, candidate.sourceConfigId);
-  assert.equal(failure.stage, "analysis");
-  assert.equal(failure.errorCode, "provider_timeout");
-  assert.equal(failure.errorName, "AbortError");
-  assert.equal(failure.message, "The analysis provider timed out before returning a result.");
-  assert.equal(failure.timestamp, now);
-  assert.equal(h.store.revisions.size, 0);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  // D-072: the analyzer outage is recorded as an advisory warning with exact
+  // item/snapshot context, and the official source is published source-first.
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  const warning = result.run.candidateWarnings.find(
+    (entry) => entry.reasonCode === "provider_timeout"
+  );
+  assert.ok(warning);
+  assert.equal(warning.itemId, "fixture-1");
+  assert.equal(warning.snapshotId, "fixture-2");
+  assert.equal(warning.sourceConfigId, candidate.sourceConfigId);
+  assert.equal(warning.stage, "analysis");
+  assert.equal(
+    warning.message,
+    "The analysis provider exceeded its configured timeout during source sync."
+  );
+  assert.equal(warning.timestamp, now);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.contentKind, "source_first");
+  assert.equal(revision.modelMetadata.sourceFirst?.reason, "analysis_unavailable");
   const [adminItem] = await h.store.adminService.listItems();
-  assert.equal(adminItem.pipelineFailures[0].snapshotId, failure.snapshotId);
+  assert.equal(adminItem.publicationDiagnostics.published, true);
 });
 
-test("verification failure is attributed to the verification stage", async () => {
+test("an unexpected verifier internal error remains a genuine failure", async () => {
   const h = dependencies({
     verify: () => {
       throw new Error("verifier internal error");
     },
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  // D-073: an unexpected internal error must not be silently converted into a
+  // normal fallback publication.
+  assert.equal(result.run.failureCount, 1);
+  assert.equal(result.run.publishedCount, 0);
+  assert.equal(result.run.sourceFirstPublishedCount, 0);
   assert.equal(result.run.candidateFailures[0].stage, "verification");
   assert.equal(result.run.candidateFailures[0].errorCode, "pipeline_error");
-  assert.equal(result.run.candidateFailures[0].message, "The analysis could not be verified.");
+  assert.equal(
+    result.run.candidateFailures[0].message,
+    "The analysis could not be verified."
+  );
   assert.equal(h.store.revisions.size, 0);
 });
 
@@ -1220,17 +1401,37 @@ test("unknown candidate exception is sanitized and does not leak secrets", async
   const secret = "sk-live-secret-token-123";
   const h = dependencies({
     analyze: () => {
-      throw new Error(`provider response ${secret} https://private.example/?api_key=${secret}`);
+      throw new Error(
+        `provider response ${secret} https://private.example/?api_key=${secret}`
+      );
     },
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  const serialized = JSON.stringify({ run: result.run, outcomes: result.outcomes });
-  assert.equal(result.run.candidateFailures[0].errorCode, "analysis_internal_error");
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  const serialized = JSON.stringify({
+    run: result.run,
+    outcomes: result.outcomes,
+  });
+  // D-073: an unexpected internal error is a genuine engineering failure, not
+  // normal AI unavailability; it is recorded with a safe message and never
+  // converted into a fallback publication.
+  assert.equal(
+    result.run.candidateFailures[0].errorCode,
+    "analysis_internal_error"
+  );
   assert.equal(
     result.run.candidateFailures[0].message,
     "An internal error prevented policy analysis from completing."
   );
-  assert.doesNotMatch(serialized, /sk-live-secret-token|private\.example|api_key/i);
+  assert.equal(result.run.failureCount, 1);
+  assert.equal(result.run.publishedCount, 0);
+  assert.equal(result.run.sourceFirstPublishedCount, 0);
+  assert.doesNotMatch(
+    serialized,
+    /sk-live-secret-token|private\.example|api_key/i
+  );
 });
 
 test("analysis abort and timeout errors receive safe provider_timeout diagnostics", async () => {
@@ -1243,8 +1444,16 @@ test("analysis abort and timeout errors receive safe provider_timeout diagnostic
     aborted.deps,
     candidate.sourceConfigId
   );
-  assert.equal(abortedResult.run.candidateFailures[0].errorCode, "provider_timeout");
-  assert.equal(abortedResult.run.candidateFailures[0].errorName, "AbortError");
+  // D-072: the classification is unchanged but is recorded as an advisory
+  // warning; the official source still publishes source-first.
+  assert.equal(abortedResult.run.failureCount, 0);
+  assert.equal(abortedResult.run.sourceFirstPublishedCount, 1);
+  assert.equal(
+    abortedResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "provider_timeout"
+    ),
+    true
+  );
 
   const sdkAbort = new RetryError({
     message: "private retry detail",
@@ -1256,24 +1465,43 @@ test("analysis abort and timeout errors receive safe provider_timeout diagnostic
     timedOut.deps,
     candidate.sourceConfigId
   );
-  assert.equal(timeoutResult.run.candidateFailures[0].errorCode, "provider_timeout");
+  assert.equal(
+    timeoutResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "provider_timeout"
+    ),
+    true
+  );
+  assert.equal(timeoutResult.run.sourceFirstPublishedCount, 1);
 });
 
 test("AI SDK structured-output errors are classified without storing model text", async () => {
   const rawModelText = "private raw model output with token sk-private-123";
   const error = new NoObjectGeneratedError({
-    cause: new JSONParseError({ text: rawModelText, cause: new Error("parse detail") }),
+    cause: new JSONParseError({
+      text: rawModelText,
+      cause: new Error("parse detail"),
+    }),
     text: rawModelText,
     response: {} as never,
     usage: {} as never,
     finishReason: "stop",
   });
   const h = dependencies({ analyze: () => Promise.reject(error) });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  const failure = result.run.candidateFailures[0];
-  assert.equal(failure.errorCode, "structured_output_error");
-  assert.equal(failure.errorName, "JSONParseError");
-  assert.doesNotMatch(JSON.stringify(result.run), /private raw model output|sk-private-123/);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  // D-072: classified as a warning, published source-first, never failed.
+  const warning = result.run.candidateWarnings.find(
+    (entry) => entry.reasonCode === "structured_output_error"
+  );
+  assert.ok(warning);
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.doesNotMatch(
+    JSON.stringify(result.run),
+    /private raw model output|sk-private-123/
+  );
 });
 
 test("Zod and AI SDK type validation errors map to schema_validation_error", async () => {
@@ -1288,20 +1516,32 @@ test("Zod and AI SDK type validation errors map to schema_validation_error", asy
     zodFailure.deps,
     candidate.sourceConfigId
   );
-  assert.equal(zodResult.run.candidateFailures[0].errorCode, "schema_validation_error");
-  assert.equal(zodResult.run.candidateFailures[0].errorName, "ZodError");
+  assert.equal(
+    zodResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "schema_validation_error"
+    ),
+    true
+  );
+  assert.equal(zodResult.run.sourceFirstPublishedCount, 1);
 
   const typeError = TypeValidationError.wrap({
     value: "private model output",
     cause: new Error("private validation detail"),
   });
-  const typedFailure = dependencies({ analyze: () => Promise.reject(typeError) });
+  const typedFailure = dependencies({
+    analyze: () => Promise.reject(typeError),
+  });
   const typedResult = await runPolicyIntelligenceSync(
     typedFailure.deps,
     candidate.sourceConfigId
   );
-  assert.equal(typedResult.run.candidateFailures[0].errorCode, "schema_validation_error");
-  assert.equal(typedResult.run.candidateFailures[0].errorName, "TypeValidationError");
+  assert.equal(
+    typedResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "schema_validation_error"
+    ),
+    true
+  );
+  assert.equal(typedResult.run.sourceFirstPublishedCount, 1);
 });
 
 test("provider and empty-output failures are classified by AI SDK error types", async () => {
@@ -1325,9 +1565,20 @@ test("provider and empty-output failures are classified by AI SDK error types", 
     candidate.sourceConfigId
   );
   const providerJson = JSON.stringify(providerResult.run);
-  assert.equal(providerResult.run.candidateFailures[0].errorCode, "provider_error");
-  assert.equal(providerResult.run.candidateFailures[0].errorName, "APICallError");
-  assert.equal(providerResult.run.analysisAttempts[0].outcome, "provider_error");
+  // D-072: recorded as a warning with the same classification; the source
+  // still publishes and no failure is reported.
+  assert.equal(
+    providerResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "provider_error"
+    ),
+    true
+  );
+  assert.equal(providerResult.run.failureCount, 0);
+  assert.equal(providerResult.run.sourceFirstPublishedCount, 1);
+  assert.equal(
+    providerResult.run.analysisAttempts[0].outcome,
+    "provider_error"
+  );
   assert.doesNotMatch(
     providerJson,
     /provider\.invalid|private prompt|private raw provider|secret|Official evidence version|Analyze these official-source snapshots/
@@ -1345,9 +1596,17 @@ test("provider and empty-output failures are classified by AI SDK error types", 
     emptyFailure.deps,
     candidate.sourceConfigId
   );
-  assert.equal(emptyResult.run.candidateFailures[0].errorCode, "empty_model_output");
-  assert.equal(emptyResult.run.candidateFailures[0].errorName, "NoOutputGeneratedError");
-  assert.equal(emptyResult.run.analysisAttempts[0].outcome, "empty_model_output");
+  assert.equal(
+    emptyResult.run.candidateWarnings.some(
+      (warning) => warning.reasonCode === "empty_model_output"
+    ),
+    true
+  );
+  assert.equal(
+    emptyResult.run.analysisAttempts[0].outcome,
+    "empty_model_output"
+  );
+  assert.equal(emptyResult.run.sourceFirstPublishedCount, 1);
 });
 
 test("analysis provider uses one call when the first attempt succeeds", async () => {
@@ -1355,12 +1614,19 @@ test("analysis provider uses one call when the first attempt succeeds", async ()
   const calls: number[] = [];
   const h = dependencies({
     analyze: async (evidence) =>
-      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
-        calls.push(timeoutMs);
-        return analysis(evidence[0].evidenceRef);
-      }, 90_000, analysisAttemptContext),
+      await withPolicyAnalysisTimeoutRetry(
+        async (timeoutMs) => {
+          calls.push(timeoutMs);
+          return analysis(evidence[0].evidenceRef);
+        },
+        90_000,
+        analysisAttemptContext
+      ),
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
   assert.deepEqual(calls, [90_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.equal(h.calls().verifyCalls, 1);
@@ -1380,61 +1646,92 @@ test("analysis timeout retries once at 120 seconds then continues the pipeline",
   const calls: number[] = [];
   const h = dependencies({
     analyze: async (evidence) =>
-      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
-        calls.push(timeoutMs);
-        if (calls.length === 1) {
-          throw classifyPolicyAnalysisFailure(
-            new DOMException("private source-related detail", "AbortError"),
-            true
-          );
-        }
-        return analysis(evidence[0].evidenceRef);
-      }, 90_000, analysisAttemptContext),
+      await withPolicyAnalysisTimeoutRetry(
+        async (timeoutMs) => {
+          calls.push(timeoutMs);
+          if (calls.length === 1) {
+            throw classifyPolicyAnalysisFailure(
+              new DOMException("private source-related detail", "AbortError"),
+              true
+            );
+          }
+          return analysis(evidence[0].evidenceRef);
+        },
+        90_000,
+        analysisAttemptContext
+      ),
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
   assert.deepEqual(calls, [90_000, 120_000]);
   assert.equal(result.run.publishedCount, 1);
   assert.deepEqual(result.run.candidateFailures, []);
-  assert.deepEqual(result.run.analysisAttempts.map(({ attemptNumber, timeoutSeconds, outcome }) => ({ attemptNumber, timeoutSeconds, outcome })), [
-    { attemptNumber: 1, timeoutSeconds: 90, outcome: "provider_timeout" },
-    { attemptNumber: 2, timeoutSeconds: 120, outcome: "success" },
-  ]);
+  assert.deepEqual(
+    result.run.analysisAttempts.map(
+      ({ attemptNumber, timeoutSeconds, outcome }) => ({
+        attemptNumber,
+        timeoutSeconds,
+        outcome,
+      })
+    ),
+    [
+      { attemptNumber: 1, timeoutSeconds: 90, outcome: "provider_timeout" },
+      { attemptNumber: 2, timeoutSeconds: 120, outcome: "success" },
+    ]
+  );
   assert.equal(result.run.analysisAttempts[1].elapsedMs >= 0, true);
   assert.equal(h.calls().verifyCalls, 1);
 });
 
-test("second analysis timeout fails closed and records safe retry metadata", async () => {
+test("a repeated analysis timeout publishes source-first and records attempt telemetry", async () => {
   const calls: number[] = [];
   const h = dependencies({
     analyze: async () =>
-      await withPolicyAnalysisTimeoutRetry(async (timeoutMs) => {
-        calls.push(timeoutMs);
-        throw classifyPolicyAnalysisFailure(
-          new DOMException("secret and raw provider response", "AbortError"),
-          true
-        );
-      }, 90_000, analysisAttemptContext),
+      await withPolicyAnalysisTimeoutRetry(
+        async (timeoutMs) => {
+          calls.push(timeoutMs);
+          throw classifyPolicyAnalysisFailure(
+            new DOMException("secret and raw provider response", "AbortError"),
+            true
+          );
+        },
+        90_000,
+        analysisAttemptContext
+      ),
   });
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  const failure = result.run.candidateFailures[0];
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
+  // D-072: the retry policy is unchanged (one retry at 120s), and a repeated
+  // timeout now degrades to a source-first publication instead of an empty feed.
   assert.deepEqual(calls, [90_000, 120_000]);
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(h.store.revisions.size, 0);
-  assert.equal(failure.stage, "analysis");
-  assert.equal(failure.errorCode, "provider_timeout");
-  assert.equal(failure.attemptCount, 2);
-  assert.equal(failure.timeoutSeconds, 120);
-  assert.equal(failure.retryReason, "provider_timeout");
-  assert.deepEqual(result.run.analysisAttempts.map((attempt) => attempt.outcome), [
-    "provider_timeout",
-    "provider_timeout",
-  ]);
-  assert.doesNotMatch(JSON.stringify(result.run), /secret|raw provider response/);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.run.failureCount, 0);
+  assert.deepEqual(
+    result.run.analysisAttempts.map((attempt) => attempt.outcome),
+    ["provider_timeout", "provider_timeout"]
+  );
+  assert.deepEqual(
+    result.run.analysisAttempts.map((attempt) => attempt.timeoutSeconds),
+    [90, 120]
+  );
+  assert.doesNotMatch(
+    JSON.stringify(result.run),
+    /secret|raw provider response/
+  );
   assert.equal(h.store.snapshots.size, 1);
+  assert.equal(h.store.revisions.size, 1);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.contentKind, "source_first");
   const [adminItem] = await h.store.adminService.listItems();
-  assert.equal(adminItem.pipelineFailures[0].attemptCount, 2);
-  assert.equal(adminItem.pipelineFailures[0].timeoutSeconds, 120);
-  assert.deepEqual(adminItem.analysisAttempts.map((attempt) => attempt.timeoutSeconds), [90, 120]);
+  assert.deepEqual(
+    adminItem.analysisAttempts.map((attempt) => attempt.timeoutSeconds),
+    [90, 120]
+  );
 });
 
 test("source-wide timeout stays separate from a successful item's publication diagnostics", async () => {
@@ -1448,32 +1745,53 @@ test("source-wide timeout stays separate from a successful item's publication di
     analyze: async (evidence) => {
       analysisCount += 1;
       if (analysisCount === 2) {
-        return await withPolicyAnalysisTimeoutRetry(async () => {
-          throw classifyPolicyAnalysisFailure(
-            new DOMException("private provider payload", "AbortError"),
-            true
-          );
-        }, 90_000, analysisAttemptContext);
+        return await withPolicyAnalysisTimeoutRetry(
+          async () => {
+            throw classifyPolicyAnalysisFailure(
+              new DOMException("private provider payload", "AbortError"),
+              true
+            );
+          },
+          90_000,
+          analysisAttemptContext
+        );
       }
       return analysis(evidence[0].evidenceRef);
     },
   });
   h.deps.discover = async () => [candidate, secondCandidate];
 
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
-  assert.equal(result.run.publishedCount, 1);
-  assert.equal(result.run.failureCount, 1);
-  const items = await h.store.adminService.listItems();
-  const publishedItem = items.find((item) => item.editorialStatus === "published");
-  assert.ok(publishedItem);
-  assert.deepEqual(publishedItem.pipelineFailures, []);
-  assert.equal(publishedItem.publicationDiagnostics.published, true);
-  assert.equal(
-    publishedItem.publicationDiagnostics.reasons.some(({ reasonCode }) => reasonCode === "provider_timeout"),
-    false
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
   );
-  assert.equal(publishedItem.sourceSyncDiagnostic?.errorCode, "provider_timeout");
-  assert.doesNotMatch(JSON.stringify(result.run), /private provider payload|official-source snapshots|經來源核實/);
+  // D-072: both candidates publish (one full analysis, one source-first); the
+  // source-wide timeout stays a source-scoped diagnostic and never becomes an
+  // item-level failure or a held publication.
+  assert.equal(result.run.publishedCount, 2);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.run.failureCount, 0);
+  const items = await h.store.adminService.listItems();
+  const publishedItems = items.filter(
+    (item) => item.editorialStatus === "published"
+  );
+  assert.equal(publishedItems.length, 2);
+  for (const item of publishedItems) {
+    assert.deepEqual(item.pipelineFailures, []);
+    assert.equal(item.publicationDiagnostics.published, true);
+    assert.equal(
+      item.publicationDiagnostics.reasons.some(
+        ({ reasonCode }) => reasonCode === "provider_timeout"
+      ),
+      false
+    );
+  }
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.doesNotMatch(
+    JSON.stringify(result.run),
+    /private provider payload|official-source snapshots|經來源核實/
+  );
 });
 
 test("only the analysis timeout retries; other failures and unrelated aborts do not", async () => {
@@ -1508,16 +1826,23 @@ test("only the analysis timeout retries; other failures and unrelated aborts do 
       error: new DOMException("unrelated abort", "AbortError"),
       code: "provider_timeout",
     },
-    { error: new Error("private unknown source content"), code: "analysis_internal_error" },
+    {
+      error: new Error("private unknown source content"),
+      code: "analysis_internal_error",
+    },
   ] as const;
 
   for (const entry of cases) {
     let calls = 0;
     await assert.rejects(
-      withPolicyAnalysisTimeoutRetry(async () => {
-        calls += 1;
-        throw entry.error;
-      }, 90_000, analysisAttemptContext),
+      withPolicyAnalysisTimeoutRetry(
+        async () => {
+          calls += 1;
+          throw entry.error;
+        },
+        90_000,
+        analysisAttemptContext
+      ),
       (error: unknown) =>
         error instanceof PolicyAnalysisDiagnosticError &&
         error.errorCode === entry.code
@@ -1528,7 +1853,10 @@ test("only the analysis timeout retries; other failures and unrelated aborts do 
 
 test("successful candidate retains publication behavior without failure diagnostics", async () => {
   const h = dependencies();
-  const result = await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
+  const result = await runPolicyIntelligenceSync(
+    h.deps,
+    candidate.sourceConfigId
+  );
   assert.equal(result.run.publishedCount, 1);
   assert.deepEqual(result.run.candidateFailures, []);
   assert.deepEqual(result.run.analysisAttempts, []);
@@ -1536,7 +1864,7 @@ test("successful candidate retains publication behavior without failure diagnost
   assert.deepEqual(adminItem.pipelineFailures, []);
 });
 
-test("malformed verifier claim sets fail closed", async () => {
+test("malformed verifier claim sets publish source-first instead of failing", async () => {
   const h = dependencies({
     verify: () => ({
       schemaVersion: POLICY_VERIFICATION_SCHEMA,
@@ -1547,8 +1875,13 @@ test("malformed verifier claim sets fail closed", async () => {
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.failureCount, 1);
+  // D-072: unusable verification withholds the analysis prose, not the update.
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.sourceFirstPublishedCount, 1);
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(result.outcomes[0].reasonCode, "verification_unusable");
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.contentKind, "source_first");
 });
 
 test("source status is independently assessed and announced status may publish", async () => {
@@ -1559,9 +1892,9 @@ test("source status is independently assessed and announced status may publish",
   );
   const revision = [...h.store.revisions.values()][0];
   assert.equal(result.run.publishedCount, 1);
-  assert.deepEqual(revision.analysis.sourceStatus.value, "announced");
+  assert.deepEqual(revision.analysis?.sourceStatus.value, "announced");
   assert.deepEqual(
-    revision.verification.assessments.find(
+    revision.verification?.assessments.find(
       (unit) => unit.unitId === "source-status"
     ),
     {
@@ -1597,9 +1930,9 @@ test("official published guidance may publish without asserting legislative forc
   const revision = [...h.store.revisions.values()][0];
 
   assert.equal(result.run.publishedCount, 1);
-  assert.equal(revision.analysis.sourceStatus.value, "published_guidance");
-  assert.equal(revision.analysis.sourceStatus.certain, true);
-  assert.equal(revision.analysis.sourceStatus.claimRef, "claim-1");
+  assert.equal(revision.analysis?.sourceStatus.value, "published_guidance");
+  assert.equal(revision.analysis?.sourceStatus.certain, true);
+  assert.equal(revision.analysis?.sourceStatus.claimRef, "claim-1");
   assert.equal(POLICY_ANALYSIS_SCHEMA, "policy-intelligence.analysis.v2");
 });
 
@@ -1642,9 +1975,9 @@ test("directly supported Federal Register in-force status remains publishable", 
   const revision = [...h.store.revisions.values()][0];
 
   assert.equal(result.run.publishedCount, 1);
-  assert.equal(revision.analysis.sourceStatus.value, "in_force");
+  assert.equal(revision.analysis?.sourceStatus.value, "in_force");
   assert.equal(
-    revision.verification.assessments.find(
+    revision.verification?.assessments.find(
       (assessment) => assessment.unitId === "source-status"
     )?.verdict,
     "supported"
@@ -1675,7 +2008,40 @@ test("current published read requires revision snapshot and joined snapshot owne
   );
   assert.equal(
     isCurrentPublishedPolicyRevision({
+      item,
+      revision,
+      snapshot: { ...snapshot, id: "different-snapshot" },
+    }),
+    false
+  );
+  // A newer captured snapshot no longer removes the published revision
+  // (Stage 3 fix); the mismatch is reported as a currentness signal instead.
+  assert.equal(
+    isCurrentPublishedPolicyRevision({
       item: { ...item, latestSnapshotId: "a-newer-snapshot" },
+      revision,
+      snapshot,
+    }),
+    true
+  );
+  assert.equal(
+    isPublishedRevisionStaleAgainstLatestSnapshot({
+      item: { ...item, latestSnapshotId: "a-newer-snapshot" },
+      revision,
+    }),
+    true
+  );
+  assert.equal(
+    isCurrentPublishedPolicyRevision({
+      item: { ...item, editorialStatus: "archived" },
+      revision,
+      snapshot,
+    }),
+    false
+  );
+  assert.equal(
+    isCurrentPublishedPolicyRevision({
+      item: { ...item, latestPublishedRevisionId: "a-different-revision" },
       revision,
       snapshot,
     }),
@@ -1683,7 +2049,7 @@ test("current published read requires revision snapshot and joined snapshot owne
   );
 });
 
-test("supported announced claim cannot support mismatched in-force source status", async () => {
+test("an unsupported in-force status is reported as unknown instead of blocking", async () => {
   const h = dependencies({
     analyze: (evidence) => {
       const draft = analysis(evidence[0].evidenceRef);
@@ -1707,20 +2073,23 @@ test("supported announced claim cannot support mismatched in-force source status
   );
   const revision = [...h.store.revisions.values()][0];
   assert.equal(
-    revision.verification.assessments.find((unit) => unit.unitId === "claim-1")
+    revision.verification?.assessments.find((unit) => unit.unitId === "claim-1")
       ?.verdict,
     "supported"
   );
-  assert.equal(revision.analysis.sourceStatus.value, "in_force");
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.heldCount, 1);
+  // D-072: the unsupported legal force is never asserted; the published status
+  // is the honest `unknown` and the update still publishes.
+  assert.equal(revision.analysis?.sourceStatus.value, "unknown");
+  assert.equal(revision.analysis?.sourceStatus.certain, false);
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.heldCount, 0);
   assert.equal(
-    result.outcomes[0].reasonCode,
-    "source_status_not_fully_supported"
+    revision.modelMetadata.advisories?.includes("source_status_not_verified"),
+    true
   );
 });
 
-test("unsupported source status is held despite supported material claims", async () => {
+test("an unsupported source status publishes with honest unknown status", async () => {
   const h = dependencies({
     verify: (draft) => verification(draft, { "source-status": "unsupported" }),
   });
@@ -1728,11 +2097,14 @@ test("unsupported source status is held despite supported material claims", asyn
     h.deps,
     candidate.sourceConfigId
   );
-  assert.equal(result.run.publishedCount, 0);
-  assert.equal(result.run.heldCount, 1);
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(result.run.publishedCount, 1);
+  assert.equal(result.run.heldCount, 0);
+  assert.equal(result.run.failureCount, 0);
+  assert.equal(revision.analysis?.sourceStatus.value, "unknown");
   assert.equal(
-    result.outcomes[0].reasonCode,
-    "source_status_not_fully_supported"
+    revision.modelMetadata.advisories?.includes("source_status_not_verified"),
+    true
   );
 });
 
@@ -1750,11 +2122,11 @@ test("empty uncertainty and recommended-action lists are valid when absent from 
   );
   assert.equal(result.run.publishedCount, 1);
   assert.equal(
-    [...h.store.revisions.values()][0].analysis.uncertainties.length,
+    [...h.store.revisions.values()][0].analysis?.uncertainties.length,
     0
   );
   assert.equal(
-    [...h.store.revisions.values()][0].analysis.recommendedActions.length,
+    [...h.store.revisions.values()][0].analysis?.recommendedActions.length,
     0
   );
 });
@@ -1774,8 +2146,8 @@ test("audit model metadata is derived from the v2 analysis and verification cont
     POLICY_VERIFICATION_SCHEMA,
     "policy-intelligence.verification.v2"
   );
-  assert.equal(metadata.analyzerVersion, "policy-intelligence.analyzer.v2.2");
-  assert.equal(metadata.verifierVersion, "policy-intelligence.verifier.v2.2");
+  assert.equal(metadata.analyzerVersion, "policy-intelligence.analyzer.v2.3");
+  assert.equal(metadata.verifierVersion, "policy-intelligence.verifier.v2.3");
   assert.notEqual(metadata.analyzerVersion, POLICY_ANALYSIS_SCHEMA);
   assert.notEqual(metadata.verifierVersion, POLICY_VERIFICATION_SCHEMA);
   assert.equal(metadata.model, "unchanged-selected-model");
@@ -1796,11 +2168,11 @@ test("analysis fingerprint changes with implementation versions independently of
   };
   const changedAnalyzer = {
     ...previousMetadata,
-    analyzerVersion: "policy-intelligence.analyzer.v2.2",
+    analyzerVersion: "policy-intelligence.analyzer.v2.3",
   };
   const changedVerifier = {
     ...previousMetadata,
-    verifierVersion: "policy-intelligence.verifier.v2.2",
+    verifierVersion: "policy-intelligence.verifier.v2.3",
   };
   const base = computePolicyAnalysisFingerprint(
     "same-snapshot",
@@ -1875,7 +2247,7 @@ test("changed analysis configuration permits a new revision from the same snapsh
   assert.notEqual(revisions[1].analysisFingerprint, oldFingerprint);
 });
 
-test("v2.2 reanalyzes the same snapshot captured under v2.1", async () => {
+test("v2.3 reanalyzes the same snapshot captured under v2.1", async () => {
   const h = dependencies();
   const currentMetadata = h.deps.modelMetadata;
   h.deps.modelMetadata = {
@@ -1925,11 +2297,11 @@ test("v2.2 reanalyzes the same snapshot captured under v2.1", async () => {
   );
   assert.equal(
     revisions[1].modelMetadata.analyzerVersion,
-    "policy-intelligence.analyzer.v2.2"
+    "policy-intelligence.analyzer.v2.3"
   );
   assert.equal(
     revisions[1].modelMetadata.verifierVersion,
-    "policy-intelligence.verifier.v2.2"
+    "policy-intelligence.verifier.v2.3"
   );
   assert.deepEqual(h.calls(), { analyzeCalls: 2, verifyCalls: 2 });
 });
@@ -2013,8 +2385,19 @@ test("uncertain source status keeps source status separate from editorial review
   });
   await runPolicyIntelligenceSync(h.deps, candidate.sourceConfigId);
   const item = [...h.store.items.values()][0];
-  assert.equal(item.sourceStatus, "announced");
-  assert.equal(item.editorialStatus, "review_required");
+  // D-072: an uncertain status is published honestly as `unknown` with an
+  // advisory (never silently asserted as in force, and never a review hold).
+  assert.equal(item.sourceStatus, "unknown");
+  assert.equal(item.editorialStatus, "published");
+  const [revision] = [...h.store.revisions.values()];
+  assert.equal(revision.analysis?.sourceStatus.value, "unknown");
+  assert.equal(revision.analysis?.sourceStatus.certain, false);
+  assert.equal(
+    revision.modelMetadata.advisories?.includes(
+      "source_status_recorded_as_uncertain"
+    ),
+    true
+  );
 });
 test("fixture sync is repeatable and idempotent with bounded telemetry", async () => {
   const h = dependencies();
@@ -2044,7 +2427,9 @@ test("archived published items disappear publicly, retain history, suppress sync
 
   const item = [...h.store.items.values()][0];
   assert.ok(item);
-  const oldRevision = h.store.revisions.get(item.latestPublishedRevisionId ?? "");
+  const oldRevision = h.store.revisions.get(
+    item.latestPublishedRevisionId ?? ""
+  );
   const oldSnapshot = oldRevision
     ? h.store.snapshots.get(oldRevision.snapshotId)
     : undefined;

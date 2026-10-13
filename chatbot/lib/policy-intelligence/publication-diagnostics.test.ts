@@ -127,11 +127,11 @@ test("published item has no blocking diagnostics", () => {
       verification: null,
       evidence: null,
     }),
-    { published: true, reasons: [] }
+    { published: true, reasons: [], advisories: [] }
   );
 });
 
-test("unpublished item returns all gate and verifier reason codes", () => {
+test("a held item exposes structural blockers and non-blocking advisories", () => {
   const draft = analysis();
   const diagnostics = buildAdminPublicationDiagnostics({
     editorialStatus: "review_required",
@@ -140,24 +140,42 @@ test("unpublished item returns all gate and verifier reason codes", () => {
     evidence,
   });
 
+  // D-072: AI opinions are advisories, never blocking reasons. A held item with
+  // no structural blocker reports no blocking reason at all.
   assert.equal(diagnostics.published, false);
+  assert.deepEqual(diagnostics.reasons, []);
   assert.deepEqual(
-    diagnostics.reasons
-      .filter((reason) => !reason.unitId)
-      .map((reason) => reason.reasonCode),
+    diagnostics.advisories
+      .filter((advisory) => !advisory.unitId)
+      .map((advisory) => advisory.reasonCode)
+      .sort(),
     [
-      "source_status_uncertain",
-      "publication_eligibility_not_supported",
-      "unsupported_material_claim",
+      "analysis_withheld_title_or_summary",
+      "publication_eligibility_not_verified",
+      "source_status_recorded_as_uncertain",
     ]
   );
   assert.ok(
-    diagnostics.reasons.some(
-      (reason) =>
-        reason.reasonCode === "insufficient_support" &&
-        reason.unitId === "claim-1" &&
-        reason.explanation.length > 0
+    diagnostics.advisories.some(
+      (advisory) =>
+        advisory.reasonCode === "insufficient_support" &&
+        advisory.unitId === "claim-1" &&
+        advisory.explanation.length > 0
     )
+  );
+});
+
+test("a structurally blocked item reports the blocker as the only reason", () => {
+  const draft = analysis();
+  const diagnostics = buildAdminPublicationDiagnostics({
+    editorialStatus: "review_required",
+    analysis: draft,
+    verification: verification(draft),
+    evidence: { ...evidence, canonicalUrl: "" },
+  });
+  assert.deepEqual(
+    diagnostics.reasons.map((reason) => reason.reasonCode),
+    ["source_identity_incomplete"]
   );
 });
 
@@ -217,8 +235,9 @@ test("unknown stored verifier reason code is retained for an unsupported unit", 
     verification: storedVerification,
     evidence,
   });
+  // D-072: the unknown verifier reason is retained as an advisory for the unit.
   assert.ok(
-    diagnostics.reasons.some(
+    diagnostics.advisories.some(
       ({ reasonCode, explanation, unitId }) =>
         reasonCode === "future_verifier_reason" &&
         explanation ===

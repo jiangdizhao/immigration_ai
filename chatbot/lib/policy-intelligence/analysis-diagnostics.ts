@@ -11,6 +11,7 @@ import {
   TypeValidationError,
 } from "ai";
 import { ZodError } from "zod";
+import type { PolicySourceFirstReason } from "./contracts";
 
 export const POLICY_ANALYSIS_TIMEOUT_MS = 90_000;
 export const POLICY_ANALYSIS_RETRY_TIMEOUT_MS = 120_000;
@@ -49,6 +50,77 @@ export type PolicyAnalysisExecutionResult<T> = {
   attempts: PolicyAnalysisAttemptTelemetry[];
 };
 
+/**
+ * Phase 12 Stage 3 D-073 — maps a recoverable analyzer failure to a
+ * source-first publication reason, or returns null when the failure must remain
+ * a genuine pipeline failure.
+ *
+ * Recoverable (provider/model output problems): timeouts, provider errors,
+ * empty or invalid structured output, schema validation failures and model
+ * output that cites unknown evidence. Not recoverable: an operator-disabled
+ * provider, and unexpected internal/programming errors (`analysis_internal_error`)
+ * — those stay visible as engineering failures instead of being silently
+ * converted into a normal fallback publication.
+ */
+export function sourceFirstReasonForAnalysisFailure(
+  error: unknown
+): PolicySourceFirstReason | null {
+  if (
+    error instanceof Error &&
+    error.message === "policy_intelligence_provider_disabled"
+  ) {
+    return null;
+  }
+  const failure = classifyPolicyAnalysisFailure(error);
+  switch (failure.errorCode) {
+    case "structured_output_error":
+    case "schema_validation_error":
+    case "invalid_analysis_output":
+      return "analysis_invalid";
+    case "unknown_analysis_evidence_ref":
+      return "analysis_evidence_mismatch";
+    case "provider_timeout":
+    case "provider_error":
+    case "empty_model_output":
+      return "analysis_unavailable";
+    default:
+      // An unexpected internal error (analysis_internal_error) is a
+      // programming/operations failure, not normal AI unavailability: it must
+      // not become a public notice.
+      return null;
+  }
+}
+
+/**
+ * Phase 12 Stage 3 D-073 — the verifier equivalent. Typed provider/output
+ * failures (timeout, provider error, malformed or empty structured output) fall
+ * back to a source-first notice; an unexpected internal error does not.
+ */
+export function sourceFirstReasonForVerifierFailure(
+  error: unknown
+): Extract<PolicySourceFirstReason, "verification_unavailable"> | null {
+  if (
+    error instanceof Error &&
+    error.message === "policy_intelligence_provider_disabled"
+  ) {
+    return null;
+  }
+  const failure = classifyPolicyAnalysisFailure(error);
+  switch (failure.errorCode) {
+    case "provider_timeout":
+    case "provider_error":
+    case "empty_model_output":
+    case "structured_output_error":
+    case "schema_validation_error":
+    case "invalid_analysis_output":
+      return "verification_unavailable";
+    default:
+      // An unexpected internal error (analysis_internal_error) stays a genuine
+      // failure rather than a source-first fallback.
+      return null;
+  }
+}
+
 export type PolicyAnalysisFailureDiagnostic = {
   errorCode: PolicyAnalysisFailureCode;
   errorName: string;
@@ -63,14 +135,20 @@ export type PolicyAnalysisFailureDiagnostic = {
 };
 
 const messages: Record<PolicyAnalysisFailureCode, string> = {
-  provider_timeout: "The analysis provider timed out before returning a result.",
+  provider_timeout:
+    "The analysis provider timed out before returning a result.",
   provider_error: "The analysis provider could not complete the request.",
-  structured_output_error: "The analysis provider returned output that could not be parsed as structured data.",
-  schema_validation_error: "The analysis output did not match the required policy schema.",
+  structured_output_error:
+    "The analysis provider returned output that could not be parsed as structured data.",
+  schema_validation_error:
+    "The analysis output did not match the required policy schema.",
   empty_model_output: "The analysis provider returned no usable output.",
-  invalid_analysis_output: "The analysis provider returned output that could not be used.",
-  unknown_analysis_evidence_ref: "The analysis referred to evidence outside the retrieved snapshot.",
-  analysis_internal_error: "An internal error prevented policy analysis from completing.",
+  invalid_analysis_output:
+    "The analysis provider returned output that could not be used.",
+  unknown_analysis_evidence_ref:
+    "The analysis referred to evidence outside the retrieved snapshot.",
+  analysis_internal_error:
+    "An internal error prevented policy analysis from completing.",
 };
 
 const errorNames: Record<PolicyAnalysisFailureCode, string> = {
@@ -171,7 +249,10 @@ export function classifyPolicyAnalysisFailure(
       );
     }
     if (error.cause instanceof ZodError) {
-      return new PolicyAnalysisDiagnosticError("schema_validation_error", "ZodError");
+      return new PolicyAnalysisDiagnosticError(
+        "schema_validation_error",
+        "ZodError"
+      );
     }
     if (error.text === undefined || error.text.trim().length === 0) {
       return new PolicyAnalysisDiagnosticError("empty_model_output");
@@ -188,7 +269,10 @@ export function classifyPolicyAnalysisFailure(
     );
   }
   if (error instanceof ZodError) {
-    return new PolicyAnalysisDiagnosticError("schema_validation_error", "ZodError");
+    return new PolicyAnalysisDiagnosticError(
+      "schema_validation_error",
+      "ZodError"
+    );
   }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 408 || error.statusCode === 504) {
@@ -209,10 +293,16 @@ export function classifyPolicyAnalysisFailure(
     );
   }
   if (LoadAPIKeyError.isInstance(error)) {
-    return new PolicyAnalysisDiagnosticError("provider_error", "LoadAPIKeyError");
+    return new PolicyAnalysisDiagnosticError(
+      "provider_error",
+      "LoadAPIKeyError"
+    );
   }
   if (NoSuchModelError.isInstance(error)) {
-    return new PolicyAnalysisDiagnosticError("provider_error", "NoSuchModelError");
+    return new PolicyAnalysisDiagnosticError(
+      "provider_error",
+      "NoSuchModelError"
+    );
   }
   return new PolicyAnalysisDiagnosticError("analysis_internal_error");
 }
@@ -264,7 +354,10 @@ export async function withPolicyAnalysisTimeoutRetry<T>(
 
   const second = await attemptOnce(POLICY_ANALYSIS_RETRY_TIMEOUT_MS, 2);
   if (second.ok) {
-    return { value: second.value, attempts: [first.telemetry, second.telemetry] };
+    return {
+      value: second.value,
+      attempts: [first.telemetry, second.telemetry],
+    };
   }
 
   second.failure.retryMetadata = {

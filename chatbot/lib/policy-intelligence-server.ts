@@ -6,6 +6,7 @@ import {
   conversationPolicyTopicContextEntry,
 } from "./policy-intelligence/conversation-policy-binding";
 import {
+  getPolicyIntelligenceDurabilityRows,
   getPublishedPolicyIntelligenceHistory,
   getPublishedPolicyIntelligenceList,
 } from "./policy-intelligence/read-service";
@@ -28,6 +29,11 @@ export async function getPolicyIntelligenceProductState(): Promise<PolicyProduct
   return await loadPolicyProductState({
     checkSchema: policyIntelligenceSchemaAvailable,
     readLive: getPublishedPolicyIntelligenceList,
+    // Owner-host correction: the durable slug index keeps the bundled
+    // compatibility registry visible alongside durable publications while
+    // preventing a withdrawn durable policy from being replaced by an obsolete
+    // compatibility entry.
+    readDurability: getPolicyIntelligenceDurabilityRows,
     manualEntries: MANUAL_POLICY_ENTRIES,
   });
 }
@@ -53,23 +59,12 @@ export async function getPolicyIntelligenceProductBySlug(
   if (!rawHistory) {
     return null;
   }
-  const fullHistory = rawHistory.revisions
-    .filter(
-      (revision) =>
-        revision.editorialStatus === "published" ||
-        revision.editorialStatus === "superseded"
-    )
-    .map((revision) => ({
-      editorialStatus: revision.editorialStatus,
-      policy: projectLivePolicy({
-        id: rawHistory.id,
-        slug: rawHistory.slug,
-        sourceStatus: revision.sourceStatus,
-        source: revision.source,
-        analysis: revision.analysis,
-        revision: revision.revision,
-      }),
-    }));
+  const fullHistory = rawHistory.revisions.map(
+    ({ editorialStatus, record }) => ({
+      editorialStatus,
+      policy: projectLivePolicy(record),
+    })
+  );
   const currentIndex = fullHistory.findIndex(
     ({ policy: revision }) =>
       revision.revision.number === policy.revision.number &&

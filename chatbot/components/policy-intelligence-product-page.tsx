@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatPolicyDate } from "@/lib/policy-intelligence";
+import type { PolicyEditorialProvenance } from "@/lib/policy-intelligence-product";
 import {
   impactPolicyOrder,
   latestPolicyOrder,
@@ -30,6 +31,7 @@ import {
   getPolicyProductCopy,
   getPublicImportanceLabel,
   type PolicyPresentationGroup,
+  type PolicyProductCopy,
 } from "@/lib/policy-intelligence-product-copy";
 import { getPublicPageContent, PUBLIC_ROUTES } from "@/lib/public-content";
 import { PolicyIntelligenceAvailabilityNotice } from "./policy-intelligence-availability-notice";
@@ -43,11 +45,41 @@ type Locale = "zh-CN" | "en";
 const statusClasses = {
   published: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   proposed: "bg-amber-50 text-amber-800 ring-amber-200",
-  historical: "bg-slate-100 text-slate-700 ring-slate-200",
+  // D-073: official updates whose legal effect is not in force / not yet
+  // confirmed are shown neutrally; the badge never implies legal force.
+  official_update: "bg-sky-50 text-sky-900 ring-sky-200",
 } as const;
 
 function dateLabel(date: string | null, locale: Locale, notStated: string) {
   return date ? formatPolicyDate(date, locale) : notStated;
+}
+
+/**
+ * Stage 3: the public provenance label. Every published item states which of
+ * the three publication pathways produced it, so AI-verified analysis is never
+ * conflated with lawyer-authored commentary.
+ */
+function provenanceLabel(
+  provenance: PolicyEditorialProvenance,
+  copy: PolicyProductCopy
+): string {
+  switch (provenance) {
+    case "lawyer_override":
+      return copy.provenanceLawyerOverride;
+    case "lawyer_authored":
+      return copy.provenanceLawyerAuthored;
+    case "curated_reviewed":
+      // Owner-host correction: bundled compatibility entries are human-compiled
+      // reviewed content. They must never be labelled as AI source-verified
+      // analysis or as official/verified legal text.
+      return copy.provenanceCuratedReviewed;
+    case "official_source_update":
+      // D-072: an official-source notice is not AI analysis and must be
+      // labelled distinctly from source-verified AI interpretation.
+      return copy.provenanceOfficialSourceUpdate;
+    default:
+      return copy.provenanceAutomatedVerified;
+  }
 }
 
 function SourceStatus({ policy }: { policy: PublicPolicyProduct }) {
@@ -55,7 +87,7 @@ function SourceStatus({ policy }: { policy: PublicPolicyProduct }) {
   const group = getPolicyPresentationGroup(policy.sourceStatus);
   return (
     <span
-      className={`inline-flex w-fit rounded px-2.5 py-1 text-xs font-semibold ring-1 ${statusClasses[group ?? "historical"]}`}
+      className={`inline-flex w-fit rounded px-2.5 py-1 text-xs font-semibold ring-1 ${statusClasses[group]}`}
     >
       {getPolicyPresentationStatusLabel(policy.sourceStatus, locale)}
     </span>
@@ -75,13 +107,16 @@ function PolicyRow({ policy }: { policy: PublicPolicyProduct }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <SourceStatus policy={policy} />
           <span className="text-xs text-slate-500">
-            {policy.origin === "automated"
-              ? copy.liveOrigin
-              : copy.manualOrigin}
+            {provenanceLabel(policy.provenance, copy)}
           </span>
           <span className="text-xs text-slate-500">
             {policy.source.authority}
           </span>
+          {policy.analysisPending ? (
+            <span className="rounded bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900 ring-1 ring-sky-200">
+              {copy.analysisPendingLabel}
+            </span>
+          ) : null}
         </div>
         <h3 className="mt-3 text-lg font-semibold leading-snug tracking-tight text-[#092c52]">
           <Link
@@ -91,6 +126,11 @@ function PolicyRow({ policy }: { policy: PublicPolicyProduct }) {
             {text.title}
           </Link>
         </h3>
+        {policy.analysisPending ? (
+          <p className="mt-1 text-xs text-slate-500">
+            {copy.sourceExcerptNotice}
+          </p>
+        ) : null}
         <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">
           {text.summary}
         </p>
@@ -117,13 +157,15 @@ function PolicyRow({ policy }: { policy: PublicPolicyProduct }) {
       </div>
       <div className="flex min-w-0 flex-col justify-between gap-4 border-t border-slate-100 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
         <div className="grid gap-2 text-xs text-slate-600">
-          <span className="inline-flex items-start gap-2 break-words">
-            <FileText
-              aria-hidden="true"
-              className="mt-0.5 size-3.5 shrink-0 text-[#315d86]"
-            />
-            {policy.source.officialTitle}
-          </span>
+          {policy.source.officialTitle ? (
+            <span className="inline-flex items-start gap-2 break-words">
+              <FileText
+                aria-hidden="true"
+                className="mt-0.5 size-3.5 shrink-0 text-[#315d86]"
+              />
+              {policy.source.officialTitle}
+            </span>
+          ) : null}
           <span className="inline-flex items-center gap-2">
             <CalendarDays
               aria-hidden="true"
@@ -132,17 +174,33 @@ function PolicyRow({ policy }: { policy: PublicPolicyProduct }) {
             {dateLabel(policy.source.sourceDate, locale, copy.notStated)}
           </span>
           <span className="break-words">{policy.source.category[locale]}</span>
+          {policy.newerSourcePendingReview ? (
+            <span className="leading-5 text-amber-800">
+              {copy.newerSourcePendingReview}
+            </span>
+          ) : null}
+          {policy.humanPublicationProtected ? (
+            <span className="leading-5 text-amber-800">
+              {copy.humanPublicationProtectedNotice}
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <a
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-[#123f70]"
-            href={policy.source.officialUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {copy.officialSource}
-            <ExternalLink aria-hidden="true" className="size-3.5" />
-          </a>
+          {policy.source.officialUrl ? (
+            <a
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-[#123f70]"
+              href={policy.source.officialUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {copy.officialSource}
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+            </a>
+          ) : (
+            <span className="text-xs text-slate-500">
+              {copy.noOfficialSource}
+            </span>
+          )}
           <Link
             className="inline-flex items-center gap-1 text-sm font-semibold text-[#123f70] hover:text-violet-700"
             href={`${PUBLIC_ROUTES.intelligence}/${policy.slug}`}
@@ -212,9 +270,6 @@ export function PolicyIntelligenceProductPage({
   const policies = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     return state.policies
-      .filter(
-        (policy) => getPolicyPresentationGroup(policy.sourceStatus) !== null
-      )
       .filter((policy) => {
         const searchable = [
           policy.copy["zh-CN"].title,
@@ -242,6 +297,10 @@ export function PolicyIntelligenceProductPage({
   );
   const proposed = policies.filter(
     (item) => getPolicyPresentationGroup(item.sourceStatus) === "proposed"
+  );
+  const officialUpdates = policies.filter(
+    (item) =>
+      getPolicyPresentationGroup(item.sourceStatus) === "official_update"
   );
 
   return (
@@ -318,11 +377,13 @@ export function PolicyIntelligenceProductPage({
                   value={status}
                 >
                   <option value="">{copy.allStatuses}</option>
-                  {(["published", "proposed"] as const).map((value) => (
-                    <option key={value} value={value}>
-                      {getPolicyPresentationGroupLabel(value, locale)}
-                    </option>
-                  ))}
+                  {(["published", "proposed", "official_update"] as const).map(
+                    (value) => (
+                      <option key={value} value={value}>
+                        {getPolicyPresentationGroupLabel(value, locale)}
+                      </option>
+                    )
+                  )}
                 </select>
                 <label className="sr-only" htmlFor="policy-product-sort">
                   {copy.latest}
@@ -351,6 +412,14 @@ export function PolicyIntelligenceProductPage({
                   eyebrow="02 · PROPOSED"
                   policies={proposed}
                   title={getPolicyPresentationGroupLabel("proposed", locale)}
+                />
+                <PolicyGroup
+                  eyebrow="03 · OFFICIAL UPDATES"
+                  policies={officialUpdates}
+                  title={getPolicyPresentationGroupLabel(
+                    "official_update",
+                    locale
+                  )}
                 />
               </div>
             ) : (
@@ -488,11 +557,19 @@ export function PolicyIntelligenceProductDetail({
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <SourceStatus policy={entry} />
               <span className="text-xs text-slate-500">
-                {entry.origin === "automated"
-                  ? copy.liveOrigin
-                  : copy.manualOrigin}
+                {provenanceLabel(entry.provenance, copy)}
               </span>
             </div>
+            {entry.analysisPending ? (
+              <p className="mt-3 max-w-3xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-950">
+                {copy.analysisPendingNotice}
+              </p>
+            ) : null}
+            {entry.newerSourcePendingReview ? (
+              <p className="mt-3 max-w-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                {copy.newerSourcePendingReview}
+              </p>
+            ) : null}
             <h1 className="mt-3 max-w-5xl text-2xl font-semibold leading-tight tracking-tight text-[#092c52] sm:text-3xl">
               {text.title}
             </h1>
@@ -564,15 +641,103 @@ export function PolicyIntelligenceProductDetail({
                   </dd>
                 </div>
               </dl>
-              <a
-                className="mt-5 inline-flex items-center gap-2 border-t border-slate-100 pt-4 text-sm font-semibold text-[#315d86] underline decoration-slate-300 underline-offset-4"
-                href={entry.source.officialUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {locale === "zh-CN" ? "打开官方来源" : "Open official source"}
-                <ExternalLink aria-hidden="true" className="size-4" />
-              </a>
+              {entry.editorialDates ? (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold text-slate-700">
+                    {copy.editorialDates}
+                  </p>
+                  <dl className="mt-2 grid gap-x-5 gap-y-3 sm:grid-cols-3">
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {copy.officialSourceDate}
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-800">
+                        {dateLabel(
+                          entry.editorialDates.officialSourceDate,
+                          locale,
+                          copy.notStated
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {copy.commencementDate}
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-800">
+                        {entry.editorialDates.commencementDate
+                          ? dateLabel(
+                              entry.editorialDates.commencementDate,
+                              locale,
+                              copy.notStated
+                            )
+                          : copy.commencementDateNotEstablished}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {copy.reviewedAsOfDate}
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-800">
+                        {dateLabel(
+                          entry.editorialDates.reviewedAsOfDate,
+                          locale,
+                          copy.notStated
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : null}
+              {entry.humanPublicationProtected ? (
+                <p className="mt-4 border-t border-slate-100 pt-4 text-xs leading-5 text-amber-800">
+                  {copy.humanPublicationProtectedNotice}
+                </p>
+              ) : null}
+              {entry.source.officialUrl ? (
+                <a
+                  className="mt-5 inline-flex items-center gap-2 border-t border-slate-100 pt-4 text-sm font-semibold text-[#315d86] underline decoration-slate-300 underline-offset-4"
+                  href={entry.source.officialUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {locale === "zh-CN" ? "打开官方来源" : "Open official source"}
+                  <ExternalLink aria-hidden="true" className="size-4" />
+                </a>
+              ) : (
+                <p className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-600">
+                  {copy.noOfficialSource}
+                </p>
+              )}
+              {entry.source.sourceReferences.length ? (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold text-slate-700">
+                    {copy.sourceReferences}
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {entry.source.sourceReferences.map((reference) => (
+                      <li
+                        className="text-xs leading-5 text-slate-600"
+                        key={`${reference.url}-${reference.title}`}
+                      >
+                        <a
+                          className="font-medium text-[#315d86] underline decoration-slate-300 underline-offset-4"
+                          href={reference.url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {reference.title}
+                        </a>
+                        {" · "}
+                        {reference.authority}
+                        {reference.date
+                          ? ` · ${dateLabel(reference.date, locale, copy.notStated)}`
+                          : ""}
+                        {reference.citation ? ` · ${reference.citation}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {entry.officialExcerpt ? (
                 <blockquote className="mt-4 border-l-2 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-950">
                   <p>{entry.officialExcerpt.text}</p>
@@ -584,15 +749,41 @@ export function PolicyIntelligenceProductDetail({
                   </footer>
                 </blockquote>
               ) : null}
+              {entry.analysisPending ? (
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  {copy.sourceExcerptNotice}
+                </p>
+              ) : null}
             </section>
             <section className="mt-5 border border-violet-200 bg-[#fbf9ff] px-5 py-5 sm:px-7">
               <div className="flex items-center gap-2 text-sm font-bold text-violet-950">
                 <Sparkles aria-hidden="true" className="size-4" />
-                {entry.aiGenerated ? copy.aiLabel : copy.manualSummary}
+                {entry.analysisPending
+                  ? copy.analysisPendingLabel
+                  : entry.provenance === "lawyer_authored"
+                    ? copy.provenanceLawyerAuthored
+                    : entry.provenance === "lawyer_override"
+                      ? copy.provenanceLawyerOverride
+                      : entry.aiGenerated
+                        ? copy.aiLabel
+                        : copy.manualSummary}
               </div>
               <p className="mt-2 text-xs leading-5 text-violet-900/80">
-                {entry.aiGenerated ? copy.aiDisclaimer : copy.manualOrigin}
+                {entry.analysisPending
+                  ? copy.analysisPendingNotice
+                  : entry.provenance === "lawyer_authored"
+                    ? copy.provenanceLawyerAuthoredNotice
+                    : entry.provenance === "lawyer_override"
+                      ? copy.provenanceLawyerOverrideNotice
+                      : entry.aiGenerated
+                        ? copy.aiDisclaimer
+                        : copy.manualOrigin}
               </p>
+              {entry.publicAttribution ? (
+                <p className="mt-2 text-xs leading-5 text-violet-900/80">
+                  {copy.authorAttribution}: {entry.publicAttribution}
+                </p>
+              ) : null}
               <section className="border-b border-slate-200 py-5">
                 <h2 className="text-sm font-bold text-[#092c52]">
                   {copy.sectionSummary}
@@ -601,6 +792,16 @@ export function PolicyIntelligenceProductDetail({
                   {text.summary}
                 </p>
               </section>
+              {entry.body ? (
+                <section className="border-b border-slate-200 py-5">
+                  <h2 className="text-sm font-bold text-[#092c52]">
+                    {copy.bodyContent}
+                  </h2>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {entry.body[locale]}
+                  </p>
+                </section>
+              ) : null}
               <NarrativeSection
                 items={entry.analysis.keyChanges}
                 title={copy.keyChanges}

@@ -13,7 +13,6 @@ import Link from "next/link";
 import { formatPolicyDate } from "@/lib/policy-intelligence";
 import type { PolicyProductPreviewState } from "@/lib/policy-intelligence-product";
 import {
-  getPolicyPresentationGroup,
   getPolicyPresentationStatusLabel,
   getPolicyProductCopy,
 } from "@/lib/policy-intelligence-product-copy";
@@ -44,11 +43,7 @@ export function ImmigrationServiceHome({
   const content = getPublicPageContent(locale);
   const services = getPublicServiceCatalog(locale);
   const policyCopy = getPolicyProductCopy(locale);
-  const policies = policyState.policies
-    .filter(
-      (policy) => getPolicyPresentationGroup(policy.sourceStatus) !== null
-    )
-    .slice(0, 3);
+  const policies = policyState.policies.slice(0, 3);
 
   return (
     <PublicPageFrame>

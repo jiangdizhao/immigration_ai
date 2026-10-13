@@ -1,5 +1,18 @@
 # DECISIONS
 
+<!-- BEGIN PHASE12_STAGE3_OWNER_SIGNOFF_2026_10_14 -->
+## Stage 3 owner acceptance — 2026-10-14 (supersedes historical stage-in-progress notes)
+
+**Status:** ACCEPTED — Stage 3 core functionality, *not* full formal Gate 3 or release authorization.
+
+The owner explicitly concludes Stage 3 feature development and local functional acceptance, preferring rapid closure and defect-driven follow-up during real lawyer usage over further proactive tests. D-065, D-070, D-071, D-072 and D-073 remain authoritative. Preserve the later Archive/Restore strict-payload repair and direct **Publish Official Source** without an AI revision, with genuine snapshot provenance, audit, idempotency, RBAC, and human protection. AI relevance and verifier judgments are advisory rather than an editorial veto.
+
+Acceptance evidence: LIN 26/061 compatibility import, edit, human publication and protection; corrected Archive/Restore with public count `4 -> 3 -> 4` and no compatibility resurrection. A local one-time Home Affairs sync recorded 8 full-analysis and 2 source-first publications (10 discovered). The owner accepts the other Stage 3 features, including blank manual creation, Grant/Revoke, Force Publish, official URL submissions and direct source publication, **without requiring additional individual owner-browser tests**. Do not misdescribe those waived tests as executed PASS.
+
+Formal Gate 3 stays NOT ACCEPTED (deferred integration/security/staging/environment checks); prior Gate 1/2 exceptions likewise remain. No automatic daily scheduler, production readiness, merge/deployment or payment activation is inferred. Next action: commit/push the full uncommitted Stage 3 worktree and these docs on its existing branch, verify remote SHA; handle new issues only with observed evidence.
+<!-- END PHASE12_STAGE3_OWNER_SIGNOFF_2026_10_14 -->
+
+
 Durable decisions for future ChatGPT/Cline/Codex sessions. Do not silently reverse an ACCEPTED decision. If new evidence requires a change, add a superseding decision record.
 
 ## D-009 — User-owned durable history is server-authoritative; Projects are interface-reserved only
@@ -656,7 +669,6 @@ P11-005 Stage 1 must close this lifecycle gap before acceptance. The implementat
 
 The migration remains unapplied. If the lifecycle correction requires a new SQL change after the already-pushed `0018` migration, prefer generating a follow-up migration rather than silently rewriting an already-pushed migration history, unless repository migration tooling clearly requires otherwise.
 
-
 ## D-040 — P11-005 production-readiness gates are deferred, not waived
 
 **Date:** 2026-09-25  
@@ -701,7 +713,6 @@ Data authority rules:
 
 P11-006 is a continuity and navigation layer. AI Workspace, lawyer-request detail, VIP billing, future lawyer workspace and future appointment workflow remain their own authorities.
 
-
 ## D-042 — Client Portal degrades explicitly when deferred document schema is unavailable
 
 **Date:** 2026-09-25  
@@ -718,7 +729,6 @@ The accepted rollout-compatibility behavior is:
 - unrelated database failures must not be broadly swallowed.
 
 This decision is a compatibility bridge only. It does not apply migrations, weaken P11-005 security, or mark P11-005 production-ready. D-040 remains fully in force.
-
 
 ## D-043 — Lawyer continuity is request-scoped, not matter-wide staff access
 
@@ -741,7 +751,6 @@ The accepted lawyer continuity package is the request itself plus its bounded im
 P11-007 may restructure and safely project that data for human usability, but must not silently widen the authorization model. Any future matter-wide staff workspace or generic document browsing requires a separate architecture/security decision.
 
 Official/legal evidence, AI analysis, customer-document evidence and lawyer advice must remain visibly separate in the lawyer UI.
-
 
 ## D-044 — P11-008 uses a first-party request/proposal/confirmation workflow
 
@@ -775,7 +784,6 @@ No consultation price, VIP-only entitlement, external calendar provider, video p
 
 Stage 1 may create the next additive migration artifact, but applying it to any database remains separately authorized.
 
-
 ## D-045 — P11-008 Stage 2 is customer-only and availability-aware before migration 0022
 
 **Date:** 2026-09-26  
@@ -805,7 +813,6 @@ The initial time-entry UI uses browser-local `datetime-local` values with the br
 
 This decision does not authorize migration application, pricing, VIP-only booking, external calendar/video/phone providers, office hours, real-time availability claims, or Legal Service changes.
 
-
 ## D-046 — P11-008 Stage 3 separates staff scheduling source work from the migrated-DB runtime gate
 
 **Date:** 2026-09-26  
@@ -829,7 +836,6 @@ Staff proposal time entry uses the staff browser/device timezone and absolute IS
 Consultation notifications are a separate contract from lawyer-request notifications. They reuse the existing email transport but are disabled by default and fail-neutral after the database mutation commits. Email content is generic and contains no customer note, document/chat content, legal facts, private matter metadata, provider credentials or meeting-provider claims.
 
 Stage 3 source/UI acceptance is not the migrated-DB runtime acceptance. P11-008 overall verification requires a separately authorized disposable/migrated DB gate covering real transitions, concurrency/rollback and customer/admin/lawyer E2E.
-
 
 ## D-047 — P11-008 runtime acceptance uses a disposable cloned chatbot database
 
@@ -855,7 +861,6 @@ Notification fail-neutral runtime acceptance must avoid real delivery. A deliber
 Applying 0018–0021 to the disposable clone is compatibility testing only. It does not close D-040, does not verify P11-005 production readiness and does not authorize deployment.
 
 If a source defect is discovered, stop the runtime gate and return to the normal local patch -> external review -> commit/push workflow. Do not mutate data manually to hide a failing invariant.
-
 
 ## D-048 — Live Policy Intelligence may auto-publish verified AI analysis from authoritative sources
 
@@ -911,7 +916,6 @@ The lawyer-provided `chatbot/UI_template/OPEN_ME_Sovereign_Nexus_UI.html` is a p
 
 D-040 remains fully in force. Expanding P11-009 does not waive any deferred P11-005 production-readiness gate.
 
-
 ## D-050 — P11-009 Stage 2 activates live Policy Intelligence through a rollout-safe public projection
 
 **Date:** 2026-09-30  
@@ -937,7 +941,6 @@ Accepted Stage-2 rules:
 Stage 2 creates no schema migration and does not authorize applying 0023, running live paid-provider/source sync, scheduling, deployment, AWS changes, P11-005 production-readiness closure, or Legal Service reasoning/model-routing changes.
 
 The Sovereign Nexus template remains visual/product reference only; its mock facts, people, credentials and prototype behavior are not production authority.
-
 
 ## D-051 — Stage 3 hardens production mechanisms; Stage 4 supplies environment-specific AWS/staging attestations
 
@@ -965,8 +968,6 @@ Environment-specific proof remains Stage 4 / separately authorized acceptance:
 - exact deployed-image and rollback/staging E2E evidence.
 
 Accordingly, Stage-3 source acceptance alone does not mark D-040 closed and does not mark P11-005 VERIFIED. Those statuses require the mandatory environment evidence to be recorded later.
-
-
 
 ## D-052 — P11-009 Stage 3 is accepted; Stage 4 begins with read-only authoritative reconnaissance
 
@@ -1049,7 +1050,6 @@ The automatic Policy Intelligence operator itself has passed live execution: the
 The EventBridge Scheduler `immigration-ai-staging-policy-sync-daily` has been created, verified and is `ENABLED` for `cron(0 6 * * ? *)` in timezone `Australia/Sydney`.
 
 Because the schedule was created after the current day's 06:00 trigger point, no naturally Scheduler-triggered execution has yet been observed. This does not reopen implementation or deployment. It remains a single operational observation item: confirm the next scheduled ECS task launches and completes normally.
-
 
 ## D-056 — China VIP payments stay on Stripe: Alipay recurring when approved, WeChat prepaid
 
@@ -1261,4 +1261,207 @@ aws s3api list-objects-v2 \
 
 **Stage 3 acceptance correction.** Explicitly test a legitimate lawyer `forcePublish` on both a `source_not_policy_relevant` case and an AI-evidence/verifier-held case while the verifier remains rejecting or unavailable; the lawyer's publish must succeed without LLM calls. Also test an uncited, correctly attributed lawyer opinion, RBAC denials, audit/version history, concurrency and content/URL safety. Keep automatic-publication regression tests. This correction is **inside existing Stage 3**, not an extra Stage.
 
+## D-066 — Stage 3 implementation authorized on a dedicated branch with Gate 1/Gate 2 checks still open
+
+**Date:** 2026-10-13
+**Status:** ACCEPTED — owner-authorized implementation sequencing; Stage 3 implemented on `codex/phase12-stage3-policy-intelligence` at base `a61fcddfa9dcbb3fbf6fb72d2aff093c6d7d7419`
+
+**Decision.** The owner explicitly authorizes full Phase 12 **Stage 3 (Policy Intelligence Completion)** implementation on the dedicated branch `codex/phase12-stage3-policy-intelligence` while the previously deferred verification items remain **open**:
+
+- Stage 1 **Gate 1** (cross-device continuity, original-byte download, DOCX end-to-end and documented failure paths on the owner host) is still NOT ACCEPTED.
+- The original Stage 2 **Gate 2** checks remain NOT ACCEPTED (unexecuted/deferred items only; core scope stays OWNER SIGNED OFF).
+- Neither gate is retroactively marked as passed by this decision, and this authorization does not convert them to PASS.
+
+**Implementation scope realized under this decision (subject to independent review, not yet committed/pushed):**
+
+1. **Three coexisting publication pathways** on one public read model: automatic trusted publication (unchanged eligibility path), authorized-lawyer override/force publish (no AI re-run, no verifier approval, no gate PASS), and fully manual bilingual lawyer authoring with draft/preview/publish/revise/archive/restore independent of crawlers, AI availability and official sources.
+2. **Published revision stability:** `isCurrentPublishedPolicyRevision` no longer requires the published revision's snapshot to equal the item's latest snapshot. An approved published revision stays public while a newer source snapshot is held, and the newer-source condition is exposed as an honest `newerSourcePendingReview` currentness signal. Archive suppression, pointer integrity, source identity and history remain enforced.
+3. **Explicit, revocable Policy Editor capability** (`PolicyEditorGrant`) enforced server-side; administrators are the grantors; ordinary lawyers and customers are denied; the authenticated session is the only actor source (body actor/role fields are strict-schema rejections).
+4. **Data model additions** (additive migration `0027_phase12_stage3_policy_editorial.sql`): item `origin`/nullable official identity/`createdByUserId`; revision `contentKind` discriminator with nullable snapshot/analysis/verification/modelMetadata and durable `humanContent`, `baseRevisionId`, `aiDecision`, `overrideReason`, `idempotencyKey`; new `PolicyEditorGrant`, `PolicyIntelligenceEditorialEvent` (immutable audit) and `PolicyIntelligenceOperatorSubmission` tables. No human content is forced into fabricated official snapshots or AI metadata.
+5. **Discovery expansion:** new controlled sources for Home Affairs announcements/consultations, ministerial announcements and parliamentary bills, plus an operator-submission source that admits any allowlisted official `.gov.au` host through the existing HTTPS/SSRF/redirect/byte/timeout protections; authorized staff submit URLs that the existing sync pipeline consumes on its next run.
+6. **Coexistence guarantees:** automatic sync never deletes/overwrites/unpublishes human work; held AI revisions never silently replace an approved human override; archive/restore preserve intentional editorial decisions and audit history.
+
+**Evidence recorded in the repository at implementation time (see CURRENT_HANDOFF for the exact commands/counts):** new unit suites for currentness stability, editorial service/API contracts, capability RBAC and operator-submission/discovery safety; a PostgreSQL integration suite on the isolated disposable database covering automatic publication, held-source stability, verifier-unavailable force publish, LLM-free manual authoring, sync coexistence, concurrency, archive/restore and durable audit; `tsc --noEmit` at the same 45 pre-existing diagnostics as the base commit; and the owner-host acceptance steps listed in the handoff.
+
+**Non-effects and safeguards.** No migration was applied to the owner's development/staging/production databases (only the isolated disposable test database was created/migrated for validation). No AWS/billing/customer-data/deployment change. Nothing was committed or pushed by this implementation; independent review and owner-host functional acceptance happen before any commit/push decision. Protected branches and the immutable recovery branch were not touched.
+
 **Non-effects.** Documentation change only. Stage 3 implementation still requires a separate owner authorization and a decision on Stage 1/2 deferred gate sequencing. Stage 2 core functionality remains OWNER SIGNED OFF; Stage 1 Gate 1 and original Stage 2 Gate 2 remain NOT ACCEPTED. No code, DB migration, customer data, AWS, billing or deployment is changed by D-065.
+
+## D-067 — Stage 3 R1 review corrections: human-publication protection, verified-lawyer publication authority, editorial content integrity
+
+**Date:** 2026-10-13
+**Status:** ACCEPTED — independent-review corrections implemented on `codex/phase12-stage3-policy-intelligence` (uncommitted, review pending)
+
+**Context.** An independent review of the Stage 3 patch identified issues that the first implementation did not cover. They are corrected within Stage 3 (no new milestone, no architecture redesign).
+
+**Decisions.**
+
+1. **Durable human-publication protection (P0).** `PolicyIntelligenceItem.publicationMode` (`automatic` | `human_protected`, plus `protectionSetAt`/`protectionSetByUserId`) is the explicit per-item protection state, additive migration `0028_phase12_stage3_r1_publication_protection.sql`. Any authorized lawyer publication (force publish/override or manual publish) sets `human_protected`. While protected, an eligible automated revision is still discovered, acquired, analyzed and verified normally, but the write path stores it as `review_required` (pending review), never moves the published pointer, never changes the item's published status or editor-approved source status, and the sync run reports the outcome as `held` with reason `human_publication_protected`. Unprotected items keep publishing automatically; automatic publication was not weakened globally.
+2. **Editor-controlled exit and entry.** An authorized Policy Editor publishes a newer revision (force publish on the pending AI revision, which keeps protection on) or explicitly releases protection (`releasePublicationProtection` + `POST /api/policy-editor/protection`), which returns the item to `automatic` under audit; the release is idempotent and writes no duplicate audit row. Archive/restore never change the protection decision.
+3. **Publication authority is verified-lawyer-plus-grant (P1).** `requirePublicationAuthority` requires (a) a verified identity (`emailVerifiedAt`), (b) `role === "lawyer"`, and (c) an active `PolicyEditorGrant` — checked in-transaction on every editorial mutation and on operator-URL submission. Administrator role alone never confers publication authority; administrators manage grants (`isAdministrator`, admin-only grant/revoke/list, only verified lawyer accounts are eligible targets) and monitor. Grants on customer accounts, grants on unverified accounts, revoked grants and administrator-only accounts cannot publish, and the negative cases are covered by unit and PostgreSQL integration tests.
+4. **Editorial content integrity (P1).** The workspace loads and saves *all* stored source references (max 8, with citations and dates); narrative over-limit or missing-translation input is reported as a visible error instead of being truncated or auto-copied between languages; bilingual fields must be genuinely provided. Deterministic narrative ids are derived from the bilingual text so round trips are stable.
+5. **Author-stated dates, kept distinct (P1).** The human revision contract adds nullable `officialSourceDate`, `commencementDate` and `reviewedAsOfDate`, stored and displayed separately from platform-observed official snapshot `sourceDate`/`effectiveDate`; the platform never infers or fabricates a legal date, and "no established commencement date" is an explicit display state.
+6. **Provenance and request hardening (P1).** The server-derived editor identity (`editorUserId`/`editorEmail`/`editorRole`) is persisted in the audit trail independently of the lawyer-entered public byline, and the contract rejects bylines that impersonate an official government authority while keeping firm/team attribution possible. Request bodies are read under a real byte budget on the stream (not a trusted `Content-Length`), the legacy admin policy route no longer buffers an unbounded JSON body, and the same-origin (Origin + `Sec-Fetch-Site`) guard covers every editorial mutation.
+7. **Audit and scalability (P2).** Draft saves record a bounded, reconstructible change set (old/new values, narrative added/removed/modified with previews and full-text digests), not just fingerprints; a retried create after editing the draft resolves to the same item (no duplicate manual entries); the editorial workspace paginates deterministically (bounded limit/offset with `hasMore`/`nextOffset`) instead of a hard 100-item cut; and an unreadable stored AI analysis no longer blocks human correction (the override editor opens a blank bilingual draft seeded only with official-source facts and explains why).
+
+**Non-effects and safeguards.** Only the isolated disposable test database (`immigration_ai_phase12_stage1_test`) received migration `0028`; no owner development/staging/production database was migrated. Nothing was committed, pushed, merged or deployed; Gates 1–3 remain NOT ACCEPTED. Stage 2 continuity was re-verified against the Stage 3 schema.
+
+## D-068 — Stage 3 R2 corrections: concurrent manual publication, lossless draft history, admin-UI/permission alignment, hold consistency
+
+**Date:** 2026-10-13
+**Status:** ACCEPTED — second independent-review corrections implemented on `codex/phase12-stage3-policy-intelligence` (uncommitted, review pending)
+
+**Context.** A second independent review of `stage3-r1-full.patch` accepted the overall architecture (lawyer-final force publication, human protection, manual authoring, additive migrations 0027/0028) and required targeted corrections. They are implemented within Stage 3.
+
+**Decisions.**
+
+1. **Concurrent manual publication is rejected, never silently superseding (P1).** `createManualRevision` records the published revision the draft was based on in the existing `baseRevisionId`; `publishManualRevision` compares that baseline with the item's current published revision **under the item row lock** and returns the existing domain-level 409 `stale_publication_conflict` (detail `draft_baseline_superseded`) when another lawyer has published in the meantime. The initial unpublished manual draft keeps a null baseline, so first publication is unaffected. An isolated PostgreSQL integration scenario (published V1 → draft A → draft B → B publishes V2 → A publishes → 409 → V2 remains current, draft A stays a draft) is recorded.
+2. **Lossless, bounded, durable draft history (P1).** New append-only table `PolicyIntelligenceDraftSnapshot` (migration `0029`) stores the *complete* validated document of every human draft save (create and each save), with `saveNumber`, `contentVersion`, a canonical `contentDigest`, `contentBytes`, the server-authoritative `savedByUserId` and a timestamp. Retention is bounded deterministically per revision (25 snapshots / 2 MB, newest never pruned; `planDraftSnapshotPrune`); pruning happens in the same transaction and only removes that revision's own oldest snapshots. `saveManualDraft`'s audit row keeps its bounded change *summary* and now links `snapshotId`/`snapshotSaveNumber`; the summary is explicitly documented as a preview-based summary and is **not** described as reconstructible history. An authorized editor retrieves the complete previous documents through `getDraftHistory` + `GET /api/policy-editor/drafts/history` (publication authority enforced) and the workspace offers a "load saved version" action. Published revisions remain immutable: their content stays in the revision row and later saves cannot modify them.
+3. **Administrator UI and identity consistency (P1).** The Admin Policy Intelligence page no longer offers Archive/Restore controls (the route enforces lawyer publication authority and remains available for non-UI callers); it is now read-only monitoring plus grant management, with explicit copy pointing editorial actions to the Policy Editor workspace. Grant management (grant/revoke/list) additionally requires a **verified** administrator identity at the service level — an unverified admin receives `identity_not_verified` and `isAdministrator` is false for it; ordinary admins still never gain publication authority.
+4. **Held-revision consistency for protected items (P1).** `saveHeldRevision` now uses `resolveHeldRevisionItemStatus`: on a `human_protected` item that already publishes an editor-approved revision, a newly held AI analysis no longer rewrites the item status to `review_required` (the held revision itself remains `review_required`, so the pending-review signal and the public currentness warning stay honest). Unprotected items keep the original hold behaviour, and automatic publication for unprotected items is unchanged. The integration suite covers V4-L protected → failing-verification hold → still `published` + protected + public with the pending-review signal + coherent archive/restore + workspace detail, plus the unprotected release-then-hold path.
+5. **Concurrent manual creation is always controlled (P1).** Idempotent replay detection is unchanged, but item insertion is now conflict-free (`insertItemIfSlugAvailable` → `ON CONFLICT DO NOTHING` on the slug unique index): a lost slug race resolves to a deterministic alternative slug or the existing 409 `slug_unavailable`/replay outcome instead of an uncaught unique-violation error. Covered by unit tests, a service-level concurrent-create test and a PostgreSQL race test (two concurrent creates; identical same-author replays resolve to one item; the primitive returns `slug_taken`).
+
+**Non-effects and safeguards.** Only the isolated disposable `immigration_ai_phase12_stage1_test` database received migration `0029`; no owner development/staging/production database was migrated. No commit, push, merge, rebase, force-push, deployment, AWS or Stripe change. Gates 1, 2 and 3 remain NOT ACCEPTED.
+
+## D-069 — Stage 3 R3 security corrections: revoke can never grant, operator listing authorization, bounded recovery wording
+
+**Date:** 2026-10-13
+**Status:** ACCEPTED — third independent-review security corrections implemented on `codex/phase12-stage3-policy-intelligence` (uncommitted, review pending)
+
+**Context.** Independent review of the R2 patch found one P0 permission defect and one P1 authorization gap, and asked that the draft-history retention be described honestly. Migrations 0027–0029 and the Stage 3 architecture remain unchanged.
+
+**Decisions.**
+
+1. **P0 — revoke can never grant (permission inversion).** The previous `upsertPolicyEditorGrant({ revoked })` inserted `revokedAt: null` and applied revoke semantics only through `onConflictDoUpdate`, so revoking a verified lawyer with no existing row **created an active grant**. Grant/revoke are now two explicit intents: `activatePolicyEditorGrant` (insert-or-explicitly-reactivate, reporting `reactivated`) and `revokePolicyEditorGrant` (**update-only** — a plain `UPDATE` that structurally cannot insert). Revoking a never-granted user returns the controlled outcome `not_granted` and creates nothing; repeated revocation returns `already_revoked` (idempotent); an active grant becomes inactive with `revokedAt`/`revokedByUserId` set; an explicit re-grant reactivates and reports `reactivated: true`. Both paths keep the server-authoritative admin actor identity, timestamps and durable audit events carrying the real outcome. Concurrency: the revoke's `UPDATE` takes the row lock, so a racing grant's `ON CONFLICT DO UPDATE` blocks and then re-applies its explicit activation — the stored state always reflects the last explicit admin intent, never an implicit grant, and no path throws on conflict.
+2. **P1 — operator submission listing now authorizes.** `list()` previously authenticated the caller but returned the queue to anyone. Submission and listing now share one substantive authority contract (`requireOperatorWorkflowAuthority`): **verified lawyer account + currently active Policy Editor grant**, enforced inside the service (so the API route *and* the server-rendered page both pass through it). Ordinary customers, unprivileged lawyers, unverified lawyers, revoked Policy Editors and administrators without lawyer publication capability are refused with `403` (`publication_authority_required` / `capability_required` / `identity_not_verified`), while an authorized verified Policy Editor keeps the intended workflow. The admin/editor UI now reports the real grant/revoke outcomes (activation vs reactivation, revoked vs already-revoked vs never-granted) instead of implying a change.
+3. **P2 — retention described honestly.** Draft history is documented and labelled everywhere (module docs, service docs, workspace UI) as a **bounded recovery window** (≤ 25 saves / 2 MB per revision, newest never pruned, older snapshots pruned automatically) — not permanent complete draft history. The retention design itself is unchanged.
+
+**Non-effects and safeguards.** No schema or migration change in R3; migrations 0027–0029 were **not** applied to any new database (the isolated disposable test database already carried them). No commit, push, merge, rebase, force-push, deployment, AWS or Stripe change. Gates 1, 2 and 3 remain NOT ACCEPTED.
+
+## D-070 — Admin Is Principal Lawyer and Has Inherent Policy Editorial Authority
+
+**Date:** 2026-10-13
+**Status:** ACCEPTED — owner-directed authority-model correction implemented on `codex/phase12-stage3-policy-intelligence` (uncommitted, review pending)
+**Supersedes:** the part of D-065 (and its R1/R2/R3 restatements) that treated the administrator role as *never* conferring publication authority.
+
+**Owner ruling.** The Admin account represents the law firm's **principal lawyer**, not a non-lawyer technical administrator. A **verified** Admin therefore holds complete Policy Intelligence editorial authority inherently. It needs no `PolicyEditorGrant`, and ordinary grant revocation can never remove that authority. The separate lawyer-grant system is retained for other staff.
+
+**Corrected permission matrix** (role and verification are always read from the database actor row — never from session claims, client bodies, or forged grants):
+
+| Account | Editorial / publication authority | Grant management |
+| --- | --- | --- |
+| **Verified Admin** (principal lawyer) | Full: manual authoring, draft save/publish, Force Publish override, archive/restore, publication-protection set/release, operator official-URL submission **and** queue listing | Yes (grant/revoke/list) |
+| **Verified Lawyer with an active `PolicyEditorGrant`** | Same editorial/publication capabilities | No |
+| **Verified Lawyer without a grant** | None (`capability_required`) | No |
+| **Ordinary user** (any grant row included) | None (`publication_authority_required`) | No |
+| **Unverified account (admin or lawyer)** | None (`identity_not_verified`) | No (for admins: `identity_not_verified`) |
+| **Unknown / unauthenticated** | None (`unauthenticated`) | No |
+
+**Implementation.** `requirePublicationAuthority()` and `canEdit()` in `lib/policy-intelligence/editorial-service.ts`, and `requireOperatorWorkflowAuthority()` in `lib/policy-intelligence/operator-submission.ts`, now short-circuit to allow a verified `role === "admin"` before the lawyer-grant checks; every entry point that already delegated to those helpers inherits the correction (manual create/draft/publish/revise, force publish, archive/restore, protection set/release, workspace listing, operator submit/list, `/policy-editor` page access). `isAdministrator()` still means grant management and remains verified-admin-only. The Admin Policy Intelligence page restores its audited Archive/Restore controls (now genuinely permitted) and the surrounding copy describes the principal-lawyer model. D-065's substantive rule is retained: human legal-editorial decisions take precedence over AI judgments, and all R1–R3 security fixes (verified identity, protection, revision-concurrency 409s, idempotency, lossless-bounded draft recovery, audit history, revoke-never-grants) remain in force.
+
+**Non-effects.** No database or migration change; migrations 0027–0029 remain confined to the isolated disposable test database and were **not** applied to the owner's `chatbot` database by this task (owner-run one-time instructions provided). No commit, push, merge, deployment, AWS or Stripe change. Gates 1, 2 and 3 remain NOT ACCEPTED.
+
+## D-071 — Durable and Compatibility Policy Content Coexist on the Public Page
+
+**Decision.** The public Policy Intelligence page shows durable (database-backed) published policies **and** the bundled compatibility registry (`content/policy-intelligence/registry.ts`) at the same time. The merge is deterministic and slug-keyed:
+
+- A durable published revision always wins for a matching slug (precedence); there is never a duplicate card for one slug.
+- A slug whose durable item has **ever published** a revision but is not currently public (archived, withdrawn, held) is suppressed: an obsolete compatibility entry can never reappear as if it were current.
+- A durable item that has only ever held drafts does **not** hide the compatibility entry (importing an entry must not blank the public card before the lawyer publishes).
+- Compatibility entries stay visible before the first durable publication.
+
+**Provenance.** Bundled entries keep their own honest label (`curated_reviewed` → "已审核的兼容内容（人工汇编，非官方原文）" / "Reviewed compatibility entry (human-compiled, not official source text)"). Manually compiled commentary is never presented as AI-verified analysis or as official/verified legal text.
+
+**Import bridge.** A single compatibility entry can be brought under normal Policy Editor management through a controlled, idempotent action: verified Admin or granted lawyer only (database-authoritative), it creates a **draft** manual revision from the bundled entry (preserving source identity: authority, title, URL, source/commencement dates; attribution explicitly states it is a platform-compiled summary), reports an existing durable item with the same slug as `already_managed` instead of duplicating, audits the action, and never publishes by itself. The Admin page lists durable and compatibility content separately with explicit storage/provenance labels.
+
+## D-073 — Minimal Structural Exclusion, Default Publication, Lawyer Final Authority
+
+**Date:** 2026-10-14
+**Status:** ACCEPTED — owner-directed correction, implemented on `codex/phase12-stage3-policy-intelligence` (worktree only).
+**Builds on:** D-072 (no subjective AI publication veto) remains authoritative and unchanged in intent.
+
+**Owner ruling.** The platform exists to publish Australian immigration policy developments promptly — enacted legislation, proposed reforms, consultations, announcements, future changes that have not commenced, official guidance and procedural change. AI gathers and explains; it does not decide whether an official update deserves publication. The owner explicitly rejects complex automated editorial screening. No new Event Admission architecture, keyword filtering, regex title classification, importance threshold, AI ranking gate or operator-approval queue may be introduced.
+
+**1. Public visibility (P0).** `getPolicyPresentationGroup` is now a total function over the status vocabulary with three visible groups: `published` (in_force, published_guidance, announced), `proposed` (proposed, consultation) and the new `official_update` (enacted_not_commenced, superseded, withdrawn, unknown, and any future unmapped status). A published record can no longer disappear from `/intelligence` merely because its legal-effect status is `unknown`; the third group is rendered as “Official updates (not in force or awaiting confirmation) / 官方更新（尚未生效或待确认）”, appears in the status filter, and official updates always display their exact honest badge (“Legal effect not yet verified”, “Enacted, not yet commenced”, “Superseded”, “Withdrawn”) and are never labelled as legislation in force. No persistence or status-taxonomy change was needed (the existing domain model already carries `enacted_not_commenced`).
+
+**2. Structural exclusion of presentation components (P0).** Minimal, deterministic and structural only:
+- listing extraction ignores `<nav>`/`<header>`/`<footer>` regions, elements whose own `class`/`id`/`data-*` declares a structural display token (banner, masthead, hero, promo, carousel, breadcrumb, nav, menu, …), anchors with a presentational ARIA role or `aria-hidden="true"`, and fragment-only/`javascript:` navigation wrappers;
+- Home Affairs alert items are excluded only when the source-provided `type`/`category` names a display component outright (`banner`, `site-banner`, `campaign-banner`, `advertisement`, `promotion(al)`, `display`, `navigation`, `menu`).
+Titles, candidate text, AI opinions, uncertainty, proposed/consultative status, low importance and procedural topics never exclude anything; unknown values keep the candidate. Destinations are never blacklisted: a page referenced from substantive content (or another substantive alert) is still discovered, and the destination of an excluded component remains discoverable through the source's normal listing/sitemap strategies. **Limitation, stated honestly:** this handles structurally identifiable cases only; a URL referenced *exclusively* by a presentation-typed component, or a component whose own markup is indistinguishable from content, is not excluded. Some low-value content may still be published and can be archived by the lawyer.
+
+**3. Source-first fingerprint stability (P1).** The source-first revision identity is now the snapshot plus the content kind (`computePolicyAnalysisFingerprint(..., { contentKind: "source_first" })`); the AI failure reason (`analysis_unavailable` vs `verification_unavailable` vs …) is diagnostic metadata only. Different failure reasons on the same snapshot therefore never create two source-first revisions. A later successful analysis still produces a distinct analysis revision that enriches the same policy without a duplicate public card. Revision history, archived-item suppression and human-protected publication semantics are unchanged.
+
+**4. Provider failures vs programming errors (P1).** Recoverable, typed provider/model failures (timeout/abort, provider error, empty or invalid structured output, schema/type validation, model output citing unknown evidence) keep the source-first fallback. Unexpected internal errors (`analysis_internal_error`, plain untyped exceptions) remain genuine engineering failures recorded in the candidate-failure diagnostics — they are never silently converted into a normal fallback publication. Operator-disabled providers keep their explicit failure. The verifier uses the same rule (typed provider/output failure → source-first; unexpected internal error → failure). No new error-handling framework was added.
+
+**5. Protections preserved.** D-065 human publication protection, D-070 Admin-as-principal-lawyer authority, explicit grants, D-071 compatibility registry/import, D-072's removal of subjective vetoes, all Admin/lawyer draft/publish/force-publish/archive/restore/override workflows, and official-source provenance requirements are unchanged.
+
+**Testing.** Deliberately minimal and targeted: presentation-group/visibility assertions (product-copy + a source-first visibility case), three structural-exclusion cases in the discovery suite (chrome excluded, content kept, shared destination preserved, source-provided display type excluded, title text never used), source-first fingerprint stability, unexpected-error failure semantics, and the retained lawyer-protection suites. Plus the routine unit suite and production build. No live Federal Register sync, no paid provider experiment, no bulk discovery/publication run, no disposable database, no destructive integration run, no new browser suite.
+
+**No migration required.** All changes are code-level (discovery regex structure handling, presentation groups/labels, fingerprint identity, error classification). No DDL, no new table, no new queue.
+
+### D-073 owner-host correction — Admin Archive/Unpublish failed with `validation_failed` (2026-10-14)
+
+**Observed:** the verified principal-lawyer Admin clicked `Archive / Unpublish` on the Manual, published, editor-protected policy `evisitor-application-arrangements-lin-26-061` on `/admin/policy-intelligence` and received `validation_failed`; the record stayed published and visible on `/intelligence`.
+
+**Root cause:** `app/api/admin/policy-intelligence` (PATCH) dispatched on `body.action` and then forwarded the **entire** parsed body — including the routing field `action` — into `handleArchivePolicyItem`/`handleRestorePolicyItem`. Those handler schemas are strict (`{ itemId, reason? }` / `{ itemId }`), so the extra key failed `safeParse` and `invalidEditorialBody()` returned `400 { error: "validation_failed", detail: null }` before any authorization, service call or audit write. The unit-tested legacy `handleAdminPolicyIntelligenceUpdate` (whose schema *does* accept `{ itemId, action }`) is not wired to any route, which is why the suite passed while the browser failed. The Policy Editor workspace was unaffected because its dedicated `/api/policy-editor/archive|restore` routes post `{ itemId }` only.
+
+**Correction:** the Admin dispatch is now the exported, testable `handleAdminPolicyItemAction` in `lib/policy-intelligence/editorial-api.ts`. It validates the composite payload **once** with a strict discriminated union (`{ action: "archive", itemId, reason? }` | `{ action: "restore", itemId }`) and re-presents only the handler payload to the shared handlers; the route is a thin delegation. No validation, authorization, CSRF, concurrency, protection or audit rule was weakened, and the strict schemas still reject unknown keys, wrong id types (e.g. a slug) and unknown actions.
+
+### D-073 follow-up — Publish Official Source (lawyer direct publication of an official snapshot, 2026-10-14)
+
+**Observed:** a real sync discovered/snapshotted 10 Home Affairs candidates (9 analysed, 8 full-analysis publications, 2 source-first, 0 failures), yet items such as `Migration (Student Visa Applications to Be Made from outside Australia) Instrument 2026` stayed `draft` with a stored snapshot and **no** analysis revision (`analysis_revision_unavailable`). The existing Force Publish path requires an AI analysis revision to override, so the principal lawyer could not publish an authentic official source that had no analysis. That contradicts lawyer-final editorial authority.
+
+**Ruling:** an authorized editor may publish the item's persisted official snapshot directly, reusing D-072's source-first representation — no AI, no analyzer, no verifier, no publication gate.
+
+**Implementation (reuses D-072's persistence representation, no new table):**
+- `editorial-core.ts`: new `EditorialSourceSnapshotRow` + tx method `getSourceSnapshotForItem({ itemId, snapshotId })` (the item's `latestSnapshotId` when present, else the newest stored snapshot), `insertRevision` now accepts optional `schemaVersion`/`modelMetadata` (existing callers unchanged), and `officialSourceRevisionFingerprint({ itemId, snapshotId })` (snapshot + source-first contract only, so the unique `(snapshotId, analysisFingerprint)` index makes repeats idempotent).
+- `editorial-repository.ts` / `editorial-memory.ts`: implement the lookup and revision fields (postgres query on `PolicyIntelligenceSourceSnapshot`; in-memory `sourceSnapshots` map + `seedEditorialSourceSnapshot`).
+- `editorial-service.ts`: `publishOfficialSource({ actorUserId, itemId })` — `requirePublicationAuthority` (admin inherent / verified lawyer with an active grant), item row locked `FOR UPDATE`, archived refused (`item_archived`), no snapshot refused (`validation_failed: no_source_snapshot`), an identical already-published revision returns `unchanged` with **no** new revision or audit row, otherwise the previous published revision is superseded, a `source_first` revision is inserted (`schemaVersion: POLICY_SOURCE_FIRST_SCHEMA`, `modelMetadata.sourceFirst.reason = "lawyer_source_publication"`, `analysis`/`verification` null), the item becomes `published` with an honest `sourceStatus` (`deriveSourceFirstSourceStatus(declaredSourceStatusFromMetadata(snapshot.sourceMetadata))`; an unestablished legal effect stays `unknown`) plus `publicationMode: human_protected` and protection metadata, and one `publish_official_source` audit event records actor/timestamp/snapshot/previous state.
+- `contracts.ts`: `PolicySourceFirstReason` gains `"lawyer_source_publication"`; `publication-diagnostics.ts` adds its operator explanation.
+- `editorial-api.ts`: `publishSourceSchema` + `handlePublishOfficialSource`, and the Admin action union accepts `{ action: "publish_source", itemId }`; new editor route `app/api/policy-editor/publish-source`; Admin UI gains an inline-confirmed **Publish Official Source / 发布官方来源** button (shown when a snapshot exists and the item is not archived).
+
+**Public effect:** `read-service` maps the stored `source_first` kind to provenance `official_source_update` with the official title/URL/dates and a verbatim excerpt and `analysisPending: true`; an `unknown` legal effect renders in D-073's `official_update` group with the badge "Legal effect not yet verified" — never as legislation in force. **Protection:** the same transaction sets `human_protected`, so the pipeline's existing hold branch stores any later AI revision as `review_required` instead of replacing the editor-approved publication; edit/revise/archive/restore/explicit release are unchanged and no lawyer-authored analysis is fabricated.
+
+**Tests (focused, 6 new in `editorial-api.test.ts`):** Admin publishes a snapshot-only item with no grant and no analysis; granted editor publishes while plain lawyer / unverified admin / cross-site requests stay 403 with zero revisions or audit rows; the stored revision is D-072's `source_first` with `analysis`/`verification` null and no provider/model identity; idempotent repeat returns `unchanged` with no duplicate revision/audit; archived items stay archived; missing snapshot is a controlled 400; an explicit `declaredSourceStatus: "in_force"` is honoured while the default stays `unknown`; a held automated revision (the postgres hold outcome) cannot disturb the human publication or cause duplicates. Validation: `pnpm test:unit` **877/877 pass, 0 fail, 0 skip**, `pnpm build` **exit 0**, `tsc --noEmit` 44 (below the 45 baseline), Biome clean. No migration, no new table, no live sync, no paid call, no database mutation.
+
+**Known limitation (stated honestly):** the in-memory pipeline repository is a test double and does not implement the `human_protected` hold that the production postgres repository enforces; the hold is therefore verified by code review plus the existing stubbed unit test and the owner-run isolated integration suite rather than by a new unit test.
+
+### Behaviour record — Admin archive/restore regression evidence
+
+The raw `{ itemId, action }` body forwarded straight into the archive handler still returns `validation_failed` (the documented root cause above); the Admin payload now archives a published, editor-protected Manual policy with no Policy Editor grant, preserving `publicationMode: human_protected` and `latestPublishedRevisionId`, and appends exactly one durable `archive_policy_item` audit event with the actor and previous status; Admin restore returns the item to `published` from its intact published revision with one `restore_policy_item` event; unverified admins, ungranted lawyers and cross-site requests remain 403 with no state change. D-071 compatibility suppression is unchanged (archiving keeps `latestPublishedRevisionId`, so the durability index still suppresses the obsolete bundled entry for that slug).
+
+
+
+## D-072 — AI Must Not Hold Subjective Editorial Veto Over Official Policy Updates
+
+**Date:** 2026-10-14
+**Status:** ACCEPTED — owner-directed correction, implemented on `codex/phase12-stage3-policy-intelligence` (worktree only).
+**Supersedes:** the subjective-AI publication-veto policy expressed by the pre-D-072 automatic publication gate (`evaluatePublicationGate`) and its downstream hold reasons.
+
+**Owner ruling.** The AI must not possess subjective editorial veto authority over automatically discovered official policy updates. The product objective is timely publication of official Australian immigration policy intelligence — including proposals, consultations, announcements, bills, future changes, guidance and enacted laws. The previous gate repeatedly withheld information the principal lawyer considered valuable, producing prolonged periods with no newly published items; that is a product failure.
+
+**Removed veto conditions (now advisory metadata only).** `publicationEligibility.classification !== "policy_relevant"`, `sourceStatus.certain === false`, `publication_eligibility_not_supported`, `source_status_not_fully_supported`, verifier disagreement about partial/uncertain interpretations, and evidence truncation no longer withhold an item. They are recorded as advisories (on the revision metadata and the sync-run telemetry), they may withhold individual unsupported prose units, and they may downgrade an unverifiable legal-effect status to `unknown`.
+
+**Structural safeguards retained.** HTTPS official-source allowlists, SSRF and redirect protection, acquisition limits, provenance/snapshot identity, unreadable-source handling, deduplication and idempotency, archived-item suppression, durable human-publication protection, D-065/D-070/D-071, and the honest distinction between AI analysis, official-source notices and lawyer-authored content. `source_identity_incomplete` (which official source this content came from cannot be established) remains the only blocking condition; without it nothing is published.
+
+**Two independent questions.** (A) Is the source an authentic, eligible official update? (B) What legal status, commencement, scope and effect can be established? If A passes, the item is ordinarily publishable even when B is partly uncertain. Uncertainty about future enactment is never treated as uncertainty about whether a consultation or proposal exists. Status is never upgraded: proposals and consultations are never presented as enacted, commencement dates are never invented, and an unestablished status is displayed as `unknown` ("Legal effect not yet verified" / "法律效力状态待确认"). `unknown` was added to the status vocabulary (no migration: the column is a plain varchar without CHECK constraints).
+
+**Source-first publication fallback.** For authentic, readable, allowlisted sources the pipeline now publishes a minimal typed `source_first` revision instead of holding or failing when the analyzer is unavailable/invalid, when its output cites unretrieved evidence, or when verification is unusable: verified source identity and canonical URL, the official title, retrieval date, an available bounded verbatim official excerpt, explicit official-vs-AI-vs-legal-advice labelling, honest status, and a clear "AI analysis pending" notice. No analysis object, `keyChanges`, affected groups, dates or legal effects are fabricated to satisfy the analysis schema. A later successful analysis publishes a distinct newer revision of the same item (fingerprint includes the content kind) and therefore enriches the item without duplicating it or erasing the earlier revision; repeated identical runs remain idempotent. Provider-disabled runs still fail explicitly rather than publishing notices for every item.
+
+**Publication metrics.** `publishedCount` remains the count of successful automatic releases and `sourceFirstPublishedCount` (stored in the existing sync-run metadata JSON, no migration) is the subset published source-first; `fullAnalysisPublishedCount = publishedCount − sourceFirstPublishedCount`. `heldCount` now counts genuine technical holds and human-publication protection only. Analyzer/verifier warnings are recorded in `candidateWarnings` (bounded) and are never reported as failed publications. The Admin sync-run table and the item diagnostics panel display the split and the advisory breakdown.
+
+**Non-effects.** No schema migration (the new `contentKind = "source_first"` value and the `unknown` status are type-level varchar enums). No commit/push/deploy. Gates 1–3 remain NOT ACCEPTED.
+
+
+**Rationale.** Owner-host browser acceptance found the public page and the Admin page sourcing different data (compatibility-only public list vs durable-only admin list); the exclusivity was a genuine product inconsistency, not an intended state. Existing schemas and editorial services are reused; no parallel publishing system was added, no migration is required, and no existing local database record is mutated by the import (it only creates a new draft).
+
+## Owner-selected normal local development workflow (Phase 12 Stage 3 acceptance)
+
+The owner rejects an extra disposable database and a non-standard port for ordinary manual browser acceptance. The canonical local acceptance environment is the existing repository-local setup:
+
+- PostgreSQL database: **`chatbot`** on the existing local server (the repository's normal `POSTGRES_URL` target).
+- Website: the existing local dev server on **port 3000**.
+- Accounts: the **existing local user accounts** (no extra generated test accounts).
+- Documents: the existing local-test S3 bucket `immigration-ai-localtest-documents-747452892291-ap-southeast-2`, AWS profile `aulawyers-staging`, region `ap-southeast-2`.
+
+Rules: do not clone the database and do not create extra accounts for ordinary browser testing. The isolated `immigration_ai_phase12_stage1_test` database remains acceptable **only** for destructive automated integration tests. Migrations are applied to `chatbot` once, by the owner, with the preflight/acknowledgement flow documented in `CURRENT_HANDOFF.md`.

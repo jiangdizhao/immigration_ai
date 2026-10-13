@@ -7,6 +7,11 @@ const sourceIds = [
   "home-affairs-guidance",
   "federal-register-legislation",
   "art-immigration-review",
+  "home-affairs-announcements",
+  "home-affairs-consultations",
+  "ministerial-announcements",
+  "parliamentary-bills",
+  "operator-submitted-official-url",
 ] as const;
 type SourceId = (typeof sourceIds)[number];
 function parseArgs(args: string[]) {
@@ -32,7 +37,7 @@ function parseArgs(args: string[]) {
       fixture = true;
     } else if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: pnpm policy:sync -- --source <home-affairs-guidance|federal-register-legislation|art-immigration-review> [--fixture]"
+        `Usage: pnpm policy:sync -- --source <${sourceIds.join("|")}> [--fixture]`
       );
       process.exit(0);
     } else {
@@ -91,7 +96,7 @@ function fixtureIndex(sourceId: SourceId): {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const [
-    { discoverPolicyCandidates },
+    { discoverPolicyCandidates, discoverOperatorSubmissionCandidates },
     { acquireOfficialPolicySource },
     { runPolicyIntelligenceSync, createPolicyModelMetadata },
     { createInMemoryPolicyIntelligenceRepository },
@@ -118,6 +123,13 @@ async function main() {
   ) => Promise<
     import("./policy-intelligence-acquisition").OfficialSourceAcquisition
   >;
+  // Phase 12 Stage 3: operator-submitted official URLs are ordinary candidates
+  // for this source; their lifecycle status is updated from the run outcome.
+  const isOperatorSource =
+    options.sourceId === "operator-submitted-official-url";
+  let pendingSubmissions: { id: string; submittedUrl: string }[] = [];
+  let submissionFailures: { submissionId: string; errorCode: string }[] = [];
+  let submissionToCandidate = new Map<string, string>();
 
   if (options.fixture) {
     const memory = createInMemoryPolicyIntelligenceRepository();
@@ -162,6 +174,27 @@ async function main() {
             candidate.sourceMetadata.urlProvenance === "seed"
           )
       );
+    if (isOperatorSource) {
+      pendingSubmissions = [
+        {
+          id: "fixture-submission-1",
+          submittedUrl:
+            "https://immi.homeaffairs.gov.au/policy-intelligence-fixture",
+        },
+      ];
+      const operatorDiscovery = await discoverOperatorSubmissionCandidates({
+        submissions: pendingSubmissions,
+        fetchOptions: fixtureFetch,
+      });
+      submissionFailures = [...operatorDiscovery.failures];
+      submissionToCandidate = new Map(
+        operatorDiscovery.candidates.flatMap((candidate) => {
+          const submissionId = candidate.sourceMetadata.operatorSubmissionId;
+          return submissionId ? [[submissionId, candidate.candidateId]] : [];
+        })
+      );
+      discover = async () => operatorDiscovery.candidates;
+    }
     acquire = (candidate) =>
       acquireOfficialPolicySource({
         candidate,
@@ -303,6 +336,30 @@ async function main() {
           )
       );
     acquire = (candidate) => acquireOfficialPolicySource({ candidate });
+    if (isOperatorSource) {
+      const { operatorSubmissionRepository } = await import(
+        "../lib/policy-intelligence/operator-submission-repository"
+      );
+      const pending =
+        await operatorSubmissionRepository.listPendingSubmissions(10);
+      pendingSubmissions = pending.map((row) => ({
+        id: row.id,
+        submittedUrl: row.submittedUrl,
+      }));
+      discover = async () => {
+        const result = await discoverOperatorSubmissionCandidates({
+          submissions: pendingSubmissions,
+        });
+        submissionFailures = [...result.failures];
+        submissionToCandidate = new Map(
+          result.candidates.flatMap((candidate) => {
+            const submissionId = candidate.sourceMetadata.operatorSubmissionId;
+            return submissionId ? [[submissionId, candidate.candidateId]] : [];
+          })
+        );
+        return result.candidates;
+      };
+    }
   }
 
   const dependencies = {
@@ -355,6 +412,32 @@ async function main() {
       throw new Error("fixture_idempotence_failed");
     }
     idempotence = "pass";
+  }
+  if (isOperatorSource && !options.fixture) {
+    const [
+      { planOperatorSubmissionOutcomes },
+      { operatorSubmissionRepository },
+    ] = await Promise.all([
+      import("../lib/policy-intelligence/operator-submission"),
+      import("../lib/policy-intelligence/operator-submission-repository"),
+    ]);
+    const updates = planOperatorSubmissionOutcomes({
+      submissions: pendingSubmissions.map((submission) => ({
+        id: submission.id,
+        candidateId: submissionToCandidate.get(submission.id) ?? null,
+      })),
+      failures: submissionFailures,
+      outcomes: result.outcomes,
+    });
+    const now = new Date();
+    for (const update of updates) {
+      await operatorSubmissionRepository.markSubmission({
+        id: update.id,
+        status: update.status,
+        errorCode: update.errorCode,
+        now,
+      });
+    }
   }
   await new Promise<void>((resolve) => {
     process.stdout.write(

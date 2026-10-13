@@ -6,6 +6,7 @@ import {
   type AdminPolicyIntelligenceSyncRun,
   handleAdminPolicyIntelligenceGet,
   handleAdminPolicyIntelligenceUpdate,
+  projectAdminCompatibilityEntries,
 } from "./admin-api";
 import { createInMemoryPolicyIntelligenceRepository } from "./memory-repository";
 
@@ -38,7 +39,7 @@ function setup() {
     pipelineFailures: [],
     analysisAttempts: [],
     sourceSyncDiagnostic: null,
-    publicationDiagnostics: { published: true, reasons: [] },
+    publicationDiagnostics: { published: true, reasons: [], advisories: [] },
   };
   const records = new Map([[itemId, item]]);
   const syncRun: AdminPolicyIntelligenceSyncRun & {
@@ -56,11 +57,43 @@ function setup() {
     heldCount: 0,
     failureCount: 0,
     safeErrorCode: "unsafe raw diagnostic text",
+    fullAnalysisPublishedCount: 0,
+    sourceFirstPublishedCount: 0,
+    advisoryCount: 0,
+    advisoryReasons: [],
     metadata: { sourceBody: "must not be returned" },
   };
   const service: AdminPolicyIntelligenceService = {
     async listItems() {
       return [...records.values()];
+    },
+    listCompatibilityEntries() {
+      return Promise.resolve(
+        projectAdminCompatibilityEntries({
+          entries: [
+            {
+              slug: "manual-policy",
+              sourceStatus: "in_force",
+              source: {
+                authority: "Department of Home Affairs",
+                officialTitle: "Bundled compatibility source",
+                officialUrl: "https://immi.homeaffairs.gov.au/example",
+                sourceDate: "2026-09-19",
+                effectiveDate: "2026-09-19",
+                category: "Skilled visa processing priorities",
+              },
+              copy: {
+                "zh-CN": { title: "兼容内容标题", summary: "兼容内容摘要" },
+                en: {
+                  title: "Compatibility title",
+                  summary: "Compatibility summary",
+                },
+              },
+            },
+          ],
+          durableState: new Map([["manual-policy", "not_managed"]]),
+        })
+      );
     },
     listSourceSyncRuns() {
       return Promise.resolve([syncRun]);
@@ -183,9 +216,41 @@ test("admin listing is authenticated and returns only management fields", async 
         heldCount: syncRun.heldCount,
         failureCount: syncRun.failureCount,
         safeErrorCode: null,
+        fullAnalysisPublishedCount: 0,
+        sourceFirstPublishedCount: 0,
+        advisoryCount: 0,
+        advisoryReasons: [],
+      },
+    ],
+    compatibilityEntries: [
+      {
+        slug: "manual-policy",
+        title: {
+          "zh-CN": "兼容内容标题",
+          en: "Compatibility title",
+        },
+        summary: {
+          "zh-CN": "兼容内容摘要",
+          en: "Compatibility summary",
+        },
+        authority: "Department of Home Affairs",
+        officialTitle: "Bundled compatibility source",
+        officialUrl: "https://immi.homeaffairs.gov.au/example",
+        sourceDate: "2026-09-19",
+        effectiveDate: "2026-09-19",
+        sourceStatus: "in_force",
+        category: "Skilled visa processing priorities",
+        storage: "bundled_registry",
+        provenance: "curated_reviewed",
+        editorialStatus: "published",
+        durableState: "not_managed",
       },
     ],
   });
+  // The admin view distinguishes storage and provenance per source.
+  assert.equal(body.compatibilityEntries[0].storage, "bundled_registry");
+  assert.equal(body.compatibilityEntries[0].provenance, "curated_reviewed");
+  assert.notEqual(body.items[0].sourceStatus, undefined);
   assert.equal(syncRun.status, "complete");
   assert.equal(body.sourceSyncRuns[0].safeErrorCode, null);
   assert.equal(body.items[0].sourceSyncDiagnostic, null);
@@ -210,6 +275,8 @@ test("direct admin service projection sanitizes error codes before page consumpt
     failureCount: 0,
     safeErrorCode: "unsafe raw diagnostic text",
     candidateFailures: [],
+    candidateWarnings: [],
+    sourceFirstPublishedCount: 0,
     analysisAttempts: [],
   });
 
@@ -217,15 +284,19 @@ test("direct admin service projection sanitizes error codes before page consumpt
   assert.equal(run?.safeErrorCode, null);
   assert.equal(Object.hasOwn(run ?? {}, "metadata"), false);
   assert.deepEqual(Object.keys(run ?? {}).sort(), [
+    "advisoryCount",
+    "advisoryReasons",
     "analyzedCount",
     "completedAt",
     "discoveredCount",
     "failureCount",
+    "fullAnalysisPublishedCount",
     "heldCount",
     "publishedCount",
     "safeErrorCode",
     "snapshottedCount",
     "sourceConfigId",
+    "sourceFirstPublishedCount",
     "startedAt",
     "status",
     "unchangedCount",

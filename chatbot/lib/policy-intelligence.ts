@@ -6,7 +6,15 @@ export const POLICY_SOURCE_STATUSES = [
   "announced",
   "proposed",
   "consultation",
+  "enacted_not_commenced",
   "superseded",
+  "withdrawn",
+  /**
+   * Phase 12 Stage 3 D-072 — the honest "not established" status. It is shown
+   * for source-first notices and for analyses whose status could not be
+   * verified; it never asserts legal force.
+   */
+  "unknown",
 ] as const;
 
 export type PolicySourceStatus = (typeof POLICY_SOURCE_STATUSES)[number];
@@ -105,7 +113,10 @@ const sourceStatusLabels: Record<
     announced: "已公布",
     proposed: "拟议",
     consultation: "咨询中",
+    enacted_not_commenced: "已立法，尚未生效",
     superseded: "已被取代",
+    withdrawn: "已撤回",
+    unknown: "法律效力状态待确认",
   },
   en: {
     in_force: "In force",
@@ -113,7 +124,10 @@ const sourceStatusLabels: Record<
     announced: "Announced",
     proposed: "Proposed",
     consultation: "Consultation",
+    enacted_not_commenced: "Enacted, not yet commenced",
     superseded: "Superseded",
+    withdrawn: "Withdrawn",
+    unknown: "Legal effect not yet verified",
   },
 };
 

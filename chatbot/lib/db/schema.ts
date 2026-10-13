@@ -1,5 +1,6 @@
 import { type InferSelectModel, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   foreignKey,
   index,
@@ -1001,16 +1002,24 @@ export type Stream = InferSelectModel<typeof stream>;
 // P11-009 Stage 1: durable, source-grounded Policy Intelligence revisions.
 // Snapshot evidence and analysis payloads are append-only; only publication
 // lifecycle pointers/status fields advance as newer verified revisions publish.
+//
+// Phase 12 Stage 3 adds the human editorial dimension: `origin` distinguishes
+// crawler-discovered items from lawyer-authored ones, and the official source
+// identity columns are nullable because a lawyer-authored commentary entry has
+// no authoritative official source (nothing may be fabricated for it).
 export const policyIntelligenceItem = pgTable(
   "PolicyIntelligenceItem",
   {
     id: uuid("id").primaryKey().notNull().defaultRandom(),
     slug: varchar("slug", { length: 180 }).notNull(),
+    origin: varchar("origin", { enum: ["automated", "manual"] })
+      .notNull()
+      .default("automated"),
     primarySourceConfigId: varchar("primarySourceConfigId", {
       length: 100,
-    }).notNull(),
-    primarySourceId: varchar("primarySourceId", { length: 255 }).notNull(),
-    canonicalOfficialUrl: text("canonicalOfficialUrl").notNull(),
+    }),
+    primarySourceId: varchar("primarySourceId", { length: 255 }),
+    canonicalOfficialUrl: text("canonicalOfficialUrl"),
     sourceStatus: varchar("sourceStatus", {
       enum: [
         "in_force",
@@ -1018,7 +1027,12 @@ export const policyIntelligenceItem = pgTable(
         "announced",
         "proposed",
         "consultation",
+        "enacted_not_commenced",
         "superseded",
+        "withdrawn",
+        // Phase 12 Stage 3 D-072: honest "not established" status. It never
+        // asserts legal force.
+        "unknown",
       ],
     })
       .notNull()
@@ -1030,6 +1044,34 @@ export const policyIntelligenceItem = pgTable(
       .default("draft"),
     latestSnapshotId: uuid("latestSnapshotId"),
     latestPublishedRevisionId: uuid("latestPublishedRevisionId"),
+    /**
+     * The staff member who created the item. Automated items leave this null;
+     * a manually authored item always has an accountable human creator.
+     */
+    createdByUserId: uuid("createdByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    /**
+     * Phase 12 Stage 3 R1 — durable human-publication protection.
+     *
+     * `automatic` (default): an eligible newer source revision may supersede the
+     * current public revision without human approval, exactly as before.
+     * `human_protected`: an authorized Policy Editor has approved/published the
+     * current revision, so automatic publication must never replace or unpublish
+     * it. Newer eligible revisions are captured, analyzed and held as pending
+     * review instead. Only an authorized Policy Editor may publish a newer
+     * revision or explicitly release the item back to `automatic`.
+     */
+    publicationMode: varchar("publicationMode", {
+      enum: ["automatic", "human_protected"],
+    })
+      .notNull()
+      .default("automatic"),
+    protectionSetAt: timestamp("protectionSetAt"),
+    protectionSetByUserId: uuid("protectionSetByUserId").references(
+      () => user.id,
+      { onDelete: "restrict" }
+    ),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
@@ -1086,6 +1128,23 @@ export const policyIntelligenceSourceSnapshot = pgTable(
   })
 );
 
+/**
+ * Policy Intelligence revision store (P11-009 Stage 1 + Phase 12 Stage 3).
+ *
+ * `contentKind` discriminates three revision origins:
+ * - `ai_analysis`: the automated pipeline's analyzed + verified revision of an
+ *   official source snapshot (`analysis`, `verification`, `modelMetadata` and
+ *   `snapshotId` are all present).
+ * - `lawyer_override`: a lawyer-corrected revision of an AI revision. It keeps
+ *   the base revision's snapshot only as provenance; there is no AI analysis
+ *   metadata and no AI verification covering the corrected wording.
+ * - `lawyer_authored`: fully manual, first-class lawyer-authored content with no
+ *   source snapshot at all.
+ *
+ * Human revisions never fabricate snapshot/analysis/verification/model metadata:
+ * those columns are simply NULL, and the durable human content lives in
+ * `humanContent` (validated by `policyHumanRevisionContentSchema`).
+ */
 export const policyIntelligenceAnalysisRevision = pgTable(
   "PolicyIntelligenceAnalysisRevision",
   {
@@ -1093,19 +1152,48 @@ export const policyIntelligenceAnalysisRevision = pgTable(
     itemId: uuid("itemId")
       .notNull()
       .references(() => policyIntelligenceItem.id, { onDelete: "restrict" }),
-    snapshotId: uuid("snapshotId")
-      .notNull()
-      .references(() => policyIntelligenceSourceSnapshot.id, {
+    snapshotId: uuid("snapshotId").references(
+      () => policyIntelligenceSourceSnapshot.id,
+      {
         onDelete: "restrict",
-      }),
+      }
+    ),
+    contentKind: varchar("contentKind", {
+      enum: [
+        "ai_analysis",
+        "lawyer_override",
+        "lawyer_authored",
+        // Phase 12 Stage 3 D-072: a published source-first notice with no
+        // fabricated analysis (analysis/verification/modelMetadata are NULL).
+        "source_first",
+      ],
+    })
+      .notNull()
+      .default("ai_analysis"),
     analysisFingerprint: varchar("analysisFingerprint", {
       length: 64,
     }).notNull(),
     revisionNumber: integer("revisionNumber").notNull(),
     schemaVersion: varchar("schemaVersion", { length: 100 }).notNull(),
-    analysis: json("analysis").notNull(),
-    verification: json("verification").notNull(),
-    modelMetadata: json("modelMetadata").notNull(),
+    analysis: json("analysis"),
+    verification: json("verification"),
+    modelMetadata: json("modelMetadata"),
+    /** Validated human editorial content for the two human content kinds. */
+    humanContent: json("humanContent"),
+    /** The AI revision a lawyer_override corrected, for audit lineage. */
+    baseRevisionId: uuid("baseRevisionId").references(
+      (): AnyPgColumn => policyIntelligenceAnalysisRevision.id,
+      { onDelete: "restrict" }
+    ),
+    /** Snapshot of the AI decision the lawyer overrode (audit only). */
+    aiDecision: json("aiDecision"),
+    overrideReason: text("overrideReason"),
+    /** Client-provided idempotency key, unique per item when present. */
+    idempotencyKey: varchar("idempotencyKey", { length: 80 }),
+    /** The accountable human editor for human-authored/override revisions. */
+    createdByUserId: uuid("createdByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
     editorialStatus: varchar("editorialStatus", {
       enum: ["draft", "review_required", "published", "superseded", "archived"],
     }).notNull(),
@@ -1127,6 +1215,181 @@ export const policyIntelligenceAnalysisRevision = pgTable(
     publicationIndex: index(
       "PolicyIntelligenceAnalysisRevision_publication_idx"
     ).on(table.editorialStatus, table.publishedAt),
+    itemIdempotencyUnique: uniqueIndex(
+      "PolicyIntelligenceAnalysisRevision_item_idempotency_unique"
+    ).on(table.itemId, table.idempotencyKey),
+    contentKindIndex: index(
+      "PolicyIntelligenceAnalysisRevision_content_kind_idx"
+    ).on(table.itemId, table.contentKind, table.revisionNumber),
+  })
+);
+
+/**
+ * Phase 12 Stage 3 — explicit, administratively assignable/revocable Policy
+ * Editor capability. Being a lawyer does NOT imply publication rights: the
+ * capability is a deliberate grant recorded here (and in the immutable
+ * editorial event log), enforced server-side on every editorial mutation.
+ */
+export const policyEditorGrant = pgTable(
+  "PolicyEditorGrant",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    grantedByUserId: uuid("grantedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    grantedAt: timestamp("grantedAt").notNull().defaultNow(),
+    revokedByUserId: uuid("revokedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    revokedAt: timestamp("revokedAt"),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    userUnique: uniqueIndex("PolicyEditorGrant_user_unique").on(table.userId),
+    activeIndex: index("PolicyEditorGrant_active_idx").on(
+      table.revokedAt,
+      table.updatedAt
+    ),
+  })
+);
+
+/**
+ * Phase 12 Stage 3 — immutable editorial audit log. Every publication,
+ * override, archive, restore and capability change appends one durable row:
+ * actor, timestamp, affected records and old/new values. Rows are never
+ * updated or deleted by application code.
+ */
+export const policyIntelligenceEditorialEvent = pgTable(
+  "PolicyIntelligenceEditorialEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    action: varchar("action", {
+      enum: [
+        "grant_policy_editor",
+        "revoke_policy_editor",
+        "create_manual_policy",
+        "save_manual_draft",
+        "create_revision_draft",
+        "publish_manual_policy",
+        "force_publish_revision",
+        "release_publication_protection",
+        "archive_policy_item",
+        "restore_policy_item",
+        "submit_official_url",
+      ],
+    }).notNull(),
+    itemId: uuid("itemId").references(() => policyIntelligenceItem.id, {
+      onDelete: "restrict",
+    }),
+    revisionId: uuid("revisionId").references(
+      () => policyIntelligenceAnalysisRevision.id,
+      { onDelete: "restrict" }
+    ),
+    overrideReason: text("overrideReason"),
+    detail: json("detail").notNull().default({}),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    itemCreatedIndex: index(
+      "PolicyIntelligenceEditorialEvent_item_created_idx"
+    ).on(table.itemId, table.createdAt),
+    actorCreatedIndex: index(
+      "PolicyIntelligenceEditorialEvent_actor_created_idx"
+    ).on(table.actorUserId, table.createdAt),
+  })
+);
+
+/**
+ * Phase 12 Stage 3 R2 — immutable, lossless history of human draft saves.
+ *
+ * Every `createManualDraft` / `saveManualDraft` appends the *complete* draft
+ * document here (not only a hash or a truncated preview), so an authorized
+ * editor can retrieve exactly what a previous save contained — long bilingual
+ * body text, amended citations, removed narrative items and removed references.
+ * Rows are append-only: no application code updates them, and the only deletion
+ * is the bounded retention prune executed in the same transaction as the save,
+ * which removes nothing but this revision's own oldest snapshots beyond the
+ * configured count/byte budget. Published revisions are never touched by it.
+ */
+export const policyIntelligenceDraftSnapshot = pgTable(
+  "PolicyIntelligenceDraftSnapshot",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    itemId: uuid("itemId")
+      .notNull()
+      .references(() => policyIntelligenceItem.id, { onDelete: "restrict" }),
+    revisionId: uuid("revisionId")
+      .notNull()
+      .references(() => policyIntelligenceAnalysisRevision.id, {
+        onDelete: "restrict",
+      }),
+    /** Monotonic per-revision save number (1 = the create). */
+    saveNumber: integer("saveNumber").notNull(),
+    /** Fingerprint of the saved content (the value the revision also carries). */
+    contentVersion: varchar("contentVersion", { length: 64 }).notNull(),
+    /** sha256 of the canonical stored JSON, so stored content is verifiable. */
+    contentDigest: varchar("contentDigest", { length: 64 }).notNull(),
+    /** The complete validated human revision content at that save. */
+    humanContent: json("humanContent").notNull(),
+    /** Serialized size, used by the bounded retention policy. */
+    contentBytes: integer("contentBytes").notNull(),
+    /** Server-authoritative author of the save. */
+    savedByUserId: uuid("savedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    revisionSaveUnique: uniqueIndex(
+      "PolicyIntelligenceDraftSnapshot_revision_save_unique"
+    ).on(table.revisionId, table.saveNumber),
+    revisionCreatedIndex: index(
+      "PolicyIntelligenceDraftSnapshot_revision_created_idx"
+    ).on(table.revisionId, table.createdAt),
+  })
+);
+
+/**
+ * Phase 12 Stage 3 — authorized submission of an official URL into the
+ * existing controlled discovery pipeline. The row is durable operator intent;
+ * the next `operator-submitted-official-url` sync run fetches it through the
+ * same allowlist/SSRF/redirect/byte/timeout protections as every other source.
+ */
+export const policyIntelligenceOperatorSubmission = pgTable(
+  "PolicyIntelligenceOperatorSubmission",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    sourceConfigId: varchar("sourceConfigId", { length: 100 })
+      .notNull()
+      .default("operator-submitted-official-url"),
+    submittedUrl: text("submittedUrl").notNull(),
+    submittedByUserId: uuid("submittedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    note: varchar("note", { length: 500 }),
+    status: varchar("status", {
+      enum: ["pending", "consumed", "failed", "rejected"],
+    })
+      .notNull()
+      .default("pending"),
+    errorCode: varchar("errorCode", { length: 100 }),
+    attemptedAt: timestamp("attemptedAt"),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    statusCreatedIndex: index(
+      "PolicyIntelligenceOperatorSubmission_status_created_idx"
+    ).on(table.status, table.createdAt),
+    urlIndex: index("PolicyIntelligenceOperatorSubmission_url_idx").on(
+      table.submittedUrl
+    ),
   })
 );
 

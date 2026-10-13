@@ -4,7 +4,6 @@ import {
   type AdminPolicyIntelligenceService,
   projectAdminPolicyIntelligenceSyncRun,
 } from "./admin-api";
-import { isCurrentPublishedPolicyRevision } from "./currentness";
 import type {
   PolicyIntelligenceRepository,
   PolicyItemRecord,
@@ -14,6 +13,11 @@ import type {
   PolicySnapshotRecord,
 } from "./pipeline";
 import { PolicyItemArchivedError } from "./pipeline";
+import { declaredSourceStatusFromMetadata } from "./contracts";
+import {
+  advisoryReasonCounts,
+  buildAdminSourceSyncPublicationMetrics,
+} from "./publication-diagnostics";
 import {
   readAnalysisAttemptDiagnostics,
   readCandidateFailureDiagnostics,
@@ -59,10 +63,12 @@ export function createInMemoryPolicyIntelligenceRepository() {
         unchangedCount: 0,
         analyzedCount: 0,
         publishedCount: 0,
+        sourceFirstPublishedCount: 0,
         heldCount: 0,
         failureCount: 0,
         safeErrorCode: null,
         candidateFailures: [],
+        candidateWarnings: [],
         analysisAttempts: [],
       });
     },
@@ -167,6 +173,7 @@ export function createInMemoryPolicyIntelligenceRepository() {
         ...structuredClone(input),
         id: nextId(),
         revisionNumber,
+        editorialStatus: "review_required",
         publishedAt: null,
         supersededAt: null,
       };
@@ -235,7 +242,12 @@ export function createInMemoryPolicyIntelligenceRepository() {
         supersededAt: null,
       };
       revisions.set(revision.id, revision);
-      item.sourceStatus = revision.analysis.sourceStatus.value;
+      // Phase 12 Stage 3 D-072: source-first publications never assert a legal
+      // effect that could not be established.
+      item.sourceStatus =
+        revision.contentKind === "source_first"
+          ? declaredSourceStatusFromMetadata(snapshot.sourceMetadata)
+          : (revision.analysis?.sourceStatus.value ?? item.sourceStatus);
       item.editorialStatus = "published";
       item.latestPublishedRevisionId = revision.id;
       return { revision, created: true };
@@ -243,6 +255,15 @@ export function createInMemoryPolicyIntelligenceRepository() {
   };
 
   const adminService: AdminPolicyIntelligenceService = {
+    /**
+     * The in-memory repository is a test double: it deliberately carries no
+     * bundled registry data (the server-only registry module cannot load in a
+     * plain test process). The DB-backed admin service supplies the real
+     * compatibility entries through `listCompatibilitySourceEntries()`.
+     */
+    listCompatibilityEntries() {
+      return Promise.resolve([]);
+    },
     listSourceSyncRuns() {
       const sourceIds = new Set<string>();
       const countsBySource = new Map<string, number>();
@@ -266,6 +287,15 @@ export function createInMemoryPolicyIntelligenceRepository() {
           continue;
         }
         countsBySource.set(run.sourceConfigId, sourceCount + 1);
+        const metrics = buildAdminSourceSyncPublicationMetrics({
+          publishedCount: run.publishedCount,
+          heldCount: run.heldCount,
+          failureCount: run.failureCount,
+          metadata: {
+            sourceFirstPublishedCount: run.sourceFirstPublishedCount,
+            advisoryReasons: advisoryReasonCounts(run.candidateWarnings),
+          },
+        });
         projected.push(
           projectAdminPolicyIntelligenceSyncRun({
             sourceConfigId: run.sourceConfigId,
@@ -276,10 +306,14 @@ export function createInMemoryPolicyIntelligenceRepository() {
             snapshottedCount: run.snapshottedCount,
             unchangedCount: run.unchangedCount,
             analyzedCount: run.analyzedCount,
-            publishedCount: run.publishedCount,
-            heldCount: run.heldCount,
-            failureCount: run.failureCount,
+            publishedCount: metrics.publishedCount,
+            heldCount: metrics.heldCount,
+            failureCount: metrics.failureCount,
             safeErrorCode: run.safeErrorCode,
+            fullAnalysisPublishedCount: metrics.fullAnalysisPublishedCount,
+            sourceFirstPublishedCount: metrics.sourceFirstPublishedCount,
+            advisoryCount: metrics.advisoryCount,
+            advisoryReasons: metrics.advisoryReasons,
           })
         );
       }
@@ -396,22 +430,16 @@ export function createInMemoryPolicyIntelligenceRepository() {
       if (item.editorialStatus !== "archived") {
         return { status: "not_archived" };
       }
+      // Phase 12 Stage 3 restore semantics: an intact published revision
+      // returns to `published`, regardless of whether a newer source snapshot
+      // is awaiting review (that is a currentness signal, not suppression).
       const revision = item.latestPublishedRevisionId
         ? revisions.get(item.latestPublishedRevisionId)
         : undefined;
-      const snapshot = revision
-        ? snapshots.get(revision.snapshotId)
-        : undefined;
-      const isCurrent = Boolean(
-        revision &&
-          snapshot &&
-          isCurrentPublishedPolicyRevision({
-            item: { ...item, editorialStatus: "published" },
-            revision,
-            snapshot,
-          })
-      );
-      item.editorialStatus = isCurrent ? "published" : "review_required";
+      item.editorialStatus =
+        revision?.editorialStatus === "published"
+          ? "published"
+          : "review_required";
       return { status: "updated", editorialStatus: item.editorialStatus };
     },
   };
