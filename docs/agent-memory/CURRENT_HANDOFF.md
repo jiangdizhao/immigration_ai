@@ -1,6 +1,19 @@
 # CURRENT_HANDOFF
 
 
+<!-- BEGIN AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+## LATEST correction: AWS Staging Fast mode upgraded to GPT-6 (2026-10-14)
+
+**Supersedes the previous “Web :44 is current” operational summary, but not its historical deployment evidence.** The owner identified a missed environment variable: on Web task definition `:44`, `FAST_LUNA_MODEL` was **not set**, and `legal-service/app/core/config.py` defaults to **`gpt-5.6-luna`**. Thus an earlier statement that Fast already used GPT-6 was incorrect; Fast was not covered by `DEFAULT_AGENT_MODEL`.
+
+**Fix deployed / owner AWS CLI output:** Web ECS task definition **`immigration-ai-staging-web:45`**, with **`FAST_LUNA_MODEL=gpt-6-luna`** explicitly added to the `legal-service` container environment (no new images or database migration). Owner command returned `Registered revision: 45`, `SUCCESS: GPT-6 Fast deployment completed`, `Task revision: 45`, `FAST_LUNA_MODEL: gpt-6-luna`, and **`Running tasks: 1`** after the `services-stable` wait and rollout-state assertions. **`:45` is now current; `:44` and `:43` are historical references**, not the current deployment.
+
+Other previously verified task configuration: `DEFAULT_AGENT_MODEL=gpt-6-luna`, `LEGAL_FACT_CHECK_MODEL=gpt-6-luna`, `COMPACT_CHECKER_MODEL=gpt-6-luna`, `PREMIUM_AGENT_MODEL=gpt-6.1-sol`, `PREMIUM_DIRECT_PRIMARY_MODEL=gpt-6.1-sol`, `PREMIUM_DIRECT_FALLBACK_MODEL=gpt-6-luna`. Unset `PREMIUM_DIRECT_TERMINAL_MODEL` inherits fallback via source configuration. `GENERAL_QA_MODEL` and `REASONING_MODEL` intentionally remain `gpt-5.4-mini`. Separate Policy Sync Task Definition `:11` remains `POLICY_INTELLIGENCE_MODEL=gpt-6.1-sol` with Scheduler targeting `:11`.
+
+**Evidence boundary:** ECS configuration and stable service are verified by the owner's output. No new live provider request, CloudWatch serving-model trace, or policy-sync scheduled execution was performed as part of this correction; do **not** describe actual per-request model identity as independently proven. Owner requested minimal necessary action, no additional test campaign. See [staging deployment record](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md) for the chronological rollout and this corrective addendum.
+<!-- END AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+
+
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
 ## LATEST: Phase 12 Stage 3 — AWS Staging deployment COMPLETED / owner accepted (2026-10-14)
 
