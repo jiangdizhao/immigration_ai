@@ -1,5 +1,29 @@
 # Phase 12 Stage 3 — AWS Staging deployment record (2026-10-14)
 
+
+<!-- BEGIN AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+## Deployment correction — 2026-10-14 Fast-model setting (Web :45)
+
+**Current Web release is `:45`, superseding `:44` in the historical original rollout sections below.** Source review of `legal-service/app/core/config.py` found `fast_luna_model` reads `FAST_LUNA_MODEL` with default `gpt-5.6-luna`. The Stage 3 `:44` task definition did not define `FAST_LUNA_MODEL`; therefore the assertion that Fast was configured for `gpt-6-luna` was not justified by the earlier six-variable update. A separate `DEFAULT_AGENT_MODEL=gpt-6-luna` does **not** override this Fast-specific setting.
+
+The owner registered ECS Task Definition `immigration-ai-staging-web:45` by copying `:44` and adding **`FAST_LUNA_MODEL=gpt-6-luna`** to the `legal-service` environment. No Docker rebuild/digest change, RDS migration, Policy Sync change or task-definition edits beyond that variable were intended. They updated `immigration-ai-staging-web`, waited for `aws ecs wait services-stable`, and reported:
+
+```text
+Registered revision: 45
+Waiting for ECS deployment...
+SUCCESS: GPT-6 Fast deployment completed
+Task revision: 45
+FAST_LUNA_MODEL: gpt-6-luna
+Running tasks: 1
+```
+
+The command additionally asserted `taskDefinition == new_arn`, `runningCount == desiredCount`, and `rolloutState == COMPLETED` before reporting SUCCESS. **Current Web baseline `:45`**; `:44` (prior running revision) and `:43` (pre-Stage-3 release) remain historical rollback references subject to schema compatibility. Policy Sync `:11` remains enabled and unchanged.
+
+**Model environment names inspected from `:44` prior to the fix:** `FAST_LUNA_MODEL` absent; `DEFAULT_AGENT_MODEL=gpt-6-luna`; `LEGAL_FACT_CHECK_MODEL=gpt-6-luna`; `COMPACT_CHECKER_MODEL=gpt-6-luna`; `PREMIUM_AGENT_MODEL=gpt-6.1-sol`; `PREMIUM_DIRECT_PRIMARY_MODEL=gpt-6.1-sol`; `PREMIUM_DIRECT_FALLBACK_MODEL=gpt-6-luna`; `PREMIUM_DIRECT_TERMINAL_MODEL` absent (source inherits fallback); `GENERAL_QA_MODEL=gpt-5.4-mini`; `REASONING_MODEL=gpt-5.4-mini`. Policy Sync `:11` `POLICY_INTELLIGENCE_MODEL=gpt-6.1-sol`. No actual per-request API/provider model identity was independently confirmed after deploying `:45`; that would require log/response metadata review if ever needed. Existing owner Stage 3 acceptance and no-additional-test instruction remain in force.
+
+
+<!-- END AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+
 **Status:** DEPLOYED / OWNER ACCEPTED FOR STAGING. Deployment and narrow functional acceptance are complete; do not schedule another broad test campaign without an observed defect or fresh owner direction. This is an operational handoff, **not** approval for production rollout, a protected-branch merge, China payment activation, or retrospective proof of unrun formal Gates 1–3.
 
 **Evidence basis:** Owner-executed AWS CLI outputs, ECS/CloudWatch summaries, and owner browser smoke confirmation during the 2026-10-14 deployment conversation. This document records those results; its author did not independently execute commands in the owner's AWS account. Never put SSM/Secrets Manager values, database URLs containing credentials, OpenAI keys, or user conversation contents in this repository.
