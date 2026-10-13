@@ -1,6 +1,13 @@
 # PROJECT_STATE
 
 
+<!-- BEGIN AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+## 2026-10-14 AWS Staging current revision correction — Web :45
+
+**Current ECS Web Task Definition: `immigration-ai-staging-web:45` (NOT :44).** The original Stage 3 Web :44 config omitted `FAST_LUNA_MODEL`; Fast's code default was `gpt-5.6-luna` despite setting `DEFAULT_AGENT_MODEL=gpt-6-luna`. Owner deployed `:45` with explicit `FAST_LUNA_MODEL=gpt-6-luna`; AWS CLI returned success after `services-stable`, running 1 task. Other defaults/Legal Check/Checker/Premium config were already GPT-6 family. Deliberate `GENERAL_QA_MODEL` and `REASONING_MODEL` still `gpt-5.4-mini`. Policy Sync remains `:11` with `gpt-6.1-sol`. No new image or DB migration. Per-request provider model identity has not been separately observed after :45. [Operational history](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md).
+<!-- END AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
+
+
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
 **Latest operational state (2026-10-14): Stage 3 SOURCE COMMITTED + AWS STAGING DEPLOYED / OWNER ACCEPTED.** Branch `codex/phase12-stage3-policy-intelligence`, deployed commit `b760c028674efe4fd40190d8b212167729e74348`. The old sections below describing Stage 3 as uncommitted or undeployed are historical. [Detailed AWS staging deployment and rollback handoff](./deployments/AWS_STAGING_PHASE12_STAGE3_2026-10-14.md).
 
