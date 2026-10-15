@@ -5,7 +5,6 @@ import {
 } from "@/lib/assistant-mode-access";
 import { getUserEntitlementById } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
-import { isPremiumAllowed } from "@/lib/vip/entitlement";
 
 export async function GET() {
   const session = await auth();
@@ -24,7 +23,7 @@ export async function GET() {
   return Response.json(
     assistantModeAccessPolicy({
       user: session.user,
-      premiumAllowed: entitlement ? isPremiumAllowed(entitlement) : false,
+      entitlement,
     })
   );
 }

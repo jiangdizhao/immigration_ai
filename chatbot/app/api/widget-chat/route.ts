@@ -3,7 +3,10 @@ import type { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
-import { isGuestAssistantUser } from "@/lib/assistant-mode-access";
+import {
+  assistantModeAccessPolicy,
+  isGuestAssistantUser,
+} from "@/lib/assistant-mode-access";
 import {
   beginWidgetTurn,
   completeWidgetTurn,
@@ -22,6 +25,7 @@ import {
 } from "@/lib/conversations/widget-turn-schemas";
 import {
   getImmigrationConversationByChatId,
+  getUserEntitlementById,
   touchImmigrationConversation,
   updateImmigrationConversation,
 } from "@/lib/db/queries";
@@ -801,6 +805,23 @@ async function handleWidgetRequest(request: Request, requestId: string) {
           error:
             "Legal Check requires a registered account. Use Fast — Quick Answer, or sign in.",
           loginPath: "/login",
+        },
+        { status: 403 }
+      );
+    }
+    const entitlement = await getUserEntitlementById(session.user.id);
+    if (!entitlement) {
+      return new ChatbotError("unauthorized:chat").toResponse();
+    }
+    const modeAccess = assistantModeAccessPolicy({
+      user: session.user,
+      entitlement,
+    });
+    if (!modeAccess.slowAllowed) {
+      return Response.json(
+        {
+          error: "Legal Check requires an active VIP membership.",
+          upgradePath: "/vip",
         },
         { status: 403 }
       );

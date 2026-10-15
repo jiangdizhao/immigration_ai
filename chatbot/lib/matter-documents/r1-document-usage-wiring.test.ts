@@ -129,3 +129,20 @@ test("R1: the default serving path never derives use from availability", () => {
     "availability alone must never set the verified flag"
   );
 });
+
+test("document processing operations share registered-role authorization", () => {
+  const documentHttp = source("lib/matter-documents/http.ts");
+  assert.match(documentHttp, /hasRegisteredMatterDocumentAccess/u);
+  assert.match(
+    documentHttp,
+    /user\.role === "user"\s*\|\|\s*user\.role === "lawyer"\s*\|\|\s*user\.role === "admin"/u
+  );
+  const processingRoute = source(
+    "app/api/matter-documents/[documentId]/processing/route.ts"
+  );
+  assert.match(
+    processingRoute,
+    /hasRegisteredMatterDocumentAccess\(session\.user\)/u,
+    "processing and retry must use the same registered-role gate"
+  );
+});

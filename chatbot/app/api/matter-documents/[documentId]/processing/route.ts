@@ -1,4 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
+import { hasRegisteredMatterDocumentAccess } from "@/lib/matter-documents/http";
 import {
   ProcessingConflictError,
   ProcessingIntegrityError,
@@ -20,9 +21,7 @@ function json(body: unknown, status = 200) {
 }
 async function customer() {
   const session = await auth();
-  return session?.user?.id &&
-    session.user.type === "regular" &&
-    session.user.role === "user"
+  return session?.user?.id && hasRegisteredMatterDocumentAccess(session.user)
     ? session.user.id
     : null;
 }

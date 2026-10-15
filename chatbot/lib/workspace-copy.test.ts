@@ -10,6 +10,13 @@ test("workspace copy provides Chinese-first and English chrome", () => {
   );
 });
 
+test("registered users see localized VIP mode requirements", () => {
+  const zh = getWorkspaceCopy("zh-CN").mode.registeredVipRequired;
+  const en = getWorkspaceCopy("en").mode.registeredVipRequired;
+  assert.match(zh, /Legal Check.*VIP/iu);
+  assert.match(en, /Legal Check.*active VIP/iu);
+});
+
 test("archived conversation copy is present, localized and non-misleading", () => {
   const zh = getWorkspaceCopy("zh-CN").legacy;
   const en = getWorkspaceCopy("en").legacy;

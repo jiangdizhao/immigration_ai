@@ -112,6 +112,7 @@ export type WorkspaceCopy = {
     guestLegalCheck: string;
     signIn: string;
     guestPremium: string;
+    registeredVipRequired: string;
     premiumDescription: string;
     fastDescription: string;
     legalCheckDescription: string;
@@ -351,6 +352,7 @@ const zh: WorkspaceCopy = {
     guestLegalCheck: "Legal Check 需要登录。",
     signIn: "登录",
     guestPremium: "Premium 需要 VIP 会员资格。",
+    registeredVipRequired: "Legal Check 需要有效 VIP 会员资格。",
     premiumDescription: "VIP 会员可使用现有 Premium 答复模式。",
     fastDescription: "快速答复；如问题涉及最新信息，系统可能进行网页搜索。",
     legalCheckDescription: "使用现有的来源核对移民法律工作流。",
@@ -609,6 +611,7 @@ const en: WorkspaceCopy = {
     guestLegalCheck: "Legal Check requires an account.",
     signIn: "Sign in",
     guestPremium: "Premium requires VIP membership.",
+    registeredVipRequired: "Legal Check requires an active VIP membership.",
     premiumDescription: "VIP members can use the existing Premium answer mode.",
     fastDescription:
       "Quick answers; web search may be used when current information matters.",

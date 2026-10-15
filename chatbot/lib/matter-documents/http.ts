@@ -30,6 +30,21 @@ type HttpDependencies = {
   service: MatterDocumentService;
 };
 
+export function hasRegisteredMatterDocumentAccess(
+  user:
+    | {
+        type?: string;
+        role?: string;
+      }
+    | null
+    | undefined
+): boolean {
+  return (
+    user?.type === "regular" &&
+    (user.role === "user" || user.role === "lawyer" || user.role === "admin")
+  );
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return Response.json(body, {
     status,
@@ -128,8 +143,10 @@ export function createMatterDocumentHandlers(deps: HttpDependencies) {
     if (!user) {
       return { response: jsonError("Authentication required.", 401) };
     }
-    if (user.type !== "regular" || user.role !== "user") {
-      return { response: jsonError("Customer access required.", 403) };
+    if (!hasRegisteredMatterDocumentAccess(user)) {
+      return {
+        response: jsonError("Registered account access required.", 403),
+      };
     }
     return { userId: user.userId };
   }

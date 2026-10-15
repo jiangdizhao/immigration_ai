@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import type { MatterDocument } from "@/lib/db/schema";
-import { createMatterDocumentHandlers } from "./http";
+import { resolveConversationMatterDocumentEvidence } from "./ai-evidence-packet";
+import {
+  createMatterDocumentHandlers,
+  hasRegisteredMatterDocumentAccess,
+} from "./http";
 import { MemoryMatterDocumentStorage } from "./memory-storage";
 import { createMatterDocumentService } from "./service";
 import type { MatterDocumentRepository } from "./types";
@@ -284,7 +288,7 @@ test("valid JPEG and PNG signatures are accepted", async () => {
   }
 });
 
-test("anonymous and non-customer sessions cannot use document APIs", async () => {
+test("anonymous and guest sessions cannot use private document APIs", async () => {
   const anonymous = makeHarness();
   assert.equal(
     (
@@ -315,19 +319,91 @@ test("anonymous and non-customer sessions cannot use document APIs", async () =>
     401
   );
 
-  for (const identity of [
-    { userId: USER_A, type: "guest" as const, role: "user" as const },
-    { userId: USER_A, type: "regular" as const, role: "lawyer" as const },
-    { userId: USER_A, type: "regular" as const, role: "admin" as const },
-  ]) {
-    const h = makeHarness({ authenticatedUser: identity });
+  const guest = makeHarness({
+    authenticatedUser: {
+      userId: USER_A,
+      type: "guest",
+      role: "user",
+    },
+  });
+  assert.equal(
+    (
+      await guest.handlers.list(
+        request("GET", `/api/matter-documents?chatId=${CHAT_A}`)
+      )
+    ).status,
+    403
+  );
+  assert.equal(
+    hasRegisteredMatterDocumentAccess({ type: "regular", role: "invalid" }),
+    false
+  );
+});
+
+test("admin and lawyer accounts can manage documents in their own workspace", async () => {
+  for (const role of ["admin", "lawyer"] as const) {
+    const h = makeHarness({
+      authenticatedUser: { userId: USER_A, type: "regular", role },
+    });
     assert.equal(
-      (
-        await h.handlers.list(
-          request("GET", `/api/matter-documents?chatId=${CHAT_A}`)
-        )
-      ).status,
-      403
+      hasRegisteredMatterDocumentAccess({ type: "regular", role }),
+      true
+    );
+    const uploaded = await h.handlers.upload(
+      uploadRequest(CHAT_A, "owner-document.pdf", "application/pdf", PDF)
+    );
+    assert.equal(uploaded.status, 201, role);
+
+    const ownerDocuments = [...h.records.values()];
+    const evidence = await resolveConversationMatterDocumentEvidence({
+      userId: USER_A,
+      chatId: CHAT_A,
+      documents: ownerDocuments,
+      getLatestAttempt: async (documentId) => ({
+        id: `run-${documentId}`,
+        status: "complete",
+        extractionMethod: "native",
+        truncated: false,
+      }),
+      getEvidence: async () => [
+        {
+          ordinal: 1,
+          locator: { kind: "page", pageNumber: 1 },
+          extractedText: "owner document evidence",
+          extractionMethod: "native",
+        },
+      ],
+    });
+    assert.equal(evidence.evidence.documents.length, 1, role);
+    assert.equal(
+      evidence.evidence.documents[0]?.units[0]?.text,
+      "owner document evidence",
+      role
+    );
+
+    const listing = await h.handlers.list(
+      request("GET", `/api/matter-documents?chatId=${CHAT_A}`)
+    );
+    assert.equal(listing.status, 200, role);
+    assert.equal(
+      ((await listing.json()) as { documents: unknown[] }).documents.length,
+      1,
+      role
+    );
+    assert.equal(
+      (await h.handlers.metadata(request("GET", "/"), DOC_ID)).status,
+      200,
+      role
+    );
+    assert.equal(
+      (await h.handlers.download(request("GET", "/"), DOC_ID)).status,
+      200,
+      role
+    );
+    assert.equal(
+      (await h.handlers.delete(request("DELETE", "/"), DOC_ID)).status,
+      204,
+      role
     );
   }
 });
@@ -354,23 +430,28 @@ test("foreign conversation upload and list use not-found semantics", async () =>
   assert.equal(h.records.size, 0);
 });
 
-test("foreign metadata, download, and delete are indistinguishable from missing", async () => {
-  const h = makeHarness({
-    authenticatedUser: userA(),
-    existingRecord: makeRecord({ userId: USER_B, chatId: CHAT_B }),
-  });
-  assert.equal(
-    (await h.handlers.metadata(request("GET", "/"), DOC_ID)).status,
-    404
-  );
-  assert.equal(
-    (await h.handlers.download(request("GET", "/"), DOC_ID)).status,
-    404
-  );
-  assert.equal(
-    (await h.handlers.delete(request("DELETE", "/"), DOC_ID)).status,
-    404
-  );
+test("foreign metadata, download, and delete stay hidden from every registered role", async () => {
+  for (const role of ["user", "lawyer", "admin"] as const) {
+    const h = makeHarness({
+      authenticatedUser: { userId: USER_A, type: "regular", role },
+      existingRecord: makeRecord({ userId: USER_B, chatId: CHAT_B }),
+    });
+    assert.equal(
+      (await h.handlers.metadata(request("GET", "/"), DOC_ID)).status,
+      404,
+      role
+    );
+    assert.equal(
+      (await h.handlers.download(request("GET", "/"), DOC_ID)).status,
+      404,
+      role
+    );
+    assert.equal(
+      (await h.handlers.delete(request("DELETE", "/"), DOC_ID)).status,
+      404,
+      role
+    );
+  }
 });
 
 test("owner can list metadata and download only through private authorized route", async () => {
@@ -766,7 +847,7 @@ test("the account file index preserves processing status and download integrity"
 
 const HISTORY_ROUTE = "http://localhost/api/matter-documents/history";
 
-test("the user-level history endpoint requires an authenticated customer account", async () => {
+test("the user-level history endpoint allows registered roles but excludes guests", async () => {
   const harness = makeHarness({ existingRecords: [historyRecord(1)] });
   const anonymous = createMatterDocumentHandlers({
     authenticate: async () => null,
@@ -777,8 +858,18 @@ test("the user-level history endpoint requires an authenticated customer account
     401
   );
 
+  const guest = createMatterDocumentHandlers({
+    authenticate: async () => ({
+      userId: USER_A,
+      type: "guest" as const,
+      role: "user" as const,
+    }),
+    service: harness.service,
+  });
+  assert.equal((await guest.history(new Request(HISTORY_ROUTE))).status, 403);
+
   for (const role of ["lawyer", "admin"] as const) {
-    const staff = createMatterDocumentHandlers({
+    const registered = createMatterDocumentHandlers({
       authenticate: async () => ({
         userId: USER_A,
         type: "regular" as const,
@@ -786,7 +877,13 @@ test("the user-level history endpoint requires an authenticated customer account
       }),
       service: harness.service,
     });
-    assert.equal((await staff.history(new Request(HISTORY_ROUTE))).status, 403);
+    const response = await registered.history(new Request(HISTORY_ROUTE));
+    assert.equal(response.status, 200, role);
+    assert.equal(
+      ((await response.json()) as { documents: unknown[] }).documents.length,
+      1,
+      role
+    );
   }
 });
 

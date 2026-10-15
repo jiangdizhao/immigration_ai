@@ -1,5 +1,23 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN VIP_DOCUMENT_ACCESS_HOTFIX_2026_10_15 -->
+## 2026-10-15 Combined VIP Payment and Universal Document Access Hotfix
+
+**Branch/base:** `hotfix/vip-payment-universal-document-analysis-20261015`, based on the already validated payment hotfix commit `bb8b8e365dd9f81b9e0e609c983bf285ff41561e`. The prior VIP invoice-paid fix is included unchanged; its original incident and validation record remains immediately below.
+
+**Incident and scope:** authenticated Lawyer and Admin accounts were excluded from personal document APIs, while the mode-access policy let registered Free users select Legal Check. The combined hotfix opens owner-scoped document operations to every registered role and enforces the requested Free-only Fast lane.
+
+**Document access:** the shared document API gate accepts authenticated `regular` users with database/session roles `user`, `lawyer`, or `admin`. Upload, conversation list, metadata, download, delete, account history, extraction status and processing/retry use the authenticated owner ID. Guests remain excluded. Role membership does not grant access to another account's files; filename/MIME validation, size limits, storage, malware/security states, deletion, and evidence eligibility remain on the existing pipeline. The workspace continues to enable upload for any registered account and retains read-only conversation controls.
+
+**Mode enforcement:** `/api/assistant-mode-access` builds its policy from `getUserEntitlementById()`. Free users receive Fast only; active VIP users retain Fast, Legal Check, and Premium; Admin keeps all modes; Lawyer retains Legal Check and gets Premium only under the existing active-VIP/admin entitlement rule. The Legal Check API now checks the database entitlement before conversation-turn persistence and Legal Service invocation. Premium continues to use its existing database-authoritative guard. Per-route request schemas reject cross-mode spoofing, including Premium sent to Fast. The workspace falls back from a stale Free user's saved mode to Fast and displays localized Chinese/English VIP requirements.
+
+**Analysis and provenance:** no new analysis route or storage path was added. Fast, Legal Check, and Premium continue to use the existing owner-and-conversation-scoped document context, bounded evidence packet, processing eligibility, and customer-document acknowledgement/provenance contract. Unit coverage exercises Admin/Lawyer-owned document uploads and evidence resolution, cross-account denial, guest rejection, pending/unsafe evidence filtering, and read-only conversation behavior.
+
+**Validation:** 11 focused Node test files passed (0 failed, 0 skipped), covering assistant-mode policy and route schemas, document service/authorization, extraction processing, evidence filtering and provenance, workspace upload/read-only wiring, and localized copy. Changed-file Biome check passed on 12 TypeScript files. `git diff --check` passed. `pnpm exec tsc --noEmit --pretty false` reports the documented **44 pre-existing diagnostics**; none are in files changed by this hotfix. `pnpm build` reached Next.js production compilation but could not fetch Geist/Geist Mono from Google Fonts in this network-restricted environment. No database-backed integration test, live AI call, Stripe action, customer-account mutation, AWS operation, or migration was run. No model configuration changed.
+
+**Release state:** committed and pushed for external review; AWS Staging deployment remains pending owner/reviewer approval. Do not treat this branch as deployed.
+<!-- END VIP_DOCUMENT_ACCESS_HOTFIX_2026_10_15 -->
+
 <!-- BEGIN VIP_PAYMENT_ACTIVATION_HOTFIX_2026_10_15 -->
 ## 2026-10-15 Emergency VIP Payment Activation Hotfix
 

@@ -196,8 +196,23 @@ test("the shared contract stays strict for the rest of the body", () => {
     )
   );
   assert.throws(() =>
+    fastWidgetRequestSchema.parse(
+      asRequestJson({ ...wireBody(), assistantMode: "default" })
+    )
+  );
+  assert.throws(() =>
     premiumWidgetRequestSchema.parse(
       asRequestJson({ ...wireBody(), assistantMode: "fast" })
+    )
+  );
+  assert.throws(() =>
+    premiumWidgetRequestSchema.parse(
+      asRequestJson({ ...wireBody(), assistantMode: "default" })
+    )
+  );
+  assert.throws(() =>
+    legalCheckWidgetRequestSchema.parse(
+      asRequestJson({ ...wireBody(), assistantMode: "premium" })
     )
   );
   // Legal Check still requires its model selection.
@@ -238,6 +253,46 @@ test("the widget routes use the shared schema module under test", () => {
       `${route} must not re-declare its own policy-slug rule`
     );
   }
+});
+
+test("Legal Check authorizes database entitlement before turn persistence and serving", () => {
+  const source = readFileSync(
+    new URL("../../app/api/widget-chat/route.ts", import.meta.url),
+    "utf8"
+  );
+  const entitlementCheck = source.indexOf("if (!modeAccess.slowAllowed)");
+  const turnPersistence = source.indexOf(
+    "await beginWidgetTurn(",
+    entitlementCheck
+  );
+  const servingCall = source.indexOf(
+    "await fetchLegalServiceJson(",
+    entitlementCheck
+  );
+  assert.ok(source.includes("getUserEntitlementById(session.user.id)"));
+  assert.ok(entitlementCheck >= 0);
+  assert.ok(turnPersistence > entitlementCheck);
+  assert.ok(servingCall > entitlementCheck);
+});
+
+test("Premium requires database entitlement before turn persistence and serving", () => {
+  const source = readFileSync(
+    new URL("../../app/api/widget-chat-direct/route.ts", import.meta.url),
+    "utf8"
+  );
+  const accessCheck = source.indexOf(
+    "const premiumAccess = await requirePremiumAccess()"
+  );
+  const turnPersistence = source.indexOf("await beginWidgetTurn(", accessCheck);
+  const servingCall = source.indexOf(
+    "await fetchLegalServiceDirect(",
+    accessCheck
+  );
+  assert.match(source, /getUserEntitlementById\(session\.user\.id\)/u);
+  assert.match(source, /isPremiumAllowed\(entitlement\)/u);
+  assert.ok(accessCheck >= 0);
+  assert.ok(turnPersistence > accessCheck);
+  assert.ok(servingCall > accessCheck);
 });
 
 test("the workspace sends the shared body instead of a local literal", () => {

@@ -1,4 +1,9 @@
 import { guestRegex } from "@/lib/constants";
+import {
+  type EntitlementUser,
+  isActiveVip,
+  isPremiumAllowed,
+} from "@/lib/vip/entitlement";
 
 export type AssistantModeAccessUser = {
   type: "guest" | "regular";
@@ -11,13 +16,22 @@ export function isGuestAssistantUser(user: AssistantModeAccessUser): boolean {
 
 export function assistantModeAccessPolicy(params: {
   user: AssistantModeAccessUser;
-  premiumAllowed: boolean;
+  entitlement: EntitlementUser | null;
 }) {
   const guest = isGuestAssistantUser(params.user);
+  const entitlement = params.entitlement;
+  const activeVip = entitlement ? isActiveVip(entitlement) : false;
+  const staffOrVip = Boolean(
+    entitlement &&
+      (entitlement.role === "admin" ||
+        entitlement.role === "lawyer" ||
+        activeVip)
+  );
   return {
     userType: guest ? ("guest" as const) : ("regular" as const),
     fastAllowed: true,
-    slowAllowed: !guest,
-    premiumAllowed: !guest && params.premiumAllowed,
+    slowAllowed: !guest && staffOrVip,
+    premiumAllowed:
+      !guest && entitlement ? isPremiumAllowed(entitlement) : false,
   };
 }

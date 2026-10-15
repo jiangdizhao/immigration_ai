@@ -154,6 +154,16 @@ export function PremiumAnswerModeWorkspace({
               <span aria-hidden="true">·</span>
               <span>{copy.guestPremium}</span>
             </div>
+          ) : !hydratedAccessPolicy.slowAllowed ||
+            !hydratedAccessPolicy.premiumAllowed ? (
+            <div className="flex w-full flex-wrap gap-x-1 text-[11px] leading-5 text-slate-600">
+              {hydratedAccessPolicy.slowAllowed ? null : (
+                <span>{copy.registeredVipRequired}</span>
+              )}
+              {hydratedAccessPolicy.premiumAllowed ? null : (
+                <span>{copy.premiumDescription}</span>
+              )}
+            </div>
           ) : assistantMode === "premium" ? (
             <span className="text-[11px] leading-5 text-amber-700">
               {copy.premiumDescription}
