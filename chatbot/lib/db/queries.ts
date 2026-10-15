@@ -1647,6 +1647,8 @@ export async function applyVipInvoicePaid({
   notification: VipBillingNotification | null;
   duplicate: boolean;
 }> {
+  const currentPeriodEndTimestamp = rawPgTimestamp(currentPeriodEnd);
+
   return await db.transaction(async (tx) => {
     await lockOwnedVipBillingEvent(tx, billingEventId, processingToken);
     await tx.execute(
@@ -1710,7 +1712,7 @@ export async function applyVipInvoicePaid({
       .update(user)
       .set({
         membershipTier: "vip",
-        vipExpiresAt: sql`GREATEST(COALESCE("vipExpiresAt", ${currentPeriodEnd}), ${currentPeriodEnd})`,
+        vipExpiresAt: sql`GREATEST(COALESCE("vipExpiresAt", ${currentPeriodEndTimestamp}::timestamp), ${currentPeriodEndTimestamp}::timestamp)`,
       })
       .where(eq(user.id, prior.userId));
 

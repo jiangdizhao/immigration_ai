@@ -1,5 +1,20 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN VIP_PAYMENT_ACTIVATION_HOTFIX_2026_10_15 -->
+## 2026-10-15 Emergency VIP Payment Activation Hotfix
+
+**Incident:** AWS Staging Web task definition `:45` returned HTTP 500 for verified Stripe `invoice.paid` deliveries, leaving paid VIP subscriptions unprojected to user entitlements. No customer identifiers or payment credentials are recorded here.
+
+**Root cause verified:** `applyVipInvoicePaid()` placed `currentPeriodEnd` (`Date`) directly into raw Drizzle SQL while assigning the `timestamp without time zone` `User.vipExpiresAt` column. The raw `sql` parameter bypassed the column encoder. Against the isolated PostgreSQL test database, the installed Drizzle/postgres.js path reproduced the incident exactly: `TypeError [ERR_INVALID_ARG_TYPE]` from `Buffer.byteLength(Date)` in postgres.js 3.4.5. The new integration test failed on that original expression and passed after the fix.
+
+**Fix:** convert the period end with the existing `rawPgTimestamp()` helper and explicitly cast both raw string parameters to `::timestamp`. The existing `GREATEST(COALESCE(vipExpiresAt, periodEnd), periodEnd)` projection is unchanged, preserving first activation, renewal idempotency, and later prepaid VIP expiry. No application schema or migration changed.
+
+**Retry safety:** the entitlement update, invoice marker, notification outbox insert, and event completion share one transaction. A SQL exception rolls that transaction back; the webhook processor marks the claimed event failed and returns a retryable outcome, which the route maps to HTTP 500. Failed events can be reclaimed with a new processing token; if an earlier attempt committed, the invoice-ID guard prevents extending entitlement twice. [Stripe's retry policy](https://docs.stripe.com/webhooks#automatic-retries) says live webhook deliveries are retried for up to three days with exponential backoff. The event timestamps/delivery state for the affected deliveries were not inspected, and no event was resent; whether those specific events remain in Stripe's automatic retry window is unconfirmed.
+
+**Validation:** the real PostgreSQL integration test invokes `applyVipInvoicePaid()` through Drizzle/postgres.js and covers first activation, renewal, duplicate invoice delivery, and preservation of later existing VIP expiry. Controlled red/green verification reproduced the exact postgres.js `ERR_INVALID_ARG_TYPE` on the original expression and passed with the hotfix. Focused billing/webhook-processing/entitlement suites: **37 passed, 0 failed, 0 skipped**. Changed-file Biome check passed. Focused TypeScript check for `queries.ts` and this integration test passed; the full chatbot TypeScript check still exits 2 with **44 existing diagnostics in unrelated files**, and none in the changed TypeScript files. `git diff --check` passed. Tests used synthetic `example.test` fixtures in the isolated `immigration_ai_phase12_stage1_test` database only; that disposable database was removed after validation. No live Stripe action, customer-account/payment mutation, AWS operation, or model configuration change was performed.
+
+<!-- END VIP_PAYMENT_ACTIVATION_HOTFIX_2026_10_15 -->
+
 
 <!-- BEGIN AWS_STAGING_FAST_GPT6_CORRECTION_2026_10_14 -->
 ## LATEST correction: AWS Staging Fast mode upgraded to GPT-6 (2026-10-14)
