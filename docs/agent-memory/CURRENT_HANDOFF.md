@@ -1,5 +1,21 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN AWS_STAGING_VIP_DOCUMENT_HOTFIX_DEPLOYED_2026_10_15 -->
+## LATEST — 2026-10-15: Combined VIP Payment + Universal Document Access deployed to AWS Staging (Web :46)
+
+**Source/release:** branch `hotfix/vip-payment-universal-document-analysis-20261015`; deployed code commit `1ef7d6f6d8c0deb9d942890be18949ed91910569`, including verified Stripe Date serialization fix from `bb8b8e365dd9f81b9e0e609c983bf285ff41561e`. This and any subsequent documentation-only commits do not change the deployed app image.
+
+**Deployment evidence (owner AWS CLI):** ECR Chatbot digest `sha256:5888fda581edb5043368799b5a2f642f95e5b82ce9c903bf881c653e7a9efda5`; ECS cluster `immigration-ai-staging`, service `immigration-ai-staging-web`, task definition **`:46`** supersedes `:45`; `services-stable` wait succeeded, reported `ECS status: COMPLETED` and `Running tasks: 1`. Operator change was limited to the Chatbot container image in the copied task definition; Legal Service image/environment, GPT-6 settings, AWS secrets and IAM/network settings, RDS, and separate Policy Sync `:11` were preserved. No database migration or repeated payment was made.
+
+**Change 1 — Stripe VIP billing:** verified `invoice.paid` HTTP 500/`ERR_INVALID_ARG_TYPE` from passing `Date` through raw Drizzle SQL (`applyVipInvoicePaid`); fixed with `rawPgTimestamp()` string and `::timestamp` casts while preserving transactionally atomic activation, paid-invoice idempotency and later prepaid expiry. Original SQL reproduced the fault and fixed SQL passed in an isolated PostgreSQL test. Focused suite: 37 passed.
+
+**Change 2 — documents / mode policy:** personal document upload, list, download, delete, history, and processing/retry now allowed for authenticated `user`, `lawyer`, `admin` roles, scoped strictly to the authenticated owner and conversation; guests excluded. Registered Free customers use **Fast only**; active VIP customers and Admin retain all three modes; Lawyers retain Fast/Legal Check and require independent VIP entitlement for Premium. Both mode UI and the Legal Check API use DB-backed entitlement; Fast already receives conversation-scoped verified document evidence. Coding-agent reported 11 focused test files passed; full TypeScript still has 44 unrelated pre-existing diagnostics; coding-agent Next production build was blocked by Google Fonts network access, while owner later successfully built and pushed the production Docker image.
+
+**Open incident / verification state:** This is a **deployed** code fix, **NOT** yet proof that the two live Stripe AUD 1.00 paid invoices have been successfully reconciled to VIP, or that Free Fast/Admin/Lawyer document upload and AI analysis have passed real staging smoke. Stripe dashboard after deployment still showed *historical* HTTP 500 attempts; a selected older attempt's Resend was disabled (`Only the most recent delivery attempt can be resent`), with automatic retry still pending. Check the latest attempt for each distinct `invoice.paid` event, resend only the most recent eligible attempt if necessary, verify HTTP 200 and actual user membership; never charge again. For documents, verify clean/extracted evidence use and strict Free mode restriction without bypassing cross-owner/malware controls.
+
+**Canonical full deployment and incident record:** [AWS Staging combined VIP/document Hotfix 2026-10-15](./deployments/AWS_STAGING_VIP_PAYMENT_DOCUMENT_HOTFIX_2026-10-15.md). This deployed-state block supersedes the historical pre-deployment 'pending' paragraphs immediately below; the 2026-10-14 Web `:45` and Stage 3 `:44` entries are historical baselines, not the current running Web revision.
+<!-- END AWS_STAGING_VIP_DOCUMENT_HOTFIX_DEPLOYED_2026_10_15 -->
+
 <!-- BEGIN VIP_DOCUMENT_ACCESS_HOTFIX_2026_10_15 -->
 ## 2026-10-15 Combined VIP Payment and Universal Document Access Hotfix
 
@@ -15,7 +31,7 @@
 
 **Validation:** 11 focused Node test files passed (0 failed, 0 skipped), covering assistant-mode policy and route schemas, document service/authorization, extraction processing, evidence filtering and provenance, workspace upload/read-only wiring, and localized copy. Changed-file Biome check passed on 12 TypeScript files. `git diff --check` passed. `pnpm exec tsc --noEmit --pretty false` reports the documented **44 pre-existing diagnostics**; none are in files changed by this hotfix. `pnpm build` reached Next.js production compilation but could not fetch Geist/Geist Mono from Google Fonts in this network-restricted environment. No database-backed integration test, live AI call, Stripe action, customer-account mutation, AWS operation, or migration was run. No model configuration changed.
 
-**Release state:** committed and pushed for external review; AWS Staging deployment remains pending owner/reviewer approval. Do not treat this branch as deployed.
+**Release state (historical coding-agent handoff, before deployment):** committed and pushed for review, without AWS operations in that coding task. **Subsequently deployed** by the owner as AWS Staging Web `:46` using Chatbot ECR digest `sha256:5888fda581edb5043368799b5a2f642f95e5b82ce9c903bf881c653e7a9efda5`. Billing recovery and actual document-analysis smoke remain pending; consult the latest block at the top and the dedicated deployment record.
 <!-- END VIP_DOCUMENT_ACCESS_HOTFIX_2026_10_15 -->
 
 <!-- BEGIN VIP_PAYMENT_ACTIVATION_HOTFIX_2026_10_15 -->
