@@ -1,7 +1,23 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN DOCUMENT_PROCESSING_LIVE_ACCEPTANCE_2026_10_16 -->
+## LATEST — 2026-10-16: Document Processing Hotfix in live use; PDF + Fast summary accepted
+
+**Operational disposition:** Owner confirmed in live website screenshots that a previously failing immigration PDF is now processed (`解析流程已完成`) and the **Fast** assistant gives a document-specific summary of the uploaded Department of Home Affairs Bridging Visa A grant notice. This **closes the owner-observed PDF parsing/answering incident**. It does not prove independent ECS revision, every other format on live AWS, or trace-level citations.
+
+**Source:** `hotfix/document-processing-reliability-20261016`, implemented in `94bb397c617f57ead7706dfca4d106ffaff830af` and `4e339a0b7cb448257b4ec3074bf03c7b65cd0658`. Packaging fix adds missing PDF.js `pdf.worker.mjs` to the Next standalone runtime; corrects misleading `malformed_document`/HTTP 409 infrastructure errors into retryable 503/504 and preserves genuine file-validation 422/state-conflict 409 and explicit failed-run retry. The prior Stripe VIP fix and role access are unchanged.
+
+**Local production runtime evidence:** Node 22 `linux/amd64` Docker build and native PDF worker execution passed. The 11-format × 3 synthetic sizes × 20 iterations gate passed **660/660 runs**; JPEG/PNG used mocked Vision. Eleven focused document test files passed; synthetic upload-to-Fast evidence path tested PDF, DOCX, TXT, XLSX, PNG with in-memory storage/mock Fast transport. The previous 44 standalone TypeScript diagnostics remain baseline; production build/type stage passed. No migration. Performance/limits: [Hotfix report and post-deployment addendum](./audits/DOCUMENT_PROCESSING_HOTFIX_PERFORMANCE_2026_10_16.md).
+
+**Release evidence limit:** Owner supplied ECR Chatbot digest `sha256:d7f0fd76ed378a12130682154d3a5b1040bab9b56dd3b1869f2d015db3f057bb` and completed the website test after deployment instructions for ECS Staging Web. Earlier confirmed Web task revision was `:46`; the next revision was expected `:47`, **but no final ECS deployment-success transcript or independent active-task image inspection is present**. Do not state `:47` as independently verified. This documentation update is **docs-only** and requires no Docker rebuild/AWS deployment.
+
+**Conversation Files UI observation:** After upload, composer showed count 1 and **My Historical Files** showed the parsed file, but **Conversation Files** remained empty. A full reload showed the file in Conversation Files. Source suggests missing cross-panel refresh wiring (`documentsRevision` passed to history but not the sibling conversation-file panel). **Owner explicitly declined/deferred fixing this**; leave source unchanged, browser reload is adequate for now. The original upload/processing and AI summary worked.
+
+**Authoritative incident / live acceptance record:** [AWS Staging Document Processing Live Acceptance 2026-10-16](./deployments/AWS_STAGING_DOCUMENT_PROCESSING_LIVE_ACCEPTANCE_2026-10-16.md). Earlier 2026-10-16 audit and “READY FOR EXTERNAL REVIEW / no deployment” sections below describe their historical pre-deployment point in time and are **superseded for current functional status**; retain their original evidence and limitations.
+<!-- END DOCUMENT_PROCESSING_LIVE_ACCEPTANCE_2026_10_16 -->
+
 <!-- BEGIN DOCUMENT_PROCESSING_AUDIT_2026_10_16 -->
-## LATEST — 2026-10-16: all-format document processing audit
+## 2026-10-16 (historical investigation): all-format document processing audit
 
 **Investigation:** branch `audit/document-processing-all-formats-20261016`, based on `c0f10c9ddb73b451552cb8ec59fe8171293d3ed6`. The detailed source map, 11-format matrix, commands, evidence, limits, Q1–Q10 answers and proposed repair plan are in [the Phase 12 document processing audit](./audits/DOCUMENT_PROCESSING_ALL_FORMATS_AUDIT_2026_10_16.md).
 
@@ -5118,7 +5134,7 @@ The initial HTTPS push attempt encountered an authentication blocker, which was 
 
 This entry supersedes any earlier "ACTIVE / implementation pending" instructions for China Stripe payments; earlier records remain historical implementation evidence.
 
-## 2026-10-16 Emergency document-processing hotfix — READY FOR EXTERNAL REVIEW
+## 2026-10-16 Emergency document-processing hotfix — READY FOR EXTERNAL REVIEW (historical; later live-accepted)
 
 The focused hotfix is on `hotfix/document-processing-reliability-20261016`, based on `audit/document-processing-all-formats-20261016` at `edc593fb8317d56f3aa7a94a3c322abf61703b2b`. It packages the PDF.js worker asset in the standalone processing route, preserves `malformed_document` for malformed/password/format errors, and reports missing parser dependencies and parser runtime failures as safe retryable server errors. The processing endpoint now distinguishes invalid input (422), parser/storage failures (503), and processing timeout (504) from true state conflicts (409). Explicit retry of a failed parser run is covered; existing extraction and evidence bounds are unchanged.
 
