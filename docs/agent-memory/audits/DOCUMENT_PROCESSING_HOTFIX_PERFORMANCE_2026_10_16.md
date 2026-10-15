@@ -1,5 +1,19 @@
 # Emergency Document Processing Hotfix — Validation and Performance
 
+<!-- BEGIN LIVE_ACCEPTANCE_ADDENDUM_2026_10_16 -->
+## Post-deployment functional acceptance — 2026-10-16 (owner observed)
+
+This **post-implementation addendum** supersedes only the earlier report's *deployment still pending / no live test yet* status, not its original synthetic measurement scope or test claims.
+
+- Owner reported a successfully pushed ECR Chatbot image digest: `sha256:d7f0fd76ed378a12130682154d3a5b1040bab9b56dd3b1869f2d015db3f057bb`, then conducted live website testing after being given an ECS Web image-only deployment script.
+- In the live AI workspace, the previous Australian Department of Home Affairs Bridging Visa A notice now displayed **解析流程已完成** in the account file history. Fast mode produced a document-specific summary of the uploaded immigration notice, so the user-facing PDF processing + Fast answering scenario is **owner-accepted**.
+- The same current-conversation file initially did not appear in the right-side Conversation Files list even though the composer count showed one file and account history showed it. A full browser refresh made it appear in Conversation Files as well. Code inspection identified the likely cross-panel refresh wiring issue: the account history receives `documentsRevision`, while the conversation-file panel instance does not. **Owner chose to ignore/defer UI refresh work**; no UI code changes were made.
+- The operator did not supply an ECS deployment SUCCESS transcript, so Web task-definition revision **:47 is expected, not independently confirmed** by the documentation writer. Neither the active ECS image digest nor all-format on-AWS execution was read back.
+- This observed acceptance is distinct from the benchmark: all 33 format/tier scenarios × 20 synthetic iterations passed in local production Docker, JPEG/PNG using mock Vision; none of those synthetic p50/p95 numbers become AWS or live-provider timing measurements.
+
+Detailed timeline, operational bounds, and status table: [AWS Staging Document Processing Live Acceptance](../deployments/AWS_STAGING_DOCUMENT_PROCESSING_LIVE_ACCEPTANCE_2026-10-16.md).
+<!-- END LIVE_ACCEPTANCE_ADDENDUM_2026_10_16 -->
+
 **Date:** 2026-10-16
 **Repository:** `jiangdizhao/immigration_ai`
 **Branch:** `hotfix/document-processing-reliability-20261016`
