@@ -1,4 +1,8 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  getDocument,
+  InvalidPDFException,
+  PasswordException,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   DOCUMENT_PROCESSING_LIMITS,
   ProcessingLimitError,
@@ -145,7 +149,27 @@ async function extractPdfInternal(input: {
     if (error instanceof ProcessingLimitError) {
       throw error;
     }
-    throw new Error("malformed_document");
+    if (
+      error instanceof InvalidPDFException ||
+      error instanceof PasswordException ||
+      (error instanceof Error && error.name === "FormatError")
+    ) {
+      throw new Error("malformed_document");
+    }
+    const runtimeError = error instanceof Error ? error.message : "";
+    if (
+      error instanceof Error &&
+      (("code" in error &&
+        ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"].includes(
+          String(error.code)
+        )) ||
+        /Setting up fake worker failed:.*(?:Cannot find module|ERR_MODULE_NOT_FOUND)/su.test(
+          runtimeError
+        ))
+    ) {
+      throw new Error("parser_dependency_unavailable");
+    }
+    throw new Error("parser_worker_failed");
   } finally {
     await task?.destroy().catch(() => undefined);
   }

@@ -8,7 +8,11 @@ import {
   formatIdForDocument,
   processMatterDocument,
 } from "./registry";
-import type { DocumentVisionExtractor, PdfPageRenderer } from "./types";
+import type {
+  DocumentVisionExtractor,
+  PdfPageRenderer,
+  ProcessingErrorCode,
+} from "./types";
 
 export class ProcessingNotFoundError extends Error {
   constructor() {
@@ -26,6 +30,27 @@ export class ProcessingIntegrityError extends Error {
   constructor() {
     super("Document integrity check failed.");
     this.name = "ProcessingIntegrityError";
+  }
+}
+
+export class ProcessingFailedError extends Error {
+  readonly code: ProcessingErrorCode;
+  readonly status: 422 | 503 | 504;
+
+  constructor(code: ProcessingErrorCode) {
+    super("Document processing failed.");
+    this.name = "ProcessingFailedError";
+    this.code = code;
+    this.status =
+      code === "processing_timeout"
+        ? 504
+        : [
+              "malformed_document",
+              "unsupported_processing_format",
+              "processing_limit_exceeded",
+            ].includes(code)
+          ? 422
+          : 503;
   }
 }
 
@@ -91,6 +116,8 @@ const SAFE_ERROR_CODES = new Set([
   "integrity_mismatch",
   "processing_timeout",
   "parser_worker_failed",
+  "parser_dependency_unavailable",
+  "processing_temporarily_unavailable",
   "vision_timeout",
 ]);
 function safeErrorCode(error: unknown): string {
@@ -185,6 +212,7 @@ export function createMatterDocumentProcessingService(deps: {
         throw new ProcessingConflictError();
       }
       const deadline = createProcessingDeadline(deps.runtimeMs);
+      let stage: "storage" | "parser" | "persistence" = "storage";
       try {
         deadline.assertActive();
         const bytes = await deps.storage.get({
@@ -199,6 +227,7 @@ export function createMatterDocumentProcessingService(deps: {
           throw new ProcessingIntegrityError();
         }
         deadline.assertActive();
+        stage = "parser";
         const format = formatIdForDocument(claimed.record);
         const extracted = await (deps.processor ?? processMatterDocument)({
           format,
@@ -221,6 +250,7 @@ export function createMatterDocumentProcessingService(deps: {
         }
         deadline.assertActive();
         const completedAt = now();
+        stage = "persistence";
         await deps.repository.finalize({
           runId,
           documentId: claimed.record.id,
@@ -237,10 +267,16 @@ export function createMatterDocumentProcessingService(deps: {
         });
         return { runId, status: extracted.status, idempotent: false };
       } catch (error) {
-        const code =
+        const parserCode = safeErrorCode(error);
+        const code: ProcessingErrorCode =
           error instanceof ProcessingIntegrityError
             ? "integrity_mismatch"
-            : safeErrorCode(error);
+            : parserCode === "processing_timeout"
+              ? "processing_timeout"
+              : stage === "storage" || stage === "persistence"
+                ? "processing_temporarily_unavailable"
+                : (parserCode as ProcessingErrorCode);
+        let failureWasPersisted = true;
         await deps.repository
           .fail({
             runId,
@@ -248,11 +284,15 @@ export function createMatterDocumentProcessingService(deps: {
             failedAt: now(),
             errorCode: code,
           })
-          .catch(() => undefined);
+          .catch(() => {
+            failureWasPersisted = false;
+          });
         if (error instanceof ProcessingIntegrityError) {
           throw error;
         }
-        throw new ProcessingConflictError();
+        throw new ProcessingFailedError(
+          failureWasPersisted ? code : "processing_temporarily_unavailable"
+        );
       } finally {
         deadline.dispose();
       }

@@ -11,6 +11,8 @@ const SAFE_ERRORS = new Set([
   "unsupported_processing_format",
   "malformed_document",
   "processing_limit_exceeded",
+  "parser_dependency_unavailable",
+  "parser_worker_failed",
 ]);
 type WorkerInput = {
   format: MatterDocumentFormatId;
@@ -72,8 +74,15 @@ async function run() {
     ) {
       throw new Error("processing_limit_exceeded");
     }
+    parentPort.postMessage({ type: "ready", threadId });
+    const extractionStartedAt = performance.now();
     const output = await parse(input);
-    parentPort.postMessage({ type: "result", threadId, output });
+    parentPort.postMessage({
+      type: "result",
+      threadId,
+      output,
+      extractionMs: performance.now() - extractionStartedAt,
+    });
   } catch (error) {
     const code =
       error instanceof Error && SAFE_ERRORS.has(error.message)

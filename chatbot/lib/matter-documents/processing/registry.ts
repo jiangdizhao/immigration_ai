@@ -162,10 +162,18 @@ export async function processMatterDocument(
       });
     }
     if (input.format === "pdf") {
-      await import("pdfjs-dist/legacy/build/pdf.mjs");
+      try {
+        await import("pdfjs-dist/legacy/build/pdf.mjs");
+      } catch {
+        throw new ParserWorkerError("parser_dependency_unavailable");
+      }
     }
     if (input.format === "pdf" && input.vision) {
-      await import("@napi-rs/canvas");
+      try {
+        await import("@napi-rs/canvas");
+      } catch {
+        throw new ParserWorkerError("parser_dependency_unavailable");
+      }
     }
     const remainingMs = deadlineAt
       ? deadlineAt - Date.now()

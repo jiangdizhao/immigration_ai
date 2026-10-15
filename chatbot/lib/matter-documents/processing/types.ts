@@ -11,7 +11,9 @@ export type ProcessingErrorCode =
   | "vision_unavailable"
   | "integrity_mismatch"
   | "processing_timeout"
-  | "parser_worker_failed";
+  | "parser_worker_failed"
+  | "parser_dependency_unavailable"
+  | "processing_temporarily_unavailable";
 
 export type SourceLocator =
   | { kind: "page"; pageNumber: number }

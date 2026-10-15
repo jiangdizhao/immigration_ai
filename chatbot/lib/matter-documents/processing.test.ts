@@ -23,6 +23,7 @@ import { processMatterDocument } from "./processing/registry";
 import {
   createMatterDocumentProcessingService,
   ProcessingConflictError,
+  ProcessingFailedError,
   ProcessingIntegrityError,
   ProcessingNotFoundError,
 } from "./processing/service";
@@ -133,6 +134,7 @@ function processingHarness(input: {
   now?: () => Date;
   runtimeMs?: number;
   processor?: typeof processMatterDocument;
+  storageFailure?: boolean;
   initialRuns?: Array<{
     id: string;
     status: string;
@@ -260,6 +262,9 @@ function processingHarness(input: {
     repository,
     storage: {
       async get() {
+        if (input.storageFailure) {
+          throw new Error("synthetic storage unavailable");
+        }
         return input.bytes;
       },
       async put() {
@@ -843,6 +848,10 @@ test("native PDF, DOC, DOCX, XLS, and XLSX parsers run in the isolated productio
       output.result.units.length > 0,
       `${format} should return parsed evidence`
     );
+    assert.ok(output.timings);
+    assert.ok(output.timings.workerInitializationMs >= 0);
+    assert.ok(output.timings.extractionMs >= 0);
+    assert.ok(output.timings.totalMs >= output.timings.workerInitializationMs);
     assert.equal(
       output.result.units.every((unit) => unit.extractionMethod === "native"),
       true
@@ -987,10 +996,89 @@ test("failed parser worker run stores no partial evidence", async () => {
   });
   await assert.rejects(
     service.process({ documentId: record.id, userId: record.userId }),
-    ProcessingConflictError
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "processing_timeout" &&
+      error.status === 504
   );
   assert.equal(failedCode, "processing_timeout");
   assert.equal(finalized, 0);
+});
+
+test("stored-document read failures are temporary infrastructure errors", async () => {
+  const bytes = Buffer.from("retry after object storage recovers");
+  const harness = processingHarness({ bytes, storageFailure: true });
+  await assert.rejects(
+    harness.service.process({
+      documentId: harness.record.id,
+      userId: harness.record.userId,
+    }),
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "processing_temporarily_unavailable" &&
+      error.status === 503
+  );
+  assert.equal(
+    harness.runs[0]?.errorCode,
+    "processing_temporarily_unavailable"
+  );
+  assert.equal(harness.evidence.size, 0);
+});
+
+test("failed extraction stays retryable and does not masquerade as a state conflict", async () => {
+  const bytes = Buffer.from("synthetic document for parser retry");
+  let calls = 0;
+  const harness = processingHarness({
+    bytes,
+    processor: async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new ParserWorkerError("parser_worker_failed");
+      }
+      return {
+        status: "complete",
+        method: "native",
+        units: [
+          {
+            locator: { kind: "lines", lineStart: 1, lineEnd: 1 },
+            extractedText: "recovered parser evidence",
+            extractionMethod: "native",
+            provenance: {},
+          },
+        ],
+        truncated: false,
+      };
+    },
+  });
+  await assert.rejects(
+    harness.service.process({
+      documentId: harness.record.id,
+      userId: harness.record.userId,
+    }),
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "parser_worker_failed" &&
+      error.status === 503
+  );
+  await assert.rejects(
+    harness.service.process({
+      documentId: harness.record.id,
+      userId: harness.record.userId,
+    }),
+    ProcessingConflictError
+  );
+  const retried = await harness.service.process({
+    documentId: harness.record.id,
+    userId: harness.record.userId,
+    retryFailed: true,
+  });
+  assert.equal(retried.status, "complete");
+  assert.equal(calls, 2);
+  const visible = (await harness.service.getEvidence({
+    documentId: harness.record.id,
+    userId: harness.record.userId,
+  })) as { units: Array<{ extractedText: string }> };
+  assert.equal(visible.units[0]?.extractedText, "recovered parser evidence");
 });
 
 test("one global deadline aborts multi-page scanned-PDF vision and prevents partial finalization", async () => {
@@ -1025,7 +1113,10 @@ test("one global deadline aborts multi-page scanned-PDF vision and prevents part
   });
   await assert.rejects(
     harness.service.process({ documentId: record.id, userId: record.userId }),
-    ProcessingConflictError
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "processing_timeout" &&
+      error.status === 504
   );
   assert.deepEqual(processedPages, [1, 2]);
   assert.equal(harness.runs[0]?.errorCode, "processing_timeout");
@@ -1063,7 +1154,10 @@ test("global deadline aborts active image OpenAI request and fails the run", asy
   const harness = processingHarness({ bytes, record, runtimeMs: 40, vision });
   await assert.rejects(
     harness.service.process({ documentId: record.id, userId: record.userId }),
-    ProcessingConflictError
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "processing_timeout" &&
+      error.status === 504
   );
   assert.equal(providerAborted, true);
   assert.equal(harness.runs[0]?.errorCode, "processing_timeout");
@@ -1236,7 +1330,10 @@ test("failed reprocessing preserves prior terminal evidence", async () => {
       userId: record.userId,
       reprocessIncomplete: true,
     }),
-    ProcessingConflictError
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "parser_worker_failed" &&
+      error.status === 503
   );
   const retained = (await harness.service.getEvidence({
     documentId: record.id,
@@ -1347,7 +1444,10 @@ test("failure persistence outage leaves a run recoverable after the stale thresh
       documentId: harness.record.id,
       userId: harness.record.userId,
     }),
-    ProcessingConflictError
+    (error: unknown) =>
+      error instanceof ProcessingFailedError &&
+      error.code === "processing_temporarily_unavailable" &&
+      error.status === 503
   );
   assert.equal(harness.record.processingStatus, "processing");
   assert.equal(harness.runs[0]?.status, "processing");

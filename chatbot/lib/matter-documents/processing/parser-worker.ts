@@ -15,7 +15,13 @@ export class ParserWorkerError extends Error {
   }
 }
 
-export type NativeParserOutput = PdfParserOutput;
+export type NativeParserOutput = PdfParserOutput & {
+  timings?: {
+    workerInitializationMs: number;
+    extractionMs: number;
+    totalMs: number;
+  };
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -141,6 +147,8 @@ export function runParserWorker(input: {
     );
   const threadWorker = createRequire(import.meta.url)("node:worker_threads")
     .Worker as typeof import("node:worker_threads").Worker;
+  const workerStartedAt = performance.now();
+  let workerReadyAt: number | undefined;
   const worker = Reflect.construct(threadWorker, [
     workerPath,
     {
@@ -197,12 +205,27 @@ export function runParserWorker(input: {
     if (input.signal?.aborted) {
       onAbort();
     }
-    worker.once("message", (message: unknown) => {
+    worker.on("message", (message: unknown) => {
       if (!isRecord(message)) {
         worker.terminate().then(
           () => finish(new ParserWorkerError("parser_worker_failed")),
           () => finish(new ParserWorkerError("parser_worker_failed"))
         );
+        return;
+      }
+      if (message.type === "ready") {
+        if (
+          !Number.isInteger(message.threadId) ||
+          message.threadId === 0 ||
+          workerReadyAt !== undefined
+        ) {
+          worker.terminate().then(
+            () => finish(new ParserWorkerError("parser_worker_failed")),
+            () => finish(new ParserWorkerError("parser_worker_failed"))
+          );
+          return;
+        }
+        workerReadyAt = performance.now();
         return;
       }
       if (
@@ -212,6 +235,8 @@ export function runParserWorker(input: {
           "unsupported_processing_format",
           "malformed_document",
           "processing_limit_exceeded",
+          "parser_dependency_unavailable",
+          "parser_worker_failed",
         ].includes(message.code)
       ) {
         finish(new ParserWorkerError(message.code));
@@ -230,6 +255,18 @@ export function runParserWorker(input: {
       }
       try {
         const output = validateOutput(message.output);
+        if (
+          workerReadyAt !== undefined &&
+          typeof message.extractionMs === "number" &&
+          Number.isFinite(message.extractionMs) &&
+          message.extractionMs >= 0
+        ) {
+          output.timings = {
+            workerInitializationMs: workerReadyAt - workerStartedAt,
+            extractionMs: message.extractionMs,
+            totalMs: performance.now() - workerStartedAt,
+          };
+        }
         finish(undefined, output);
       } catch {
         worker.terminate().then(

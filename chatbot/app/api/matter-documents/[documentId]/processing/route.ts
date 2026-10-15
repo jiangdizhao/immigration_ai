@@ -2,6 +2,7 @@ import { auth } from "@/app/(auth)/auth";
 import { hasRegisteredMatterDocumentAccess } from "@/lib/matter-documents/http";
 import {
   ProcessingConflictError,
+  ProcessingFailedError,
   ProcessingIntegrityError,
   ProcessingNotFoundError,
 } from "@/lib/matter-documents/processing/service";
@@ -31,6 +32,16 @@ function failure(error: unknown) {
   }
   if (error instanceof ProcessingIntegrityError) {
     return json({ error: "Stored document integrity check failed." }, 422);
+  }
+  if (error instanceof ProcessingFailedError) {
+    const message =
+      error.code === "malformed_document" ||
+      error.code === "unsupported_processing_format"
+        ? "This file could not be read. Check the file and try again."
+        : error.code === "processing_timeout"
+          ? "Document processing took too long. Please retry."
+          : "Document processing is temporarily unavailable. Please retry.";
+    return json({ error: message }, error.status);
   }
   if (error instanceof ProcessingConflictError) {
     return json(

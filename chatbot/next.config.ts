@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "/api/matter-documents/\\[documentId\\]/processing": [
       "./lib/matter-documents/processing/worker-runtime/parser-worker.mjs",
       "./lib/matter-documents/processing/worker-runtime/**/*",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
     ],
   },
   images: {
