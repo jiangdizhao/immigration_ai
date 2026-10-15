@@ -1,5 +1,17 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN DOCUMENT_PROCESSING_AUDIT_2026_10_16 -->
+## LATEST — 2026-10-16: all-format document processing audit
+
+**Investigation:** branch `audit/document-processing-all-formats-20261016`, based on `c0f10c9ddb73b451552cb8ec59fe8171293d3ed6`. The detailed source map, 11-format matrix, commands, evidence, limits, Q1–Q10 answers and proposed repair plan are in [the Phase 12 document processing audit](./audits/DOCUMENT_PROCESSING_ALL_FORMATS_AUDIT_2026_10_16.md).
+
+**Confirmed local production-image finding:** the Node 22 standalone image contains PDF.js `pdf.mjs` but not dynamically loaded `pdf.worker.mjs`. PDF.js therefore fails with a missing module; `extractPdfInternal()` rewrites it as `malformed_document`, and the processing endpoint returns HTTP 409. Eight other Worker formats passed in the same local production image. This is a high-likelihood explanation for the two reported PDF failures, not direct proof from their inaccessible files or deployed `:46` image.
+
+**Cross-format safety finding:** the storage transition sets `securityStatus=clean` when it marks the S3 upload `stored`, but GuardDuty reconciliation only accepts `pending`. Processing therefore may proceed before a scanner verdict, and the storage transition can overwrite a verdict if event ordering races. Actual Staging GuardDuty/S3 configuration was not verifiable with available AWS permissions. Treat `clean` as unverified until external review resolves this source-level issue.
+
+**Validation:** local production Docker build and native-runtime import verifier passed; the verifier did not exercise PDF parsing and missed the missing PDF.js asset. Production-image parser smoke: PDF failed; DOCX, DOC, TXT, Markdown, JSON, CSV, XLSX and XLS passed. JPEG/PNG returned the expected no-provider `needs_review / vision_unavailable` state in direct parser tests. Focused document suites: 124 passed, 0 failed, 0 skipped with child-process spawning enabled. No application changes, customer data, live AI, production database, S3, AWS mutation, or deployment. AWS task-definition/ECR inspection was blocked; see report for exact errors. **No remediation implemented; stop for external review.**
+<!-- END DOCUMENT_PROCESSING_AUDIT_2026_10_16 -->
+
 <!-- BEGIN AWS_STAGING_VIP_DOCUMENT_HOTFIX_DEPLOYED_2026_10_15 -->
 ## LATEST — 2026-10-15: Combined VIP Payment + Universal Document Access deployed to AWS Staging (Web :46)
 
