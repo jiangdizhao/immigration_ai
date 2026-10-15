@@ -21,11 +21,23 @@ export async function verifyNativeRuntime(adapters) {
   ) {
     throw new Error("parser_runtime_invalid");
   }
+  const pdfEvidence = await adapters.parsePdf();
+  if (
+    !Array.isArray(pdfEvidence) ||
+    !pdfEvidence.some(
+      (text) =>
+        typeof text === "string" &&
+        text.includes("NATIVE RUNTIME PDF EXTRACTION")
+    )
+  ) {
+    throw new Error("parser_pdf_extraction_failed");
+  }
   return {
     ...adapters.runtime,
     canvasVersion: canvasModule.version,
     parserWorker: "loaded",
     pdfJsVersion: parser.pdfJsVersion,
     pdfJsApi: "getDocument",
+    pdfExtraction: "passed",
   };
 }

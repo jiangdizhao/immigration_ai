@@ -42,6 +42,9 @@ test("native runtime verifier renders canvas and loads parser worker", async () 
         pdfJsVersion: "6.0",
       };
     },
+    async parsePdf() {
+      return ["NATIVE RUNTIME PDF EXTRACTION sample text"];
+    },
   });
   assert.deepEqual(result, {
     ...runtime,
@@ -49,6 +52,7 @@ test("native runtime verifier renders canvas and loads parser worker", async () 
     parserWorker: "loaded",
     pdfJsVersion: "6.0",
     pdfJsApi: "getDocument",
+    pdfExtraction: "passed",
   });
 });
 
