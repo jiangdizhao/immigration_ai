@@ -1,11 +1,21 @@
 # PROJECT_STATE
 
+<!-- BEGIN PHASE13_M0_002_2026_10_23 -->
+## Phase 13 M0-001 source audit reviewed; M0-002 design activated (2026-10-23)
+
+- Verified remote M0-001 commit: `0d17ab34db7ceae55ad6df57ebce0b6a850b31f7` on `phase13-study-journey-project-centric`. ChatGPT independently reviewed the audit, confirmed the chat-scoped file deletion/S3 object cleanup conflict against source code, and approved **proceeding to M0-002 specification**. This is NOT final M0 architecture freeze or lawyer approval.
+- M0-001 report: [PHASE13_M0_001_AUDIT_RESULT.md](./tasks/PHASE13_M0_001_AUDIT_RESULT.md). Active task: [PHASE13_M0_002_DATA_AUTH_CONTRACT.md](./tasks/PHASE13_M0_002_DATA_AUTH_CONTRACT.md).
+- M0-002 is **READY / NOT STARTED**. Default for scrutiny: Project-owned asset/immutable versions independent from chat deletion; alternatives and lifecycle must be compared before owner accepts it. No code, migration, database, AWS, Stripe or live submission mutation approved.
+- Provisional school/visa baselines remain lawyer/agent **PENDING**. Staff reviewer approval is required for managed school and visa packages, and is separate from contracts/payment/consent; self-service never acquires fake lawyer approval.
+<!-- END PHASE13_M0_002_2026_10_23 -->
+
+
 <!-- BEGIN PHASE13_STUDY_JOURNEY_2026_10_23 -->
 ## ACTIVE - Phase 13 Study Journey M0 preparation (2026-10-23; provisional)
 
 **Owner decision:** Proceed with implementation preparation on `phase13-study-journey-project-centric` (reference base `8b963eea1aa4023d30f31eba816a545efaa65e3d`). Six design/PDF/PNG assets remain in `doc/`. The lawyer/education-agent has **not yet reviewed** the four fact/document matrices, which are `PROVISIONAL`. Start M0 design and read-only source audit now; no legal-rule approval, schema migration, code rollout, live submission, DB/AWS mutation or paid model call is authorized by this entry.
 
-**Current canonical plan:** [PHASE13_STUDY_JOURNEY_ROADMAP.md](./PHASE13_STUDY_JOURNEY_ROADMAP.md) (M0-M10, all gates), and [M0-001 task contract](./tasks/PHASE13_M0_ARCHITECTURE_AUDIT.md). **M0-001: DRAFT DELIVERED; AWAITING OWNER REVIEW; NOT ACCEPTED.** [Audit report](./tasks/PHASE13_M0_001_AUDIT_RESULT.md) was prepared at `88385f2c0bff0ad636bfca7439d40ccc673ae2ef` on `phase13-study-journey-project-centric`. The older Architecture V2 PDF remains a design reference; this roadmap documents later owner changes (lawyer school review, professional engagement/contract/offline fee, independent self service, project human messaging, staff dashboard). D-009's no-Project restriction applied to Phase 12 only; Phase 13 design is separately owner-authorized without changing legacy data.
+**Current canonical plan:** [PHASE13_STUDY_JOURNEY_ROADMAP.md](./PHASE13_STUDY_JOURNEY_ROADMAP.md) (M0-M10, all gates), and [M0-001 task contract](./tasks/PHASE13_M0_ARCHITECTURE_AUDIT.md). **M0-001: INDEPENDENT AUDIT REVIEW COMPLETE; ADVANCE TO M0-002 DESIGN (not overall M0 signoff).** [Audit report](./tasks/PHASE13_M0_001_AUDIT_RESULT.md) was prepared at `88385f2c0bff0ad636bfca7439d40ccc673ae2ef` on `phase13-study-journey-project-centric`. The older Architecture V2 PDF remains a design reference; this roadmap documents later owner changes (lawyer school review, professional engagement/contract/offline fee, independent self service, project human messaging, staff dashboard). D-009's no-Project restriction applied to Phase 12 only; Phase 13 design is separately owner-authorized without changing legacy data.
 
 **Invariants:** Standalone Chat remains standalone; only explicitly created Projects get Study Journey functions. Each Project keeps private facts/files across its Chat threads, but never automatically across Projects. AI investigates and drafts; mandatory professional review is not satisfied by AI. Managed school/visa external submission requires appropriate contract/payment terms/explicit customer authorization and lawyer approval for the exact application package; self submission is independent of VIP, has clear risk/scope disclosure, no false lawyer approval. Existing code/Stripe/Policy Intelligence should be reused, not duplicated.
 
