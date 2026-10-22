@@ -1,5 +1,19 @@
 # DECISIONS
 
+<!-- BEGIN DECISION_PHASE13_M0_PROVISIONAL_2026_10_23 -->
+## D-P13-001 - Study Journey Project and provisional legal baselines
+
+**Date:** 2026-10-23  
+**Status:** OWNER-APPROVED PRODUCT DIRECTION; TECHNICAL CONTRACT AND LEGAL STANDARDS PENDING M0 / LAWYER SIGNOFF.
+
+Owner authorizes designing a Project-Centric Study Journey architecture on `phase13-study-journey-project-centric`. A Study Journey exists only upon explicit Project creation; Standalone Chat stays independent and is never silently migrated. Project does not equal Legal Matter. Phase 12 D-009's no-Project rule was phase-limited, and is superseded **only for Phase 13 architecture/design and future separately approved implementation**. All prior data ownership, file sharing, persisted-turn, entitlement, evidence, security and human-editor rules remain in force unless explicitly amended after review.
+
+The two source PDFs committed under `doc/` are provisional review inputs, **not lawyer-approved regulations**. The newer owner requirements amend the V2 PDF: lawyer review of each managed school application package before authorized education representative submission; minimum school and visa Intake with dynamic conditions; GS individualized drafts edited/approved by lawyer in managed service; staff-wide assigned-case dashboard, permissioned edits and continuous human chat; separate management of signed professional contract and staff-verified offline payment, unrelated to Stripe VIP; user-authorized self-submission with legally reviewed disclosure, distinct from Managed Service. Human reviewer decisions and third-party submission receipts cannot be inferred from AI output. Unknown rules are not silently passed.
+
+Roadmap and acceptance conditions: [PHASE13_STUDY_JOURNEY_ROADMAP.md](./PHASE13_STUDY_JOURNEY_ROADMAP.md). M0 authorizes **read-only audit and documents only**; no API, database, migration, production changes, lawyer signoff or live external application submission is approved by this record.
+<!-- END DECISION_PHASE13_M0_PROVISIONAL_2026_10_23 -->
+
+
 
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
 ## Operational decision — Phase 12 Stage 3 AWS Staging accepted (2026-10-14)
