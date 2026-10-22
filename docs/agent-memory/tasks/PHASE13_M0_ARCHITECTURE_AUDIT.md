@@ -1,6 +1,8 @@
 # Phase 13 M0-001 - As-Is Architecture Audit and To-Be Boundary Proposal
 
-**Status:** READY TO ASSIGN TO CODEX; **NOT YET IMPLEMENTED / NOT ACCEPTED**  
+**Status:** DRAFT DELIVERED; **AWAITING OWNER REVIEW / NOT ACCEPTED**
+
+**Audit report:** [PHASE13_M0_001_AUDIT_RESULT.md](./PHASE13_M0_001_AUDIT_RESULT.md) — branch `phase13-study-journey-project-centric`, HEAD `88385f2c0bff0ad636bfca7439d40ccc673ae2ef`.
 **Branch:** `phase13-study-journey-project-centric`  
 **Owner-known start SHA:** `8b963eea1aa4023d30f31eba816a545efaa65e3d` (documentation commits may have advanced HEAD; verify live)  
 **Upstream roadmap:** [PHASE13_STUDY_JOURNEY_ROADMAP.md](../PHASE13_STUDY_JOURNEY_ROADMAP.md)
