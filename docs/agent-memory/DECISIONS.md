@@ -13,6 +13,28 @@ The two source PDFs committed under `doc/` are provisional review inputs, **not 
 Roadmap and acceptance conditions: [PHASE13_STUDY_JOURNEY_ROADMAP.md](./PHASE13_STUDY_JOURNEY_ROADMAP.md). M0 authorizes **read-only audit and documents only**; no API, database, migration, production changes, lawyer signoff or live external application submission is approved by this record.
 <!-- END DECISION_PHASE13_M0_PROVISIONAL_2026_10_23 -->
 
+<!-- BEGIN DECISION_PHASE13_M0_OWNER_ACCEPTANCE_2026_10_24 -->
+## D-P13-002 — Project and Chat dual authorization
+
+**Date:** 2026-10-24
+
+**Status:** OWNER ACCEPTED — TECHNICAL CONTRACT
+
+Following M0-004 finding F-01, the owner accepts this authorization contract. One Project may have multiple customer members. Each Project-linked Chat remains owned by its individual authenticated creator; Project membership does not grant access to another member's Chat transcript. Every Project-linked history, detail, update, widget-turn, and other relevant operation must verify both current Chat ownership and current Project authorization, including Project lifecycle and membership status. Membership revocation denies subsequent Project Chat operations. Existing Standalone Chats are never silently linked to a Project. Browser-supplied Project IDs and roles are selectors, not authority. This decision establishes a technical contract only; implementation and security/regression verification remain pending.
+
+This decision is consistent with the durable owner-history and shared turn requirements in D-009 and D-010. It does not approve unrelated M0-004 recommendations or authorize M1 implementation.
+
+## D-P13-003 — Project rollback and durable Chat history
+
+**Date:** 2026-10-24
+
+**Status:** OWNER ACCEPTED — TECHNICAL CONTRACT
+
+Following M0-004 finding F-02, the owner accepts this rollback contract. Emergency Project feature disablement must not delete or orphan persisted Chat/Turn records. Authenticated Chat owners retain read-only history through a clearly identified Project-origin fallback, subject to current authorization and every existing restriction. The fallback permits no new Project writes, Project AI context, or model turns; it does not reclassify a Project Chat as Standalone or bypass membership revocation. Feature rollback, normal Project closure, and membership revocation remain distinct states and must not be treated as equivalent. Case-specific closure access, retention, and privacy policy remain explicitly pending owner/privacy review; this decision does not determine them.
+
+This decision preserves the durable history and turn-lifecycle requirements in D-009 and D-010. It is a technical contract only; implementation and security/regression verification remain pending, and M1 is not authorized.
+<!-- END DECISION_PHASE13_M0_OWNER_ACCEPTANCE_2026_10_24 -->
+
 
 
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->

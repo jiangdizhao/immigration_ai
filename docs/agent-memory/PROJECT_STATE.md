@@ -1,4 +1,26 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+## Current Phase 13 status — M0-004 owner decisions (2026-10-24)
+
+- M0-004 independent architecture review: **PASS**. Owner decisions A/B are **ACCEPTED — TECHNICAL CONTRACT** in [D-P13-002 and D-P13-003](./DECISIONS.md). F-01/F-02 are resolved at the owner-decision level; implementation and security/regression verification remain pending.
+- Technical freeze is a **CANDIDATE** pending complete owner acceptance of the named contracts. M1 is **NOT YET AUTHORIZED**.
+- Remaining §5.A choices include invitation/acceptance mechanics, owner/account representation, detailed closure access and retention, ordinary Project Chat UI scope, and create/link idempotency. Other M0-004 recommendations are not accepted by implication.
+- Lawyer/admissions matrices remain **PROVISIONAL**. Financial custody, privacy/retention, GS and OSHC decisions remain pending with applicable owners/professionals.
+- Next: complete owner review of applicable remaining contracts; separately authorize a bounded M1 task before implementation. No code or security tests passed as part of this documentation update.
+
+The 2026-10-23 M0-004 section below preserves the earlier status snapshot.
+<!-- END PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
+## Current Phase 13 M0-004 review status
+
+- Review report: [PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md](./tasks/PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md).
+- M0-004 review delivered; awaiting independent architecture and owner acceptance. Architecture is not frozen and M1 is not authorized.
+- F-01/F-02 require owner decisions before M1: compose Project membership with existing Chat-owner checks, and preserve authorized access to persisted Project Chat turns during feature rollback.
+- ApplicationParty normalization and staged ProjectApplication subtype enforcement are recommended for later owner decision. Correct Offer condition-first diagram before M5. The source-verified storage-to-clean contradiction blocks actual Project document use until separately fixed and tested, but does not block the M1 Project-only foundation.
+- LF-01–LF-08, LF-D01–LF-D09, the four matrices, third-party-funds custody, disclosures, and retention remain pending with the appropriate owners/professionals. No approval is claimed.
+- Documentation only; no implementation, migration, database/cloud/payment operation, external submission, paid call, or tests.
+<!-- END PHASE13_M0_004_REVIEW_2026_10_23 -->
 
 <!-- BEGIN PHASE13_M0_003_REVIEW_2026_10_23 -->
 ## M0-003-R2 Independent Review

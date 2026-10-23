@@ -1,4 +1,25 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+## Current milestone — Phase 13 M0-004 owner decisions (2026-10-24)
+
+- **M0-004 independent architecture review: PASS.** Decisions A/B accepted as technical contracts in [D-P13-002 and D-P13-003](./DECISIONS.md); F-01/F-02 are resolved at owner-decision level, with implementation and security/regression verification pending.
+- Technical freeze: **CANDIDATE** pending complete owner acceptance of the named contracts. M1: **NOT YET AUTHORIZED**.
+- Remaining applicable §5.A owner choices: membership invitation/acceptance, owner/account representation, detailed closure access and retention, ordinary Project Chat UI scope, and Project create/link idempotency. Do not assume unaccepted M0-004 recommendations.
+- Matrices remain **PROVISIONAL**. Financial custody, privacy/retention, GS and OSHC professional decisions remain pending.
+- Next: owner review of remaining contracts and a separate explicit M1 scope/authorization. Documentation only; implementation and security tests remain undone.
+
+The 2026-10-23 section below records the prior review-time state.
+<!-- END PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
+## Phase 13 M0-004 independent architecture review delivered
+
+- **Status:** REVIEW DELIVERED — AWAITING INDEPENDENT ARCHITECTURE AND OWNER ACCEPTANCE.
+- **Report:** [PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md](./tasks/PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md).
+- **Decision state:** Architecture remains unfrozen. M1 is NOT READY / NOT AUTHORIZED pending owner acceptance of F-01 dual Project/Chat authorization and membership lifecycle, and F-02 rollback access to durable Project Chat turns.
+- M0-004 proposes freeze candidates for ownership, ProjectConversation, turn-ledger reuse, staged application subtypes, evidence/package versions, workflow governance, and feedback boundaries. The legal/admissions matrices and LF feedback remain provisional.
+- Documentation only; no code, migration, DB, cloud, payment, external source fetch, test suite, or external submission. Await independent review and explicit M1 authorization.
+<!-- END PHASE13_M0_004_REVIEW_2026_10_23 -->
 
 <!-- BEGIN PHASE13_M0_003_REVIEW_2026_10_23 -->
 ## M0-003-R2 Independent Review

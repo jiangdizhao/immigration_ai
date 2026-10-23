@@ -1,4 +1,27 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+## Current status — Phase 13 M0-004 owner decisions (2026-10-24)
+
+- M0-004 independent architecture review: **PASS**. Owner decisions A/B are **ACCEPTED — TECHNICAL CONTRACT** in [D-P13-002 and D-P13-003](./DECISIONS.md); F-01/F-02 are resolved at the owner-decision level only.
+- Required implementation and security/regression verification remain pending. Technical freeze is a **CANDIDATE** pending complete owner acceptance of named contracts. M1 is **NOT YET AUTHORIZED**.
+- Remaining §5.A choices include Project/account cardinality and owner representation, invitation/acceptance mechanics, detailed closure access and retention policy, ordinary Project Chat UI scope, and create/link idempotency details. Resolve choices needed by a selected M1 behavior; do not infer acceptance of other recommendations.
+- Lawyer/admissions matrices remain **PROVISIONAL**. Financial custody, privacy/retention, GS and OSHC decisions remain pending with applicable owners/professionals.
+- Next: complete owner review of remaining applicable contracts, then issue a separate bounded M1 implementation authorization. This integration changes documentation only; no code or security tests passed here.
+
+The 2026-10-23 M0-004 entry below preserves the review-time status and evidence; this section is current.
+<!-- END PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
+## Phase 13 M0-004 architecture review delivered
+
+- **M0-004 REVIEW DELIVERED — AWAITING INDEPENDENT ARCHITECTURE AND OWNER ACCEPTANCE.** Report: [PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md](./tasks/PHASE13_M0_004_ARCHITECTURE_FREEZE_REVIEW.md).
+- Review checkpoint: branch `phase13-study-journey-project-centric`, HEAD `5984a99b52974ee47bcb8107c73a6ba44856a475`; clean before this documentation change.
+- Recommendation: technical contracts are freeze candidates, but architecture is not frozen. F-01 and F-02 are `BLOCKER_M1`: owner must accept Project membership + Chat authorization semantics and the durable-history rollback fallback. **M1 is NOT READY / NOT AUTHORIZED.**
+- Additional findings: ApplicationParty identity/role normalization is proposed for M2; subtype enforcement should follow staged M2/M5/M6–M7 introduction; correct the condition-first Offer decision diagram before M5. The stored-to-clean scanner defect remains an M2 Project-document prerequisite, not an M1 blocker.
+- LF-01–LF-08 and LF-D01–LF-D09 remain provisional. No legal, admissions, finance, privacy, records or professional approval is claimed. No Project workflow code, test suite, migration, database, AWS/S3, Stripe, paid AI or external submission was used.
+- M1 scope and synthetic/de-identified security/regression plan are specified in the report. Do not begin M1 until the owner accepts the decisions and issues separate implementation authorization.
+- Validation: git diff --check PASS; direct trailing-whitespace scan of the new report PASS; tests not run. Changed files are the M0-004 report and these three current-status documents: CURRENT_HANDOFF.md, CURRENT_MILESTONE.md, PROJECT_STATE.md. DECISIONS.md is unchanged.
+<!-- END PHASE13_M0_004_REVIEW_2026_10_23 -->
 
 <!-- BEGIN PHASE13_M0_003_REVIEW_2026_10_23 -->
 ## M0-003-R2 Independent Review
