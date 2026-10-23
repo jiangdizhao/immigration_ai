@@ -81,6 +81,12 @@ All legal/admission requirement sources can be updated **at any time**, but chan
 
 A future PDF can be more recent than the current checklist, but **recency alone does not override applicable law, a published rule version or an approved customer package**. Lawyer-supplied standards may amend the workflow proposal at M0 or any later milestone, via an explicit decision record and review.
 
+## 4a. Lawyer feedback intake (2026-10-23; not approved rules)
+
+A later annotated copy of the provisional school/Student-500 review PDF contains practitioner comments on intake and evidence review, fee versus tuition custody, OSHC and comprehensive GS preparation. These comments are transcribed with page mapping, source hash, caveats and owner/professional follow-ups in [PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md](./tasks/PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md).
+
+**Status: CAPTURED / PENDING REVIEW.** No legal/admissions matrix is approved; no tuition-custody or bank account/legal category is authorized; no country-specific OSHC rule is published. The linked feedback must be reconciled with M0-003-R2 and carried to M0-004 as explicit pending decisions. Do not expand M1, override a same-named unannotated PDF, or amend accepted R1 source contracts by implication.
+
 ## 5. Development / Git policy
 
 - Work exclusively on `phase13-study-journey-project-centric` unless the owner explicitly creates another implementation branch. The source and existing 6 reference assets remain committed and retained.

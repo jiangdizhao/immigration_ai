@@ -112,3 +112,8 @@ Update `CURRENT_HANDOFF.md`, `CURRENT_MILESTONE.md`, `PROJECT_STATE.md` **only a
 - No code, SQL migration, test DB, live AWS, external submission, paid calls, no new standalone customer sharing.
 - Run `git diff --check`, identify all changed files, record tests **not run** and what could not be independently validated.
 - **Do not commit/push** without separate owner authorization. Do not begin M0-004 or M1. Stop for independent review.
+
+
+## Supplemental professional feedback received after task activation (2026-10-23)
+
+The additional annotated lawyer-review PDF was not part of the initial M0-003 contract version. Its comments are recorded separately in [PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md](./PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md), including the source file hash and PDF page positions. Review this delta as a **provisional professional input** when independently reviewing M0-003-R2 and preparing M0-004; the new document does **not** itself amend the legal matrices or authorize live payments, custody, OSHC exclusions or GS submission formats. The in-progress local M0-003-R2 design is uncommitted and was not read or edited by this GitHub documentation change.
