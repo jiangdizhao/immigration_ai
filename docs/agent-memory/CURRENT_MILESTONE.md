@@ -1,5 +1,16 @@
 # CURRENT_MILESTONE
 
+<!-- BEGIN PHASE13_M0_003_ACTIVATED_2026_10_23 -->
+## ACTIVE: Phase 13 M0-003 workflow / policy governance design (2026-10-23)
+
+- **Verified M0-002-R1 GitHub SHA:** `355721919d049d16070dfc887105d3c2a943afaa` on `phase13-study-journey-project-centric`; independent review **PASS WITH FOLLOW-UP CONDITIONS**, sufficient for **M0-003 technical design**. The M0-002 review does *not* approve final PostgreSQL schema, professional legal criteria, retention policy or live release. Full design: [PHASE13_M0_002_DATA_AUTH_DESIGN.md](./tasks/PHASE13_M0_002_DATA_AUTH_DESIGN.md).
+- **Current task:** [PHASE13_M0_003_WORKFLOW_POLICY_CONTRACT.md](./tasks/PHASE13_M0_003_WORKFLOW_POLICY_CONTRACT.md) — **READY / NOT STARTED**. Produce a documentation-only design for school + Student 500 state machines, versioned source/rule governance, bounded AI task planning, separated self/managed submission gates, policy-change invalidation and M0-004 review.
+- **Outstanding technical follow-ups captured in M0-003 task:** FactAssertion/ApplicationParty composite FK uniqueness versus partyRole; M2 generic application staged before M5/M7 subtype enforcement; *one real payment* covering multiple contract/application fee allocations.
+- **Critical existing code risk:** legacy MatterDocument storage transition appears to mark `securityStatus=clean` on `stored` independent of scanner verdict; code change requires a separately scoped authorization and tests before real Project document use. M0-003 changes no code.
+- School/admissions/Student-500 facts and evidence PDFs remain **PROVISIONAL** pending qualified lawyer/education-agent review. Owner can authorize synthetic/de-identified foundational development later without waiting for those legal checks, but M0-004 technical freeze and separately authorized implementation scope come first.
+<!-- END PHASE13_M0_003_ACTIVATED_2026_10_23 -->
+
+
 <!-- BEGIN PHASE13_M0_002_2026_10_23 -->
 ## Phase 13 M0-002-R1 architecture corrections delivered (2026-10-23)
 
