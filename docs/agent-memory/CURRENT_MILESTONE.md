@@ -1,5 +1,27 @@
 # CURRENT_MILESTONE
 
+<!-- BEGIN PHASE13_M0_003_REVIEW_2026_10_23 -->
+## M0-003-R2 Independent Review
+
+- Technical architecture review: PASS.
+- M0-003-R2 design accepted for M0-004 review.
+- Lawyer feedback recorded in:
+  [PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md](./tasks/PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md).
+- Legal/admissions matrices remain provisional.
+- M0-004 and M1 have not started.
+- Architecture is not yet frozen.
+<!-- END PHASE13_M0_003_REVIEW_2026_10_23 -->
+
+<!-- BEGIN PHASE13_M0_003_2026_10_23 -->
+## Phase 13 M0-003-R2 final consistency and lawyer feedback integration delivered (2026-10-23)
+
+- **M0-003-R2 DELIVERED — AWAITING INDEPENDENT REVIEW.** See [workflow and requirements governance design](./tasks/PHASE13_M0_003_WORKFLOW_POLICY_DESIGN.md). Owner acceptance and technical architecture freeze remain pending; no professional matrix is approved.
+- Branch remains `phase13-study-journey-project-centric`, HEAD `355721919d049d16070dfc887105d3c2a943afaa`. The M0-003 contract was read at activation commit `a234e4ff4ad0124e2ed522579e6a26075f34f273`; existing uncommitted R1 work was preserved. No checkout, fetch, merge, rebase, reset or commit occurred.
+- The independent review accepts all eight R1 corrections. R2 preserves them and resolves nonblocking Student 500 preparation with a parallel anchor status/gate; distinct Offer, acceptance, conditions, institution acknowledgement and CoE dimensions; separate service-fee vs client/third-party funds; separate versioned GS working-draft and official-question-answer outputs; and distinct document security, extraction, authenticity and professional-sufficiency records with bounded review suggestions. The OSHC nationality comment remains provisional pending official-source, temporal and human review.
+- The latest annotated lawyer PDF was not found; the checked-in V0.1 has only URL-link annotations. R2 comments are therefore recorded as owner-supplied provisional feedback. The four matrices remain PROVISIONAL. Funds ownership/accounting/custody/licensing/account type and permitted combinations remain OWNER/FINANCE/COUNSEL/PRIVACY PENDING.
+- Docs only; no code, schema, migration, database, cloud/payment or money-movement action, external submission, paid call, legal-source fetch or tests. M0-004/M1 have not started; architecture remains unfrozen. `git diff --check`, diagram-renderer limitation, changed files and exact Git state are in the handoff.
+<!-- END PHASE13_M0_003_2026_10_23 -->
+
 <!-- BEGIN PHASE13_M0_003_ACTIVATED_2026_10_23 -->
 ## ACTIVE: Phase 13 M0-003 workflow / policy governance design (2026-10-23)
 
@@ -10,14 +32,13 @@
 - School/admissions/Student-500 facts and evidence PDFs remain **PROVISIONAL** pending qualified lawyer/education-agent review. Owner can authorize synthetic/de-identified foundational development later without waiting for those legal checks, but M0-004 technical freeze and separately authorized implementation scope come first.
 <!-- END PHASE13_M0_003_ACTIVATED_2026_10_23 -->
 
-
 <!-- BEGIN PHASE13_M0_002_2026_10_23 -->
 ## Phase 13 M0-002-R1 architecture corrections delivered (2026-10-23)
 
 - Verified remote M0-001 commit: `0d17ab34db7ceae55ad6df57ebce0b6a850b31f7` on `phase13-study-journey-project-centric`. ChatGPT independently reviewed the audit, confirmed the chat-scoped file deletion/S3 object cleanup conflict against source code, and approved **proceeding to M0-002 specification**. This is NOT final M0 architecture freeze or lawyer approval.
 - M0-001 report: [PHASE13_M0_001_AUDIT_RESULT.md](./tasks/PHASE13_M0_001_AUDIT_RESULT.md). Active task: [PHASE13_M0_002_DATA_AUTH_CONTRACT.md](./tasks/PHASE13_M0_002_DATA_AUTH_CONTRACT.md).
 - **M0-002-R1 DELIVERED — AWAITING INDEPENDENT REVIEW.** Revised [PHASE13_M0_002_DATA_AUTH_DESIGN.md](./tasks/PHASE13_M0_002_DATA_AUTH_DESIGN.md) on the expected branch/HEAD, preserving the original Project-owned versioned-document proposal and adding the source-verified scanner-state correction, Project-level multi-application engagement coverage, concrete PostgreSQL isolation constraints/tests, split readiness gates, fact/evidence distinctions, staged M1–M8 entity introduction, development-safe defaults, and no default second reviewer. Neither architecture nor legal standards are marked approved.
-- R1 is documentation only. No code, SQL, migration, database, AWS/S3, Stripe, external submission, paid model call or tests were run. Production scanner behavior was not observed. M0-003 has not started; provisional school/admissions/visa matrices, customer disclosure, contract/fee, retention/legal-hold and conflict policies remain pending.
+- At the M0-002-R1 checkpoint, M0-003 had not started. R1 was documentation only; no code, SQL, migration, database, AWS/S3, Stripe, external submission, paid model call or tests were run. Production scanner behavior was not observed. Provisional school/admissions/visa matrices, customer disclosure, contract/fee, retention/legal-hold and conflict policies remain pending.
 - Provisional school/visa baselines remain lawyer/agent **PENDING**. Staff reviewer approval is required for managed school and visa packages, and is separate from contracts/payment/consent; self-service never acquires fake lawyer approval.
 <!-- END PHASE13_M0_002_2026_10_23 -->
 

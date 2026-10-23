@@ -1,5 +1,37 @@
 # CURRENT_HANDOFF
 
+<!-- BEGIN PHASE13_M0_003_REVIEW_2026_10_23 -->
+## M0-003-R2 Independent Review
+
+- Technical architecture review: PASS.
+- M0-003-R2 design accepted for M0-004 review.
+- Lawyer feedback recorded in:
+  [PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md](./tasks/PHASE13_LAWYER_FEEDBACK_DELTA_2026_10_23.md).
+- Legal/admissions matrices remain provisional.
+- M0-004 and M1 have not started.
+- Architecture is not yet frozen.
+<!-- END PHASE13_M0_003_REVIEW_2026_10_23 -->
+
+<!-- BEGIN PHASE13_M0_003_2026_10_23 -->
+## Phase 13 M0-003-R2 final consistency and lawyer feedback integration delivered (2026-10-23)
+
+- **M0-003-R2 DELIVERED — AWAITING INDEPENDENT REVIEW.** Updated [PHASE13_M0_003_WORKFLOW_POLICY_DESIGN.md](./tasks/PHASE13_M0_003_WORKFLOW_POLICY_DESIGN.md). It remains a proposal, not owner acceptance, architecture freeze, legal advice, lawyer/education-agent approval or implementation authorization. The independent review accepts all eight R1 corrections; all are preserved.
+- The M0-003 task contract at activation commit `a234e4ff4ad0124e2ed522579e6a26075f34f273` was read remotely. Branch remains `phase13-study-journey-project-centric`, HEAD `355721919d049d16070dfc887105d3c2a943afaa`; earlier R1 documentation WIP was retained. No branch movement or Git history rewrite occurred.
+- R2 makes Student 500 preparation independent of anchor verification while retaining source-backed admission-anchor checks at affected Managed gates; separates Offer version/authenticity, one customer decision, conditions, institution acknowledgement and actual CoE; keeps fee allocations separate from client/third-party funds; adds two versioned GS outputs; and separates document security, extraction, authenticity and sufficiency with bounded professional-review suggestions. The supplied OSHC nationality comment remains provisional and requires current-source/human review. R1's bounded planner, transactional outbox and same-Project version-bound CoE link remain.
+- Latest annotated lawyer PDF was not located. The checked-in V0.1 PDF is present but its 12 annotations are URL links only; owner-supplied R2 comments are recorded provisionally. Matrices remain PROVISIONAL. Fund ownership/accounting/custody/licensing/account category and permitted combinations remain OWNER/FINANCE/COUNSEL/PRIVACY PENDING. The source-verified MatterDocument storage-to-clean contradiction remains an implementation prerequisite for real Project file use.
+- Documentation only. No code, schema, migration, database, AWS/S3, Stripe, money movement, paid call, external legal-source fetch, submission or test suite. M0-004/M1 have not started; technical architecture is not frozen. `git diff --check` PASS; a direct trailing-whitespace scan of the new untracked design found no matches. Mermaid rendering is unavailable; diagrams received static review.
+- **Exact changed files:** `docs/agent-memory/tasks/PHASE13_M0_003_WORKFLOW_POLICY_DESIGN.md`; `docs/agent-memory/CURRENT_HANDOFF.md`; `docs/agent-memory/CURRENT_MILESTONE.md`; `docs/agent-memory/PROJECT_STATE.md`.
+- **Exact local Git status (`git status --short --branch`; HEAD `355721919d049d16070dfc887105d3c2a943afaa`):**
+
+  ```text
+  ## phase13-study-journey-project-centric...origin/phase13-study-journey-project-centric
+   M docs/agent-memory/CURRENT_HANDOFF.md
+   M docs/agent-memory/CURRENT_MILESTONE.md
+   M docs/agent-memory/PROJECT_STATE.md
+  ?? docs/agent-memory/tasks/PHASE13_M0_003_WORKFLOW_POLICY_DESIGN.md
+  ```
+<!-- END PHASE13_M0_003_2026_10_23 -->
+
 <!-- BEGIN PHASE13_M0_003_ACTIVATED_2026_10_23 -->
 ## ACTIVE: Phase 13 M0-003 workflow / policy governance design (2026-10-23)
 
@@ -10,14 +42,13 @@
 - School/admissions/Student-500 facts and evidence PDFs remain **PROVISIONAL** pending qualified lawyer/education-agent review. Owner can authorize synthetic/de-identified foundational development later without waiting for those legal checks, but M0-004 technical freeze and separately authorized implementation scope come first.
 <!-- END PHASE13_M0_003_ACTIVATED_2026_10_23 -->
 
-
 <!-- BEGIN PHASE13_M0_002_2026_10_23 -->
 ## Phase 13 M0-002-R1 architecture corrections delivered (2026-10-23)
 
 - Verified remote M0-001 commit: `0d17ab34db7ceae55ad6df57ebce0b6a850b31f7` on `phase13-study-journey-project-centric`. ChatGPT independently reviewed the audit, confirmed the chat-scoped file deletion/S3 object cleanup conflict against source code, and approved **proceeding to M0-002 specification**. This is NOT final M0 architecture freeze or lawyer approval.
 - M0-001 report: [PHASE13_M0_001_AUDIT_RESULT.md](./tasks/PHASE13_M0_001_AUDIT_RESULT.md). Active task: [PHASE13_M0_002_DATA_AUTH_CONTRACT.md](./tasks/PHASE13_M0_002_DATA_AUTH_CONTRACT.md).
 - **M0-002-R1 DELIVERED — AWAITING INDEPENDENT REVIEW.** Revised [PHASE13_M0_002_DATA_AUTH_DESIGN.md](./tasks/PHASE13_M0_002_DATA_AUTH_DESIGN.md) on the expected branch/HEAD, preserving the original Project-owned versioned-document proposal and adding the source-verified scanner-state correction, Project-level multi-application engagement coverage, concrete PostgreSQL isolation constraints/tests, split readiness gates, fact/evidence distinctions, staged M1–M8 entity introduction, development-safe defaults, and no default second reviewer. Neither architecture nor legal standards are marked approved.
-- R1 is documentation only. No code, SQL, migration, database, AWS/S3, Stripe, external submission, paid model call or tests were run. Production scanner behavior was not observed. M0-003 has not started; provisional school/admissions/visa matrices, customer disclosure, contract/fee, retention/legal-hold and conflict policies remain pending.
+- At the M0-002-R1 checkpoint, M0-003 had not started. R1 was documentation only; no code, SQL, migration, database, AWS/S3, Stripe, external submission, paid model call or tests were run. Production scanner behavior was not observed. Provisional school/admissions/visa matrices, customer disclosure, contract/fee, retention/legal-hold and conflict policies remain pending.
 - Provisional school/visa baselines remain lawyer/agent **PENDING**. Staff reviewer approval is required for managed school and visa packages, and is separate from contracts/payment/consent; self-service never acquires fake lawyer approval.
 <!-- END PHASE13_M0_002_2026_10_23 -->
 
