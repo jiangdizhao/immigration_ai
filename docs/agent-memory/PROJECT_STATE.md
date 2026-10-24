@@ -1,15 +1,18 @@
 # PROJECT_STATE
-<!-- BEGIN PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
-## Current Phase 13 status — M0 technical foundation frozen (2026-10-24)
+<!-- BEGIN PHASE13_M1_1_IMPLEMENTATION_2026_10_24 -->
+## Current Phase 13 status — M1.1 Project Foundation implemented (2026-10-24)
 
-- M0-004 independent architecture review: **PASS**. Seven technical decisions A–G accepted in [D-P13-002 through D-P13-005](./DECISIONS.md); M0 foundation **FROZEN FOR BOUNDED M1 PREPARATION**.
-- [M1.1 Project Foundation Contract](./tasks/PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md): **READY FOR INDEPENDENT REVIEW — NOT AUTHORIZED FOR IMPLEMENTATION**. Separate authorization is required after contract review.
-- Normal closure, membership revocation and emergency feature rollback remain distinct; authorized users may read only their own Project Chats after closure, and revocation still denies access. The read-only rollback fallback preserves Project origin.
-- Lawyer/admissions matrices remain **PROVISIONAL**. ApplicationParty/Role, staged application subtypes, evidence grants, full staff authorization and other M2–M8 contracts remain for later decisions. Financial custody, privacy/retention, GS and OSHC remain pending with applicable professionals.
-- No implementation, migrations, tests or live operations were performed. Next: independent review of M1.1 contract, then separate implementation authorization.
+- M0-004 remains **PASS** and D-P13-002 through D-P13-005 remain the accepted technical foundation. M1.1 implementation is complete within its authorized scope; no M1.2–M1.4 behavior is implied.
+- Added `StudyJourneyProject`, `ProjectMembership`, `ProjectConversation`, `ProjectOperation` and `ProjectEvent`, plus repository operations for create, close, current authorization, idempotency, revision/event persistence and atomic Project Chat foundation creation.
+- Migration `0030_demonic_the_hood` was generated as an additive journal index 30 and applied only to the fixed disposable M1.1 database. SQL includes PostgreSQL checks omitted by Drizzle Kit 0.25 snapshot serialization. The target has 31 migrations and zero test rows. No normal `chatbot`, staging, production or shared database was migrated or modified.
+- R1-01 reproduced and corrected: ordinary unit runner no longer imports the server-only repository for pure canonicalization/operation-ID/hash/replay tests; repository remains server-only. R1-02 now proves the five ProjectEvent CHECK/unique failures by exact SQLSTATE and constraint using valid references. Migration 0030 and manual CHECKs remain unchanged.
+- Final R1 validation: isolated integration **10 passed, 0 failed, 0 skipped**; configured `pnpm test:unit` outside sandbox **888 passed, 0 failed, 0 skipped**; focused ordinary-runner regressions **6 files passed**; `pnpm db:check` and `git diff --check` passed. Biome check passed the 6 changed TypeScript/schema/package files and lint passed all 8 changed TypeScript/JSON files; formatter differences are limited to preserved Drizzle-generated snapshot/journal output. Sandbox-only full run had three unrelated `EPERM` subprocess/localhost failures. TypeScript reported the same 44 diagnostics in unchanged files; no changed M1.1 file was named.
+- Worktree is dirty with the uncommitted implementation; HEAD remains `83286fdafe66615f4293f742cd82d0de0f70f940`. Exact changed-file inventory and lock-order evidence are in [CURRENT_HANDOFF.md](./CURRENT_HANDOFF.md).
+- Known cross-row limits: current active-member authorization and Project revision/event alignment are transactionally checked after Project-then-Membership locks; owner-membership exclusion must be enforced by M1.2 membership commands. No trigger, backfill or generic permission engine was added.
+- Next work is separately gated: M1.2 membership APIs; M1.3 Chat/widget authorization integration; M1.4 minimal Workspace entry. Project documents, context, applications, staff/professional workflows, payment and external submission remain excluded. Legal/admissions matrices remain **PROVISIONAL** and relevant professional/privacy decisions remain pending.
 
 The earlier 2026-10-23 M0-004 status snapshot below is preserved as history.
-<!-- END PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
+<!-- END PHASE13_M1_1_IMPLEMENTATION_2026_10_24 -->
 
 <!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
 ## Current Phase 13 M0-004 review status

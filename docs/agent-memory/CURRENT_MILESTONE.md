@@ -1,15 +1,16 @@
 # CURRENT_MILESTONE
-<!-- BEGIN PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
-## Current milestone — Phase 13 M0 technical foundation frozen (2026-10-24)
+<!-- BEGIN PHASE13_M1_1_IMPLEMENTATION_2026_10_24 -->
+## Current milestone — Phase 13 M1.1 Project Foundation implemented (2026-10-24)
 
-- M0-004 independent review: **PASS**. Decisions A–G accepted in [D-P13-002 through D-P13-005](./DECISIONS.md); M0 technical foundation **FROZEN FOR BOUNDED M1 PREPARATION**.
-- [M1.1 contract](./tasks/PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md) is **READY FOR INDEPENDENT REVIEW — NOT AUTHORIZED FOR IMPLEMENTATION**.
-- Closure/read-only access and rollback distinctions are recorded in D-P13-003/D-P13-004. Implementation and security/regression verification are not performed.
-- Matrices remain **PROVISIONAL**; ApplicationParty/Role, application subtypes, evidence grants, full staff authorization and other M2–M8 decisions remain for later gates. Financial custody, privacy/retention, GS and OSHC remain pending with applicable professionals.
-- Next: independent review of M1.1 contract, followed by separate explicit implementation authorization. No code, migration, tests or live operations performed.
+- M1.1 implemented on `phase13-study-journey-project-centric` at expected base `83286fdafe66615f4293f742cd82d0de0f70f940`; work remains uncommitted and unpushed.
+- Five additive entities and minimal repository primitives are implemented. Project Chats are generated server-side and created atomically with existing Chat/turn foundations, current Project authorization, operation idempotency, revision and event persistence.
+- Migration `0030_demonic_the_hood` is journal index 30 and was applied only to `immigration_ai_phase13_m1_1_test`. Final integration: 10 passed, 0 failed, 0 skipped; disposable database has 31 migrations and zero synthetic rows. Normal/shared/live databases were not modified.
+- R1-01 reproduced the ordinary-runner `server-only` failure and extracted pure canonicalization/operation-ID/hash/replay utilities while keeping the repository server-only. No global condition change. Focused ordinary-runner regression: 6 files passed; R1-02 now asserts exact SQLSTATE/constraint pairs for all five ProjectEvent negative cases using a valid operation row.
+- Final validation: disposable PostgreSQL integration 10/10; exact `pnpm test:unit` outside sandbox 888/888; `pnpm db:check` and `git diff --check` passed. Biome check passed the 6 changed TypeScript/schema/package files and `biome lint` passed all 8 TypeScript/JSON files; its formatter reports only Drizzle-generated snapshot/journal formatting differences, which were preserved. Sandbox-only full run had three unrelated `EPERM` subprocess/localhost failures; the same command passed outside the sandbox. TypeScript remains at 44 existing diagnostics, none in changed files. Migration 0030 and its manual CHECKs are unchanged.
+- M1.2 membership workflows, M1.3 widget integration, M1.4 Workspace UI and all Project evidence/application/professional/payment work remain deferred pending their own gates. Legal/admissions matrices remain **PROVISIONAL**.
 
-The 2026-10-23 review-time entries below are preserved as history.
-<!-- END PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
+The prior M0 preparation entries below are preserved as history.
+<!-- END PHASE13_M1_1_IMPLEMENTATION_2026_10_24 -->
 
 <!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
 ## Phase 13 M0-004 independent architecture review delivered

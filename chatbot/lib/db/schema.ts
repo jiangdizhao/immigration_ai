@@ -2,6 +2,7 @@ import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -537,17 +538,26 @@ export type LawyerClarificationLearningBridge = InferSelectModel<
   typeof lawyerClarificationLearningBridge
 >;
 
-export const chat = pgTable("Chat", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  createdAt: timestamp("createdAt").notNull(),
-  title: text("title").notNull(),
-  userId: uuid("userId")
-    .notNull()
-    .references(() => user.id),
-  visibility: varchar("visibility", { enum: ["public", "private"] })
-    .notNull()
-    .default("private"),
-});
+export const chat = pgTable(
+  "Chat",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    createdAt: timestamp("createdAt").notNull(),
+    title: text("title").notNull(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id),
+    visibility: varchar("visibility", { enum: ["public", "private"] })
+      .notNull()
+      .default("private"),
+  },
+  (table) => ({
+    idOwnerUnique: uniqueIndex("Chat_id_user_id_unique").on(
+      table.id,
+      table.userId
+    ),
+  })
+);
 
 export type Chat = InferSelectModel<typeof chat>;
 
@@ -616,6 +626,229 @@ export const conversationTurn = pgTable(
 );
 
 export type ConversationTurnRow = InferSelectModel<typeof conversationTurn>;
+
+// Keep these PostgreSQL check() declarations aligned with migration 0030.
+// Drizzle Kit 0.25 serializes indexes and foreign keys into snapshots but
+// omits check constraints, so the generated SQL requires the explicit CHECK
+// statements appended to that additive migration.
+export const studyJourneyProject = pgTable(
+  "StudyJourneyProject",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    ownerUserId: uuid("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    status: varchar("status", { enum: ["active", "closed"] })
+      .notNull()
+      .default("active"),
+    revision: integer("revision").notNull().default(1),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    closedAt: timestamp("closedAt"),
+  },
+  (table) => ({
+    revisionPositive: check(
+      "StudyJourneyProject_revision_positive_check",
+      sql`${table.revision} > 0`
+    ),
+    lifecycleConsistent: check(
+      "StudyJourneyProject_lifecycle_check",
+      sql`(${table.status} = 'active' and ${table.closedAt} is null) or (${table.status} = 'closed' and ${table.closedAt} is not null)`
+    ),
+    statusAllowed: check(
+      "StudyJourneyProject_status_check",
+      sql`${table.status} in ('active', 'closed')`
+    ),
+  })
+);
+
+export type StudyJourneyProject = InferSelectModel<typeof studyJourneyProject>;
+
+export const projectMembership = pgTable(
+  "ProjectMembership",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    status: varchar("status", { enum: ["pending", "active", "revoked"] })
+      .notNull()
+      .default("pending"),
+    invitedByUserId: uuid("invitedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    acceptedAt: timestamp("acceptedAt"),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    projectUserUnique: uniqueIndex("ProjectMembership_project_user_unique").on(
+      table.projectId,
+      table.userId
+    ),
+    userStatusProjectIndex: index(
+      "ProjectMembership_user_status_project_idx"
+    ).on(table.userId, table.status, table.projectId),
+    statusAllowed: check(
+      "ProjectMembership_status_check",
+      sql`${table.status} in ('pending', 'active', 'revoked')`
+    ),
+    lifecycleConsistent: check(
+      "ProjectMembership_lifecycle_check",
+      sql`(${table.status} = 'pending' and ${table.acceptedAt} is null and ${table.revokedAt} is null) or (${table.status} = 'active' and ${table.acceptedAt} is not null and ${table.revokedAt} is null) or (${table.status} = 'revoked' and ${table.revokedAt} is not null)`
+    ),
+  })
+);
+
+export type ProjectMembership = InferSelectModel<typeof projectMembership>;
+
+export const projectConversation = pgTable(
+  "ProjectConversation",
+  {
+    chatId: uuid("chatId")
+      .primaryKey()
+      .notNull()
+      .references(() => immigrationConversation.chatId, {
+        onDelete: "restrict",
+      }),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    chatOwnerForeignKey: foreignKey({
+      columns: [table.chatId, table.createdByUserId],
+      foreignColumns: [chat.id, chat.userId],
+      name: "ProjectConversation_chat_owner_fk",
+    }).onDelete("restrict"),
+    projectCreatedIndex: index("ProjectConversation_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.chatId
+    ),
+  })
+);
+
+export type ProjectConversation = InferSelectModel<typeof projectConversation>;
+
+export const projectOperation = pgTable(
+  "ProjectOperation",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationType: varchar("operationType", {
+      enum: [
+        "project_create",
+        "project_close",
+        "membership_invite",
+        "membership_accept",
+        "membership_revoke",
+        "project_chat_create",
+      ],
+    }).notNull(),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestHash: varchar("requestHash", { length: 64 }).notNull(),
+    resultKind: varchar("resultKind", {
+      enum: ["project", "membership", "chat"],
+    }).notNull(),
+    resultId: uuid("resultId").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    actorTypeOperationUnique: uniqueIndex(
+      "ProjectOperation_actor_type_operation_unique"
+    ).on(table.actorUserId, table.operationType, table.operationId),
+    actorCreatedIndex: index("ProjectOperation_actor_created_idx").on(
+      table.actorUserId,
+      table.createdAt
+    ),
+    outcomeIndex: index("ProjectOperation_outcome_idx").on(
+      table.resultKind,
+      table.resultId
+    ),
+    operationIdValid: check(
+      "ProjectOperation_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashValid: check(
+      "ProjectOperation_request_hash_check",
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`
+    ),
+    operationTypeAllowed: check(
+      "ProjectOperation_type_check",
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create')`
+    ),
+    resultKindAllowed: check(
+      "ProjectOperation_result_kind_check",
+      sql`${table.resultKind} in ('project', 'membership', 'chat')`
+    ),
+  })
+);
+
+export type ProjectOperation = InferSelectModel<typeof projectOperation>;
+
+export const projectEvent = pgTable(
+  "ProjectEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    projectRevision: integer("projectRevision").notNull(),
+    eventType: varchar("eventType", {
+      enum: [
+        "project_created",
+        "membership_state_changed",
+        "project_chat_created",
+        "project_closed",
+      ],
+    }).notNull(),
+    subjectKind: varchar("subjectKind", {
+      enum: ["project", "membership", "chat"],
+    }),
+    subjectId: uuid("subjectId"),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectRevisionUnique: uniqueIndex(
+      "ProjectEvent_project_revision_unique"
+    ).on(table.projectId, table.projectRevision),
+    projectCreatedIndex: index("ProjectEvent_project_created_idx").on(
+      table.projectId,
+      table.createdAt
+    ),
+    revisionPositive: check(
+      "ProjectEvent_revision_positive_check",
+      sql`${table.projectRevision} > 0`
+    ),
+    eventTypeAllowed: check(
+      "ProjectEvent_type_check",
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed')`
+    ),
+    subjectConsistent: check(
+      "ProjectEvent_subject_check",
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectId} is not null)`
+    ),
+  })
+);
+
+export type ProjectEvent = InferSelectModel<typeof projectEvent>;
 
 export type ConsultationStatus =
   | "requested"
