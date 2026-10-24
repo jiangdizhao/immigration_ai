@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+## Current Phase 13 project state — M1.3 remote PASS, M1.4 UI design authorized (2026-10-24)
+
+- Remote GitHub `phase13-study-journey-project-centric` HEAD `27ceb8a3e75456f3357027e368565674687a3896`, matches owner local SHA; `git status --short` empty. M1.3 37 changed files committed; Project Chat AI write enablement remains off by default.
+- Owner accepted the lawyer-inspired **product UX direction**, recorded in `PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md`. M1.4 bounded UI implementation specified in `tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md`. These are design documents, **not a claim that new M1.4 UI has been coded**.
+- M1.4 scope: existing APIs only, explicit Project entry and own Chat, safe origin, active-only Project picker, closed own Chat history via read-only global list, responsive CN/EN. No M1.4 schema/migration/data mutation; no shared project files, step workflows, facts or professional review.
+- Future M2/M4/M5–M9 features and licensed professional/education/legal criteria require distinct approvals. No live customer feature activation, tests or database changes in this documentation commit.
+<!-- END PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
 ## Current Phase 13 status — M1.3 independent review R1 corrections (2026-10-24)
 

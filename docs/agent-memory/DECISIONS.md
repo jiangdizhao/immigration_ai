@@ -1,5 +1,19 @@
 # DECISIONS
 
+<!-- BEGIN DECISION_PHASE13_M1_4_UX_DIRECTION_2026_10_24 -->
+## D-P13-007 — Project-centric UX direction and bounded M1.4 start
+
+**Date:** 2026-10-24
+**Status:** OWNER ACCEPTED — UX PRODUCT DIRECTION; M1.4 BOUNDED UI IMPLEMENTATION AUTHORIZED; later-stage technical/legal contracts NOT approved by implication.
+
+Owner accepted the lawyer-inspired left-hand step navigation, project-wide and step-scoped conversations, documents with provenance and independent AI/user/professional review status, project fact cards, truthful progress vs submission readiness, workflow/task gates, and self vs managed service distinction as the **target** product direction. These appear progressively only where backing domain contracts and server-side authorization exist, according to the canonical Phase 13 roadmap (M2 data/facts/documents; M3 education intelligence; M4 professional/engagement; M5–M8 applications/reviews/gates; M9 integrated interface; M10 pilot). This does NOT approve any provisional lawyer/school/visa baseline, evidence requirements, finance handling, or external submission.
+
+Owner authorizes M1.4 to use the existing customer AI Workspace only for explicit Project create/select and individually owned Project Chat create/open, distinguish it from Standalone, and preserve the read-only closed/feature-disable fallback, with default Chinese/English switch and responsive layout. No Project name/type/step/progress/document/fact/shared AI context or lawyer task may be fabricated where the existing model lacks a field or reviewed logic. Preserve all M1.3 authorization and server default-off Project Chat write/turn flag.
+
+References: `PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md`; `tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md`; decisions D-P13-002–D-P13-006.
+<!-- END DECISION_PHASE13_M1_4_UX_DIRECTION_2026_10_24 -->
+
+
 <!-- BEGIN DECISION_PHASE13_M0_PROVISIONAL_2026_10_23 -->
 ## D-P13-001 - Study Journey Project and provisional legal baselines
 

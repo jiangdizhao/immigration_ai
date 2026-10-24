@@ -1,4 +1,14 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+## Active milestone — Phase 13 M1.4 minimal Project Workspace UI (2026-10-24)
+
+- M1.3 source/security reviewed and committed: `27ceb8a3e75456f3357027e368565674687a3896`, local and remote heads verified; clean worktree as reported by owner. No Project production flag enabled.
+- Owner accepted Project UX foundation + longer-term lawyer-inspired staged UI. M1.4 implements only Project list/create/select and individually owned Project Chat create/open inside existing Workspace, with server-derived Project origin/read-only, bilingual and mobile behavior. M1.4 implementation **not started in this docs commit**.
+- Binding M1.4 task: `tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md`. Full product/UI blueprint: `PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md`. M2 facts/documents, M3 education intelligence, M4 professional engagement/review, M5–M8 workflows/guards and M9 full integrated workspace remain separate milestones.
+- No Project names, stage/status, Project documents or progress UI before actual backing server state. `PHASE13_PROJECT_CHAT_ENABLED` default off; do not deploy/enable.
+- Documentation-only update; no tests, migrations, production or shared DB operations.
+<!-- END PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
 ## Current milestone — M1.3 security review R1 corrections complete (2026-10-24)
 

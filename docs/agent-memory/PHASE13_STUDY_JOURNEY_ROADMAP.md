@@ -1,5 +1,10 @@
 # Phase 13 - Study Journey Project-Centric Roadmap (PROVISIONAL)
 
+<!-- BEGIN PHASE13_UI_PRODUCT_BLUEPRINT_POINTER_2026_10_24 -->
+**2026-10-24 owner-accepted UX elaboration:** [PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md](./PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md) maps the lawyer's step-centric mockups into *existing* roadmap phases without renumbering or prematurely implementing lawyer review/Project documents. [M1.4 bounded UI task](./tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md) covers only genuine Project create/select and own Project Chat entry on the existing Workspace. No new migration, legal approval, professional review or production enablement is authorized by this design note.
+<!-- END PHASE13_UI_PRODUCT_BLUEPRINT_POINTER_2026_10_24 -->
+
+
 **Date:** 2026-10-23  
 **Branch:** `phase13-study-journey-project-centric`  
 **Starting commit:** `8b963eea1aa4023d30f31eba816a545efaa65e3d`  

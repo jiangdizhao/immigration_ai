@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+## Current handoff — M1.3 committed; M1.4 minimum Project UX contract active (2026-10-24)
+
+- **Verified GitHub HEAD:** `27ceb8a3e75456f3357027e368565674687a3896` (`feat(phase13): integrate Project Chat authorization and durable turns`), branch `phase13-study-journey-project-centric`. The user's local HEAD and ls-remote matched; status was clean. M1.3 accepted after independent R1 review, but customer Project Chat writes/turns still default off.
+- **Owner UX decision:** lawyer-friend's step conversations, project overview, Project document center, fact cards, provenance, real readiness, managed/self flow and lawyer review are accepted as **long-term product direction**, not M1.4 implemented capabilities. See `PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md`. No legal/admissions/financial reviewer signoff inferred.
+- **M1.4 contract:** `tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md` ready for bounded Codex implementation: existing AI Workspace Project list/create/select + own Project Chat create/open, CN/EN/responsive, server-derived origin/read-only, Standalone unchanged. M1.4 code NOT started by this documentation commit.
+- **No misleading M1 placeholders:** current Project schema has no title/type/Offer/CoE/service mode/stages/progress; Project files/shared facts/step tasks/review are M2+/M4+/M5–M9, not M1.4. Existing GET /api/projects returns active Projects only; closed own Chats remain authorized read-only global history.
+- **Rollout:** `PHASE13_PROJECT_CHAT_ENABLED` default false, do not enable production. M1.4 UI show controls only with server capability; cosmetic UI gating does not replace API policy. Current generic POST /api/projects is not bound to this flag; retain as rollout caveat, do not claim full Project-write kill switch.
+- **Validation:** documentation-only preparation; no new application code, schema, migration, customer deployment, unit or DB tests executed. Historical M1.3/R1 test reports retained unchanged below.
+<!-- END PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
 ## Current handoff — M1.3 independent security review R1 corrections (2026-10-24)
 
