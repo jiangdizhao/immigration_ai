@@ -3,23 +3,25 @@
  *
  * Stage 1 R1 started listing owner chats that hold messages but predate the
  * `ImmigrationConversation` row. The history API reports those as
- * `origin: "legacy_chat"`. Opening one is a pure read: the widget answer route
- * requires a real immigration conversation, so the workspace must not offer
- * actions that would silently fail, and it must never create the missing row as
- * a side effect of browsing.
+ * `origin: "legacy_chat"`. Project Chats also carry server-derived
+ * read-only state; their M1.3 workspace surface permits chat turns only and
+ * does not expose documents, guided intake or lawyer review.
  *
  * The rules live here (and not inside the component) so the interactive /
  * read-only decision is one testable, reusable contract for both UI surfaces
  * and their tests.
  */
 
-export type ConversationOrigin = "immigration" | "legacy_chat";
+export type ConversationOrigin = "immigration" | "legacy_chat" | "project";
 
 /** Server values are normalized defensively: anything unknown is a normal chat. */
 export function normalizeConversationOrigin(
   value: unknown
 ): ConversationOrigin {
-  return value === "legacy_chat" ? "legacy_chat" : "immigration";
+  if (value === "legacy_chat" || value === "project") {
+    return value;
+  }
+  return "immigration";
 }
 
 export type ConversationInteraction = {
@@ -44,6 +46,8 @@ export type ConversationInteraction = {
 
 export function resolveConversationInteraction(input: {
   origin: ConversationOrigin;
+  /** Server-derived read-only status for Project Chats. */
+  projectReadOnly?: boolean;
   /** The detail for the applied conversation finished loading. */
   conversationReady: boolean;
   /** Another conversation load or create is in flight. */
@@ -51,7 +55,11 @@ export function resolveConversationInteraction(input: {
   /** A model turn is running (`status !== "ready"`). */
   turnInFlight?: boolean;
 }): ConversationInteraction {
-  const readOnly = input.origin === "legacy_chat" && input.conversationReady;
+  const isProject = input.origin === "project";
+  const readOnly =
+    (input.origin === "legacy_chat" ||
+      (isProject && input.projectReadOnly === true)) &&
+    input.conversationReady;
   const interactive =
     !readOnly && input.conversationReady && !input.conversationLoading;
 
@@ -60,9 +68,9 @@ export function resolveConversationInteraction(input: {
     readOnly,
     canSubmitMessage: interactive && !input.turnInFlight,
     canUseSuggestedQuestions: interactive && !input.turnInFlight,
-    canUseGuidedIntake: interactive && !input.turnInFlight,
-    canUploadDocuments: interactive && !input.turnInFlight,
-    canRequestLawyerReview: interactive,
+    canUseGuidedIntake: interactive && !isProject && !input.turnInFlight,
+    canUploadDocuments: interactive && !isProject && !input.turnInFlight,
+    canRequestLawyerReview: interactive && !isProject,
     canStartNewConversation: !input.conversationLoading,
     canBrowseHistory: true,
     canLoadOlderMessages: true,

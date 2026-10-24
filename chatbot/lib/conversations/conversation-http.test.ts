@@ -339,6 +339,45 @@ test("a normal conversation detail keeps the immigration origin", async () => {
   assert.equal(body.origin, "immigration");
 });
 
+test("Project detail exposes server-derived origin, identity and read-only state", async () => {
+  const chatId = conversationId(5002);
+  const projectId = conversationId(9000);
+  const handlers = handlersFor(
+    makeRepository({
+      conversations: [
+        {
+          ownerId: USER_A,
+          chatId,
+          legalMatterId: null,
+          title: "Project chat",
+          chatTitle: "Project chat",
+          createdAt: new Date(baseTime()),
+          updatedAt: new Date(baseTime() + 1),
+          origin: "project",
+          projectId,
+          readOnly: true,
+        },
+      ],
+      messages: makeMessages(chatId, 1),
+    })
+  );
+
+  const response = await handlers.detail(
+    request(`/api/immigration-conversations/${chatId}`),
+    chatId
+  );
+  const body = (await response.json()) as {
+    origin?: string;
+    projectId?: string;
+    readOnly?: boolean;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.origin, "project");
+  assert.equal(body.projectId, projectId);
+  assert.equal(body.readOnly, true);
+});
+
 test("an invalid cursor is rejected instead of silently restarting history", async () => {
   const handlers = handlersFor(
     makeRepository({ conversations: makeConversations(3) })

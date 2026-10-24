@@ -333,6 +333,8 @@ type ImmigrationConversationSummary = {
    * conversation record does not exist, so the chat is read-only in the UI.
    */
   origin?: ConversationOrigin;
+  projectId?: string | null;
+  readOnly?: boolean;
   /** Phase 12 Stage 2: the conversation's persisted policy topic, if any. */
   policyBinding?: ConversationPolicyBindingView | null;
 };
@@ -557,6 +559,8 @@ export function ImmigrationAIWorkspace({
   const [conversationOrigin, setConversationOrigin] =
     useState<ConversationOrigin>("immigration");
   const conversationOriginRef = useRef<ConversationOrigin>("immigration");
+  const [projectChatReadOnly, setProjectChatReadOnly] = useState(false);
+  const projectChatReadOnlyRef = useRef(false);
   /**
    * Phase 12 Stage 2: the visible policy card is driven by the server-persisted
    * binding, not by transient launch props. `policyBinding` is the conversation's
@@ -672,11 +676,18 @@ export function ImmigrationAIWorkspace({
     () =>
       resolveConversationInteraction({
         origin: conversationOrigin,
+        projectReadOnly: projectChatReadOnly,
         conversationReady,
         conversationLoading,
         turnInFlight: status !== "ready",
       }),
-    [conversationOrigin, conversationReady, conversationLoading, status]
+    [
+      conversationOrigin,
+      projectChatReadOnly,
+      conversationReady,
+      conversationLoading,
+      status,
+    ]
   );
   const isReadOnlyConversation = interaction.readOnly;
   const latestKnownFacts =
@@ -859,6 +870,10 @@ export function ImmigrationAIWorkspace({
         const nextOrigin = normalizeConversationOrigin(data.origin);
         conversationOriginRef.current = nextOrigin;
         setConversationOrigin(nextOrigin);
+        const nextProjectReadOnly =
+          nextOrigin === "project" && data.readOnly === true;
+        projectChatReadOnlyRef.current = nextProjectReadOnly;
+        setProjectChatReadOnly(nextProjectReadOnly);
         /**
          * Phase 12 Stage 2: the policy card is recovered from the conversation
          * itself on every read path — reload, history reopening and a second
@@ -1004,6 +1019,8 @@ export function ImmigrationAIWorkspace({
         // A conversation created here is always a normal, writable conversation.
         conversationOriginRef.current = "immigration";
         setConversationOrigin("immigration");
+        projectChatReadOnlyRef.current = false;
+        setProjectChatReadOnly(false);
         setWorkspaceChatParam(data.chatId, createdBinding?.policySlug ?? null);
         setMatterId(data.legalMatterId ?? null);
         setMessages([]);
@@ -1463,6 +1480,13 @@ export function ImmigrationAIWorkspace({
       toast.error(copy.legacy.readOnlySubmitBlocked);
       return;
     }
+    if (
+      conversationOriginRef.current === "project" &&
+      projectChatReadOnlyRef.current
+    ) {
+      toast.error(copy.projectChat.readOnlySubmitBlocked);
+      return;
+    }
     // Never send into a conversation that is still being switched away from.
     if (conversationLoading) {
       return;
@@ -1571,6 +1595,13 @@ export function ImmigrationAIWorkspace({
       toast.error(copy.legacy.readOnlySubmitBlocked);
       return;
     }
+    if (
+      conversationOriginRef.current === "project" &&
+      projectChatReadOnlyRef.current
+    ) {
+      toast.error(copy.projectChat.readOnlySubmitBlocked);
+      return;
+    }
     setRetryingPersistence(true);
     try {
       const data = await sendToWidgetRoute(
@@ -1614,8 +1645,15 @@ export function ImmigrationAIWorkspace({
     }
     // Guided intake writes a turn into the conversation, so it is unavailable in
     // read-only archived history.
-    if (conversationOriginRef.current === "legacy_chat") {
-      toast.error(copy.legacy.readOnlyIntakeBlocked);
+    if (
+      conversationOriginRef.current === "legacy_chat" ||
+      conversationOriginRef.current === "project"
+    ) {
+      toast.error(
+        conversationOriginRef.current === "project"
+          ? copy.projectChat.unsupportedWorkflowBlocked
+          : copy.legacy.readOnlyIntakeBlocked
+      );
       return;
     }
     if (conversationLoading) {
@@ -1696,8 +1734,15 @@ export function ImmigrationAIWorkspace({
     }
   };
   const handleBookConsultation = (_responseLanguage?: string | null) => {
-    if (conversationOriginRef.current === "legacy_chat") {
-      toast.error(copy.legacy.readOnlyLawyerBlocked);
+    if (
+      conversationOriginRef.current === "legacy_chat" ||
+      conversationOriginRef.current === "project"
+    ) {
+      toast.error(
+        conversationOriginRef.current === "project"
+          ? copy.projectChat.unsupportedWorkflowBlocked
+          : copy.legacy.readOnlyLawyerBlocked
+      );
       return;
     }
     router.push(consultationCreateHref(conversationId));
@@ -1859,6 +1904,15 @@ export function ImmigrationAIWorkspace({
                   {conversation.title || copy.history.unnamed}
                   {conversation.origin === "legacy_chat" ? (
                     <LegacyConversationBadge copy={copy} />
+                  ) : conversation.origin === "project" ? (
+                    <span
+                      className="ml-2 inline-flex shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-900"
+                      data-testid="project-chat-history-badge"
+                    >
+                      {conversation.readOnly
+                        ? copy.projectChat.readOnlyBadge
+                        : copy.projectChat.badge}
+                    </span>
                   ) : null}
                   {conversation.policyBinding ? (
                     <span
@@ -1891,6 +1945,11 @@ export function ImmigrationAIWorkspace({
                 {conversation.origin === "legacy_chat" ? (
                   <span className="mt-1 block text-[11px] opacity-75">
                     {copy.legacy.listHint}
+                  </span>
+                ) : conversation.origin === "project" &&
+                  conversation.readOnly ? (
+                  <span className="mt-1 block text-[11px] opacity-75">
+                    {copy.projectChat.listHint}
                   </span>
                 ) : null}
               </button>
@@ -1971,10 +2030,24 @@ export function ImmigrationAIWorkspace({
                 {isReadOnlyConversation ? (
                   <Badge
                     className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
-                    data-testid="legacy-conversation-header-badge"
+                    data-testid={
+                      conversationOrigin === "project"
+                        ? "project-chat-read-only-header-badge"
+                        : "legacy-conversation-header-badge"
+                    }
                     variant="secondary"
                   >
-                    {copy.legacy.badge}
+                    {conversationOrigin === "project"
+                      ? copy.projectChat.readOnlyBadge
+                      : copy.legacy.badge}
+                  </Badge>
+                ) : conversationOrigin === "project" ? (
+                  <Badge
+                    className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
+                    data-testid="project-chat-header-badge"
+                    variant="secondary"
+                  >
+                    {copy.projectChat.badge}
                   </Badge>
                 ) : null}
                 <Badge
@@ -2424,6 +2497,7 @@ export function ImmigrationAIWorkspace({
                 copy={copy}
                 disabled={!interaction.canStartNewConversation}
                 onStartNewConversation={startNewConversation}
+                projectChat={conversationOrigin === "project"}
               />
             ) : (
               /*

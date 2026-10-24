@@ -47,6 +47,17 @@ export type WorkspaceCopy = {
     startNewConversation: string;
     startNewConversationHint: string;
   };
+  projectChat: {
+    badge: string;
+    readOnlyBadge: string;
+    title: string;
+    description: string;
+    listHint: string;
+    readOnlySubmitBlocked: string;
+    unsupportedWorkflowBlocked: string;
+    startNewConversation: string;
+    startNewConversationHint: string;
+  };
   persistence: {
     notSaved: string;
     retrySave: string;
@@ -262,6 +273,18 @@ const zh: WorkspaceCopy = {
     startNewConversation: "新建对话",
     startNewConversationHint:
       "在新建对话中继续向 AI 提问，历史记录会保留在这里。",
+  },
+  projectChat: {
+    badge: "项目对话",
+    readOnlyBadge: "项目对话（只读）",
+    title: "项目对话（只读）",
+    description: "此项目对话目前仅供查看，因为项目已关闭或项目对话写入已暂停。",
+    listHint: "项目对话只读",
+    readOnlySubmitBlocked: "此项目对话目前为只读。请新建普通对话后继续提问。",
+    unsupportedWorkflowBlocked:
+      "项目对话目前仅支持聊天，无法上传文件或发起人工复核。",
+    startNewConversation: "新建普通对话",
+    startNewConversationHint: "此项目对话仍可在项目状态允许时查看。",
   },
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
@@ -510,6 +533,21 @@ const en: WorkspaceCopy = {
     startNewConversation: "Start a new conversation",
     startNewConversationHint:
       "Ask the AI in a new conversation — this archived history stays available here.",
+  },
+  projectChat: {
+    badge: "Project chat",
+    readOnlyBadge: "Project chat (read-only)",
+    title: "Project chat (read-only)",
+    description:
+      "This Project Chat is available for reading because the Project is closed or Project Chat writes are paused.",
+    listHint: "Read-only Project Chat",
+    readOnlySubmitBlocked:
+      "This Project Chat is read-only. Start a new standard conversation to ask a new question.",
+    unsupportedWorkflowBlocked:
+      "Project Chats currently support chat turns only. File uploads and lawyer review are unavailable.",
+    startNewConversation: "Start a standard conversation",
+    startNewConversationHint:
+      "This Project Chat remains available for reading while you are authorized.",
   },
   persistence: {
     notSaved:

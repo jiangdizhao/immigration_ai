@@ -1,8 +1,12 @@
 import "server-only";
 
+import { projectFoundationRepository } from "@/lib/db/project-foundation";
+import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
+import { ProjectFoundationError } from "@/lib/db/project-foundation-utils";
 import {
   acquireConversationTurnExecution,
   claimConversationTurn,
+  claimConversationTurnInTransaction,
   failConversationTurn,
   finalizeConversationTurnAtomic,
   getConversationTurnRecord,
@@ -20,7 +24,10 @@ import type {
   ConversationTurnRepository,
   TurnFinalizeResult,
 } from "./turn-ledger";
-import { createConversationTurnService } from "./turn-ledger";
+import {
+  ConversationTurnOwnershipError,
+  createConversationTurnService,
+} from "./turn-ledger";
 
 /**
  * Phase 12 Stage 1 R2: assistant persistence is a single atomic operation, so
@@ -58,17 +65,43 @@ function toTurnRecord(row: ConversationTurnRow): ConversationTurnRecord {
 
 const repository: ConversationTurnRepository = {
   getOwnedConversation: ({ chatId, userId }) =>
-    getImmigrationConversationByChatId({ chatId, userId }).then(
-      (conversation) =>
-        conversation
-          ? {
-              chatId: conversation.chatId,
-              legalMatterId: conversation.legalMatterId,
-            }
-          : null
+    getImmigrationConversationByChatId({
+      chatId,
+      userId,
+      allowProject: true,
+    }).then((conversation) =>
+      conversation
+        ? {
+            chatId: conversation.chatId,
+            legalMatterId: conversation.legalMatterId,
+          }
+        : null
     ),
   getTurn: getConversationTurnRecord,
-  claimTurn: claimConversationTurn,
+  async claimTurn(input) {
+    const schemaStatus = await projectFoundationSchemaStatus();
+    if (schemaStatus === "partial") {
+      throw new Error("Project schema identity is incomplete.");
+    }
+    if (schemaStatus === "absent") {
+      return claimConversationTurn(input);
+    }
+    try {
+      return await projectFoundationRepository.withProjectChatTurnAdmission({
+        actorUserId: input.userId,
+        chatId: input.chatId,
+        claim: (tx) => claimConversationTurnInTransaction(tx, input),
+      });
+    } catch (error) {
+      if (
+        error instanceof ProjectFoundationError &&
+        (error.code === "project_forbidden" || error.code === "project_closed")
+      ) {
+        throw new ConversationTurnOwnershipError();
+      }
+      throw error;
+    }
+  },
   recordUserMessageId: recordConversationTurnUserMessageId,
   recordAttempt: recordConversationTurnAttempt,
   acquireExecution: acquireConversationTurnExecution,

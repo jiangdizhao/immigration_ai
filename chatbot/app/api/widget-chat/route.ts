@@ -7,6 +7,7 @@ import {
   assistantModeAccessPolicy,
   isGuestAssistantUser,
 } from "@/lib/assistant-mode-access";
+import { updateWidgetConversationBookkeeping } from "@/lib/conversations/widget-conversation-bookkeeping";
 import {
   beginWidgetTurn,
   completeWidgetTurn,
@@ -26,8 +27,6 @@ import {
 import {
   getImmigrationConversationByChatId,
   getUserEntitlementById,
-  touchImmigrationConversation,
-  updateImmigrationConversation,
 } from "@/lib/db/queries";
 import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
@@ -46,6 +45,7 @@ import {
   evaluateWidgetSubmission,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
+import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
 import { preservePublicAnswer } from "@/lib/public-answer-preservation";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
@@ -827,11 +827,19 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       );
     }
     const frontendUserId = session.user.id;
+    const projectIngressResponse = await guardProjectChatIngress({
+      id,
+      frontendChatId,
+    });
+    if (projectIngressResponse) {
+      return projectIngressResponse;
+    }
     const activeFrontendChatId = frontendChatId ?? id;
     const ownedConversation = frontendChatId
       ? await getImmigrationConversationByChatId({
           chatId: frontendChatId,
           userId: frontendUserId,
+          allowProject: true,
         })
       : null;
 
@@ -1197,19 +1205,12 @@ async function handleWidgetRequest(request: Request, requestId: string) {
 
       // Conversation bookkeeping must never replace a generated answer.
       try {
-        if (data.matter_id) {
-          await updateImmigrationConversation({
-            chatId: frontendChatId,
-            userId: frontendUserId,
-            legalMatterId: data.matter_id,
-            title: question.slice(0, 80) || "Immigration conversation",
-          });
-        } else {
-          await touchImmigrationConversation({
-            chatId: frontendChatId,
-            userId: frontendUserId,
-          });
-        }
+        await updateWidgetConversationBookkeeping({
+          chatId: frontendChatId,
+          userId: frontendUserId,
+          title: question.slice(0, 80) || "Immigration conversation",
+          legalMatterId: data.matter_id ?? null,
+        });
       } catch {
         if (persistence) {
           persistence = {

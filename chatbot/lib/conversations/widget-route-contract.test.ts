@@ -40,6 +40,12 @@ for (const route of ROUTES) {
     );
     assert.match(contents, /clientTurnId/u);
     assert.match(contents, /persistence/u);
+    assert.match(contents, /guardProjectChatIngress/u);
+    assert.ok(
+      contents.indexOf("await guardProjectChatIngress") <
+        contents.indexOf("await beginWidgetTurn"),
+      "Project origin must be checked before turn admission and provider work"
+    );
   });
 }
 
@@ -61,6 +67,16 @@ test("the widget routes share one message-parts contract", () => {
     historyRoute,
     /extractTextFromParts/u,
     "the history route must not re-implement part extraction"
+  );
+});
+
+test("the generic chat API cannot downgrade Project Chat IDs to standalone", () => {
+  const route = source("app/(chat)/api/chat/route.ts");
+  assert.match(route, /guardProjectChatIngress\(\{ id \}\)/u);
+  assert.ok(
+    route.indexOf("await guardProjectChatIngress") <
+      route.indexOf("getChatById({ id })"),
+    "persisted Project origin must be rejected before generic chat lookup or fallback creation"
   );
 });
 

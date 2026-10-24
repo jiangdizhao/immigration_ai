@@ -109,7 +109,11 @@ export type ConversationTurnRepository = {
     requestHash: string;
     userMessageId: string;
     now: Date;
-  }): Promise<{ turn: ConversationTurnRecord; created: boolean }>;
+  }): Promise<{
+    turn: ConversationTurnRecord;
+    created: boolean;
+    requestHashMismatch?: boolean;
+  }>;
   recordUserMessageId(input: {
     turnId: string;
     userMessageId: string;
@@ -566,7 +570,11 @@ export function createConversationTurnService(deps: {
       };
     }
 
-    let claim: { turn: ConversationTurnRecord; created: boolean };
+    let claim: {
+      turn: ConversationTurnRecord;
+      created: boolean;
+      requestHashMismatch?: boolean;
+    };
     try {
       claim = await deps.repository.claimTurn({
         chatId: input.chatId,
@@ -577,7 +585,10 @@ export function createConversationTurnService(deps: {
         userMessageId,
         now: now(),
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof ConversationTurnOwnershipError) {
+        throw error;
+      }
       return {
         ...base,
         ok: false,
@@ -591,7 +602,10 @@ export function createConversationTurnService(deps: {
     }
 
     const turn = claim.turn;
-    if (turn.requestHash && turn.requestHash !== requestHash) {
+    if (
+      claim.requestHashMismatch ??
+      Boolean(turn.requestHash && turn.requestHash !== requestHash)
+    ) {
       return {
         ...base,
         ok: false,

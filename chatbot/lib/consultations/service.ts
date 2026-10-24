@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
+import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
   type ConsultationRequest,
@@ -101,6 +102,9 @@ export function createConsultation(
   if (actor.role !== "customer") {
     throw new ConsultationDomainError("Customer access required.", 403);
   }
+  const projectSchemaStatusPromise = input.chatId
+    ? projectFoundationSchemaStatus()
+    : Promise.resolve("absent" as const);
   return db.transaction(async (tx) => {
     const [owner] = await tx
       .select({
@@ -124,10 +128,21 @@ export function createConsultation(
     }
     let legalMatterId: string | null = null;
     if (input.chatId) {
+      const projectSchemaStatus = await projectSchemaStatusPromise;
+      if (projectSchemaStatus === "partial") {
+        throw new ConsultationDomainError("Conversation not found.", 404);
+      }
+      const projectConversationPredicate =
+        projectSchemaStatus === "ready"
+          ? sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${chat.id}
+            )`
+          : sql`true`;
       const [ownedChat] = await tx
         .select({ id: chat.id, userId: chat.userId })
         .from(chat)
-        .where(eq(chat.id, input.chatId))
+        .where(and(eq(chat.id, input.chatId), projectConversationPredicate))
         .limit(1);
       if (!ownedChat || !consultationLinkOwnedBy(actor.id, ownedChat.userId)) {
         throw new ConsultationDomainError("Conversation not found.", 404);

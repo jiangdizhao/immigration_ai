@@ -14,11 +14,13 @@ type ReadinessRow = {
 
 let catalogClient: ReturnType<typeof postgres> | null = null;
 
-/** Fail closed unless the complete additive M1.1 schema is already present. */
-export async function projectFoundationSchemaAvailable(): Promise<boolean> {
+export type ProjectFoundationSchemaStatus = "absent" | "partial" | "ready";
+
+/** Distinguishes an unmigrated database from an incomplete M1.1 schema. */
+export async function projectFoundationSchemaStatus(): Promise<ProjectFoundationSchemaStatus> {
   const postgresUrl = process.env.POSTGRES_URL?.trim();
   if (!postgresUrl) {
-    return false;
+    return "absent";
   }
   catalogClient ??= postgres(postgresUrl, {
     max: 1,
@@ -92,7 +94,7 @@ export async function projectFoundationSchemaAvailable(): Promise<boolean> {
       ) AS "requiredIndexes"
   `;
   const row = rows[0];
-  return Boolean(
+  const ready = Boolean(
     row?.projectTable &&
       row.membershipTable &&
       row.conversationTable &&
@@ -101,6 +103,22 @@ export async function projectFoundationSchemaAvailable(): Promise<boolean> {
       row.requiredColumns === 37 &&
       row.requiredIndexes === 3
   );
+  if (ready) {
+    return "ready";
+  }
+  return row &&
+    (row.projectTable ||
+      row.membershipTable ||
+      row.conversationTable ||
+      row.operationTable ||
+      row.eventTable)
+    ? "partial"
+    : "absent";
+}
+
+/** Fail closed unless the complete additive M1.1 schema is already present. */
+export async function projectFoundationSchemaAvailable(): Promise<boolean> {
+  return (await projectFoundationSchemaStatus()) === "ready";
 }
 
 export async function closeProjectFoundationSchemaClient(): Promise<void> {

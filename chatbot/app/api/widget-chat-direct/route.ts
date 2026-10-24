@@ -2,6 +2,7 @@ import { ipAddress } from "@vercel/functions";
 import type { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
+import { updateWidgetConversationBookkeeping } from "@/lib/conversations/widget-conversation-bookkeeping";
 import {
   beginWidgetTurn,
   completeWidgetTurn,
@@ -21,8 +22,6 @@ import {
 import {
   getImmigrationConversationByChatId,
   getUserEntitlementById,
-  touchImmigrationConversation,
-  updateImmigrationConversation,
 } from "@/lib/db/queries";
 import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
 import { ChatbotError } from "@/lib/errors";
@@ -44,6 +43,7 @@ import {
   evaluateWidgetSubmission,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
+import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { isPremiumAllowed, premiumDeniedResponse } from "@/lib/vip/entitlement";
 import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
@@ -388,11 +388,19 @@ export async function POST(request: Request) {
 
     const { session } = premiumAccess;
     const frontendUserId = session.user.id;
+    const projectIngressResponse = await guardProjectChatIngress({
+      id,
+      frontendChatId,
+    });
+    if (projectIngressResponse) {
+      return projectIngressResponse;
+    }
     const activeFrontendChatId = frontendChatId ?? id;
     const ownedConversation = frontendChatId
       ? await getImmigrationConversationByChatId({
           chatId: frontendChatId,
           userId: frontendUserId,
+          allowProject: true,
         })
       : null;
 
@@ -714,19 +722,12 @@ export async function POST(request: Request) {
 
       // Conversation bookkeeping must never replace a generated answer.
       try {
-        if (data.matter_id) {
-          await updateImmigrationConversation({
-            chatId: frontendChatId,
-            userId: frontendUserId,
-            legalMatterId: data.matter_id,
-            title: question.slice(0, 80) || "Immigration conversation",
-          });
-        } else {
-          await touchImmigrationConversation({
-            chatId: frontendChatId,
-            userId: frontendUserId,
-          });
-        }
+        await updateWidgetConversationBookkeeping({
+          chatId: frontendChatId,
+          userId: frontendUserId,
+          title: question.slice(0, 80) || "Immigration conversation",
+          legalMatterId: data.matter_id ?? null,
+        });
       } catch {
         if (persistence) {
           persistence = {

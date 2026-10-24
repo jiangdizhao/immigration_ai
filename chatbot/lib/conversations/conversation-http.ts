@@ -41,7 +41,9 @@ export type ConversationSummaryRecord = {
    * immigration conversation row. It is presented as retained history and is
    * never silently rewritten or backfilled by the read path.
    */
-  origin?: "immigration" | "legacy_chat";
+  origin?: "immigration" | "legacy_chat" | "project";
+  projectId?: string | null;
+  readOnly?: boolean;
 };
 
 export type ConversationHistoryRepository = {
@@ -126,6 +128,12 @@ function conversationFields(record: ConversationSummaryRecord) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     origin: record.origin ?? "immigration",
+    ...(record.origin === "project"
+      ? {
+          projectId: record.projectId ?? null,
+          readOnly: record.readOnly === true,
+        }
+      : {}),
   };
 }
 

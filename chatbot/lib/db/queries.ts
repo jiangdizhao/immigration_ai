@@ -16,10 +16,12 @@ import {
   ne,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
+import { guestRegex } from "@/lib/constants";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
 import { matchesImmutableMessage } from "../conversations/message-identity";
 import type { PaginationCursor } from "../conversations/pagination";
@@ -30,6 +32,7 @@ import {
 } from "../matter-documents/chat-deletion";
 import { createS3MatterDocumentStorage } from "../matter-documents/storage";
 import type { ConversationPolicyBindingDraft } from "../policy-intelligence/conversation-policy-binding";
+import { projectChatWritesEnabled } from "../projects/chat-policy";
 import { generateUUID } from "../utils";
 import {
   calculateVipWindow,
@@ -40,6 +43,7 @@ import {
   getMatterDocumentSecurityByStorageKey as lookupMatterDocumentSecurityByStorageKey,
   getMatterDocumentSecurityStatus as readMatterDocumentSecurityStatus,
 } from "./matter-document-security-repository";
+import { projectFoundationSchemaStatus } from "./project-foundation-schema-availability";
 import { getLazyDatabase } from "./runtime-client";
 import {
   type Chat,
@@ -61,6 +65,7 @@ import {
   matterDocumentProcessingRun,
   message,
   passwordResetToken,
+  projectConversation,
   type Suggestion,
   stream,
   suggestion,
@@ -87,6 +92,14 @@ function rawPgTimestamp(date: Date): string {
   return date.toISOString();
 }
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function projectSchemaReadyOrAbsent() {
+  const status = await projectFoundationSchemaStatus();
+  if (status === "partial") {
+    throw new Error("Project schema identity is incomplete.");
+  }
+  return status === "ready";
+}
 
 export function beginMatterDocumentProcessing(input: {
   documentId: string;
@@ -2336,6 +2349,7 @@ export async function listImmigrationConversations({
   userId: string;
   limit?: number;
 }) {
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   return await db
     .select({
       chatId: immigrationConversation.chatId,
@@ -2347,7 +2361,19 @@ export async function listImmigrationConversations({
     })
     .from(immigrationConversation)
     .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
-    .where(eq(chat.userId, userId))
+    .where(
+      and(
+        eq(chat.userId, userId),
+        ...(projectSchemaAvailable
+          ? [
+              sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${chat.id}
+            )`,
+            ]
+          : [])
+      )
+    )
     .orderBy(desc(immigrationConversation.updatedAt))
     .limit(Math.max(1, Math.min(limit, 100)));
 }
@@ -2355,10 +2381,17 @@ export async function listImmigrationConversations({
 export async function getImmigrationConversationByChatId({
   chatId,
   userId,
+  allowProject = false,
 }: {
   chatId: string;
   userId: string;
+  /** Reserved for the guarded history and widget paths that perform M1.3 auth. */
+  allowProject?: boolean;
 }) {
+  let projectSchemaAvailable = false;
+  if (!allowProject) {
+    projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+  }
   const [conversation] = await db
     .select({
       chatId: immigrationConversation.chatId,
@@ -2372,7 +2405,18 @@ export async function getImmigrationConversationByChatId({
     .from(immigrationConversation)
     .innerJoin(chat, eq(immigrationConversation.chatId, chat.id))
     .where(
-      and(eq(immigrationConversation.chatId, chatId), eq(chat.userId, userId))
+      and(
+        eq(immigrationConversation.chatId, chatId),
+        eq(chat.userId, userId),
+        ...(projectSchemaAvailable
+          ? [
+              sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${chatId}
+            )`,
+            ]
+          : [])
+      )
     )
     .limit(1);
 
@@ -2598,6 +2642,7 @@ export async function listMatterDocumentRecordsForOwner({
   userId: string;
   chatId: string;
 }) {
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   return await db
     .select({ matterDocument })
     .from(matterDocument)
@@ -2608,7 +2653,15 @@ export async function listMatterDocumentRecordsForOwner({
         eq(chat.userId, userId),
         eq(matterDocument.chatId, chatId),
         eq(matterDocument.storageStatus, "stored"),
-        isNull(matterDocument.deletedAt)
+        isNull(matterDocument.deletedAt),
+        ...(projectSchemaAvailable
+          ? [
+              sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${matterDocument.chatId}
+            )`,
+            ]
+          : [])
       )
     )
     .orderBy(desc(matterDocument.createdAt));
@@ -2630,6 +2683,7 @@ export async function listMatterDocumentsForPortal({
   if (chatIds.length === 0) {
     return [];
   }
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   return await db
     .select({
       id: matterDocument.id,
@@ -2652,7 +2706,15 @@ export async function listMatterDocumentsForPortal({
         eq(chat.userId, userId),
         inArray(matterDocument.chatId, chatIds),
         eq(matterDocument.storageStatus, "stored"),
-        isNull(matterDocument.deletedAt)
+        isNull(matterDocument.deletedAt),
+        ...(projectSchemaAvailable
+          ? [
+              sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${matterDocument.chatId}
+            )`,
+            ]
+          : [])
       )
     )
     .orderBy(desc(matterDocument.updatedAt))
@@ -2668,11 +2730,20 @@ export async function getMatterDocumentRecordForOwner({
   userId: string;
   includeDeleted?: boolean;
 }) {
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   const predicates = [
     eq(matterDocument.id, documentId),
     eq(matterDocument.userId, userId),
     eq(chat.userId, userId),
     eq(matterDocument.storageStatus, "stored"),
+    ...(projectSchemaAvailable
+      ? [
+          sql`not exists (
+          select 1 from "ProjectConversation" pc
+          where pc."chatId" = ${matterDocument.chatId}
+        )`,
+        ]
+      : []),
   ];
   if (!includeDeleted) {
     predicates.push(isNull(matterDocument.deletedAt));
@@ -2696,6 +2767,7 @@ export async function softDeleteMatterDocumentRecord({
   userId: string;
   deletedAt?: Date;
 }) {
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   const [deleted] = await db
     .update(matterDocument)
     .set({ deletedAt, updatedAt: deletedAt })
@@ -2709,7 +2781,15 @@ export async function softDeleteMatterDocumentRecord({
           select 1 from "Chat"
           where "Chat"."id" = ${matterDocument.chatId}
             and "Chat"."userId" = ${userId}
-        )`
+        )`,
+        ...(projectSchemaAvailable
+          ? [
+              sql`not exists (
+              select 1 from "ProjectConversation" pc
+              where pc."chatId" = ${matterDocument.chatId}
+            )`,
+            ]
+          : [])
       )
     )
     .returning();
@@ -2812,7 +2892,20 @@ export async function saveChat({
 const chatDeletionService = createChatDeletionService({
   storage: createS3MatterDocumentStorage(),
   repository: {
-    listConversationDocuments(chatId) {
+    async listConversationDocuments(chatId) {
+      if (await projectSchemaReadyOrAbsent()) {
+        const [projectChat] = await db
+          .select({ chatId: projectConversation.chatId })
+          .from(projectConversation)
+          .where(eq(projectConversation.chatId, chatId))
+          .limit(1);
+        if (projectChat) {
+          throw new ChatbotError(
+            "bad_request:api",
+            "Project Chats cannot be deleted through standalone chat operations"
+          );
+        }
+      }
       return db
         .select({
           id: matterDocument.id,
@@ -2824,6 +2917,19 @@ const chatDeletionService = createChatDeletionService({
     },
     deleteConversationAndData({ chatId, documentIds }) {
       return db.transaction(async (tx) => {
+        if (await projectSchemaReadyOrAbsent()) {
+          const [projectChat] = await tx
+            .select({ chatId: projectConversation.chatId })
+            .from(projectConversation)
+            .where(eq(projectConversation.chatId, chatId))
+            .limit(1);
+          if (projectChat) {
+            throw new ChatbotError(
+              "bad_request:api",
+              "Project Chats cannot be deleted through standalone chat operations"
+            );
+          }
+        }
         if (documentIds.length > 0) {
           await tx
             .delete(matterDocument)
@@ -2840,10 +2946,21 @@ const chatDeletionService = createChatDeletionService({
       });
     },
     async listUserChatIds(userId) {
+      const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
       const rows = await db
         .select({ id: chat.id })
         .from(chat)
-        .where(eq(chat.userId, userId));
+        .where(
+          and(
+            eq(chat.userId, userId),
+            projectSchemaAvailable
+              ? sql`not exists (
+                  select 1 from "ProjectConversation" pc
+                  where pc."chatId" = ${chat.id}
+                )`
+              : undefined
+          )
+        );
       return rows.map(({ id }) => id);
     },
   },
@@ -2886,6 +3003,13 @@ export async function getChatsByUserId({
   endingBefore: string | null;
 }) {
   try {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    const projectExclusion = projectSchemaAvailable
+      ? sql`not exists (
+          select 1 from "ProjectConversation" pc
+          where pc."chatId" = ${chat.id}
+        )`
+      : undefined;
     const extendedLimit = limit + 1;
 
     const query = (whereCondition?: SQL<any>) =>
@@ -2894,8 +3018,8 @@ export async function getChatsByUserId({
         .from(chat)
         .where(
           whereCondition
-            ? and(whereCondition, eq(chat.userId, id))
-            : eq(chat.userId, id)
+            ? and(whereCondition, eq(chat.userId, id), projectExclusion)
+            : and(eq(chat.userId, id), projectExclusion)
         )
         .orderBy(desc(chat.createdAt))
         .limit(extendedLimit);
@@ -2906,7 +3030,9 @@ export async function getChatsByUserId({
       const [selectedChat] = await db
         .select()
         .from(chat)
-        .where(eq(chat.id, startingAfter))
+        .where(
+          and(eq(chat.id, startingAfter), eq(chat.userId, id), projectExclusion)
+        )
         .limit(1);
 
       if (!selectedChat) {
@@ -2921,7 +3047,9 @@ export async function getChatsByUserId({
       const [selectedChat] = await db
         .select()
         .from(chat)
-        .where(eq(chat.id, endingBefore))
+        .where(
+          and(eq(chat.id, endingBefore), eq(chat.userId, id), projectExclusion)
+        )
         .limit(1);
 
       if (!selectedChat) {
@@ -2952,7 +3080,23 @@ export async function getChatsByUserId({
 
 export async function getChatById({ id }: { id: string }) {
   try {
-    const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    const [selectedChat] = await db
+      .select()
+      .from(chat)
+      .where(
+        and(
+          eq(chat.id, id),
+          ...(projectSchemaAvailable
+            ? [
+                sql`not exists (
+                select 1 from "ProjectConversation" pc
+                where pc."chatId" = ${chat.id}
+              )`,
+              ]
+            : [])
+        )
+      );
     if (!selectedChat) {
       return null;
     }
@@ -3259,6 +3403,7 @@ export async function getMessageCountByUserId({
   differenceInHours: number;
 }) {
   try {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
     const twentyFourHoursAgo = new Date(
       Date.now() - differenceInHours * 60 * 60 * 1000
     );
@@ -3271,7 +3416,15 @@ export async function getMessageCountByUserId({
         and(
           eq(chat.userId, id),
           gte(message.createdAt, twentyFourHoursAgo),
-          eq(message.role, "user")
+          eq(message.role, "user"),
+          ...(projectSchemaAvailable
+            ? [
+                sql`not exists (
+                select 1 from "ProjectConversation" pc
+                where pc."chatId" = ${chat.id}
+              )`,
+              ]
+            : [])
         )
       )
       .execute();
@@ -3410,16 +3563,23 @@ export function transitionMatterDocumentSecurityStatus(input: {
  * two concurrent requests for the same client turn can never both claim a new
  * row; the loser re-reads the winner's row instead.
  */
-export async function claimConversationTurn(input: {
-  chatId: string;
-  userId: string;
-  clientTurnId: string;
-  assistantMode: string | null;
-  requestHash: string;
-  userMessageId: string;
-  now: Date;
-}): Promise<{ turn: ConversationTurnRow; created: boolean }> {
-  const [created] = await db
+export async function claimConversationTurnInTransaction(
+  tx: DbTransaction,
+  input: {
+    chatId: string;
+    userId: string;
+    clientTurnId: string;
+    assistantMode: string | null;
+    requestHash: string;
+    userMessageId: string;
+    now: Date;
+  }
+): Promise<{
+  turn: ConversationTurnRow;
+  created: boolean;
+  requestHashMismatch: boolean;
+}> {
+  const [created] = await tx
     .insert(conversationTurn)
     .values({
       chatId: input.chatId,
@@ -3439,20 +3599,49 @@ export async function claimConversationTurn(input: {
     .returning();
 
   if (created) {
-    return { turn: created, created: true };
+    return { turn: created, created: true, requestHashMismatch: false };
   }
 
-  const existing = await getConversationTurnRecord({
-    chatId: input.chatId,
-    clientTurnId: input.clientTurnId,
-  });
+  const [existing] = await tx
+    .select()
+    .from(conversationTurn)
+    .where(
+      and(
+        eq(conversationTurn.chatId, input.chatId),
+        eq(conversationTurn.clientTurnId, input.clientTurnId)
+      )
+    )
+    .for("update")
+    .limit(1);
   if (!existing) {
     throw new ChatbotError(
       "bad_request:database",
       "Failed to claim conversation turn"
     );
   }
-  return { turn: existing, created: false };
+  return {
+    turn: existing,
+    created: false,
+    requestHashMismatch: Boolean(
+      existing.requestHash && existing.requestHash !== input.requestHash
+    ),
+  };
+}
+
+export function claimConversationTurn(input: {
+  chatId: string;
+  userId: string;
+  clientTurnId: string;
+  assistantMode: string | null;
+  requestHash: string;
+  userMessageId: string;
+  now: Date;
+}): Promise<{
+  turn: ConversationTurnRow;
+  created: boolean;
+  requestHashMismatch: boolean;
+}> {
+  return db.transaction((tx) => claimConversationTurnInTransaction(tx, input));
 }
 
 export async function getConversationTurnRecord(input: {
@@ -3869,6 +4058,43 @@ function cursorWallClockMs(cursor: PaginationCursor): number {
   return cursorDate.getTime() - cursorDate.getTimezoneOffset() * 60_000;
 }
 
+function registeredProjectCustomer(userId: string): SQL {
+  return sql`exists (
+    select 1 from "User" projectHistoryActor
+    where projectHistoryActor."id" = ${userId}
+      and projectHistoryActor."role" = 'user'
+      and projectHistoryActor."email" !~* ${guestRegex.source}
+  )`;
+}
+
+function projectChatHistoryVisibility(userId: string, chatId: SQLWrapper): SQL {
+  return sql`(
+    not exists (
+      select 1 from "ProjectConversation" pc0
+      where pc0."chatId" = ${chatId}
+    )
+    or exists (
+      select 1
+      from "ProjectConversation" pc
+      inner join "StudyJourneyProject" p on p."id" = pc."projectId"
+      inner join "Chat" projectChat on projectChat."id" = pc."chatId"
+      where pc."chatId" = ${chatId}
+        and pc."createdByUserId" = ${userId}
+        and projectChat."userId" = ${userId}
+        and ${registeredProjectCustomer(userId)}
+        and (
+          p."ownerUserId" = ${userId}
+          or exists (
+            select 1 from "ProjectMembership" pm
+            where pm."projectId" = p."id"
+              and pm."userId" = ${userId}
+              and pm."status" = 'active'
+          )
+        )
+    )
+  )`;
+}
+
 /**
  * Complete, cursor-paginated conversation enumeration for the authenticated
  * owner. Ordering is `(effectiveUpdatedAt DESC, chatId DESC)`, so page
@@ -3886,6 +4112,7 @@ export async function listImmigrationConversationsPage(input: {
   userId: string;
   limit: number;
   cursor: PaginationCursor | null;
+  projectSchemaAvailable?: boolean;
 }): Promise<{
   conversations: Array<{
     chatId: string;
@@ -3894,7 +4121,9 @@ export async function listImmigrationConversationsPage(input: {
     chatTitle: string;
     createdAt: Date;
     updatedAt: Date;
-    origin: "immigration" | "legacy_chat";
+    origin: "immigration" | "legacy_chat" | "project";
+    projectId?: string | null;
+    readOnly?: boolean;
   }>;
   hasMore: boolean;
 }> {
@@ -3915,6 +4144,53 @@ export async function listImmigrationConversationsPage(input: {
         )
       ) as SQL
     );
+  }
+
+  if (input.projectSchemaAvailable) {
+    predicates.push(projectChatHistoryVisibility(input.userId, chat.id));
+    const rows = await db
+      .select({
+        chatId: chat.id,
+        legalMatterId: immigrationConversation.legalMatterId,
+        title: immigrationConversation.title,
+        chatTitle: chat.title,
+        createdAt: sql<
+          Date | string
+        >`coalesce(${immigrationConversation.createdAt}, ${chat.createdAt})`,
+        updatedAt: sql<Date | string>`${effectiveUpdatedAtExpression()}`,
+        origin: sql<"immigration" | "legacy_chat" | "project">`case
+          when exists (select 1 from "ProjectConversation" pc where pc."chatId" = ${chat.id}) then 'project'
+          when ${immigrationConversation.chatId} is null then 'legacy_chat'
+          else 'immigration' end`,
+        projectId: sql<
+          string | null
+        >`(select pc."projectId" from "ProjectConversation" pc where pc."chatId" = ${chat.id} limit 1)`,
+        projectStatus: sql<
+          "active" | "closed" | null
+        >`(select p."status" from "ProjectConversation" pc inner join "StudyJourneyProject" p on p."id" = pc."projectId" where pc."chatId" = ${chat.id} limit 1)`,
+      })
+      .from(chat)
+      .leftJoin(
+        immigrationConversation,
+        eq(immigrationConversation.chatId, chat.id)
+      )
+      .where(and(...predicates))
+      .orderBy(sql`${effectiveUpdatedAtExpression()} desc`, desc(chat.id))
+      .limit(input.limit + 1);
+    return {
+      conversations: rows.slice(0, input.limit).map((row) => {
+        const { projectStatus, ...item } = row;
+        return {
+          ...item,
+          createdAt: asDate(item.createdAt),
+          updatedAt: asDate(item.updatedAt),
+          readOnly:
+            item.origin === "project" &&
+            (projectStatus !== "active" || !projectChatWritesEnabled()),
+        };
+      }),
+      hasMore: rows.length > input.limit,
+    };
   }
 
   const rows = await db
@@ -4002,6 +4278,64 @@ export async function getOwnedLegacyChatSummary(input: {
   };
 }
 
+export async function getOwnedProjectChatHistorySummary(input: {
+  chatId: string;
+  userId: string;
+}): Promise<{
+  chatId: string;
+  projectId: string;
+  legalMatterId: null;
+  title: string | null;
+  chatTitle: string;
+  createdAt: Date;
+  updatedAt: Date;
+  origin: "project";
+  readOnly: boolean;
+} | null> {
+  const [row] = await db
+    .select({
+      chatId: chat.id,
+      projectId: sql<string>`(select pc."projectId" from "ProjectConversation" pc where pc."chatId" = ${chat.id} limit 1)`,
+      projectStatus: sql<
+        "active" | "closed" | null
+      >`(select p."status" from "ProjectConversation" pc inner join "StudyJourneyProject" p on p."id" = pc."projectId" where pc."chatId" = ${chat.id} limit 1)`,
+      title: immigrationConversation.title,
+      chatTitle: chat.title,
+      createdAt: sql<
+        Date | string
+      >`coalesce(${immigrationConversation.createdAt}, ${chat.createdAt})`,
+      updatedAt: sql<Date | string>`${effectiveUpdatedAtExpression()}`,
+    })
+    .from(chat)
+    .leftJoin(
+      immigrationConversation,
+      eq(immigrationConversation.chatId, chat.id)
+    )
+    .where(
+      and(
+        eq(chat.id, input.chatId),
+        eq(chat.userId, input.userId),
+        projectChatHistoryVisibility(input.userId, chat.id),
+        sql`exists (select 1 from "ProjectConversation" pc where pc."chatId" = ${chat.id})`
+      )
+    )
+    .limit(1);
+  if (!row?.projectId || !row.projectStatus) {
+    return null;
+  }
+  return {
+    chatId: row.chatId,
+    projectId: row.projectId,
+    legalMatterId: null,
+    title: row.title,
+    chatTitle: row.chatTitle,
+    createdAt: asDate(row.createdAt),
+    updatedAt: asDate(row.updatedAt),
+    origin: "project",
+    readOnly: row.projectStatus !== "active" || !projectChatWritesEnabled(),
+  };
+}
+
 /**
  * Complete, owner-authorized message history page.
  *
@@ -4015,6 +4349,7 @@ export async function listMessagesForChatPage(input: {
   userId: string;
   limit: number;
   olderThan: PaginationCursor | null;
+  projectSchemaAvailable?: boolean;
 }): Promise<{ messages: DBMessage[]; hasOlder: boolean }> {
   const predicates: SQL[] = [
     eq(message.chatId, input.chatId),
@@ -4024,6 +4359,9 @@ export async function listMessagesForChatPage(input: {
         and "Chat"."userId" = ${input.userId}
     )`,
   ];
+  if (input.projectSchemaAvailable) {
+    predicates.push(projectChatHistoryVisibility(input.userId, message.chatId));
+  }
   if (input.olderThan) {
     const cursorTime = new Date(input.olderThan.timestamp);
     predicates.push(
@@ -4057,7 +4395,18 @@ export async function listMessagesForChatPage(input: {
  */
 export async function countImmigrationConversations(input: {
   userId: string;
+  projectSchemaAvailable?: boolean;
 }): Promise<number> {
+  const predicates: SQL[] = [
+    eq(chat.userId, input.userId),
+    or(
+      isNotNull(immigrationConversation.chatId),
+      isNotNull(lastMessageAtExpression())
+    ) as SQL,
+  ];
+  if (input.projectSchemaAvailable) {
+    predicates.push(projectChatHistoryVisibility(input.userId, chat.id));
+  }
   const [row] = await db
     .select({ total: count() })
     .from(chat)
@@ -4065,15 +4414,7 @@ export async function countImmigrationConversations(input: {
       immigrationConversation,
       eq(immigrationConversation.chatId, chat.id)
     )
-    .where(
-      and(
-        eq(chat.userId, input.userId),
-        or(
-          isNotNull(immigrationConversation.chatId),
-          isNotNull(lastMessageAtExpression())
-        )
-      )
-    );
+    .where(and(...predicates));
   return Number(row?.total ?? 0);
 }
 
@@ -4106,6 +4447,7 @@ export async function listMatterDocumentsForUserHistoryPage(input: {
   }>;
   hasMore: boolean;
 }> {
+  const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
   // `MatterDocument.createdAt` may carry sub-millisecond database precision, so
   // the cursor compares a millisecond bucket to keep page boundaries exact.
   const createdAtMillisecond = sql`date_trunc('milliseconds', ${matterDocument.createdAt})`;
@@ -4114,6 +4456,14 @@ export async function listMatterDocumentsForUserHistoryPage(input: {
     eq(chat.userId, input.userId),
     eq(matterDocument.storageStatus, "stored"),
     isNull(matterDocument.deletedAt),
+    ...(projectSchemaAvailable
+      ? [
+          sql`not exists (
+          select 1 from "ProjectConversation" pc
+          where pc."chatId" = ${matterDocument.chatId}
+        )`,
+        ]
+      : []),
   ];
   if (input.cursor) {
     predicates.push(

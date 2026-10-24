@@ -38,6 +38,22 @@ test("archived conversation notice is explicit in English", () => {
   assert.match(markup, /Start a new conversation/);
 });
 
+test("a read-only Project Chat is identified separately from legacy history", () => {
+  const markup = renderToStaticMarkup(
+    <LegacyConversationNotice
+      copy={en}
+      onStartNewConversation={() => undefined}
+      projectChat
+    />
+  );
+
+  assert.match(markup, /data-testid="project-chat-read-only-notice"/);
+  assert.match(markup, /Project chat \(read-only\)/);
+  assert.match(markup, /Project Chat is available for reading/);
+  assert.doesNotMatch(markup, /legacy-conversation-notice/);
+  assert.match(markup, /project-chat-start-new-conversation/);
+});
+
 test("the archived screen renders no message composer or upload control", () => {
   for (const copy of [zh, en]) {
     const markup = renderToStaticMarkup(

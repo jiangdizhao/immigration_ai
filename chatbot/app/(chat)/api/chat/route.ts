@@ -34,6 +34,7 @@ import {
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import { MatterDocumentCleanupPendingError } from "@/lib/matter-documents/chat-deletion";
+import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
@@ -74,6 +75,11 @@ export async function POST(request: Request) {
 
     if (!session?.user) {
       return new ChatbotError("unauthorized:chat").toResponse();
+    }
+
+    const projectIngressResponse = await guardProjectChatIngress({ id });
+    if (projectIngressResponse) {
+      return projectIngressResponse;
     }
 
     if (!allowedModelIds.has(selectedChatModel)) {

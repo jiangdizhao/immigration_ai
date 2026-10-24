@@ -10,6 +10,7 @@ import {
 test("unknown or missing origins are treated as normal conversations", () => {
   assert.equal(normalizeConversationOrigin("immigration"), "immigration");
   assert.equal(normalizeConversationOrigin("legacy_chat"), "legacy_chat");
+  assert.equal(normalizeConversationOrigin("project"), "project");
   assert.equal(normalizeConversationOrigin(undefined), "immigration");
   assert.equal(normalizeConversationOrigin(null), "immigration");
   assert.equal(normalizeConversationOrigin("LEGACY_CHAT"), "immigration");
@@ -49,6 +50,28 @@ test("a normal conversation keeps every interactive capability", () => {
   assert.equal(interaction.canRequestLawyerReview, true);
   assert.equal(interaction.canStartNewConversation, true);
   assert.equal(interaction.canLoadOlderMessages, true);
+});
+
+test("Project Chat allows turns but excludes M1.3 unsupported workflows", () => {
+  const writable = resolveConversationInteraction({
+    origin: "project",
+    conversationReady: true,
+  });
+  assert.equal(writable.readOnly, false);
+  assert.equal(writable.canSubmitMessage, true);
+  assert.equal(writable.canUseSuggestedQuestions, true);
+  assert.equal(writable.canUseGuidedIntake, false);
+  assert.equal(writable.canUploadDocuments, false);
+  assert.equal(writable.canRequestLawyerReview, false);
+
+  const readOnly = resolveConversationInteraction({
+    origin: "project",
+    projectReadOnly: true,
+    conversationReady: true,
+  });
+  assert.equal(readOnly.readOnly, true);
+  assert.equal(readOnly.canSubmitMessage, false);
+  assert.equal(readOnly.canLoadOlderMessages, true);
 });
 
 test("read-only never applies before the archived conversation is loaded", () => {

@@ -1,4 +1,26 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
+## Current milestone — M1.3 security review R1 corrections complete (2026-10-24)
+
+- R1-01: Project-linked Chats are rejected by Vote GET/PATCH after persisted-origin checking; lookup/schema uncertainty fails closed. Standalone voting behavior is retained and covered by executable handler tests.
+- R1-02: Project history list/count/detail/message pagination and Project-specific Chat listing require the current registered-customer identity using M1.1's `role = 'user'` plus shared `guestRegex` semantics. Standalone history has no added role restriction. Project title updates and turn admission retain their existing current-customer guard.
+- Focused tests: **6 files passed, 0 failed, 0 skipped**. Guarded M1.3 disposable-PostgreSQL integration: **1 passed, 0 failed, 0 skipped**, including Project ingress, staff/guest owner denial, revocation, closed-project reads, Standalone history, and concurrent turn admission/revocation.
+- Changed-file Biome passed on **7 files**; `git diff --check` passed; TypeScript remains at **44 baseline diagnostics** and has none in R1-changed areas. The fixed disposable DB was status-checked before/after and retained 42 public tables; integration fixtures were cleaned. No schema/migration, commit, push, shared/live DB, or deployment changes.
+- Existing M1.3 implementation remains uncommitted at base `5704520b54921590dfe11facb1570090e2b69f98`; independent review remains pending.
+
+<!-- END PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_3_IMPLEMENTATION_2026_10_24 -->
+## Current milestone — Phase 13 M1.3 implemented; awaiting independent review (2026-10-24)
+
+- M1.3 Project Chat APIs, current owner/member plus individual creator authorization, history/detail/message/update integration, and Fast/Default/Premium turn admission are implemented at uncommitted base `5704520b54921590dfe11facb1570090e2b69f98` on `phase13-study-journey-project-centric`.
+- Project-origin metadata is server-derived from `ProjectConversation`. Revocation denies read/write; closed Projects and the default-off `PHASE13_PROJECT_CHAT_ENABLED` emergency gate retain clearly identified read-only history. Existing turn claims and replay/fencing remain unchanged; Project lock, current Membership check, Chat ownership and claim share one short transaction before inference.
+- Guarded fixed-disposable PostgreSQL results (Codex-executed sequentially): M1.1 **10/10**, M1.2 **7/7**, M1.3 **1/1**, all with zero failures and zero skips. The M1.1 guarded reset/migration proof touched only `immigration_ai_phase13_m1_1_test`.
+- Final `pnpm test:unit` outside sandbox: **911 passed, 0 failed, 0 skipped**. `pnpm db:check`, changed-file Biome (30 files) and `git diff --check` passed. TypeScript remains at **44 baseline diagnostics**, with zero in changed areas. In-sandbox full unit attempt's three child-process/loopback failures were isolated and passed outside sandbox.
+- No application schema, migration or migration metadata changed; no live/shared database or production system changed. No commit, push or feature enablement. M1.4 UI workflows and Project documents/context remain out of scope. Await independent source/security and integration review.
+
+<!-- END PHASE13_M1_3_IMPLEMENTATION_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_3_PLAN_2026_10_24 -->
 ## Current milestone — Phase 13 M1.3 Project Chat Integration planned (2026-10-24)
 

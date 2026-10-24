@@ -3,28 +3,33 @@ import { Button } from "@/components/ui/button";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
 /**
- * Phase 12 Stage 1 R3: the read-only surface for an archived (legacy) chat.
+ * Read-only surface for archived legacy chats and server-closed Project Chats.
  *
- * It replaces the composer on purpose: an archived conversation has no
- * immigration conversation record, so the answer route would reject any new
- * turn. This component never renders an input, a textarea or an upload control,
- * and its only action creates a new conversation.
+ * It replaces the composer on purpose. This component never renders an input,
+ * a textarea or an upload control, and its only action creates a new
+ * conversation.
  */
 export function LegacyConversationNotice({
   copy,
+  projectChat = false,
   disabled = false,
   onStartNewConversation,
 }: {
   copy: WorkspaceCopy;
+  projectChat?: boolean;
   disabled?: boolean;
   onStartNewConversation: () => void;
 }) {
-  const labels = copy.legacy;
+  const labels = projectChat ? copy.projectChat : copy.legacy;
   return (
     <section
       aria-label={labels.title}
       className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900"
-      data-testid="legacy-conversation-notice"
+      data-testid={
+        projectChat
+          ? "project-chat-read-only-notice"
+          : "legacy-conversation-notice"
+      }
     >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
@@ -33,7 +38,11 @@ export function LegacyConversationNotice({
         <div className="min-w-0">
           <p
             className="text-sm font-semibold"
-            data-testid="legacy-conversation-title"
+            data-testid={
+              projectChat
+                ? "project-chat-read-only-title"
+                : "legacy-conversation-title"
+            }
           >
             {labels.title}
           </p>
@@ -46,7 +55,11 @@ export function LegacyConversationNotice({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               className="rounded-xl bg-[#001736] px-4 text-white hover:bg-[#002b5b]"
-              data-testid="legacy-start-new-conversation"
+              data-testid={
+                projectChat
+                  ? "project-chat-start-new-conversation"
+                  : "legacy-start-new-conversation"
+              }
               disabled={disabled}
               onClick={onStartNewConversation}
               type="button"

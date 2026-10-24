@@ -1,10 +1,14 @@
 import "server-only";
 
+import { projectFoundationRepository } from "@/lib/db/project-foundation";
+import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
+import { ProjectFoundationError } from "@/lib/db/project-foundation-utils";
 import {
   countImmigrationConversations,
   createImmigrationConversation,
   getImmigrationConversationByChatId,
   getOwnedLegacyChatSummary,
+  getOwnedProjectChatHistorySummary,
   listImmigrationConversationsPage,
   listMessagesForChatPage,
   updateImmigrationConversation,
@@ -17,10 +21,28 @@ import {
 import type { ConversationHistoryRepository } from "./conversation-http";
 import { createConversationHistoryHandlers } from "./conversation-http";
 
+async function projectSchemaReadyOrAbsent() {
+  const status = await projectFoundationSchemaStatus();
+  if (status === "partial") {
+    throw new Error("Project schema identity is incomplete.");
+  }
+  return status === "ready";
+}
+
 const repository: ConversationHistoryRepository = {
-  listConversations: ({ userId, limit, cursor }) =>
-    listImmigrationConversationsPage({ userId, limit, cursor }),
-  countConversations: ({ userId }) => countImmigrationConversations({ userId }),
+  async listConversations({ userId, limit, cursor }) {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    return listImmigrationConversationsPage({
+      userId,
+      limit,
+      cursor,
+      projectSchemaAvailable,
+    });
+  },
+  async countConversations({ userId }) {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    return countImmigrationConversations({ userId, projectSchemaAvailable });
+  },
   async createConversation({ userId, title, policySlug, policyLaunchId }) {
     /**
      * Phase 12 Stage 2: a policy launch creates the conversation together with
@@ -99,6 +121,14 @@ const repository: ConversationHistoryRepository = {
     };
   },
   async getConversation({ chatId, userId }) {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    if (projectSchemaAvailable) {
+      const origin =
+        await projectFoundationRepository.getProjectChatOrigin(chatId);
+      if (origin) {
+        return await getOwnedProjectChatHistorySummary({ chatId, userId });
+      }
+    }
     const conversation = await getImmigrationConversationByChatId({
       chatId,
       userId,
@@ -119,8 +149,16 @@ const repository: ConversationHistoryRepository = {
     // authorized by Chat ownership and nothing is created or repaired here.
     return await getOwnedLegacyChatSummary({ chatId, userId });
   },
-  listMessages: ({ chatId, userId, limit, olderThan }) =>
-    listMessagesForChatPage({ chatId, userId, limit, olderThan }),
+  async listMessages({ chatId, userId, limit, olderThan }) {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    return listMessagesForChatPage({
+      chatId,
+      userId,
+      limit,
+      olderThan,
+      projectSchemaAvailable,
+    });
+  },
   /**
    * Phase 12 Stage 2: the policy topic card is recovered from the persisted
    * binding on every read path (reload, history reopening, second device). The
@@ -132,6 +170,48 @@ const repository: ConversationHistoryRepository = {
   listPolicyBindings: ({ userId, chatIds }) =>
     listOwnedPolicyBindingViews({ userId, chatIds }),
   async updateConversation(input) {
+    const projectSchemaAvailable = await projectSchemaReadyOrAbsent();
+    if (projectSchemaAvailable) {
+      const origin = await projectFoundationRepository.getProjectChatOrigin(
+        input.chatId
+      );
+      if (origin) {
+        let updated: Awaited<
+          ReturnType<typeof projectFoundationRepository.updateOwnedProjectChat>
+        >;
+        try {
+          updated = await projectFoundationRepository.updateOwnedProjectChat({
+            actorUserId: input.userId,
+            chatId: input.chatId,
+            title: input.title,
+            legalMatterId: input.legalMatterId,
+          });
+        } catch (error) {
+          if (
+            error instanceof ProjectFoundationError &&
+            ["project_forbidden", "project_closed", "invalid_request"].includes(
+              error.code
+            )
+          ) {
+            return null;
+          }
+          throw error;
+        }
+        return updated
+          ? {
+              chatId: updated.chatId,
+              legalMatterId: null,
+              title: updated.title,
+              chatTitle: updated.title ?? "Project conversation",
+              createdAt: updated.createdAt,
+              updatedAt: updated.updatedAt,
+              origin: "project" as const,
+              projectId: updated.projectId,
+              readOnly: false,
+            }
+          : null;
+      }
+    }
     const updated = await updateImmigrationConversation(input);
     return updated
       ? {

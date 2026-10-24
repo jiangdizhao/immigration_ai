@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { allowedModelIds } from "@/lib/ai/models";
 import { normalizeAssistantMode } from "@/lib/assistant-mode";
+import { updateWidgetConversationBookkeeping } from "@/lib/conversations/widget-conversation-bookkeeping";
 import {
   beginWidgetTurn,
   completeWidgetTurn,
@@ -19,11 +20,7 @@ import {
   fastWidgetRequestSchema,
   type messageSchema,
 } from "@/lib/conversations/widget-turn-schemas";
-import {
-  getImmigrationConversationByChatId,
-  touchImmigrationConversation,
-  updateImmigrationConversation,
-} from "@/lib/db/queries";
+import { getImmigrationConversationByChatId } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
 import { createImmigrationAnswerTraceLink } from "@/lib/lawyer-requests/service";
 import { buildImmigrationAnswerTraceLinkValues } from "@/lib/lawyer-requests/trace-link";
@@ -44,6 +41,7 @@ import {
   evaluateWidgetSubmission,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
+import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { FAST_LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
 import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
@@ -245,6 +243,14 @@ export async function POST(request: Request) {
     }
     await checkIpRateLimit(ipAddress(request));
 
+    const projectIngressResponse = await guardProjectChatIngress({
+      id: parsed.id,
+      frontendChatId: parsed.frontendChatId,
+    });
+    if (projectIngressResponse) {
+      return finish(projectIngressResponse);
+    }
+
     const safeMessages = sanitizePoliticalHistory(
       parsed.messages
     ) as typeof parsed.messages;
@@ -253,6 +259,7 @@ export async function POST(request: Request) {
       ? await getImmigrationConversationByChatId({
           chatId: parsed.frontendChatId,
           userId: session.user.id,
+          allowProject: true,
         })
       : null;
     if (parsed.frontendChatId && !ownedConversation) {
@@ -601,19 +608,12 @@ export async function POST(request: Request) {
 
       // Conversation bookkeeping must never replace a generated answer.
       try {
-        if (data.matter_id) {
-          await updateImmigrationConversation({
-            chatId: parsed.frontendChatId,
-            userId: session.user.id,
-            legalMatterId: data.matter_id,
-            title: question.slice(0, 80) || "Immigration conversation",
-          });
-        } else {
-          await touchImmigrationConversation({
-            chatId: parsed.frontendChatId,
-            userId: session.user.id,
-          });
-        }
+        await updateWidgetConversationBookkeeping({
+          chatId: parsed.frontendChatId,
+          userId: session.user.id,
+          title: question.slice(0, 80) || "Immigration conversation",
+          legalMatterId: data.matter_id ?? null,
+        });
       } catch {
         if (persistence) {
           persistence = {

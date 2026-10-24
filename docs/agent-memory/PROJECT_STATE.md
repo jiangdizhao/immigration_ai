@@ -1,4 +1,27 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
+## Current Phase 13 status — M1.3 independent review R1 corrections (2026-10-24)
+
+- **R1-01:** Legacy Vote GET/PATCH now check persisted Project origin before normal Chat lookup and reject Project-linked Chats. Any inability to establish origin fails closed. Executable handler tests verify active/revoked membership cases are both denied and Standalone owner voting still works.
+- **R1-02:** Project history SQL visibility and Project-specific Chat listing enforce current registered-customer eligibility with the established M1.1 definition (`User.role = 'user'`, email does not match shared `guestRegex`). These checks cover listing, count, detail, messages and relevant Project history consumers; Standalone history remains unrestricted by this additional Project eligibility predicate. Existing Project writes/turn admission continue to guard current eligibility.
+- **Verified outcomes:** focused tests **6 files passed, 0 failed, 0 skipped**; guarded M1.3 PostgreSQL suite **1 passed, 0 failed, 0 skipped** on `immigration_ai_phase13_m1_1_test`. Coverage includes executable scoped ingress, current role/guest identity denial for canonical owner, active and revoked history, revoked voting, closed read-only history, Standalone history, and the preserved concurrent turn-claim/revocation race. Changed-file Biome passed (7 files); `git diff --check` passed; TypeScript still has 44 baseline diagnostics and none in R1-changed areas.
+- **Database/schema:** guarded status before/after reports the same fixed disposable target and 42 public tables. Integration inserted and cleaned generated fixtures only; no reset, migration, schema edit, shared/live database or production operation.
+- Existing M1.3 WIP is preserved and remains uncommitted on `phase13-study-journey-project-centric` at base HEAD `5704520b54921590dfe11facb1570090e2b69f98`. No commit or push. Independent security/source review is pending.
+
+<!-- END PHASE13_M1_3_R1_SECURITY_CORRECTIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_3_IMPLEMENTATION_2026_10_24 -->
+## Current Phase 13 status — M1.3 Project Chat Integration implemented (2026-10-24)
+
+- **Checkpoint:** `phase13-study-journey-project-centric` at base HEAD `5704520b54921590dfe11facb1570090e2b69f98`; M1.3 changes are uncommitted and await independent source/security and integration review. No commit, push, deployment or live enablement.
+- **Implemented boundary:** Project Chat create/list APIs reuse the existing M1.1 atomic create operation. History list/count/detail/messages/title update require persisted Project origin, the individual Chat creator and Chat owner, and current owner/active-Membership authority. Revoked creators cannot read; closed Project and emergency-disabled history remain read-only. Fast/Default/Premium widget turns serialize Project row lock, current user/Membership authorization, Chat ownership and the existing ConversationTurn claim in a short PostgreSQL transaction; no lock spans AI inference. The generic `/api/chat` path rejects Project IDs before standalone fallback.
+- **Minimal Workspace compatibility:** server origin and read-only flags are honored. Active Project Chat supports chat turns only; M1.3 does not provide Project documents/context, guided application intake, lawyer/staff access, or the M1.4 create/select UI. Project writes/turns are default-off under `PHASE13_PROJECT_CHAT_ENABLED`; no customer-facing flag was enabled.
+- **Validation:** guarded disposable PostgreSQL M1.1 **10/10**, M1.2 **7/7**, M1.3 **1/1**; all zero failures/skips. `pnpm test:unit` outside sandbox **911/911**, zero skips. Changed-file Biome **30 files passed**, `pnpm db:check` passed, `git diff --check` passed. TypeScript remains at the established **44 unchanged-file diagnostics**, with none in M1.3 changed areas. Three initial in-sandbox subprocess/localhost failures individually passed outside the sandbox; the later complete unit suite passed.
+- **Database/schema:** the guarded operator reset and M1.1 migration proof used only `immigration_ai_phase13_m1_1_test`; M1.2/M1.3 suites then ran sequentially on that same disposable target. Existing migration 0030/schema/journal/snapshot were not edited. No ordinary/shared/live database was modified and no new migration was created.
+- The M1.3 contract-preparation block below remains preserved as a historical checkpoint; this status supersedes its “not started” statement. M1.4 and Project evidence/context remain deferred. Professional/legal-admissions matrices remain **PROVISIONAL**.
+
+<!-- END PHASE13_M1_3_IMPLEMENTATION_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_3_PLAN_2026_10_24 -->
 ## Current project state — M1.2 committed; M1.3 implementation design ready (2026-10-24)
 

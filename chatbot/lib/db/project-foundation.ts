@@ -1,8 +1,10 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
+import type { PaginationCursor } from "@/lib/conversations/pagination";
+import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
 import {
   hashProjectOperationRequest,
   ProjectFoundationError,
@@ -35,6 +37,7 @@ export {
 const db = getLazyDatabase();
 type Database = typeof db;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type ProjectFoundationTransaction = Transaction;
 
 export const PROJECT_OPERATION_TYPES = [
   "project_create",
@@ -1246,6 +1249,210 @@ export function createProjectFoundationRepository(
           }
         }
         return project;
+      });
+    },
+
+    getProjectChatOrigin(
+      chatId: string
+    ): Promise<{ projectId: string } | null> {
+      return database
+        .select({ projectId: projectConversation.projectId })
+        .from(projectConversation)
+        .where(eq(projectConversation.chatId, chatId))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+    },
+
+    listOwnedProjectChats(input: {
+      actorUserId: string;
+      projectId: string;
+      limit: number;
+      cursor: PaginationCursor | null;
+    }) {
+      const predicates = [
+        eq(projectConversation.projectId, input.projectId),
+        eq(projectConversation.createdByUserId, input.actorUserId),
+        eq(chat.userId, input.actorUserId),
+        sql`exists (
+          select 1 from "User" projectChatActor
+          where projectChatActor."id" = ${input.actorUserId}
+            and projectChatActor."role" = 'user'
+            and projectChatActor."email" !~* ${guestRegex.source}
+        )`,
+        or(
+          eq(studyJourneyProject.ownerUserId, input.actorUserId),
+          sql`exists (
+            select 1 from "ProjectMembership" pm
+            where pm."projectId" = ${studyJourneyProject.id}
+              and pm."userId" = ${input.actorUserId}
+              and pm."status" = 'active'
+          )`
+        ),
+      ];
+      if (input.cursor) {
+        const cursorDate = new Date(input.cursor.timestamp);
+        predicates.push(
+          or(
+            lt(projectConversation.createdAt, cursorDate),
+            and(
+              eq(projectConversation.createdAt, cursorDate),
+              lt(projectConversation.chatId, input.cursor.id)
+            )
+          ) as (typeof predicates)[number]
+        );
+      }
+      return database
+        .select({
+          chatId: projectConversation.chatId,
+          projectId: projectConversation.projectId,
+          title: immigrationConversation.title,
+          chatTitle: chat.title,
+          createdAt: projectConversation.createdAt,
+          updatedAt: immigrationConversation.updatedAt,
+          projectStatus: studyJourneyProject.status,
+        })
+        .from(projectConversation)
+        .innerJoin(
+          studyJourneyProject,
+          eq(studyJourneyProject.id, projectConversation.projectId)
+        )
+        .innerJoin(chat, eq(chat.id, projectConversation.chatId))
+        .innerJoin(
+          immigrationConversation,
+          eq(immigrationConversation.chatId, projectConversation.chatId)
+        )
+        .where(and(...predicates))
+        .orderBy(
+          desc(projectConversation.createdAt),
+          desc(projectConversation.chatId)
+        )
+        .limit(Math.max(1, Math.min(input.limit, 100)) + 1)
+        .then((rows) => {
+          const hasMore = rows.length > Math.max(1, Math.min(input.limit, 100));
+          const conversations = rows
+            .slice(0, Math.max(1, Math.min(input.limit, 100)))
+            .map(({ projectStatus, ...row }) => ({
+              ...row,
+              origin: "project" as const,
+              readOnly:
+                projectStatus !== "active" || !projectChatWritesEnabled(),
+            }));
+          return { conversations, hasMore };
+        });
+    },
+
+    withProjectChatTurnAdmission<T>(input: {
+      actorUserId: string;
+      chatId: string;
+      claim: (tx: Transaction) => Promise<T>;
+    }): Promise<T> {
+      return database.transaction(async (tx) => {
+        const [association] = await tx
+          .select({ projectId: projectConversation.projectId })
+          .from(projectConversation)
+          .where(eq(projectConversation.chatId, input.chatId))
+          .limit(1);
+        if (!association) {
+          return input.claim(tx);
+        }
+
+        const project = await lockProject(tx, association.projectId);
+        await assertCustomerActor(tx, input.actorUserId);
+        await assertProjectAuthority(
+          tx,
+          project,
+          input.actorUserId,
+          "project_write"
+        );
+        if (!projectChatWritesEnabled()) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        const [ownedChat] = await tx
+          .select({ chatId: projectConversation.chatId })
+          .from(projectConversation)
+          .innerJoin(chat, eq(chat.id, projectConversation.chatId))
+          .where(
+            and(
+              eq(projectConversation.projectId, project.id),
+              eq(projectConversation.chatId, input.chatId),
+              eq(projectConversation.createdByUserId, input.actorUserId),
+              eq(chat.userId, input.actorUserId)
+            )
+          )
+          .limit(1);
+        if (!ownedChat) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        return input.claim(tx);
+      });
+    },
+
+    updateOwnedProjectChat(input: {
+      actorUserId: string;
+      chatId: string;
+      title?: string | null;
+      legalMatterId?: string | null;
+      now?: Date;
+    }) {
+      if (input.legalMatterId !== undefined && input.legalMatterId !== null) {
+        throw new ProjectFoundationError("invalid_request");
+      }
+      const now = input.now ?? new Date();
+      return database.transaction(async (tx) => {
+        const [association] = await tx
+          .select({ projectId: projectConversation.projectId })
+          .from(projectConversation)
+          .where(eq(projectConversation.chatId, input.chatId))
+          .limit(1);
+        if (!association) {
+          return null;
+        }
+
+        const project = await lockProject(tx, association.projectId);
+        await assertCustomerActor(tx, input.actorUserId);
+        await assertProjectAuthority(
+          tx,
+          project,
+          input.actorUserId,
+          "project_write"
+        );
+        if (!projectChatWritesEnabled()) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        const [ownedChat] = await tx
+          .select({ chatId: chat.id })
+          .from(projectConversation)
+          .innerJoin(chat, eq(chat.id, projectConversation.chatId))
+          .where(
+            and(
+              eq(projectConversation.projectId, project.id),
+              eq(projectConversation.chatId, input.chatId),
+              eq(projectConversation.createdByUserId, input.actorUserId),
+              eq(chat.userId, input.actorUserId)
+            )
+          )
+          .limit(1);
+        if (!ownedChat) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        const [conversation] = await tx
+          .update(immigrationConversation)
+          .set({
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            updatedAt: now,
+          })
+          .where(eq(immigrationConversation.chatId, input.chatId))
+          .returning();
+        if (!conversation) {
+          throw new ProjectFoundationError("integrity_conflict");
+        }
+        if (input.title !== undefined) {
+          await tx
+            .update(chat)
+            .set({ title: input.title || "Project conversation" })
+            .where(eq(chat.id, input.chatId));
+        }
+        return { ...conversation, projectId: project.id };
       });
     },
   };

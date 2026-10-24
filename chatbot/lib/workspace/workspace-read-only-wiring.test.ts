@@ -30,6 +30,16 @@ test("the workspace derives read-only capability from the shared contract", () =
   );
   assert.match(
     workspaceSource,
+    /projectReadOnly: projectChatReadOnly/u,
+    "Project write availability must come from the server-derived detail state"
+  );
+  assert.match(
+    workspaceSource,
+    /projectChat=\{conversationOrigin === "project"\}/u,
+    "read-only Project Chat details must not be presented as a legacy chat"
+  );
+  assert.match(
+    workspaceSource,
     /shouldApplyConversationDetail\(\{/u,
     "a delayed detail response must not be applied"
   );
@@ -45,7 +55,7 @@ test("the workspace derives read-only capability from the shared contract", () =
   );
 });
 
-test("the archived screen replaces the composer instead of disabling part of it", () => {
+test("read-only screens replace the composer instead of disabling part of it", () => {
   const readOnlyBranch = workspaceSource.match(
     /\{isReadOnlyConversation \? \(([\s\S]*?)\) : \(\s*\/\*\s*\n\s*Phase 12 Stage 2 interactive composer/u
   );
