@@ -1,4 +1,15 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M1_3_PLAN_2026_10_24 -->
+## Current milestone — Phase 13 M1.3 Project Chat Integration planned (2026-10-24)
+
+- **Verified remote checkpoint:** M1.2 implementation committed and pushed as `7dfcb6c720d1227cd5dd6a0bbd94d310399daa09`, confirmed directly against GitHub branch `phase13-study-journey-project-centric`; user reported a clean local worktree. Owner-run disposable PostgreSQL suites: M1.1 **10/10**, M1.2 **7/7**; these are not a claim that the previous complete unit suite is all green.
+- **M1.3 design:** [PHASE13_M1_003_PROJECT_CHAT_INTEGRATION_CONTRACT.md](./tasks/PHASE13_M1_003_PROJECT_CHAT_INTEGRATION_CONTRACT.md) is the bounded implementation packet. Reuse M1.1 atomic Project Chat creation, integrate own-Chat Project create/list and history/detail/update, enforce Project+individual Chat authorization, and serialize Project permission check with the existing turn claim in a short transaction at Fast/Default/Premium ingress.
+- **Read-only semantics:** closed Project and emergency feature disablement preserve only a still-authorized creator's own Project-origin history; revocation denies history, no Project turns/writes, no silent Standalone relabel. Standalone/legacy paths must not regress.
+- **Scope/state:** M1.3 implementation **not started at this documentation checkpoint**; no new migration/database/deployment/professional rule is authorized. M1.4 Workspace UI and later Project evidence/workflow remain deferred. The M1.3 plan is ready for the user's next Codex implementation action; do not mistake this doc commit for implemented code.
+- **Artifact location preference:** user-requested patches or MD exports outside the repo go under `~/`, never `/tmp/`; test software may use its own internal temporary storage.
+
+<!-- END PHASE13_M1_3_PLAN_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_2_FINAL_REVIEW_R1_2026_10_24 -->
 ## Current milestone — M1.2 Final Review R1 correction (2026-10-24)
 
