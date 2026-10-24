@@ -1,15 +1,15 @@
 # CURRENT_HANDOFF
-<!-- BEGIN PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
-## Current status — Phase 13 M0-004 owner decisions (2026-10-24)
+<!-- BEGIN PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
+## Current status — Phase 13 M0 technical foundation frozen (2026-10-24)
 
-- M0-004 independent architecture review: **PASS**. Owner decisions A/B are **ACCEPTED — TECHNICAL CONTRACT** in [D-P13-002 and D-P13-003](./DECISIONS.md); F-01/F-02 are resolved at the owner-decision level only.
-- Required implementation and security/regression verification remain pending. Technical freeze is a **CANDIDATE** pending complete owner acceptance of named contracts. M1 is **NOT YET AUTHORIZED**.
-- Remaining §5.A choices include Project/account cardinality and owner representation, invitation/acceptance mechanics, detailed closure access and retention policy, ordinary Project Chat UI scope, and create/link idempotency details. Resolve choices needed by a selected M1 behavior; do not infer acceptance of other recommendations.
-- Lawyer/admissions matrices remain **PROVISIONAL**. Financial custody, privacy/retention, GS and OSHC decisions remain pending with applicable owners/professionals.
-- Next: complete owner review of remaining applicable contracts, then issue a separate bounded M1 implementation authorization. This integration changes documentation only; no code or security tests passed here.
+- M0-004 independent architecture review: **PASS**. Seven owner decisions A–G are accepted as technical contracts in [D-P13-002 through D-P13-005](./DECISIONS.md). The M0 technical foundation is **FROZEN FOR BOUNDED M1 PREPARATION**.
+- [M1.1 Project Foundation Contract](./tasks/PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md): **READY FOR INDEPENDENT REVIEW — NOT AUTHORIZED FOR IMPLEMENTATION**. M1.1 coding requires separate explicit authorization after contract review.
+- Normal closure permits only currently authorized users to read their own Project Chats; closed Projects reject new chats, AI turns and business mutations. Revocation still denies access. Feature rollback remains distinct and uses the D-P13-003 Project-origin read-only fallback under current authorization.
+- Legal/admissions matrices remain **PROVISIONAL**. ApplicationParty/Role, staged subtypes, evidence grants, full staff authorization and other M2–M8 contracts remain for later gates. Financial custody, privacy/retention, GS and OSHC decisions remain pending with applicable professionals.
+- No implementation, migration, tests or live operations were performed. Next: independent review of M1.1 contract; then await a separate implementation authorization.
 
-The 2026-10-23 M0-004 entry below preserves the review-time status and evidence; this section is current.
-<!-- END PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+The 2026-10-23 review and earlier A/B-only status entries below remain historical.
+<!-- END PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
 
 <!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
 ## Phase 13 M0-004 architecture review delivered

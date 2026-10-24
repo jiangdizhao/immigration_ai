@@ -1,15 +1,15 @@
 # CURRENT_MILESTONE
-<!-- BEGIN PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
-## Current milestone — Phase 13 M0-004 owner decisions (2026-10-24)
+<!-- BEGIN PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
+## Current milestone — Phase 13 M0 technical foundation frozen (2026-10-24)
 
-- **M0-004 independent architecture review: PASS.** Decisions A/B accepted as technical contracts in [D-P13-002 and D-P13-003](./DECISIONS.md); F-01/F-02 are resolved at owner-decision level, with implementation and security/regression verification pending.
-- Technical freeze: **CANDIDATE** pending complete owner acceptance of the named contracts. M1: **NOT YET AUTHORIZED**.
-- Remaining applicable §5.A owner choices: membership invitation/acceptance, owner/account representation, detailed closure access and retention, ordinary Project Chat UI scope, and Project create/link idempotency. Do not assume unaccepted M0-004 recommendations.
-- Matrices remain **PROVISIONAL**. Financial custody, privacy/retention, GS and OSHC professional decisions remain pending.
-- Next: owner review of remaining contracts and a separate explicit M1 scope/authorization. Documentation only; implementation and security tests remain undone.
+- M0-004 independent review: **PASS**. Decisions A–G accepted in [D-P13-002 through D-P13-005](./DECISIONS.md); M0 technical foundation **FROZEN FOR BOUNDED M1 PREPARATION**.
+- [M1.1 contract](./tasks/PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md) is **READY FOR INDEPENDENT REVIEW — NOT AUTHORIZED FOR IMPLEMENTATION**.
+- Closure/read-only access and rollback distinctions are recorded in D-P13-003/D-P13-004. Implementation and security/regression verification are not performed.
+- Matrices remain **PROVISIONAL**; ApplicationParty/Role, application subtypes, evidence grants, full staff authorization and other M2–M8 decisions remain for later gates. Financial custody, privacy/retention, GS and OSHC remain pending with applicable professionals.
+- Next: independent review of M1.1 contract, followed by separate explicit implementation authorization. No code, migration, tests or live operations performed.
 
-The 2026-10-23 section below records the prior review-time state.
-<!-- END PHASE13_M0_004_OWNER_DECISIONS_2026_10_24 -->
+The 2026-10-23 review-time entries below are preserved as history.
+<!-- END PHASE13_M0_TECHNICAL_FREEZE_2026_10_24 -->
 
 <!-- BEGIN PHASE13_M0_004_REVIEW_2026_10_23 -->
 ## Phase 13 M0-004 independent architecture review delivered

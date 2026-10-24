@@ -1,5 +1,41 @@
 # Phase 13 M0-004 — Independent Architecture Review and Technical Contract Freeze Proposal
 
+## Final Owner Acceptance and Technical Freeze Addendum — 2026-10-24
+
+**Current status:** **M0 TECHNICAL FOUNDATION ACCEPTED — M1.1 TASK PREPARATION READY.** M0-004 independent architecture review: **PASS**. D-P13-002 through D-P13-005 record the seven accepted technical decisions and the bounded foundation freeze. **M1.1 IMPLEMENTATION NOT YET AUTHORIZED.** The implementation and security/regression verification have not occurred.
+
+**Finding disposition:** F-01 and F-02 are **RESOLVED AT THE OWNER-DECISION LEVEL** by D-P13-002 and D-P13-003. Required implementation and regression/security verification remain pending.
+
+**Accepted owner decisions:** D-P13-002 and D-P13-003 remain accepted for dual Project/Chat authorization and durable rollback history. D-P13-004 records C–G: canonical owner and cardinality; customer membership lifecycle; soft closure with read-only access to only the still-authorized caller's own Project Chat; minimal existing-Workspace Project UI with no member dashboard; and actor/operation-scoped idempotency with canonical request hashes and atomic Project Chat/event creation. D-P13-005 freezes these with the existing Chat/turn-ledger contract and the separation of later evidence, workflows, professional review and payments.
+
+**Normal-closure resolution:** D-P13-004/E adds read-only history after normal closure for a user who remains authorized, limited to that user's own Project Chats. A closed Project permits no new Chat, AI turn or business mutation. Revoked membership denies subsequent access and cannot be restored by closure or feature rollback. This supersedes any earlier proposal that closure denies all reads; it does not change D-P13-003's separate emergency feature-disable fallback. Neither state deletes or relabels persisted Chat/Turn rows.
+
+### M0 exit checklist evidence
+
+| Roadmap M0 criterion | Evidence and disposition |
+|---|---|
+| Source/repository map at a pinned checkpoint | M0-001 and this review cite source paths at the stated checkpoint; inspected source confirms current implementation boundaries. |
+| Four provisional matrices mapped to versioned source references | M0-003 and the lawyer-feedback delta record the proposed mapping and source/provenance handling. Matrices remain **PROVISIONAL**, not approved rules. |
+| Self/managed modes and admission entry routes represented | M0-003 documents these pathways and distinct gates; this is architecture evidence, not live workflow validation. |
+| Project vs Chat vs LegalMatter, migration and rollback boundaries | M0-002/M0-004 plus D-P13-002–D-P13-005 define identity separation, no legacy linking, additive foundation, durable history and rollback. |
+| Staff, document sharing, GS, project messaging and per-school review boundaries | Covered as proposed later-stage contracts in M0-002/M0-003; not authorized or implemented by this freeze. |
+| Version-bound review/submission guards | M0-003 documents candidate controls; professional approval and any external action remain pending. |
+| Policy/source governance and impact handling | M0-003 documents the candidate versioned governance contract; operative rules remain subject to qualified review. |
+| Unverified assertions and legal/professional limits explicit | M0-001–M0-004 and the lawyer-feedback delta preserve the pending approvals; no approval or live operation is fabricated. |
+| Owner acceptance for bounded M1 foundation | D-P13-002–D-P13-005 accept the seven named technical decisions and freeze only the listed foundation. They do not accept every M0-002/M0-003 proposal or authorize implementation. |
+
+The documented M0 exit is satisfied **for the bounded technical foundation**. Matrix/professional criteria are satisfied only as documented provisional boundaries; they are not operative legal or admissions approval.
+
+### Frozen M1 foundation and later-stage candidates
+
+Frozen for bounded preparation: explicit Project and canonical owner; additional customer membership with pending/active/revoked states; new Project Chat association; current owner-plus-Project authorization at linked-Chat operations; no transcript access across members; existing durable Chat/turn identity; soft closure and restricted read-only history; separate rollback fallback; durable operation idempotency; minimal Project creation/selection/Chat entry in the existing Workspace; and no Project-to-LegalMatter or Project-to-VIP conflation.
+
+ApplicationParty/Role normalization, staged application subtype enforcement, Project evidence/document grants, full staff authorization, requirement/source registries, education/visa workflows, professional engagement, financial custody, GS/OSHC rules, package review, submission and remaining M2–M8 details stay outside this freeze and require their applicable owner or professional gates. Lawyer/admissions matrices remain **PROVISIONAL**; financial custody and privacy/retention decisions remain pending.
+
+**M1.1 task:** [PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md](./PHASE13_M1_001_PROJECT_FOUNDATION_CONTRACT.md) is prepared as **READY FOR INDEPENDENT REVIEW — NOT AUTHORIZED FOR IMPLEMENTATION**. It specifies the additive database foundation and future isolated migration/security tests only. No code, migration, test, database, cloud, payment or live operation was performed for this addendum or task-contract preparation.
+
+The earlier disposition and A/B-only Owner Decision Addendum below are retained as history. This final addendum supersedes their freeze and outstanding-decision status with D-P13-004/D-P13-005.
+
 **Disposition (updated 2026-10-24):** M0-004 independent architecture review: **PASS**. Owner decisions A and B are accepted as technical contracts; see the Owner Decision Addendum. The technical freeze remains a **CANDIDATE** pending complete owner acceptance of the named contracts. M1 is **NOT YET AUTHORIZED**. No legal, admissions, financial, privacy, or professional approval is inferred.
 
 **Repository checkpoint:** branch phase13-study-journey-project-centric; HEAD 5984a99b52974ee47bcb8107c73a6ba44856a475; worktree was clean at review start. The branch and SHA match the M0-004 brief.

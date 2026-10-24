@@ -35,6 +35,48 @@ Following M0-004 finding F-02, the owner accepts this rollback contract. Emergen
 This decision preserves the durable history and turn-lifecycle requirements in D-009 and D-010. It is a technical contract only; implementation and security/regression verification remain pending, and M1 is not authorized.
 <!-- END DECISION_PHASE13_M0_OWNER_ACCEPTANCE_2026_10_24 -->
 
+<!-- BEGIN DECISION_PHASE13_M1_FOUNDATION_2026_10_24 -->
+## D-P13-004 — Phase 13 M1 Foundation Owner Decisions
+
+**Date:** 2026-10-24
+
+**Status:** OWNER ACCEPTED — TECHNICAL CONTRACT
+
+On 2026-10-24, the owner accepted Decisions C–G below as bounded M1 technical contracts. They supplement D-P13-002 (Project/Chat dual authorization) and D-P13-003 (feature-rollback history fallback); they do not reverse either decision or authorize implementation.
+
+**C — Project ownership and cardinality.** A User may own multiple `StudyJourneyProject` records. Each Project has exactly one canonical owner in `StudyJourneyProject.ownerUserId`; owner authority derives from this field and is not duplicated as a removable `ProjectMembership` row. `ProjectMembership` contains additional customer members only. The owner cannot be removed through membership revocation. Ownership transfer is unsupported in M1. Project, Chat and LegalMatter identities remain distinct.
+
+**D — Customer membership lifecycle.** The Project Owner may invite an existing registered account, and that account must explicitly accept before receiving Project access. Membership states distinguish `pending`, `active` and `revoked`; pending and revoked memberships have no Project access. The Owner may revoke another customer's membership, and revocation denies subsequent Project operations immediately. M1 requires no email invitation system. Customer membership grants no staff, lawyer, agent or global administrator capability. Account targeting and invitation APIs must avoid account enumeration and identity disclosure.
+
+**E — Project closure and history.** M1 closes Projects softly. A closed Project rejects new Project Chats, AI turns and business mutations. Existing users who remain authorized may read only Project Chats they personally own; a revoked member cannot regain access through closure or fallback. Closure, membership revocation and emergency feature disablement are distinct. Persisted Chat and Turn data are not deleted or reclassified as Standalone. Physical deletion, legal hold, retention periods, erasure and long-term recovery remain subject to later privacy/records approval; no deletion period or unrestricted read access is promised. This adds the normal-closure read-only contract to D-P13-003. Any earlier proposal that closure categorically denies all reads is superseded for M1 by this decision.
+
+**F — Minimal M1 frontend.** Reuse the existing customer AI Workspace for only minimal Project creation, Project selection, and creation/opening of Project-linked Chats. Keep Project Chat origin visibly distinct from Standalone Chat; preserve existing Standalone creation and history; do not provide cross-member transcript sharing. Membership lifecycle may be API-first in M1; a member-management dashboard and a complete customer portal or lawyer workspace are not required.
+
+**G — Idempotency and transaction integrity.** Project creation, membership-changing operations and Project Chat creation/linkage use a server-validated operation identifier scoped to the authenticated actor and operation, bound to a canonical request hash. An identical replay returns the existing outcome; reuse with different content conflicts; concurrent identical requests cannot create duplicates. Project Chat creation, its `ImmigrationConversation`, `ProjectConversation` association and required audit event commit atomically. Partial failure leaves no orphaned or cross-owner records. Keep the existing durable turn ledger; do not create a second turn-persistence system. Key expiry, retention and storage details may be bounded implementation choices but cannot weaken these guarantees.
+
+These are technical decisions only. They do not approve legal/admissions rules, financial custody, professional scope, privacy/retention policy or later-stage workflow details.
+
+## D-P13-005 — Phase 13 M0 Technical Foundation Freeze
+
+**Date:** 2026-10-24
+
+**Status:** OWNER ACCEPTED — TECHNICAL FOUNDATION FROZEN FOR BOUNDED M1 PREPARATION
+
+Together, D-P13-002, D-P13-003 and D-P13-004 freeze the following technical foundation for bounded M1 preparation:
+
+1. Explicit Project identity, canonical ownership and the accepted active/closed lifecycle.
+2. Customer membership identity, pending/active/revoked authorization and immediate subsequent-operation denial after revocation.
+3. Project Chat association only for newly created Project Chats, with Project/Chat dual authorization.
+4. Existing Chat ownership and the durable shared turn-ledger contract; no parallel Project turn store.
+5. Soft closure, owner-only-per-Chat read access for users who remain authorized, and denial for revoked members.
+6. Project-origin read-only history under D-P13-003 during feature rollback, with no reclassification or authorization bypass.
+7. Actor/operation-scoped idempotency, canonical request-hash conflict detection, transaction integrity and the minimal M1 Workspace boundary.
+8. Separation of this foundation from later Project evidence, workflows, professional review, financial custody and payments.
+9. M0-001/M0-002/M0-003/M0-004 technical invariants to the extent consistent with these accepted decisions; unaccepted proposal details are not incorporated by implication.
+
+This freeze authorizes preparation of the bounded M1.1 task contract and independent review only. **It does not authorize M1.1 implementation, code changes, migration generation/application, database changes or deployment.** ApplicationParty/Role normalization, staged application-subtype enforcement, evidence grants, full staff authorization, and other M2–M8 contracts remain for their respective owner decisions and gates. The four legal/admissions matrices and all applicable legal, education-agent, financial, privacy/records and other professional decisions remain provisional or pending.
+<!-- END DECISION_PHASE13_M1_FOUNDATION_2026_10_24 -->
+
 
 
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
