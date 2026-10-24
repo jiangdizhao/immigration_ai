@@ -1,11 +1,13 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
+import { guestRegex } from "@/lib/constants";
 import {
   hashProjectOperationRequest,
   ProjectFoundationError,
   resolveProjectOperationReplay,
+  resolveProjectOperationRequestReplay,
   validateProjectOperationId,
 } from "./project-foundation-utils";
 import { getLazyDatabase } from "./runtime-client";
@@ -17,6 +19,7 @@ import {
   projectMembership,
   projectOperation,
   studyJourneyProject,
+  user,
 } from "./schema";
 
 export type { ProjectFoundationErrorCode } from "./project-foundation-utils";
@@ -25,6 +28,7 @@ export {
   hashProjectOperationRequest,
   ProjectFoundationError,
   resolveProjectOperationReplay,
+  resolveProjectOperationRequestReplay,
   validateProjectOperationId,
 } from "./project-foundation-utils";
 
@@ -55,6 +59,9 @@ export type ProjectEventType = (typeof PROJECT_EVENT_TYPES)[number];
 export type ProjectFoundationWriteBoundary =
   | "operation_claimed"
   | "project_created"
+  | "membership_created"
+  | "membership_updated"
+  | "operation_result_updated"
   | "project_revised"
   | "chat_created"
   | "immigration_conversation_created"
@@ -123,7 +130,9 @@ async function claimOperation(
     operationType: ProjectOperationType;
     requestHash: string;
     resultId: string;
-    resultKind: "project" | "chat";
+    resultKind: "project" | "membership" | "chat";
+    replayResultKinds?: readonly ("project" | "membership" | "chat")[];
+    compareHashOnly?: boolean;
   },
   hooks: ProjectFoundationTestHooks
 ): Promise<{
@@ -184,13 +193,23 @@ async function claimOperation(
   if (!existing) {
     throw new ProjectFoundationError("integrity_conflict");
   }
-  return {
-    ...existing,
-    ...resolveProjectOperationReplay(existing, {
-      requestHash: input.requestHash,
-      resultKind: input.resultKind,
-    }),
-  };
+  const replay = input.compareHashOnly
+    ? resolveProjectOperationRequestReplay(existing, {
+        requestHash: input.requestHash,
+      })
+    : resolveProjectOperationReplay(existing, {
+        requestHash: input.requestHash,
+        resultKind: input.resultKind,
+      });
+  if (
+    input.replayResultKinds &&
+    !input.replayResultKinds.includes(
+      replay.resultKind as "project" | "membership" | "chat"
+    )
+  ) {
+    throw new ProjectFoundationError("integrity_conflict");
+  }
+  return { ...existing, ...replay };
 }
 
 async function lockProject(tx: Transaction, projectId: string) {
@@ -204,6 +223,17 @@ async function lockProject(tx: Transaction, projectId: string) {
     throw new ProjectFoundationError("project_not_found");
   }
   return project;
+}
+
+async function assertCustomerActor(tx: Transaction, actorUserId: string) {
+  const [actor] = await tx
+    .select({ email: user.email, role: user.role })
+    .from(user)
+    .where(eq(user.id, actorUserId))
+    .limit(1);
+  if (!actor || actor.role !== "user" || guestRegex.test(actor.email)) {
+    throw new ProjectFoundationError("project_forbidden");
+  }
 }
 
 async function assertProjectAuthority(
@@ -243,7 +273,7 @@ async function appendEvent(
     actorUserId: string;
     projectRevision: number;
     eventType: ProjectEventType;
-    subjectKind: "project" | "chat";
+    subjectKind: "project" | "membership" | "chat";
     subjectId: string;
     operationRecordId: string;
     hooks: ProjectFoundationTestHooks;
@@ -261,6 +291,39 @@ async function appendEvent(
     createdAt: input.createdAt,
   });
   await afterWrite(input.hooks, "event_created");
+}
+
+function operationEvents(tx: Transaction, operationRecordId: string) {
+  return tx
+    .select({
+      projectId: projectEvent.projectId,
+      eventType: projectEvent.eventType,
+      subjectKind: projectEvent.subjectKind,
+      subjectId: projectEvent.subjectId,
+    })
+    .from(projectEvent)
+    .where(eq(projectEvent.operationRecordId, operationRecordId));
+}
+
+async function assertMembershipOperationEvent(
+  tx: Transaction,
+  input: {
+    operationRecordId: string;
+    projectId: string;
+    membershipId: string;
+  }
+) {
+  const events = await operationEvents(tx, input.operationRecordId);
+  const [event] = events;
+  if (
+    events.length !== 1 ||
+    event?.projectId !== input.projectId ||
+    event.eventType !== "membership_state_changed" ||
+    event.subjectKind !== "membership" ||
+    event.subjectId !== input.membershipId
+  ) {
+    throw new ProjectFoundationError("integrity_conflict");
+  }
 }
 
 export function createProjectFoundationRepository(
@@ -295,6 +358,7 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
+        await assertCustomerActor(tx, input.actorUserId);
         if (operation.replayed) {
           const project = await lockProject(tx, operation.resultId);
           if (project.ownerUserId !== input.actorUserId) {
@@ -371,6 +435,7 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
+        await assertCustomerActor(tx, input.actorUserId);
         const project = await lockProject(tx, operation.resultId);
         if (project.ownerUserId !== input.actorUserId) {
           throw new ProjectFoundationError("project_forbidden");
@@ -418,6 +483,589 @@ export function createProjectFoundationRepository(
           createdAt: now,
         });
         return { replayed: false, project: closed };
+      });
+    },
+
+    async isRegisteredCustomer(userId: string): Promise<boolean> {
+      const [account] = await database
+        .select({ email: user.email, role: user.role })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+      return Boolean(
+        account && account.role === "user" && !guestRegex.test(account.email)
+      );
+    },
+
+    listProjects(actorUserId: string) {
+      return database
+        .select({
+          id: studyJourneyProject.id,
+          status: studyJourneyProject.status,
+          revision: studyJourneyProject.revision,
+          createdAt: studyJourneyProject.createdAt,
+          updatedAt: studyJourneyProject.updatedAt,
+          closedAt: studyJourneyProject.closedAt,
+        })
+        .from(studyJourneyProject)
+        .leftJoin(
+          projectMembership,
+          and(
+            eq(projectMembership.projectId, studyJourneyProject.id),
+            eq(projectMembership.userId, actorUserId),
+            eq(projectMembership.status, "active")
+          )
+        )
+        .where(
+          and(
+            eq(studyJourneyProject.status, "active"),
+            or(
+              eq(studyJourneyProject.ownerUserId, actorUserId),
+              eq(projectMembership.userId, actorUserId)
+            )
+          )
+        )
+        .orderBy(
+          desc(studyJourneyProject.createdAt),
+          desc(studyJourneyProject.id)
+        );
+    },
+
+    async getProjectForActor(input: {
+      actorUserId: string;
+      projectId: string;
+    }) {
+      const [project] = await database
+        .select({
+          id: studyJourneyProject.id,
+          status: studyJourneyProject.status,
+          revision: studyJourneyProject.revision,
+          createdAt: studyJourneyProject.createdAt,
+          updatedAt: studyJourneyProject.updatedAt,
+          closedAt: studyJourneyProject.closedAt,
+        })
+        .from(studyJourneyProject)
+        .leftJoin(
+          projectMembership,
+          and(
+            eq(projectMembership.projectId, studyJourneyProject.id),
+            eq(projectMembership.userId, input.actorUserId),
+            eq(projectMembership.status, "active")
+          )
+        )
+        .where(
+          and(
+            eq(studyJourneyProject.id, input.projectId),
+            eq(studyJourneyProject.status, "active"),
+            or(
+              eq(studyJourneyProject.ownerUserId, input.actorUserId),
+              eq(projectMembership.userId, input.actorUserId)
+            )
+          )
+        )
+        .limit(1);
+      if (!project) {
+        throw new ProjectFoundationError("project_not_found");
+      }
+      return project;
+    },
+
+    async listProjectMembers(input: {
+      actorUserId: string;
+      projectId: string;
+    }) {
+      const rows = await database
+        .select({
+          id: projectMembership.id,
+          userId: projectMembership.userId,
+          status: projectMembership.status,
+          createdAt: projectMembership.createdAt,
+          updatedAt: projectMembership.updatedAt,
+          acceptedAt: projectMembership.acceptedAt,
+          revokedAt: projectMembership.revokedAt,
+        })
+        .from(studyJourneyProject)
+        .leftJoin(
+          projectMembership,
+          eq(projectMembership.projectId, studyJourneyProject.id)
+        )
+        .where(
+          and(
+            eq(studyJourneyProject.id, input.projectId),
+            eq(studyJourneyProject.ownerUserId, input.actorUserId),
+            eq(studyJourneyProject.status, "active")
+          )
+        )
+        .orderBy(desc(projectMembership.createdAt), desc(projectMembership.id));
+      if (rows.length === 0) {
+        throw new ProjectFoundationError("project_not_found");
+      }
+      return rows
+        .filter((row) => row.id !== null)
+        .map((row) => ({
+          id: row.id as string,
+          userId: row.userId as string,
+          status: row.status as "pending" | "active" | "revoked",
+          createdAt: row.createdAt as Date,
+          updatedAt: row.updatedAt as Date,
+          acceptedAt: row.acceptedAt,
+          revokedAt: row.revokedAt,
+        }));
+    },
+
+    listPendingInvitations(actorUserId: string) {
+      return database
+        .select({
+          membershipId: projectMembership.id,
+          projectId: studyJourneyProject.id,
+          projectRevision: studyJourneyProject.revision,
+          status: projectMembership.status,
+          createdAt: projectMembership.createdAt,
+          updatedAt: projectMembership.updatedAt,
+        })
+        .from(projectMembership)
+        .innerJoin(
+          studyJourneyProject,
+          eq(studyJourneyProject.id, projectMembership.projectId)
+        )
+        .where(
+          and(
+            eq(projectMembership.userId, actorUserId),
+            eq(projectMembership.status, "pending"),
+            eq(studyJourneyProject.status, "active")
+          )
+        )
+        .orderBy(desc(projectMembership.createdAt), desc(projectMembership.id));
+    },
+
+    inviteProjectMember(input: {
+      actorUserId: string;
+      projectId: string;
+      targetUserId: string;
+      expectedRevision: number;
+      operationId: string;
+      now?: Date;
+    }): Promise<{ replayed: boolean; project: ProjectFoundationProject }> {
+      const operationId = validateProjectOperationId(input.operationId);
+      if (
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 1
+      ) {
+        throw new ProjectFoundationError("invalid_request");
+      }
+      const operationType = "membership_invite" as const;
+      const now = input.now ?? new Date();
+      const requestHash = hashProjectOperationRequest({
+        expectedRevision: input.expectedRevision,
+        projectId: input.projectId,
+        targetUserId: input.targetUserId,
+      });
+
+      return database.transaction(async (tx) => {
+        const operation = await claimOperation(
+          tx,
+          {
+            actorUserId: input.actorUserId,
+            operationId,
+            operationType,
+            requestHash,
+            resultId: input.projectId,
+            resultKind: "project",
+            replayResultKinds: ["project", "membership"],
+            compareHashOnly: true,
+          },
+          hooks
+        );
+        await assertCustomerActor(tx, input.actorUserId);
+        const project = await lockProject(tx, input.projectId);
+        if (project.ownerUserId !== input.actorUserId) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+
+        if (operation.replayed) {
+          if (operation.resultKind === "project") {
+            if (operation.resultId !== project.id) {
+              throw new ProjectFoundationError("integrity_conflict");
+            }
+            if ((await operationEvents(tx, operation.id)).length !== 0) {
+              throw new ProjectFoundationError("integrity_conflict");
+            }
+          } else {
+            const [membership] = await tx
+              .select({ id: projectMembership.id })
+              .from(projectMembership)
+              .where(
+                and(
+                  eq(projectMembership.id, operation.resultId),
+                  eq(projectMembership.projectId, project.id),
+                  eq(projectMembership.userId, input.targetUserId)
+                )
+              )
+              .for("update")
+              .limit(1);
+            if (!membership) {
+              throw new ProjectFoundationError("integrity_conflict");
+            }
+            await assertMembershipOperationEvent(tx, {
+              operationRecordId: operation.id,
+              projectId: project.id,
+              membershipId: membership.id,
+            });
+          }
+          return { replayed: true, project };
+        }
+
+        if (project.status !== "active") {
+          throw new ProjectFoundationError("project_closed");
+        }
+        if (project.revision !== input.expectedRevision) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+
+        const [existingMembership] = await tx
+          .select({ id: projectMembership.id })
+          .from(projectMembership)
+          .where(
+            and(
+              eq(projectMembership.projectId, project.id),
+              eq(projectMembership.userId, input.targetUserId)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (existingMembership || input.targetUserId === project.ownerUserId) {
+          return { replayed: false, project };
+        }
+
+        const [target] = await tx
+          .select({ email: user.email, role: user.role })
+          .from(user)
+          .where(eq(user.id, input.targetUserId))
+          .limit(1);
+        if (
+          !target ||
+          target.role !== "user" ||
+          guestRegex.test(target.email)
+        ) {
+          return { replayed: false, project };
+        }
+
+        const [membership] = await tx
+          .insert(projectMembership)
+          .values({
+            projectId: project.id,
+            userId: input.targetUserId,
+            status: "pending",
+            invitedByUserId: input.actorUserId,
+            createdAt: now,
+            updatedAt: now,
+            acceptedAt: null,
+            revokedAt: null,
+          })
+          .returning({ id: projectMembership.id });
+        if (!membership) {
+          throw new ProjectFoundationError("integrity_conflict");
+        }
+        await afterWrite(hooks, "membership_created");
+
+        const [updatedOperation] = await tx
+          .update(projectOperation)
+          .set({ resultKind: "membership", resultId: membership.id })
+          .where(eq(projectOperation.id, operation.id))
+          .returning({ id: projectOperation.id });
+        if (!updatedOperation) {
+          throw new ProjectFoundationError("integrity_conflict");
+        }
+        await afterWrite(hooks, "operation_result_updated");
+
+        const revision = project.revision + 1;
+        const [updatedProject] = await tx
+          .update(studyJourneyProject)
+          .set({ revision, updatedAt: now })
+          .where(
+            and(
+              eq(studyJourneyProject.id, project.id),
+              eq(studyJourneyProject.revision, project.revision),
+              eq(studyJourneyProject.status, "active")
+            )
+          )
+          .returning();
+        if (!updatedProject) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        await afterWrite(hooks, "project_revised");
+        await appendEvent(tx, {
+          projectId: project.id,
+          actorUserId: input.actorUserId,
+          projectRevision: revision,
+          eventType: "membership_state_changed",
+          subjectKind: "membership",
+          subjectId: membership.id,
+          operationRecordId: operation.id,
+          hooks,
+          createdAt: now,
+        });
+        return { replayed: false, project: updatedProject };
+      });
+    },
+
+    acceptProjectMembership(input: {
+      actorUserId: string;
+      projectId: string;
+      membershipId: string;
+      expectedRevision: number;
+      operationId: string;
+      now?: Date;
+    }): Promise<ProjectOperationOutcome> {
+      const operationId = validateProjectOperationId(input.operationId);
+      if (
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 1
+      ) {
+        throw new ProjectFoundationError("invalid_request");
+      }
+      const operationType = "membership_accept" as const;
+      const now = input.now ?? new Date();
+      const requestHash = hashProjectOperationRequest({
+        expectedRevision: input.expectedRevision,
+        membershipId: input.membershipId,
+        projectId: input.projectId,
+      });
+
+      return database.transaction(async (tx) => {
+        const operation = await claimOperation(
+          tx,
+          {
+            actorUserId: input.actorUserId,
+            operationId,
+            operationType,
+            requestHash,
+            resultId: input.membershipId,
+            resultKind: "membership",
+            replayResultKinds: ["membership"],
+            compareHashOnly: true,
+          },
+          hooks
+        );
+        await assertCustomerActor(tx, input.actorUserId);
+        const project = await lockProject(tx, input.projectId);
+        const [membership] = await tx
+          .select()
+          .from(projectMembership)
+          .where(
+            and(
+              eq(projectMembership.id, input.membershipId),
+              eq(projectMembership.projectId, project.id)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (!membership || membership.userId !== input.actorUserId) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        if (operation.replayed) {
+          if (
+            operation.resultKind !== "membership" ||
+            operation.resultId !== membership.id
+          ) {
+            throw new ProjectFoundationError("integrity_conflict");
+          }
+          if (membership.status === "revoked") {
+            throw new ProjectFoundationError("project_forbidden");
+          }
+          if (membership.status !== "active") {
+            throw new ProjectFoundationError("integrity_conflict");
+          }
+          await assertMembershipOperationEvent(tx, {
+            operationRecordId: operation.id,
+            projectId: project.id,
+            membershipId: membership.id,
+          });
+          return { replayed: true, project };
+        }
+        if (project.status !== "active") {
+          throw new ProjectFoundationError("project_closed");
+        }
+        if (project.revision !== input.expectedRevision) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        if (membership.status !== "pending") {
+          throw new ProjectFoundationError("state_conflict");
+        }
+        const [updatedMembership] = await tx
+          .update(projectMembership)
+          .set({ status: "active", acceptedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(projectMembership.id, membership.id),
+              eq(projectMembership.projectId, project.id),
+              eq(projectMembership.status, "pending")
+            )
+          )
+          .returning({ id: projectMembership.id });
+        if (!updatedMembership) {
+          throw new ProjectFoundationError("state_conflict");
+        }
+        await afterWrite(hooks, "membership_updated");
+        const revision = project.revision + 1;
+        const [updatedProject] = await tx
+          .update(studyJourneyProject)
+          .set({ revision, updatedAt: now })
+          .where(
+            and(
+              eq(studyJourneyProject.id, project.id),
+              eq(studyJourneyProject.revision, project.revision),
+              eq(studyJourneyProject.status, "active")
+            )
+          )
+          .returning();
+        if (!updatedProject) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        await afterWrite(hooks, "project_revised");
+        await appendEvent(tx, {
+          projectId: project.id,
+          actorUserId: input.actorUserId,
+          projectRevision: revision,
+          eventType: "membership_state_changed",
+          subjectKind: "membership",
+          subjectId: membership.id,
+          operationRecordId: operation.id,
+          hooks,
+          createdAt: now,
+        });
+        return { replayed: false, project: updatedProject };
+      });
+    },
+
+    revokeProjectMembership(input: {
+      actorUserId: string;
+      projectId: string;
+      membershipId: string;
+      expectedRevision: number;
+      operationId: string;
+      now?: Date;
+    }): Promise<ProjectOperationOutcome> {
+      const operationId = validateProjectOperationId(input.operationId);
+      if (
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 1
+      ) {
+        throw new ProjectFoundationError("invalid_request");
+      }
+      const operationType = "membership_revoke" as const;
+      const now = input.now ?? new Date();
+      const requestHash = hashProjectOperationRequest({
+        expectedRevision: input.expectedRevision,
+        membershipId: input.membershipId,
+        projectId: input.projectId,
+      });
+
+      return database.transaction(async (tx) => {
+        const operation = await claimOperation(
+          tx,
+          {
+            actorUserId: input.actorUserId,
+            operationId,
+            operationType,
+            requestHash,
+            resultId: input.membershipId,
+            resultKind: "membership",
+            replayResultKinds: ["membership"],
+            compareHashOnly: true,
+          },
+          hooks
+        );
+        await assertCustomerActor(tx, input.actorUserId);
+        const project = await lockProject(tx, input.projectId);
+        if (project.ownerUserId !== input.actorUserId) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        const [membership] = await tx
+          .select()
+          .from(projectMembership)
+          .where(
+            and(
+              eq(projectMembership.id, input.membershipId),
+              eq(projectMembership.projectId, project.id)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (!membership || membership.userId === project.ownerUserId) {
+          throw new ProjectFoundationError("project_not_found");
+        }
+        if (operation.replayed) {
+          if (
+            operation.resultKind !== "membership" ||
+            operation.resultId !== membership.id ||
+            membership.status !== "revoked"
+          ) {
+            throw new ProjectFoundationError("integrity_conflict");
+          }
+          await assertMembershipOperationEvent(tx, {
+            operationRecordId: operation.id,
+            projectId: project.id,
+            membershipId: membership.id,
+          });
+          return { replayed: true, project };
+        }
+        if (project.status !== "active") {
+          throw new ProjectFoundationError("project_closed");
+        }
+        if (project.revision !== input.expectedRevision) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        if (membership.status !== "pending" && membership.status !== "active") {
+          throw new ProjectFoundationError("state_conflict");
+        }
+
+        const [updatedMembership] = await tx
+          .update(projectMembership)
+          .set({ status: "revoked", revokedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(projectMembership.id, membership.id),
+              eq(projectMembership.projectId, project.id),
+              or(
+                eq(projectMembership.status, "pending"),
+                eq(projectMembership.status, "active")
+              )
+            )
+          )
+          .returning({ id: projectMembership.id });
+        if (!updatedMembership) {
+          throw new ProjectFoundationError("state_conflict");
+        }
+        await afterWrite(hooks, "membership_updated");
+        const revision = project.revision + 1;
+        const [updatedProject] = await tx
+          .update(studyJourneyProject)
+          .set({ revision, updatedAt: now })
+          .where(
+            and(
+              eq(studyJourneyProject.id, project.id),
+              eq(studyJourneyProject.revision, project.revision),
+              eq(studyJourneyProject.status, "active")
+            )
+          )
+          .returning();
+        if (!updatedProject) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        await afterWrite(hooks, "project_revised");
+        await appendEvent(tx, {
+          projectId: project.id,
+          actorUserId: input.actorUserId,
+          projectRevision: revision,
+          eventType: "membership_state_changed",
+          subjectKind: "membership",
+          subjectId: membership.id,
+          operationRecordId: operation.id,
+          hooks,
+          createdAt: now,
+        });
+        return { replayed: false, project: updatedProject };
       });
     },
 
@@ -604,6 +1252,8 @@ export function createProjectFoundationRepository(
 }
 
 const repository = createProjectFoundationRepository();
+
+export const projectFoundationRepository = repository;
 
 export const createStudyJourneyProject = repository.createProject;
 export const closeStudyJourneyProject = repository.closeProject;

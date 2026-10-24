@@ -79,6 +79,24 @@ This freeze authorizes preparation of the bounded M1.1 task contract and indepen
 
 
 
+<!-- BEGIN DECISION_PHASE13_M1_2_OWNER_ACCEPTANCE_2026_10_24 -->
+## D-P13-006 — Phase 13 M1.2 Membership and Invitation Decisions
+
+**Date:** 2026-10-24
+
+**Status:** OWNER ACCEPTED — M1.2 TECHNICAL CONTRACT FROZEN
+
+These decisions supplement D-P13-002 through D-P13-005 and finalize the bounded M1.2 membership/invitation contract. They do not authorize code, schema, migration, database, deployment or live-system changes. The frozen contract is [PHASE13_M1_002_MEMBERSHIP_AUTHORIZATION_CONTRACT.md](./tasks/PHASE13_M1_002_MEMBERSHIP_AUTHORIZATION_CONTRACT.md); it is ready for separate bounded implementation authorization.
+
+**M1.2-A — No reinvitation of revoked members.** M1.2 does not support reinvitation or reactivation. Keep the unique (projectId,userId) membership row and preserve its audit history. Never transition revoked back to pending or active, delete it, or create a replacement row. Any future reinvitation workflow requires a separate design and owner decision.
+
+**M1.2-B — Recipient-shared User ID targeting.** The recipient signs in and shares their opaque User ID with the Project Owner through an external communication channel. The Owner supplies that User ID to the invitation endpoint. Invite only existing registered customer accounts. Provide no global user search, email lookup, email delivery, invitation link or token, or new invitation table. Pending invitations appear only in the authenticated recipient’s invitation inbox, and the recipient must explicitly accept before Project access is granted. A convenient copy-User-ID UI belongs to M1.4, not M1.2. A supplied target User ID never impersonates the authenticated actor.
+
+**M1.2-C — No additional email-verification requirement.** M1.2 adds no User.emailVerifiedAt prerequisite for invitation or acceptance and introduces no verification email, OTP, confirmation link or verification screen. Require an existing authenticated, non-guest, registered customer identity and verify the current User row plus applicable Project/Membership authorization. Do not trust browser-supplied identity, role or membership claims. Do not bypass or change the application-wide login policy: the existing Credentials login may already require verified email, and that behavior remains outside M1.2.
+
+These decisions supersede the unapproved recommendations in the earlier prepared M1.2 contract. Legal/admissions requirements, financial custody, document retention and later application workflows remain outside this technical freeze and subject to their existing gates.
+<!-- END DECISION_PHASE13_M1_2_OWNER_ACCEPTANCE_2026_10_24 -->
+
 <!-- BEGIN AWS_STAGING_STAGE3_DEPLOYED_2026_10_14 -->
 ## Operational decision — Phase 12 Stage 3 AWS Staging accepted (2026-10-14)
 

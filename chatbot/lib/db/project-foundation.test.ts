@@ -5,6 +5,7 @@ import {
   hashProjectOperationRequest,
   ProjectFoundationError,
   resolveProjectOperationReplay,
+  resolveProjectOperationRequestReplay,
   validateProjectOperationId,
 } from "./project-foundation-utils";
 
@@ -82,6 +83,29 @@ test("operation replay resolves only an identical typed outcome", () => {
       resolveProjectOperationReplay(existing, {
         requestHash: "a".repeat(64),
         resultKind: "project",
+      }),
+    (error: unknown) =>
+      error instanceof ProjectFoundationError &&
+      error.code === "idempotency_conflict"
+  );
+});
+
+test("hash-first replay accepts an outcome union for later repository validation", () => {
+  const existing = {
+    requestHash: "a".repeat(64),
+    resultId: "membership-1",
+    resultKind: "membership",
+  };
+  assert.deepEqual(
+    resolveProjectOperationRequestReplay(existing, {
+      requestHash: "a".repeat(64),
+    }),
+    { resultId: "membership-1", resultKind: "membership", replayed: true }
+  );
+  assert.throws(
+    () =>
+      resolveProjectOperationRequestReplay(existing, {
+        requestHash: "b".repeat(64),
       }),
     (error: unknown) =>
       error instanceof ProjectFoundationError &&

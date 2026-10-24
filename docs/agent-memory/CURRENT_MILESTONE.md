@@ -1,4 +1,38 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M1_2_FINAL_REVIEW_R1_2026_10_24 -->
+## Current milestone — M1.2 Final Review R1 correction (2026-10-24)
+
+- Restored `lib/policy-intelligence/editorial-api.test.ts` to `chatbot/package.json` `test:unit`; retained the M1.2 HTTP tests and all other test entries.
+- User-executed local PostgreSQL results, reported by the user and **not run by Codex**: M1.1 **10/10**, M1.2 **7/7**, total **17 passed, 0 failed, 0 skipped**. This supersedes the earlier sandbox-only DB blocker recorded below. Codex performed no database operation in this correction.
+- Focused Codex checks passed: the editorial API, M1.1 unit and M1.2 HTTP test files; package membership assertion; package Biome; `git diff --check`. Full `pnpm test:unit` was not rerun in this correction; prior full-suite sandbox result remains 106 passed and 3 existing environment-sensitive failures.
+- No schema, migration, architecture or unrelated source changes. M1.3 and M1.4 remain deferred. No commit or push.
+
+<!-- END PHASE13_M1_2_FINAL_REVIEW_R1_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_2_IMPLEMENTATION_2026_10_24 -->
+## Current milestone — Phase 13 M1.2 implemented; awaiting independent review (2026-10-24)
+
+- M1.2 APIs and repository membership lifecycle are implemented on branch `phase13-study-journey-project-centric`, HEAD `8519a6af59988a0e690dea5b334a0344269ff025`; changes remain uncommitted. The accepted five pre-existing documentation modifications were preserved.
+- Customer authorization checks authenticated regular session plus current database User role/guest identity. Owner authority remains `ownerUserId`; active Membership grants scoped Project access, pending Membership grants only its own invitation projection, revoked Membership grants none. No owner Membership or Chat transcript access was added.
+- Invite/accept/revoke use operation → Project → Membership lock order and atomically commit operation, Membership transition, Project revision and event. Neutral invite outcomes are idempotent and create no Membership/revision/event. Revoked Membership cannot be reinvited. Routes fail closed unless the complete existing M1.1 schema is detected.
+- Focused M1.1 utility tests **5/5** and M1.2 HTTP tests **10/10** passed. Full `pnpm test:unit`: **106 passed, 3 failed, 0 skipped** across 109 test-file subprocesses; failures are the existing sandbox subprocess stdout, migration CLI exit-code and localhost `EPERM` tests. All 8 relevant Conversation/turn-ledger regressions passed. `pnpm db:check`, changed-file Biome (16 files) and `git diff --check` passed. TypeScript remains at baseline **44** diagnostics in unchanged files.
+- PostgreSQL validation is **BLOCKED**, not passed: guarded status reports `isolated_database_url_missing`; both M1.1 and M1.2 integration suites report **0 passed, 0 failed, 1 skipped** because the fixed test URL is unset. No DB connection or mutation occurred. Migration 0030 and schema metadata are unchanged; no new migration exists.
+- M1.3 widget-turn integration and M1.4 Workspace UI remain out of scope and deferred. Do not activate customer-facing Project features until independent review and the guarded disposable PostgreSQL concurrency/rollback suite pass.
+
+<!-- END PHASE13_M1_2_IMPLEMENTATION_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_2_CONTRACT_2026_10_24 -->
+## Current milestone — Phase 13 M1.2 contract frozen (2026-10-24)
+
+- Checkpoint is branch phase13-study-journey-project-centric, committed HEAD 8519a6af59988a0e690dea5b334a0344269ff025; worktree was clean at preflight. M1.1 is committed. The following M1.1 status block is preserved as an execution-time snapshot from HEAD 83286fdafe66615f4293f742cd82d0de0f70f940.
+- M1.1 is complete, independently reviewed and committed at this checkpoint. The following M1.1 block is preserved as an execution-time snapshot from HEAD 83286fdafe66615f4293f742cd82d0de0f70f940.
+- D-P13-006 records the three accepted M1.2 owner decisions. [PHASE13_M1_002_MEMBERSHIP_AUTHORIZATION_CONTRACT.md](./tasks/PHASE13_M1_002_MEMBERSHIP_AUTHORIZATION_CONTRACT.md) is OWNER ACCEPTED — M1.2 TECHNICAL CONTRACT FROZEN and READY FOR BOUNDED IMPLEMENTATION AUTHORIZATION.
+- Invitation idempotency uses the existing ProjectOperation result union: a created invitation resolves to its same-Project Membership; a neutral result resolves to the Project and writes no Membership, revision or ProjectEvent. Repository validation distinguishes neutral results from integrity failures; no migration is proposed.
+- M1.2 code has not started. Await independent review and separate bounded implementation authorization. M1.3/M1.4 remain deferred; professional/legal-admissions matrices remain PROVISIONAL.
+- This task changed documentation only. No code, database, migration, tests, shared/live system or external service was used.
+
+<!-- END PHASE13_M1_2_CONTRACT_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_1_IMPLEMENTATION_2026_10_24 -->
 ## Current milestone — Phase 13 M1.1 Project Foundation implemented (2026-10-24)
 

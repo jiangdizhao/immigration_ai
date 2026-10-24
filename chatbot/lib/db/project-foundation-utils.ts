@@ -8,6 +8,7 @@ export type ProjectFoundationErrorCode =
   | "project_forbidden"
   | "project_closed"
   | "revision_conflict"
+  | "state_conflict"
   | "outcome_unavailable"
   | "integrity_conflict";
 
@@ -95,13 +96,26 @@ export function resolveProjectOperationReplay(
   },
   expected: {
     requestHash: string;
-    resultKind: "project" | "chat";
+    resultKind: "project" | "membership" | "chat";
   }
 ) {
-  if (
-    existing.requestHash !== expected.requestHash ||
-    existing.resultKind !== expected.resultKind
-  ) {
+  const replay = resolveProjectOperationRequestReplay(existing, expected);
+  if (existing.resultKind !== expected.resultKind) {
+    throw new ProjectFoundationError("idempotency_conflict");
+  }
+  return replay;
+}
+
+/** Compare replay payloads before decoding an operation's persisted outcome. */
+export function resolveProjectOperationRequestReplay(
+  existing: {
+    requestHash: string;
+    resultId: string;
+    resultKind: string;
+  },
+  expected: { requestHash: string }
+) {
+  if (existing.requestHash !== expected.requestHash) {
     throw new ProjectFoundationError("idempotency_conflict");
   }
   return {
