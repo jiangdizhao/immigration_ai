@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+## Active milestone — M2-A1.1 durable PostgreSQL design ready (2026-10-25)
+
+- A1.0 ACCEPTED at `a5cee03`; documentation baseline `22baeb8`. ChatGPT wrote A1.1 design contract in `tasks/PHASE13_M2_A1_1_DURABLE_TRANSACTIONS_AUDIT_CONTRACT.md` and Codex packet in `tasks/PHASE13_M2_A1_1_CODEX_IMPLEMENTATION_PACKET.md`. This is architect-proposed with clear bounded implementation authorization, not acceptance or rollout.
+- 0032 extends original ProjectOperation/Event user/service actor shape with genuine worker audit attribution and typed document ops; adds durable intent, import acknowledgement, storage-version identity and event fingerprint, without editing 0030/0031. Synthetic DB-only A1.1 code and tests permitted **only upon explicit owner launch**; no live ingestion/scanner/API/AI context or deployment.
+- Next gate: owner sync then Codex implements narrowly; ChatGPT independent cumulative patch review before commit.
+
+<!-- END PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
 ## Current milestone — M2-A1.0 ACCEPTED; M2-A1.1 design gate pending (2026-10-25)
 

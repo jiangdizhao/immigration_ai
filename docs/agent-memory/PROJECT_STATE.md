@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+## Current Phase 13 state — M2-A1.1 contract authored, no code yet (2026-10-25)
+
+- Current accepted A1.0 `a5cee03aabfa1609b8fda5b5d030a393da2d8638`; docs-only checkpoint `22baeb8e6c453bbd8e9045569df2083028cb3fd7`; `phase13-study-journey-project-centric`.
+- Architect-owned A1.1 contract and implementation packet are checked into `docs/agent-memory/tasks/`; next owner-dispatched bounded target is 0032 additive user/service actor audit + durable Project document intent/consent, synthetic Postgres repository and guarded tests only. No real scanner, actual files, public routes, grant sharing, AI-context or migration of customer database is authorized.
+- After Codex returns an **uncommitted** cumulative patch, independently review tests and code. A1.1/overall M2 NOT ACCEPTED. M1.4, A0, A1.0 remain accepted; maintain default-off flags and prior source privacy decision gates.
+
+<!-- END PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
 ## Current Phase 13 project state — M2-A1.0 accepted (2026-10-25)
 

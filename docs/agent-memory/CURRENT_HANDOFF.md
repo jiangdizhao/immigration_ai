@@ -1,4 +1,14 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+## Current handoff — M2-A1.1 durable transactions/audit architect contract (2026-10-25)
+
+- Accepted M2-A1.0 implementation: `a5cee03aabfa1609b8fda5b5d030a393da2d8638`. Subsequent acceptance-docs baseline: `22baeb8e6c453bbd8e9045569df2083028cb3fd7`. Source branch: `phase13-study-journey-project-centric`. A1.1 is **DESIGNED, NOT IMPLEMENTED**.
+- Architect-owned contract: `tasks/PHASE13_M2_A1_1_DURABLE_TRANSACTIONS_AUDIT_CONTRACT.md`; bounded implementer packet: `tasks/PHASE13_M2_A1_1_CODEX_IMPLEMENTATION_PACKET.md`. Worker identity resolved with additive 0032 `user/service` actorKind and constrained servicePrincipalCode on the existing ProjectOperation/Event; no fake User or parallel generic event ledger.
+- Planned 0032-only additive schema: ProjectDocumentIntent and ImportConsent, verified storageObjectVersionId-once and scan eventFingerprint, document operation/event allowlists. DB-only repository and guarded synthetic PostgreSQL tests with Project revision/Event atomicity, cross-project auth and worker CAS. No real S3, scan, APIs, customer files, AI context, production migration or deployment authorized; A1.2/1.3 remain gated.
+- The owner may explicitly dispatch Codex for **A1.1 implementation only** on the new docs HEAD after syncing. Stop uncommitted/unpushed for independent patch review. M2 overall and A1.1 are NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
 ## Current handoff — M2-A1.0 internal Project Document Service ACCEPTED (2026-10-25)
 
