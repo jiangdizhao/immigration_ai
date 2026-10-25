@@ -25,7 +25,7 @@ import {
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0030_demonic_the_hood";
+const EXPECTED_MIGRATION_HEAD = "0031_sour_scarecrow";
 const skipReason = TEST_DATABASE_URL
   ? false
   : "PHASE13_M1_1_TEST_DATABASE_URL is not configured (isolated database required)";
@@ -273,7 +273,7 @@ test(
       const [migrationCount] = await sql<{ count: string }[]>`
         select count(*)::text as count from drizzle.__drizzle_migrations
       `;
-      assert.equal(Number(migrationCount?.count), 31);
+      assert.equal(Number(migrationCount?.count), 32);
 
       const [inventory] = await sql<
         {
@@ -300,7 +300,7 @@ test(
       });
 
       await t.test(
-        "schema inventory stays inside the M1.1 foundation",
+        "M1.1 foundation tables remain alongside additive M2-A0 tables",
         async () => {
           const projectTables = await sql<{ tableName: string }[]>`
           select table_name as "tableName" from information_schema.tables
@@ -312,6 +312,10 @@ test(
             projectTables.map((row) => row.tableName).sort(),
             [
               "ProjectConversation",
+              "ProjectDocumentAsset",
+              "ProjectDocumentGrant",
+              "ProjectDocumentProcessingRun",
+              "ProjectDocumentVersion",
               "ProjectEvent",
               "ProjectMembership",
               "ProjectOperation",

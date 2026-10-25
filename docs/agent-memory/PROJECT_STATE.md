@@ -1,4 +1,24 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+## Current Phase 13 state — M2-A0 R1-01 terminal processing-run immutability fixed (2026-10-25)
+
+- The `0031_sour_scarecrow` processing-run trigger blocks any changed completed/failed row with SQLSTATE `23514` and `ProjectDocumentProcessingRun_terminal_immutable`; exact no-op updates and one-time started-to-terminal transitions are tested.
+- Guarded results: M2-A0 PostgreSQL **3/3**, M1.1 PostgreSQL **10/10**, focused unit **2/2**, all with zero failures/skips. `db:check`, Biome and `git diff --check` passed. Only loopback `immigration_ai_phase13_m1_1_test` was used; M1.2/M1.3 and full unit suite were not rerun.
+- The R1 correction changed only migration 0031, its M2-A0 PostgreSQL regression test, and the current-state records. No snapshot/schema update, migration 0032, commit, push, or deployment. M2-A0 remains unaccepted pending independent review.
+
+<!-- END PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+## Current Phase 13 state — M2-A0 inert document schema implemented; independent review pending (2026-10-25)
+
+- M2-A0 implementation is uncommitted on `phase13-study-journey-project-centric` at baseline HEAD `f7640a8757f6fd4752ddbe4c9172e78e3b9d9dab`; no commit, push or deployment.
+- Added four Project document schema entities and additive migration 0031, with same-Project composite FKs, restrictive deletes, immutable identity, unique storage/version/generation/event constraints, bounded checks and pending storage/security defaults. No application routes or runtime consumers exist. Project Chat and Standalone behavior, migration 0030 and the ConversationTurn ledger remain unchanged.
+- Validation: focused unit/M1 regressions **6 passed**; guarded M2-A0 DB integration **3 passed**; guarded M1.1/M1.2/M1.3 **10/10, 7/7, 1/1**; zero failures/skips. `pnpm db:check`, source/test/package Biome, generated metadata lint, `git diff --check` and untracked whitespace checks passed. TypeScript remains at 44 baseline diagnostics with 0 in changed files. Full `pnpm test:unit` not run.
+- Database target was only loopback `immigration_ai_phase13_m1_1_test`; all integration rows were synthetic. No regular/shared/live database or external service was used.
+- M2-A0 is implemented but not accepted. Independent source review remains pending. R1 does not define authority-basis/service-principal code allowlists; stored codes have no runtime authority until a later authorized writer validates them.
+
+<!-- END PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
 ## Current Phase 13 project state — M1.4 accepted, M2-001 architect-owned R1 (2026-10-25)
 

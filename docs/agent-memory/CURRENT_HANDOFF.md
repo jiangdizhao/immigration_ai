@@ -1,4 +1,28 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+## Current handoff — M2-A0 R1-01 processing-run terminal immutability fixed; independent review pending (2026-10-25)
+
+- **Correction:** migration `0031_sour_scarecrow.sql` now rejects every changed `ProjectDocumentProcessingRun` row after `completed` or `failed` with SQLSTATE `23514` and constraint identifier `ProjectDocumentProcessingRun_terminal_immutable`. Exact no-op updates remain valid. Existing identity checks remain intact, and a `started` run can complete or fail once.
+- **R1 files changed:** `chatbot/lib/db/migrations/0031_sour_scarecrow.sql`, `chatbot/lib/db/project-document-schema.integration.test.ts`, and these three current-state records. No snapshot/schema change, migration 0032, or other runtime/schema edit was needed.
+- **Validation:** M2-A0 PostgreSQL **3 passed, 0 failed, 0 skipped**; focused schema/M1 unit tests **2 passed, 0 failed, 0 skipped**; guarded M1.1 PostgreSQL regression **10 passed, 0 failed, 0 skipped**. `pnpm db:check`, changed-file Biome, and `git diff --check` passed. M1.2/M1.3 and full `pnpm test:unit` were not rerun for this trigger-only correction.
+- **Database:** guard status confirmed only `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`; the reset and migration tests used synthetic rows there. No other database was used.
+- **Status:** M2-A0 remains unaccepted, uncommitted, and unpushed. Independent review is pending. Complete cumulative patch: `~/phase13_m2_a0_R1_review.patch`.
+
+<!-- END PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+## Current handoff — M2-A0 inert Project document schema implemented; independent review pending (2026-10-25)
+
+- **Baseline:** repository `jiangdizhao/immigration_ai`, branch `phase13-study-journey-project-centric`, starting HEAD `f7640a8757f6fd4752ddbe4c9172e78e3b9d9dab`; worktree was clean at preflight. No commit or push.
+- **Scope:** additive Drizzle definitions for `ProjectDocumentAsset`, `ProjectDocumentVersion`, `ProjectDocumentGrant` and `ProjectDocumentProcessingRun`; generated migration index 31 (`0031_sour_scarecrow`), snapshot and journal entry. The migration adds same-Project composite keys/FKs, restrictive deletion, version/hash/size/state checks, exact-version purpose grants, processing generation/event identity, and immutable asset/version/grant/run identity guards. Storage and security status remain independent; both default to `pending`. Source Chat/document identifiers are optional provenance only and have no FKs. No API, upload/import, storage, scanner, extraction, context, UI or runtime consumer was added. Migration 0030 and M1 Project/ConversationTurn behavior remain intact.
+- **Files:** modified `chatbot/lib/db/schema.ts`, `chatbot/lib/db/project-foundation.integration.test.ts`, `chatbot/package.json`, `chatbot/lib/db/migrations/meta/_journal.json`; added `chatbot/lib/db/migrations/0031_sour_scarecrow.sql`, `chatbot/lib/db/migrations/meta/0031_snapshot.json`, `chatbot/lib/db/project-document-schema.test.ts`, and `chatbot/lib/db/project-document-schema.integration.test.ts`; this handoff, `CURRENT_MILESTONE.md` and `PROJECT_STATE.md` record the result.
+- **Validation:** focused unit/M1 regression **6 passed, 0 failed, 0 skipped**; guarded M2-A0 PostgreSQL integration **3 passed, 0 failed, 0 skipped**; existing guarded M1.1 **10/10**, M1.2 **7/7**, M1.3 **1/1**, all zero failures/skips. `pnpm db:check` passed. Biome check passed on the 5 changed source/test/package files; generated Drizzle JSON metadata passed Biome lint and remains in generator format. `git diff --check` and untracked whitespace review passed. TypeScript remains at the **44 baseline diagnostics**, with **0** in changed files (compiler exit 2 from unchanged baseline diagnostics). Full `pnpm test:unit` was not run.
+- **PostgreSQL:** only `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` was reset and used; tests assert the actual database identity and use synthetic data. The initial sandbox status probe could not connect; the repository guard then verified and ran outside the sandbox. No regular chatbot database, `immigration_legal`, staging, AWS or production database was touched.
+- **Open implementation detail:** R1 does not enumerate `grantorAuthorityBasis` or service-principal codes. A0 stores bounded codes only; these values do not grant authority, and any future writer must define and verify them before enabling writes. M2-A0 is implemented but not accepted; stop for independent source review.
+- **Review artifact:** complete cumulative uncommitted patch: `~/phase13_m2_a0_review.patch`.
+
+<!-- END PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
 ## Current handoff — M1.4 accepted; architect-owned M2-001 R1 design committed (2026-10-25)
 

@@ -850,6 +850,379 @@ export const projectEvent = pgTable(
 
 export type ProjectEvent = InferSelectModel<typeof projectEvent>;
 
+export const PROJECT_DOCUMENT_ASSET_LIFECYCLES = [
+  "active",
+  "withdrawn",
+  "deletion_pending",
+  "deleted",
+] as const;
+export type ProjectDocumentAssetLifecycle =
+  (typeof PROJECT_DOCUMENT_ASSET_LIFECYCLES)[number];
+
+export const PROJECT_DOCUMENT_ORIGIN_KINDS = [
+  "direct_upload",
+  "explicit_chat_import",
+] as const;
+export type ProjectDocumentOriginKind =
+  (typeof PROJECT_DOCUMENT_ORIGIN_KINDS)[number];
+
+export const PROJECT_DOCUMENT_STORAGE_STATUSES = [
+  "pending",
+  "stored",
+  "failed",
+  "cleanup_pending",
+] as const;
+export type ProjectDocumentStorageStatus =
+  (typeof PROJECT_DOCUMENT_STORAGE_STATUSES)[number];
+
+export const PROJECT_DOCUMENT_SECURITY_STATUSES = [
+  "pending",
+  "clean",
+  "rejected",
+  "failed",
+] as const;
+export type ProjectDocumentSecurityStatus =
+  (typeof PROJECT_DOCUMENT_SECURITY_STATUSES)[number];
+
+export const PROJECT_DOCUMENT_GRANT_RECIPIENT_KINDS = [
+  "user",
+  "project",
+] as const;
+export type ProjectDocumentGrantRecipientKind =
+  (typeof PROJECT_DOCUMENT_GRANT_RECIPIENT_KINDS)[number];
+
+export const PROJECT_DOCUMENT_GRANT_PURPOSES = [
+  "metadata_read",
+  "content_read",
+  "download",
+  "ai_context",
+  "future_package",
+] as const;
+export type ProjectDocumentGrantPurpose =
+  (typeof PROJECT_DOCUMENT_GRANT_PURPOSES)[number];
+
+export const PROJECT_DOCUMENT_RUN_KINDS = ["scan", "extract"] as const;
+export type ProjectDocumentRunKind =
+  (typeof PROJECT_DOCUMENT_RUN_KINDS)[number];
+
+export const PROJECT_DOCUMENT_RUN_STATUSES = [
+  "started",
+  "completed",
+  "failed",
+] as const;
+export type ProjectDocumentRunStatus =
+  (typeof PROJECT_DOCUMENT_RUN_STATUSES)[number];
+
+// These tables are an inert M2-A0 data foundation. No customer request path
+// reads or writes them until a later, separately authorized service exists.
+export const projectDocumentAsset = pgTable(
+  "ProjectDocumentAsset",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    lifecycle: varchar("lifecycle", {
+      enum: PROJECT_DOCUMENT_ASSET_LIFECYCLES,
+    })
+      .notNull()
+      .default("active"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex("ProjectDocumentAsset_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    projectLifecycleCreatedIndex: index(
+      "ProjectDocumentAsset_project_lifecycle_created_idx"
+    ).on(table.projectId, table.lifecycle, table.createdAt),
+    lifecycleAllowed: check(
+      "ProjectDocumentAsset_lifecycle_check",
+      sql`${table.lifecycle} in ('active', 'withdrawn', 'deletion_pending', 'deleted')`
+    ),
+  })
+);
+
+export type ProjectDocumentAsset = InferSelectModel<
+  typeof projectDocumentAsset
+>;
+
+export const projectDocumentVersion = pgTable(
+  "ProjectDocumentVersion",
+  {
+    projectId: uuid("projectId").notNull(),
+    assetId: uuid("assetId").notNull(),
+    versionId: uuid("versionId").primaryKey().notNull().defaultRandom(),
+    versionNumber: integer("versionNumber").notNull(),
+    storageKey: varchar("storageKey", { length: 512 }).notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    byteSize: integer("byteSize").notNull(),
+    canonicalMime: varchar("canonicalMime", { length: 255 }).notNull(),
+    originKind: varchar("originKind", {
+      enum: PROJECT_DOCUMENT_ORIGIN_KINDS,
+    }).notNull(),
+    // Optional provenance identifiers only. These are deliberately not FKs to
+    // Chat or MatterDocument and grant no authority over either source.
+    sourceChatId: uuid("sourceChatId"),
+    sourceDocumentId: uuid("sourceDocumentId"),
+    sourceSha256: varchar("sourceSha256", { length: 64 }),
+    uploadedByUserId: uuid("uploadedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    storageStatus: varchar("storageStatus", {
+      enum: PROJECT_DOCUMENT_STORAGE_STATUSES,
+    })
+      .notNull()
+      .default("pending"),
+    securityStatus: varchar("securityStatus", {
+      enum: PROJECT_DOCUMENT_SECURITY_STATUSES,
+    })
+      .notNull()
+      .default("pending"),
+    processingGeneration: integer("processingGeneration").notNull().default(1),
+  },
+  (table) => ({
+    projectIdVersionUnique: uniqueIndex(
+      "ProjectDocumentVersion_project_version_unique"
+    ).on(table.projectId, table.versionId),
+    projectAssetVersionUnique: uniqueIndex(
+      "ProjectDocumentVersion_project_asset_version_unique"
+    ).on(table.projectId, table.assetId, table.versionId),
+    projectVersionDigestUnique: uniqueIndex(
+      "ProjectDocumentVersion_project_version_sha256_unique"
+    ).on(table.projectId, table.versionId, table.sha256),
+    projectAssetNumberUnique: uniqueIndex(
+      "ProjectDocumentVersion_project_asset_number_unique"
+    ).on(table.projectId, table.assetId, table.versionNumber),
+    storageKeyUnique: uniqueIndex(
+      "ProjectDocumentVersion_storage_key_unique"
+    ).on(table.storageKey),
+    projectAssetForeignKey: foreignKey({
+      columns: [table.projectId, table.assetId],
+      foreignColumns: [projectDocumentAsset.projectId, projectDocumentAsset.id],
+      name: "ProjectDocumentVersion_project_asset_fk",
+    }).onDelete("restrict"),
+    versionNumberPositive: check(
+      "ProjectDocumentVersion_version_number_check",
+      sql`${table.versionNumber} > 0`
+    ),
+    sizePositive: check(
+      "ProjectDocumentVersion_byte_size_check",
+      sql`${table.byteSize} > 0`
+    ),
+    generationPositive: check(
+      "ProjectDocumentVersion_generation_check",
+      sql`${table.processingGeneration} > 0`
+    ),
+    storageKeyPresent: check(
+      "ProjectDocumentVersion_storage_key_check",
+      sql`length(trim(${table.storageKey})) > 0`
+    ),
+    digestValid: check(
+      "ProjectDocumentVersion_sha256_check",
+      sql`${table.sha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    sourceDigestValid: check(
+      "ProjectDocumentVersion_source_sha256_check",
+      sql`${table.sourceSha256} is null or ${table.sourceSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    canonicalMimeValid: check(
+      "ProjectDocumentVersion_canonical_mime_check",
+      sql`${table.canonicalMime} ~ '^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$'`
+    ),
+    originKindAllowed: check(
+      "ProjectDocumentVersion_origin_kind_check",
+      sql`${table.originKind} in ('direct_upload', 'explicit_chat_import')`
+    ),
+    storageStatusAllowed: check(
+      "ProjectDocumentVersion_storage_status_check",
+      sql`${table.storageStatus} in ('pending', 'stored', 'failed', 'cleanup_pending')`
+    ),
+    securityStatusAllowed: check(
+      "ProjectDocumentVersion_security_status_check",
+      sql`${table.securityStatus} in ('pending', 'clean', 'rejected', 'failed')`
+    ),
+  })
+);
+
+export type ProjectDocumentVersion = InferSelectModel<
+  typeof projectDocumentVersion
+>;
+
+export const projectDocumentGrant = pgTable(
+  "ProjectDocumentGrant",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assetId: uuid("assetId").notNull(),
+    versionId: uuid("versionId").notNull(),
+    grantorUserId: uuid("grantorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    grantorAuthorityBasis: varchar("grantorAuthorityBasis", {
+      length: 64,
+    }).notNull(),
+    granteeKind: varchar("granteeKind", {
+      enum: PROJECT_DOCUMENT_GRANT_RECIPIENT_KINDS,
+    }).notNull(),
+    granteeUserId: uuid("granteeUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    purpose: varchar("purpose", {
+      enum: PROJECT_DOCUMENT_GRANT_PURPOSES,
+    }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+    revision: integer("revision").notNull().default(1),
+  },
+  (table) => ({
+    projectAssetForeignKey: foreignKey({
+      columns: [table.projectId, table.assetId],
+      foreignColumns: [projectDocumentAsset.projectId, projectDocumentAsset.id],
+      name: "ProjectDocumentGrant_project_asset_fk",
+    }).onDelete("restrict"),
+    projectAssetVersionForeignKey: foreignKey({
+      columns: [table.projectId, table.assetId, table.versionId],
+      foreignColumns: [
+        projectDocumentVersion.projectId,
+        projectDocumentVersion.assetId,
+        projectDocumentVersion.versionId,
+      ],
+      name: "ProjectDocumentGrant_project_asset_version_fk",
+    }).onDelete("restrict"),
+    activeScopeUnique: uniqueIndex(
+      "ProjectDocumentGrant_active_scope_purpose_unique"
+    )
+      .on(
+        table.projectId,
+        table.assetId,
+        table.versionId,
+        table.granteeKind,
+        sql`coalesce(${table.granteeUserId}, ${table.projectId})`,
+        table.purpose
+      )
+      .where(sql`${table.revokedAt} is null`),
+    grantorAuthorityBasisPresent: check(
+      "ProjectDocumentGrant_authority_basis_check",
+      sql`length(trim(${table.grantorAuthorityBasis})) between 1 and 64`
+    ),
+    recipientShapeValid: check(
+      "ProjectDocumentGrant_recipient_shape_check",
+      sql`(${table.granteeKind} = 'user' and ${table.granteeUserId} is not null) or (${table.granteeKind} = 'project' and ${table.granteeUserId} is null)`
+    ),
+    purposeAllowed: check(
+      "ProjectDocumentGrant_purpose_check",
+      sql`${table.purpose} in ('metadata_read', 'content_read', 'download', 'ai_context', 'future_package')`
+    ),
+    revisionPositive: check(
+      "ProjectDocumentGrant_revision_check",
+      sql`${table.revision} > 0`
+    ),
+  })
+);
+
+export type ProjectDocumentGrant = InferSelectModel<
+  typeof projectDocumentGrant
+>;
+
+export const projectDocumentProcessingRun = pgTable(
+  "ProjectDocumentProcessingRun",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    versionId: uuid("versionId").notNull(),
+    generation: integer("generation").notNull(),
+    operationKind: varchar("operationKind", {
+      enum: PROJECT_DOCUMENT_RUN_KINDS,
+    }).notNull(),
+    providerCode: varchar("providerCode", { length: 64 }).notNull(),
+    providerEventId: varchar("providerEventId", { length: 128 }),
+    initiatedByUserId: uuid("initiatedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    servicePrincipalCode: varchar("servicePrincipalCode", { length: 64 }),
+    objectSha256: varchar("objectSha256", { length: 64 }).notNull(),
+    status: varchar("status", {
+      enum: PROJECT_DOCUMENT_RUN_STATUSES,
+    })
+      .notNull()
+      .default("started"),
+    verdict: varchar("verdict", { length: 64 }),
+    startedAt: timestamp("startedAt").notNull().defaultNow(),
+    completedAt: timestamp("completedAt"),
+    errorCode: varchar("errorCode", { length: 128 }),
+  },
+  (table) => ({
+    projectVersionDigestForeignKey: foreignKey({
+      columns: [table.projectId, table.versionId, table.objectSha256],
+      foreignColumns: [
+        projectDocumentVersion.projectId,
+        projectDocumentVersion.versionId,
+        projectDocumentVersion.sha256,
+      ],
+      name: "ProjectDocumentProcessingRun_project_version_sha256_fk",
+    }).onDelete("restrict"),
+    projectVersionGenerationKindUnique: uniqueIndex(
+      "ProjectDocRun_project_version_generation_kind_unique"
+    ).on(
+      table.projectId,
+      table.versionId,
+      table.generation,
+      table.operationKind
+    ),
+    providerEventUnique: uniqueIndex(
+      "ProjectDocumentProcessingRun_provider_event_unique"
+    )
+      .on(table.providerCode, table.providerEventId)
+      .where(sql`${table.providerEventId} is not null`),
+    providerCodePresent: check(
+      "ProjectDocumentProcessingRun_provider_check",
+      sql`length(trim(${table.providerCode})) between 1 and 64`
+    ),
+    providerEventIdPresent: check(
+      "ProjectDocumentProcessingRun_provider_event_check",
+      sql`${table.providerEventId} is null or length(trim(${table.providerEventId})) between 1 and 128`
+    ),
+    actorShapeValid: check(
+      "ProjectDocumentProcessingRun_actor_shape_check",
+      sql`(${table.initiatedByUserId} is not null and ${table.servicePrincipalCode} is null) or (${table.initiatedByUserId} is null and ${table.servicePrincipalCode} is not null and length(trim(${table.servicePrincipalCode})) between 1 and 64)`
+    ),
+    objectDigestValid: check(
+      "ProjectDocumentProcessingRun_object_sha256_check",
+      sql`${table.objectSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    generationPositive: check(
+      "ProjectDocumentProcessingRun_generation_check",
+      sql`${table.generation} > 0`
+    ),
+    operationKindAllowed: check(
+      "ProjectDocumentProcessingRun_kind_check",
+      sql`${table.operationKind} in ('scan', 'extract')`
+    ),
+    statusAllowed: check(
+      "ProjectDocumentProcessingRun_status_check",
+      sql`${table.status} in ('started', 'completed', 'failed')`
+    ),
+    verdictCodeValid: check(
+      "ProjectDocumentProcessingRun_verdict_check",
+      sql`${table.verdict} is null or ${table.verdict} ~ '^[a-z][a-z0-9_.-]{0,63}$'`
+    ),
+    outcomeConsistent: check(
+      "ProjectDocumentProcessingRun_outcome_check",
+      sql`(${table.status} = 'started' and ${table.completedAt} is null and ${table.verdict} is null and ${table.errorCode} is null) or (${table.status} = 'completed' and ${table.completedAt} is not null and ${table.completedAt} >= ${table.startedAt} and ${table.verdict} is not null and ${table.errorCode} is null) or (${table.status} = 'failed' and ${table.completedAt} is not null and ${table.completedAt} >= ${table.startedAt} and ${table.verdict} is null and ${table.errorCode} is not null and length(trim(${table.errorCode})) between 1 and 128)`
+    ),
+  })
+);
+
+export type ProjectDocumentProcessingRun = InferSelectModel<
+  typeof projectDocumentProcessingRun
+>;
+
 export type ConsultationStatus =
   | "requested"
   | "proposed"

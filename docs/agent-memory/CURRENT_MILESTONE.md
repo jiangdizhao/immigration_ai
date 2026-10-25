@@ -1,4 +1,24 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+## Current milestone — M2-A0 R1-01 terminal processing-run immutability fixed; review pending (2026-10-25)
+
+The migration trigger now makes completed and failed processing-run rows immutable at the PostgreSQL layer while allowing exact no-op updates. It returns SQLSTATE `23514` with `ProjectDocumentProcessingRun_terminal_immutable`; valid `started → completed` and `started → failed` transitions remain covered. No Drizzle snapshot change or migration 0032 was created.
+
+Validation: guarded M2-A0 PostgreSQL **3/3**, M1.1 PostgreSQL **10/10**, focused schema/M1 unit **2/2**, zero failures or skips. `pnpm db:check`, changed-file Biome and `git diff --check` passed. Only `immigration_ai_phase13_m1_1_test` was reset/used. M1.2/M1.3 and the full unit suite were not rerun. M2-A0 remains unaccepted and awaits independent review.
+
+<!-- END PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+## Current milestone — M2-A0 schema foundation implemented; independent review pending (2026-10-25)
+
+M2-A0 adds only the four inert Project document entities and additive Drizzle migration 0031. Same-Project FKs, version/hash/generation constraints, purpose-specific exact-version grants, bounded processing-run identity and restrictive deletion are covered by schema and PostgreSQL tests. New tables have no live request-path consumer; no document operation or M2-A1 behavior is enabled. Migration 0030, existing M1 semantics, Standalone documents and the ConversationTurn ledger remain unchanged.
+
+Validation: M2-A0 guarded PostgreSQL **3/3**; existing M1.1/M1.2/M1.3 guarded suites **10/10 + 7/7 + 1/1**; focused unit/M1 regressions **6/6**; zero failures or skips. `pnpm db:check`, changed source/test/package Biome, generated metadata Biome lint, whitespace checks passed. TypeScript diagnostics remain 44 baseline, 0 in changed files. Only the disposable `immigration_ai_phase13_m1_1_test` database was reset/migrated. Full `pnpm test:unit` was not run.
+
+Branch/HEAD: `phase13-study-journey-project-centric` / `f7640a8757f6fd4752ddbe4c9172e78e3b9d9dab`; uncommitted and unpushed. M2-A0 is not accepted; independent review is the next gate. The R1 authority-basis and service-principal code vocabularies remain undefined and grant no authority in this inert schema.
+
+<!-- END PHASE13_M2_A0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
 ## Current milestone — M2-001 architecture R1; M2-A0 optional bounded implementation (2026-10-25)
 
