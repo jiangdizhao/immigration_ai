@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+## Current milestone — M2-A1 architecture written; A1.0 code task next (2026-10-25)
+
+- M2-A0 ACCEPTED at `b6cdd46`; Project document 0031 schema is inert and no live file processing exists.
+- Architect-owned `tasks/PHASE13_M2_A1_PROJECT_DOCUMENT_SERVICE_ARCHITECTURE_CONTRACT.md` specifies isolated Project file lifecycle, private purpose grants, immutable copy/import, trusted exact-byte scanning, idempotency/Project revision/events, cleanup and later rollout gates. This is NOT real-upload authorization.
+- Next bounded implementation, only when owner explicitly dispatches: `tasks/PHASE13_M2_A1_0_INTERNAL_SERVICE_CORE_IMPLEMENTATION_PACKET.md`, synthetic/injected internal service ports and offline negative tests, no DB/AWS/API/routes. A1.1/1.2/1.3 deferred for separate review and owner/privacy/scanner decisions. No M2-A1 acceptance or public rollout.
+
+<!-- END PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
 ## Current milestone — M2-A0 accepted; M2-A1 design gate next (2026-10-25)
 

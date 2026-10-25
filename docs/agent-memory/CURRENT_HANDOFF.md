@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+## Current handoff — M2-A1 Project Document Service architect design (2026-10-25)
+
+- **Checkpoint:** M2-A0 accepted and pushed at `b6cdd46d1a7289bccb30cb2257de613f5ea121f3`; latest prior docs-only HEAD `5db5a564d29c755de733f2765c42880a6ad42cf1`. Branch `phase13-study-journey-project-centric`. M2-A1 has NOT been implemented or accepted.
+- **Architect-owned design:** `tasks/PHASE13_M2_A1_PROJECT_DOCUMENT_SERVICE_ARCHITECTURE_CONTRACT.md`. Read actual 0031 schema, M1 ProjectOperation/Event semantics, Phase12 storage/validation/scanner boundaries. Separate exact bytes, independent scan verdict, document extraction and human evidentiary sufficiency; no automatic share between members and no promotion of legacy file clean status into Project scan proof.
+- **Bounded next coding packet:** `tasks/PHASE13_M2_A1_0_INTERNAL_SERVICE_CORE_IMPLEMENTATION_PACKET.md` permits only synthetic injected-port service/core and offline negative tests. NO routes, real S3, scanner, DB migration, real files, storage grant public API, AI context or UI. Requires owner's explicit dispatch and independent uncommitted source review.
+- **Later gated slices:** A1.1 durable operation/Event/revision + worker identity and additive migration; A1.2 private storage/exact-byte trusted scanner proof; A1.3 owner/privacy/consent-accepted authenticated APIs and optional UI. No unauthorized real-file ingestion. Preserve M1.4/M2-A0 prior acceptance and default-off flags. Existing generic POST /api/projects feature-gate caveat remains open.
+- Older entries below are historical checkpoints.
+
+<!-- END PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
 ## Current handoff — Phase 13 M2-A0 accepted and pushed (2026-10-25)
 

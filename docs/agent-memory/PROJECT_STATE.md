@@ -1,4 +1,14 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+## Current Phase 13 project state — M2-A1 architecture defined (2026-10-25)
+
+- M2-A0 accepted implementation `b6cdd46d1a7289bccb30cb2257de613f5ea121f3`, previous docs `5db5a564d29c755de733f2765c42880a6ad42cf1`. M2-A1 not implemented.
+- **Design source:** `docs/agent-memory/tasks/PHASE13_M2_A1_PROJECT_DOCUMENT_SERVICE_ARCHITECTURE_CONTRACT.md`. Private Project-file semantics, dedicated immutable bytes, exact-version scan attestation, distinct grants; no original MatterDocument mutation; no member transcript/file sharing by Project membership.
+- **First execution packet:** `docs/agent-memory/tasks/PHASE13_M2_A1_0_INTERNAL_SERVICE_CORE_IMPLEMENTATION_PACKET.md`, synthetic offline service ports and state-machine tests only. Explicit owner authorization is needed to run it; no DB schema, external storage, routes or UI.
+- Pending: owner file consent/recipient/retention decisions; actual scan event immutable-object binding; worker audit principal; review of generic POST /api/projects feature flag gap. M2 overall, M2-A1 and production release remain NOT ACCEPTED. Keep existing flags default-off.
+
+<!-- END PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
 ## Current Phase 13 project state — M2-A0 accepted, no real file pipeline (2026-10-25)
 
