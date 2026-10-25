@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+## Current handoff — M1.4 accepted; architect-owned M2-001 R1 design committed (2026-10-25)
+
+- **Source-of-truth baseline:** M1.4 was accepted locally and pushed at b8d7133eb6e7afd50fd199795ebe47e25aa53a77 on phase13-study-journey-project-centric. Owner ran pnpm test:unit: **941 passed, 0 failed, 0 skipped**; browser-tested Project create, own Project Chat create/turn, reload/persistence, Standalone isolation, R3 document-panel fix, R4 Back navigation and feature-disabled origin-preserving read-only fallback. These are user-reported browser/test observations. Multi-account, full mobile/English acceptance and production rollout remain open. Project Chat feature remains default-off. POST /api/projects feature-gate gap remains documented.
+- **M2 design authority:** At the owner's explicit instruction, ChatGPT authored and checked in a replacement M2-001 R1 technical design; Codex is the coding implementer, not the design authority. Contract: docs/agent-memory/tasks/PHASE13_M2_001_PROJECT_DATA_FACTS_DOCUMENTS_CONTRACT.md. Next bounded task packet: docs/agent-memory/tasks/PHASE13_M2_A0_SCHEMA_FOUNDATION_IMPLEMENTATION_PACKET.md.
+- **Technical architectural defaults (NOT owner approvals):** Private-by-default records, per-purpose revocable data grants; fact confirmation separate from publication separate from AI-use authority; person confirmation independent of Project owner; worker version/generation CAS separate from user expectedProjectRevision; independent Project copy/scan; stable confirmed facts separated from candidate/conflict context. All professional/legal, real-file privacy/retention/scanner and person/guardian gates remain pending.
+- **Next step:** Owner syncs the new remote docs while preserving local uncommitted Codex proposal. Owner may explicitly dispatch ONLY M2-A0 inert schema/contract implementation. No M2-A1 real file operations, model context, public API, deployment, migration of shared DB, or professional determination authorized by these documents.
+- **Preserve history:** All older sections below describe prior checkpoints and are not the current implementation state.
+
+<!-- END PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M1_4_R4_BACK_NAVIGATION_2026_10_25 -->
 ## Current handoff — M1.4 R4 Project panel back-navigation usability (2026-10-25)
 

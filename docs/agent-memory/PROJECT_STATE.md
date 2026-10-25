@@ -1,4 +1,14 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+## Current Phase 13 project state — M1.4 accepted, M2-001 architect-owned R1 (2026-10-25)
+
+- M1.4 canonical committed code baseline: b8d7133eb6e7afd50fd199795ebe47e25aa53a77; remote SHA verified. Owner-run suite 941/941, no skips. Bounded local browser acceptance complete; broader account/mobile/English and production gates remain open.
+- Architectural next source: docs/agent-memory/tasks/PHASE13_M2_001_PROJECT_DATA_FACTS_DOCUMENTS_CONTRACT.md. ChatGPT authored the R1 as requested; previous local Codex proposal is superseded and must be preserved as an uncommitted draft/stash. Design does not itself constitute approved owner privacy/professional decisions.
+- Immediate possible engineering task: tasks/PHASE13_M2_A0_SCHEMA_FOUNDATION_IMPLEMENTATION_PACKET.md, strictly inert additive schema and guarded isolated tests, only when separately launched. Real Project document storage, scanning, facts, shared memory, requirement publication, deployment and live migrations are NOT started.
+- Feature flags stay default off. Existing generic POST /api/projects gate discrepancy remains. Standalone and legacy Phase 12 files/turns remain independent.
+
+<!-- END PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M1_4_R4_BACK_NAVIGATION_2026_10_25 -->
 ## Current Phase 13 state — M1.4 R4 Project panel back-navigation usability (2026-10-25)
 

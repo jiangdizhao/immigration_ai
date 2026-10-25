@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+## Current milestone — M2-001 architecture R1; M2-A0 optional bounded implementation (2026-10-25)
+
+M1.4 ACCEPTED at b8d7133 (bounded local milestone; 941/941 user-run unit tests and scoped owner browser acceptance). Production rollout is not approved. The canonical M2 design is now architect-owned, not generated or approved by Codex: tasks/PHASE13_M2_001_PROJECT_DATA_FACTS_DOCUMENTS_CONTRACT.md.
+
+M2-A0 is a schema-only, default-inert, isolated-test implementation packet under tasks/PHASE13_M2_A0_SCHEMA_FOUNDATION_IMPLEMENTATION_PACKET.md. Owner must explicitly launch it. It may generate additive 0031 and run only guarded disposable PostgreSQL integration; no real customer files, scanner, S3, routes, fact publication, Project AI context, application workflows or changes to existing MatterDocument/turn ledger. Owner/privacy/professional gates remain open. Previous M1.4 R4 "unaccepted" note is historical and superseded by this section.
+
+<!-- END PHASE13_M2_001_ARCHITECT_CONTROLLED_R1_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M1_4_R4_BACK_NAVIGATION_2026_10_25 -->
 ## Active milestone — M1.4 R4 Project panel back-navigation usability (2026-10-25)
 
