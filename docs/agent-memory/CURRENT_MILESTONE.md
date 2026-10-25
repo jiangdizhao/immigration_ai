@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+## Current milestone — M2-A1.0 ACCEPTED; M2-A1.1 design gate pending (2026-10-25)
+
+- M2-A1.0 synthetic injected-port Project document service **ACCEPTED** at `a5cee03aabfa1609b8fda5b5d030a393da2d8638` (GitHub remote SHA and nine-file commit independently verified; owner local HEAD matched and working tree was clean). R1 explicit import-consent review closed. Inert only: no API, real storage, real scanner, Project AI context, 0032 migration, prod rollout or real data.
+- Local reported validation: focused tests **21/21 PASS**, 5 existing Project test files PASS, Biome/whitespace PASS, 44 baseline TypeScript diagnostics outside new code; full unit suite NOT RUN. Independent patch source review passed; tests were not re-executed by ChatGPT.
+- **Next:** design and independently approve M2-A1.1 persistent repository/ProjectOperation+ProjectEvent audit and worker principal before any implementation. Do not allow Codex to decide worker identity or silently reuse user actor. No owner approval yet for A1.2/A1.3 live-file/privacy/scanner gate.
+
+<!-- END PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
 ## Current milestone — M2-A1.0 R1 explicit import-consent fix implemented (2026-10-25)
 

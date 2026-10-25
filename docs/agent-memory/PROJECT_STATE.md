@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+## Current Phase 13 project state — M2-A1.0 accepted (2026-10-25)
+
+- Accepted pushed implementation: `a5cee03aabfa1609b8fda5b5d030a393da2d8638` on `phase13-study-journey-project-centric`; local and remote SHA match, GitHub confirms 9 exact files; local worktree clean. R1 consent-at-entry and operation-hash requirement independently source-reviewed.
+- Project Document Service now has **synthetic, in-memory core only** (5 new TS files, test registration). 21 focused tests and five Project regression files are user/Codex-reported PASS; no full suite; 44 repository baseline TypeScript errors elsewhere. No actual DB persistence, object storage, scan proof, customer route, AI-context grant or live file processing.
+- M2-A0 migration `0031_sour_scarecrow` remains accepted and inert. Next gate is architect-owned M2-A1.1 additive 0032 persistence/audit/concurrency contract and independent review. Professional/personal-data retention, source-import consent provenance and provider-linked exact immutable-object scanner proof remain open for future real-file use. M2 overall NOT ACCEPTED and feature flags remain default-OFF.
+
+<!-- END PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
 ## Current Phase 13 state — M2-A1.0 R1 import consent enforced; review pending (2026-10-25)
 

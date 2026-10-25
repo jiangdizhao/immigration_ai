@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+## Current handoff — M2-A1.0 internal Project Document Service ACCEPTED (2026-10-25)
+
+- **Accepted implementation:** branch `phase13-study-journey-project-centric`, commit `a5cee03aabfa1609b8fda5b5d030a393da2d8638`. Owner's local `git rev-parse HEAD` and `git ls-remote` matched; `git status --short` empty. Independent GitHub read verified this exact remote HEAD and **9 committed files**: 5 new `chatbot/lib/project-documents/{types,ports,testing,service,service.test}.ts`, `chatbot/package.json` and three current-state docs.
+- **Scope accepted:** fully synthetic/injected-port Project document service core with individual source Chat-document authorization, explicit `consentAccepted: true` for import before authorization/source access, consent in idempotency hash, validated copy semantics, immutable object identity and hash/length checks, storage vs scanner state separation, exact-purpose creator grants, scanner attestation identity/replay/terminal checks, fail-closed withdrawal/revocation, and no public/runtime consumers. Prior cumulative R1 patch was independently reviewed; no source-review blockers remained.
+- **Validation provenance:** user/Codex reports focused service **21/21 PASS**, existing Project regressions **5 test files PASS**, changed-file Biome and whitespace PASS; TypeScript `noEmit` 44 existing diagnostics outside the new module, none introduced; full unit suite NOT RUN. This acceptance does not claim independent execution of local tests, database integration, actual user-file consent provenance, scanning infrastructure, live S3 or production.
+- **Next milestone:** M2-A1.1 **ARCHITECT DESIGN / OWNER GATE**, not implementation. Real durable operations require exact ProjectOperation/ProjectEvent type and result/subject extension, audit worker principal without user impersonation, expectedProjectRevision, replay correctness, CAS across asynchronous workers, retention/revocation semantics and reviewed additive migration **0032**. No A1.1 coding until an architect-owned technical packet is approved. Subsequent A1.2 real S3/scanner and A1.3 customer APIs remain separately gated.
+- **Operational state:** no new migration, API route, feature enabled, AWS/scanner adapter, real customer files or deployment authorized. M2 overall is NOT ACCEPTED. Preserve accepted M1.4, M2-A0 and previous design gates below as historical records.
+
+<!-- END PHASE13_M2_A1_0_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
 ## Current handoff — M2-A1.0 R1 explicit import-consent fix (2026-10-25)
 
