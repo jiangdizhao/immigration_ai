@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+## Active milestone — B2-0 offline security harness ACCEPTED; B2-1 read-only execution gate next (2026-10-25)
+
+- **Accepted GitHub code:** `3f2b8744bc4ba6b99d5d2339eac1f16c5a31c33e`, independently verified 15 expected changed files; user confirmed equal local/remote HEAD and clean tree. B2 plan-only tooling and fixture-backed STS-first scope validation are delivered. It deliberately has no callable live AWS executor and `collect-read-only` refuses real execution. R1 corrected partial IAM Action wildcard matching and unsafe EventBridge Target transformations; static/live result remains `NO_GO`.
+- Codex validation B2 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A AWS **17/17**, full unit **964/964**; earlier 3 sandbox-restricted files separately passed **24/24** under approved local execution. No AWS/DB access, full-suite execution not independently repeated by ChatGPT. Baseline TypeScript diagnostics 44 unchanged.
+- **B2-1 only after separately frozen executor task and explicit account/profile/region/resource owner authorization.** Tool currently cannot access AWS; permission to inspect live AWS must never be inferred from B2-0 acceptance. B2-2 paid/synthetic resource mutations and GuardDuty scan, B3 trusted SQS worker + durable scan-state bridge and A1.3 are separate future gates. Full A1.2 and M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
 ## Active milestone — B2-0 R1 security evidence corrections implemented; independent review pending (2026-10-25)
 

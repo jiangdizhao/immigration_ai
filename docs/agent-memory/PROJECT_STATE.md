@@ -1,4 +1,14 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+## Phase13 canonical state — B2-0 accepted; real AWS still gated (2026-10-25)
+
+- **B2-0 ACCEPTED at verified remote HEAD `3f2b8744bc4ba6b99d5d2339eac1f16c5a31c33e`**, exact 15-file cumulative B2-0-R1 implementation. Historical "review pending" paragraphs below are superseded, not removed.
+- Plan-only operator CLI and injected fake STS-first security evidence inspection, strict AWS identity/scope controls, redacted reports and typed B1 evidence bridge are accepted. R1 repaired matching SQS IAM `*`/`?` patterns and conflicting allows/denies plus unexpected EventBridge target transformation. No real AWS executor exists; `collect-read-only` remains blocked, `NO_GO` unchanged, no scan trust capability, no cloud/DB transaction or document processing enabled.
+- Reported tests B2 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**, full unit **964/964**; static patch independently source-reviewed, not retested independently. No AWS or PostgreSQL calls.
+- Next architecture gate B2-1: isolated AWS sandbox profile/account/region/resource scope, read-only operator authorization, separately reviewed and allowlisted executor and local redacted observations. B2-2 cloud provisioning and synthetic scan needs separate security/privacy/retention/cost approval; B3 trusted scanning queue-to-A1.1 durable transition unapproved. **M2-A1.2 and overall M2 remain NOT ACCEPTED**, no customer data, real scan, prod enablement or AWS activation.
+
+<!-- END PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
 ## Phase 13 state — B2-0 R1 security evidence corrections complete, review pending (2026-10-25)
 

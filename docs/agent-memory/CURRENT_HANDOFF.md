@@ -1,4 +1,14 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+## Current handoff — M2-A1.2-B2-0 offline AWS security evidence harness ACCEPTED (2026-10-25)
+
+- **Accepted implementation:** `3f2b8744bc4ba6b99d5d2339eac1f16c5a31c33e` on `phase13-study-journey-project-centric`. User demonstrated matching local and remote SHAs, clean working tree; ChatGPT independently verified remote GitHub HEAD and the exact 15 reviewed changed files. This acceptance record supersedes the earlier *review pending* historical text retained below.
+- **Bounded functionality accepted:** server/operator-only, default-offline redacted B2 AWS security plan/harness, exact resource identity and STS-first check **in injected offline fixtures**, IAM/SQS/EventBridge/GuardDuty/S3 static evidence and B1 evaluator bridge; R1 corrections account for IAM wildcard `*`/`?` actions, extra SQS Allow or Deny and unsafe EventBridge Target `Input`/`InputPath`/`InputTransformer` and unreviewed metadata. Live outcome always `NO_GO`. `collect-read-only` explicitly exits at authorization gate, with **no production AWS executor, credentials lookup, real STS call, AWS network, scan, SQS worker or A1.1 finalizeScan integration**. No PostgreSQL or customer data access.
+- **Validation evidence:** Codex-reported B2 harness **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A adapters **17/17**, full local unit **964/964** zero failures/skips (earlier 3 files **24/24** passed outside restricted sandbox). Changed-file Biome and whitespace passed; TypeScript remained 44 pre-existing diagnostics with none in B2 paths. ChatGPT independently reviewed cumulative R1 patch; did not independently rerun local tests.
+- **Next gated B2-1:** architect/operator must approve a specific nonproduction profile, 12-digit account, region, partition, named resource selectors, explicit short-lived read-only change authorization and separately source-review a **new** narrowly scoped read-only executor before any AWS request. No account identifiers/secrets/policies in public handoff. If AWS resources are absent, report missing and seek separate B2-2 infrastructure/synthetic-scan cost/privacy/retention approval. **B2-1 live execution, B2-2 mutations/paid scans, B3 trusted worker/persistence, customer APIs and deployment all NOT AUTHORIZED.** M2-A1.2 and overall M2 remain NOT ACCEPTED; feature flags off.
+
+<!-- END PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
 ## Current handoff — B2-0 R1 static security evidence corrections implemented, review pending (2026-10-25)
 
