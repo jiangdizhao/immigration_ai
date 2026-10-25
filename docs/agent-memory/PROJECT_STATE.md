@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+## Current Phase 13 project state — A1.1 accepted, A1.2 unapproved (2026-10-25)
+
+- Accepted branch `phase13-study-journey-project-centric` implementation HEAD `752311535645343343d1e81ab569d5816e9608d5` (owner local/remote SHA equal, clean local worktree; independent GitHub 14-file commit verification). M2-A0 migration 0031 and M2-A1.0 synthetic service remain accepted; A1.1 adds internal PostgreSQL repository and new additive 0032 transaction/audit migration only.
+- A1.1 R1 guards terminal document scan-status provenance and exact-version reads against forged clean status, with user/service principal audit attribution and Project revision/event atomicity. Guarded synthetic tests locally reported A1.1 17/17, M1.1 10/10, A0 3/3, full unit 964/964. No live scan, S3, customer document pipeline, production migration or runtime API. Full M2 NOT ACCEPTED.
+- A1.2 must close exact-byte immutable-object scan attestation and persistent audit deletion/retention/principal permission risks before considering real adapters. A1.3 public/customer APIs and AI-context/facts remain separate later owner gates. Preserve existing feature flags default-OFF.
+
+<!-- END PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
 ## Current Phase 13 state — M2-A1.1 R1 scan provenance/schema parity fixed; independent review pending (2026-10-25)
 

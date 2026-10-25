@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+## Current handoff — M2-A1.1 durable Project document persistence ACCEPTED (2026-10-25)
+
+- **Accepted implementation:** `752311535645343343d1e81ab569d5816e9608d5` on `phase13-study-journey-project-centric`. The owner supplied identical local HEAD and `git ls-remote` values, with empty `git status --short`; ChatGPT independently verified the same GitHub remote branch HEAD and exactly 14 expected files. Acceptance is bounded to synthetic-only internal PostgreSQL persistence.
+- **Delivered scope:** additive Drizzle migration `0032_phase13_m2_a1_1_durable_document_audit.sql` with generated snapshot/journal; genuine `user/service` principals on ProjectOperation/ProjectEvent without fake Users; durable Project document intent, synthetic import-consent receipt, storage object-version identity and scan-event fingerprint; internal Postgres repository with operation replay, revision/event transactional writes, project membership and source ownership checks, storage/scan generation CAS and audit-linked clean-scan provenance. R1 closes direct clean-state promotion and exact-version read provenance bypass for the approved service flow. Historical migrations 0030/0031 untouched; no routes, real customer-file ingestion, AWS, S3 or scanner adapter.
+- **Evidence and limits:** owner/Codex-reported guarded synthetic local PostgreSQL A1.1 **17/17 PASS**, M1.1 **10/10 PASS**, M2-A0 **3/3 PASS**, full unit **964/964 PASS**; `pnpm db:check`, changed-source Biome and whitespace checks PASS. 44 existing TypeScript diagnostics outside changed A1.1 paths. Generated Drizzle snapshot formatter differences reported (source and snapshot lint PASS), not treated as a blocking code defect. ChatGPT independently reviewed the cumulative R1 patch but did not rerun local DB/tests. The only reported migrated/reset DB was `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`.
+- **Remaining gate:** Real document object storage and exact-object scanner provenance are **NOT implemented**. The A1.1 review identified privileged direct SQL deletion of scan audit rows as a residual risk; gate database-role privileges, delete protection, object identity immutability/versioning, event authentication and retention/cleanup policy before A1.2 or live data. No public routes, AI-context, third-party grants, production migration or rollout authorized.
+- **Next:** architect-owned M2-A1.2 trust/storage/scanner design and a separate bounded implementation packet; owner acceptance/security review before any real integration. M2-A1.2 and overall M2 remain NOT ACCEPTED. Preserve the accepted M1.4, M2-A0, M2-A1.0 records below as history.
+
+<!-- END PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
 ## Current handoff — M2-A1.1 R1 scan provenance and schema parity fixed; independent review pending (2026-10-25)
 

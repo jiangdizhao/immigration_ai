@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+## Current milestone — M2-A1.1 ACCEPTED; A1.2 architecture gate next (2026-10-25)
+
+- **M2-A1.1 ACCEPTED (bounded synthetic PostgreSQL only)** at pushed commit `752311535645343343d1e81ab569d5816e9608d5`; GitHub remote branch SHA matched owner local HEAD, with 14 approved committed files and clean local status. Migration 0032, typed user/service worker audit, durable Project document operation/consent state, revision/event atomicity, scan-generation safeguards and R1 exact-byte clean-scan/audit provenance are approved for this internal stage.
+- Reported validation: guarded test DB `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`, A1.1 **17/17**, M1.1 **10/10**, M2-A0 **3/3**, full unit **964/964**, all no fail/skip; `db:check`, source/snapshot lint and whitespace PASS. Pre-existing TypeScript 44 diagnostics, generated snapshot formatter-only difference. These are owner/Codex-reported tests, not remotely rerun.
+- **Next:** A1.2 requires an architect-owned contract and explicit owner gate for private immutable object storage, verified scanner provenance bound to exact object version, event authenticity, minimal IAM, safe cleanup/deletion, audit row tamper/delete protections and recovery tests. No real file ingestion, browser API, AWS, deployment, AI-context or production work is authorized by A1.1 acceptance.
+
+<!-- END PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
 ## Active milestone — M2-A1.1 R1 scan provenance/schema parity fix complete; independent review pending (2026-10-25)
 
