@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MatterDocumentsPanel } from "@/components/matter-documents-panel";
+import {
+  conversationDocumentListUrl,
+  conversationDocumentsAvailableForOrigin,
+  fetchConversationDocumentList,
+  isCurrentConversationDocumentRequest,
+  visibleConversationDocuments,
+} from "@/lib/matter-documents/workspace-panel";
+import { getWorkspaceCopy } from "@/lib/workspace-copy";
 
 /**
  * Phase 12 Stage 2 wiring guards.
@@ -132,7 +143,7 @@ test("the composer is compact, auto-growing and keeps uploads adjacent", () => {
   assert.match(composerBlock, /compact/u);
   assert.match(composerBlock, /onDocumentsChanged=\{notifyDocumentsChanged\}/u);
   // No attachment list may render inside the composer panel.
-  assert.match(composerPanel, /documents\.length && !compact \? \(/u);
+  assert.match(composerPanel, /visibleDocuments\.length && !compact \? \(/u);
   assert.match(workspace, /event\.nativeEvent\.isComposing/u);
 });
 
@@ -198,7 +209,8 @@ test("a guest account is told files need an account instead of an API error", ()
     3
   );
   // Both panels refuse to call the document API without account access.
-  assert.match(composerPanel, /if \(!\(chatId && accountAccess\)\)/u);
+  assert.match(composerPanel, /conversationDocumentListUrl\(/u);
+  assert.match(composerPanel, /if \(!requestUrl\)/u);
   assert.match(composerPanel, /matter-documents-guest-hint/u);
   assert.match(historyPanel, /if \(!accountAccess\)/u);
   assert.match(historyPanel, /account-files-guest-hint/u);
@@ -216,4 +228,198 @@ test("the mode toolbar stays compact and keeps its accessible control", () => {
     /hidden min-w-0 flex-1 truncate text-xs leading-5 text-slate-600 lg:block/u
   );
   assert.doesNotMatch(modeToolbar, /ChevronDown/u);
+});
+
+test("Project Chat document panels do not fetch, upload, or show raw 404 errors", async () => {
+  const chatId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const available = conversationDocumentsAvailableForOrigin("project");
+  assert.equal(available, false);
+  assert.equal(
+    conversationDocumentListUrl({
+      chatId,
+      accountAccess: true,
+      conversationDocumentsAvailable: available,
+    }),
+    null
+  );
+  let fetchCount = 0;
+  assert.equal(
+    await fetchConversationDocumentList({
+      requestUrl: conversationDocumentListUrl({
+        chatId,
+        accountAccess: true,
+        conversationDocumentsAvailable: available,
+      }),
+      isCurrentRequest: () => true,
+      fetcher: () => {
+        fetchCount += 1;
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ error: "unexpected GET" }),
+        });
+      },
+      errorFallback: "Document request failed",
+    }),
+    null
+  );
+  assert.equal(fetchCount, 0);
+
+  for (const locale of ["zh-CN", "en"] as const) {
+    for (const compact of [false, true]) {
+      const copy = getWorkspaceCopy(locale);
+      const markup = renderToStaticMarkup(
+        React.createElement(MatterDocumentsPanel, {
+          accountAccess: true,
+          chatId,
+          compact,
+          conversationDocumentsAvailable: available,
+          copy,
+          disabled: true,
+        })
+      );
+      assert.match(markup, /data-testid="project-documents-unavailable"/u);
+      assert.match(
+        markup,
+        new RegExp(copy.documents.projectDocumentsUnavailable, "u")
+      );
+      assert.doesNotMatch(markup, /composer-upload|conversation-files-upload/u);
+      assert.doesNotMatch(markup, /Document or conversation not found\./u);
+      assert.doesNotMatch(markup, /role="alert"/u);
+    }
+  }
+
+  const conversationPanels =
+    workspace.match(/<MatterDocumentsPanel[\s\S]*?\/>/gu) ?? [];
+  assert.equal(conversationPanels.length, 2);
+  for (const panel of conversationPanels) {
+    assert.match(
+      panel,
+      /conversationDocumentsAvailable=\{conversationDocumentsAvailableForOrigin\(\s*conversationOrigin\s*\)\}/u
+    );
+    assert.match(panel, /key=\{`conversation-documents:/u);
+  }
+  // Account-wide historical files remain a distinct panel and are not given a
+  // Project Chat scope or mislabeled as Project documents.
+  assert.match(
+    workspace,
+    /<UserDocumentHistoryPanel[\s\S]*?refreshToken=\{documentsRevision\}/u
+  );
+});
+
+test("Standalone document access returns on Project-to-Standalone switch and stale state is rejected", () => {
+  const chatId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const projectAvailable = conversationDocumentsAvailableForOrigin("project");
+  const standaloneAvailable =
+    conversationDocumentsAvailableForOrigin("immigration");
+  const url = conversationDocumentListUrl({
+    chatId,
+    accountAccess: true,
+    conversationDocumentsAvailable: standaloneAvailable,
+  });
+  assert.equal(
+    url,
+    `/api/matter-documents?chatId=${encodeURIComponent(chatId)}`
+  );
+
+  const priorStandaloneDocuments = [{ id: "standalone-document" }];
+  assert.deepEqual(
+    visibleConversationDocuments(priorStandaloneDocuments, projectAvailable),
+    []
+  );
+  assert.deepEqual(
+    visibleConversationDocuments(priorStandaloneDocuments, standaloneAvailable),
+    priorStandaloneDocuments
+  );
+  assert.equal(isCurrentConversationDocumentRequest(4, 5), false);
+  assert.equal(isCurrentConversationDocumentRequest(5, 5), true);
+
+  const busyStandaloneConversation = true;
+  const markup = renderToStaticMarkup(
+    React.createElement(MatterDocumentsPanel, {
+      accountAccess: true,
+      chatId,
+      copy: getWorkspaceCopy("en"),
+      conversationDocumentsAvailable: standaloneAvailable,
+      disabled: busyStandaloneConversation,
+    })
+  );
+  assert.match(markup, /data-testid="conversation-files-upload"/u);
+  assert.match(markup, /data-testid="conversation-files-upload"[^>]*disabled/u);
+  assert.doesNotMatch(markup, /data-testid="project-documents-unavailable"/u);
+});
+
+test("a pending Standalone document response is discarded after switching to Project", async () => {
+  let currentSequence = 8;
+  type PendingResponse = {
+    ok: boolean;
+    json: () => Promise<{ documents?: { id: string }[]; error?: unknown }>;
+  };
+  const pendingFetch: {
+    resolve?: (value: PendingResponse) => void;
+  } = {};
+  const fetcher = (_url: string, _init: { cache: "no-store" }) =>
+    new Promise<PendingResponse>((resolve) => {
+      pendingFetch.resolve = resolve;
+    });
+  const visibleDocuments: { id: string }[] = [];
+  const pendingDocuments = fetchConversationDocumentList({
+    requestUrl: conversationDocumentListUrl({
+      chatId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      accountAccess: true,
+      conversationDocumentsAvailable: true,
+    }),
+    isCurrentRequest: () =>
+      isCurrentConversationDocumentRequest(8, currentSequence),
+    fetcher,
+    errorFallback: "Document request failed",
+  });
+
+  // Simulate the keyed panel's effect cleanup when Project Chat becomes active.
+  currentSequence += 1;
+  const resolveFetch = pendingFetch.resolve;
+  assert.ok(resolveFetch);
+  resolveFetch({
+    ok: true,
+    json: async () => ({ documents: [{ id: "stale-standalone-document" }] }),
+  });
+  const result = await pendingDocuments;
+  if (result !== null) {
+    visibleDocuments.splice(0, visibleDocuments.length, ...result);
+  }
+  assert.deepEqual(visibleDocuments, []);
+
+  const pendingFailure: { reject?: (error: Error) => void } = {};
+  const staleFailureSequence = currentSequence;
+  const pendingError = fetchConversationDocumentList({
+    requestUrl: "/api/matter-documents?chatId=standalone",
+    isCurrentRequest: () =>
+      isCurrentConversationDocumentRequest(
+        staleFailureSequence,
+        currentSequence
+      ),
+    fetcher: (_url, _init) =>
+      new Promise<PendingResponse>((_resolve, reject) => {
+        pendingFailure.reject = reject;
+      }),
+    errorFallback: "Document request failed",
+  });
+  currentSequence += 1;
+  const rejectStaleFailure = pendingFailure.reject;
+  assert.ok(rejectStaleFailure);
+  rejectStaleFailure(new Error("Document or conversation not found."));
+  assert.equal(await pendingError, null);
+
+  await assert.rejects(
+    fetchConversationDocumentList({
+      requestUrl: "/api/matter-documents?chatId=denied",
+      isCurrentRequest: () => true,
+      fetcher: () =>
+        Promise.resolve({
+          ok: false,
+          json: async () => ({ error: "Document or conversation not found." }),
+        }),
+      errorFallback: "Document request failed",
+    }),
+    /Document or conversation not found\./u
+  );
 });

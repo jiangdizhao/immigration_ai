@@ -1,4 +1,59 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M1_4_R4_BACK_NAVIGATION_2026_10_25 -->
+## Active milestone — M1.4 R4 Project panel back-navigation usability (2026-10-25)
+
+- The selected-Project panel now places Back to all conversations at the top as a full-width secondary button, separate from the Project identity row. It uses a left arrow, readable text, a clear bordered surface, a 40px minimum target, hover/focus-visible states and the existing busy-state disabled contract. Clicking still clears the selected Project and reveals global conversation history.
+- Project title/ID, scoped Chat list and New Project Chat action are unchanged. Responsive component checks cover the existing 250px desktop sidebar and mobile single-column layout; full-width/min-width and long-ID wrapping remain in place.
+- Validation: focused Project/Workspace group **4 passed / 0 failed / 0 skipped**; changed-file Biome **2 files passed**; `git diff --check` passed. No full unit, PostgreSQL or paid AI run was performed for this visual-only correction.
+- R4 changes are limited to `project-entry-panel.tsx`, its component/workspace tests and the three state documents. No controller, schema/API, origin, persistence/turn, document, rollout or deployment change. M1.4 remains unaccepted and awaits independent review.
+- Branch/HEAD remain `phase13-study-journey-project-centric` / `b806aa8df4537505b863a51a64acb91bd4072993`; work remains uncommitted. Complete cumulative patch: `~/phase13_m1_4_R4_review.patch`.
+
+<!-- END PHASE13_M1_4_R4_BACK_NAVIGATION_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M1_4_R3_DOCUMENT_PANEL_2026_10_25 -->
+## Active milestone — M1.4 browser acceptance R3 Project document-panel compatibility (2026-10-25)
+
+- Project-origin chats no longer call the Standalone conversation-document endpoint. Compact and right-side panels show localized “Project documents are not available yet” copy and do not show upload controls or stale conversation-document errors. Account-wide historical files remain separately labeled and scoped.
+- Standalone document reads remain enabled while the conversation is temporarily busy; the existing busy capability still disables mutations. Panel identity and request sequencing discard delayed Standalone results after switching conversations. Regression coverage verifies no Project GET, both panel variants and locales, Standalone restoration, busy read behavior and stale-response rejection.
+- Validation: focused Workspace/API/turn regressions **9 files passed / 0 failed / 0 skipped**; final outside-sandbox `pnpm test:unit` **940 / 940**, zero failures/skips. Initial sandbox run: **111 passed / 3 failed / 0 skipped** in `s3-preflight-cli`, `stage3-hardening`, and `server-http-timeouts`; all passed outside sandbox. Biome **12 changed app/config files passed**; TypeScript remains at **44 baseline diagnostics**, none in changed paths; tracked and untracked whitespace checks passed. No PostgreSQL run was needed for this UI-only correction.
+- R3 changed the two Workspace/panel components, new `lib/matter-documents/workspace-panel.ts`, workspace copy, focused wiring tests and current-state records. No schema/migration/API/authorization changes; Project uploads, M2, production activation and deployment remain out of scope. M1.4 is not formally accepted; independent review and browser acceptance remain pending.
+- Branch/HEAD remain `phase13-study-journey-project-centric` / `b806aa8df4537505b863a51a64acb91bd4072993`; all changes are uncommitted. Complete cumulative review patch: `~/phase13_m1_4_R3_review.patch`.
+
+<!-- END PHASE13_M1_4_R3_DOCUMENT_PANEL_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M1_4_R2_BOUNDARY_FIX_2026_10_24 -->
+## Active milestone — M1.4 final R2 Project state-boundary fix (2026-10-24)
+
+- `createProject()` now distinguishes its follow-up Project-list refresh result. A definitive 401/403 or superseded refresh stops before it can reinsert/select the Project returned by the earlier 201. Transient 503/network failure preserves the recoverable path. R1 pending-chat sequence invalidation remains in force.
+- Controller regressions reproduce POST 201 → Project-list 403 → pending scoped Chat 403, assert all authorization-dependent state is empty, and prove a delayed successful Chat page cannot repopulate it. Post-create transient recovery, successful/idempotent create, and R1 busy-navigation controls are covered.
+- Validation: focused regressions **8 files passed / 0 failed / 0 skipped**; full `pnpm test:unit` **937/937**, zero failures/skips; Biome **9 changed files passed**; `git diff --check` passed. TypeScript has 44 baseline diagnostics, none in changed paths. PostgreSQL was not rerun because no data/API contract changed.
+- R2 changes are limited to `project-entry.ts`, its controller tests and these current-state documents. All M1.4/R1 work remains uncommitted at `b806aa8df4537505b863a51a64acb91bd4072993`; awaiting independent review and browser acceptance. M1.4 is not formally accepted and M2 has not started.
+- Complete cumulative patch: `~/phase13_m1_4_R2_review.patch`.
+
+<!-- END PHASE13_M1_4_R2_BOUNDARY_FIX_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_4_R1_CORRECTIONS_2026_10_24 -->
+## Active milestone — M1.4 independent review R1 corrections (2026-10-24)
+
+- R1-01 adds parent-to-Project-panel busy state from the existing Workspace AI-turn and conversation-loading status. Project navigation/create controls are disabled and their handlers fail closed while busy; idle state re-enables them. Stale asynchronous Project Chat creation cannot open a new conversation after the Workspace becomes busy.
+- R1-02 clears cached Project list, selected Project, Chats and pagination on definitive 401/403, invalidating outstanding scoped Chat-list requests. Network/503 failures remain recoverable without discarding cached state.
+- Focused regressions: **8 files passed / 0 failed / 0 skipped**. Full `pnpm test:unit`: **934/934**, zero failures/skips. Changed-file Biome (9 files), TypeScript baseline comparison (44 existing diagnostics, none in changed paths) and `git diff --check` completed. No PostgreSQL rerun was needed for client-only state/handler corrections.
+- Implementation remains uncommitted at `b806aa8df4537505b863a51a64acb91bd4072993` and awaits independent review. No schema/API, M1.3 turn, production, deployment, AWS, commit or push change. M1.4 is not accepted and M2 has not started.
+- Complete review patch: `~/phase13_m1_4_R1_review.patch`.
+
+<!-- END PHASE13_M1_4_R1_CORRECTIONS_2026_10_24 -->
+
+<!-- BEGIN PHASE13_M1_4_IMPLEMENTATION_2026_10_24 -->
+## Active milestone — Phase 13 M1.4 minimal Project Workspace UI implemented (2026-10-24)
+
+- Implemented bounded Project list/create/select and own Project Chat create/open inside the existing AI Workspace. Project controls require server-derived registered-customer eligibility and the default-off Project Chat flag; standalone New Conversation and policy-conversation binding remain isolated.
+- Project context selection clears stale Standalone content; closed or disabled Project Chat history remains explicitly Project-origin and read-only. The UI invents no Project names, types, Offer/CoE, facts, files, progress, workflow stage or lawyer approval. Later Project documents and guided workflows remain out of scope.
+- Rollout caveat retained: generic `POST /api/projects` is not guarded by `PHASE13_PROJECT_CHAT_ENABLED`. No backend/API scope change or production enablement was made.
+- Validation: configured `pnpm test:unit` **930/930**, zero failures/skips; focused regressions **8 files passed**; guarded PostgreSQL M1.1/M1.2/M1.3 **18/18**, zero failures/skips on the fixed disposable database; changed-file Biome (9 files), `pnpm db:check` and `git diff --check` passed. TypeScript has the unchanged **44 baseline diagnostics**, none in changed M1.4 paths. No browser visual/E2E run was available.
+- Branch/HEAD remain `phase13-study-journey-project-centric` / `b806aa8df4537505b863a51a64acb91bd4072993`; M1.4 is uncommitted and awaits independent source review. No schema/migration, production, shared system, commit or push changes.
+
+<!-- END PHASE13_M1_4_IMPLEMENTATION_2026_10_24 -->
+
 <!-- BEGIN PHASE13_M1_4_OWNER_ACCEPTED_UI_PLAN_2026_10_24 -->
 ## Active milestone — Phase 13 M1.4 minimal Project Workspace UI (2026-10-24)
 

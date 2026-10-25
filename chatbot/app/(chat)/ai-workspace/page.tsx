@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteHeader } from "@/components/site-header";
+import { projectFoundationRepository } from "@/lib/db/project-foundation";
 import type { PolicyLaunchRequestState } from "@/lib/policy-intelligence/conversation-policy-binding";
 import {
   POLICY_SLUG_PATTERN,
@@ -9,6 +10,8 @@ import {
   workspaceGuestRedirectUrl,
 } from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
+import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
+import { canShowProjectWorkspace } from "@/lib/workspace/project-entry";
 
 export default async function AIWorkspacePage({
   searchParams,
@@ -28,7 +31,8 @@ export default async function AIWorkspacePage({
     requestedSlug && isPolicyEntry && launch === "policy" && !validChatId
   );
 
-  if (!(await auth())?.user) {
+  const session = await auth();
+  if (!session?.user) {
     const redirectUrl = workspaceGuestRedirectUrl(
       requestedSlug,
       launch ?? null,
@@ -38,6 +42,22 @@ export default async function AIWorkspacePage({
       `/api/auth/guest?${new URLSearchParams({ redirectUrl }).toString()}`
     );
   }
+
+  let registeredCustomer = false;
+  const projectChatWritesAvailable = projectChatWritesEnabled();
+  if (session.user.type === "regular" && projectChatWritesAvailable) {
+    try {
+      registeredCustomer =
+        await projectFoundationRepository.isRegisteredCustomer(session.user.id);
+    } catch {
+      registeredCustomer = false;
+    }
+  }
+  const projectWorkspaceEnabled = canShowProjectWorkspace({
+    writesEnabled: projectChatWritesAvailable,
+    regularSession: session.user.type === "regular",
+    registeredCustomer,
+  });
 
   /**
    * Phase 12 Stage 2: a policy launch either resolves the published topic or
@@ -63,6 +83,7 @@ export default async function AIWorkspacePage({
           policyLaunch={policyLaunchRequested}
           policyLaunchState={policyLaunchState}
           policyReference={policyReference}
+          projectWorkspaceEnabled={projectWorkspaceEnabled}
           requestedPolicySlug={requestedSlug}
         />
       </main>

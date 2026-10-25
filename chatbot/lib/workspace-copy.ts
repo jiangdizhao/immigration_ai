@@ -58,6 +58,44 @@ export type WorkspaceCopy = {
     startNewConversation: string;
     startNewConversationHint: string;
   };
+  projectEntry: {
+    createProject: string;
+    projects: string;
+    expandProjects: string;
+    collapseProjects: string;
+    projectLabel: (date: string, shortId: string) => string;
+    selectedProject: string;
+    projectId: string;
+    createDialogTitle: string;
+    createDialogDescription: string;
+    createDialogCancel: string;
+    createDialogConfirm: string;
+    creatingProject: string;
+    loadingProjects: string;
+    projectsEmpty: string;
+    chatsTitle: string;
+    loadingChats: string;
+    chatsEmpty: string;
+    projectChatLabel: string;
+    newProjectChat: string;
+    creatingChat: string;
+    openingChat: string;
+    backToConversations: string;
+    standaloneConversation: string;
+    projectChatHistoryScope: string;
+    projectContextUnavailable: string;
+    readOnly: string;
+    retry: string;
+    loadFailed: string;
+    authenticationRequired: string;
+    accessDenied: string;
+    notFound: string;
+    stateChanged: string;
+    unavailable: string;
+    requestFailed: string;
+    networkFailed: string;
+    loadMoreChats: string;
+  };
   persistence: {
     notSaved: string;
     retrySave: string;
@@ -157,6 +195,8 @@ export type WorkspaceCopy = {
     visionUnavailable: string;
     /** Guest accounts cannot own documents, so files require an account. */
     signInForFiles: string;
+    /** Project shared documents are not part of the M1.4 scope. */
+    projectDocumentsUnavailable: string;
   };
   /**
    * Phase 12 Stage 2 compact workspace: the chat is the primary reading area and
@@ -286,6 +326,46 @@ const zh: WorkspaceCopy = {
     startNewConversation: "新建普通对话",
     startNewConversationHint: "此项目对话仍可在项目状态允许时查看。",
   },
+  projectEntry: {
+    createProject: "新建项目",
+    projects: "我的项目",
+    expandProjects: "展开我的项目",
+    collapseProjects: "收起我的项目",
+    projectLabel: (date, shortId) => `项目 · ${date} · #${shortId}`,
+    selectedProject: "已选择项目",
+    projectId: "项目编号",
+    createDialogTitle: "新建项目",
+    createDialogDescription:
+      "这会创建一个空项目容器，用于保存您自己的项目对话。项目文件、共享事实和学习流程尚未开放。",
+    createDialogCancel: "取消",
+    createDialogConfirm: "创建项目",
+    creatingProject: "正在创建项目…",
+    loadingProjects: "正在加载项目…",
+    projectsEmpty: "还没有项目。",
+    chatsTitle: "此项目中的我的对话",
+    loadingChats: "正在加载项目对话…",
+    chatsEmpty: "此项目还没有对话。您可以新建一条项目对话。",
+    projectChatLabel: "项目对话",
+    newProjectChat: "新建项目对话",
+    creatingChat: "正在创建项目对话…",
+    openingChat: "正在打开对话…",
+    backToConversations: "返回全部对话",
+    standaloneConversation: "新建普通对话",
+    projectChatHistoryScope: "每条项目对话都有独立的消息记录。",
+    projectContextUnavailable:
+      "项目文件、共享事实和学习流程目前尚不可用。此项目尚未打开任何对话。",
+    readOnly: "只读",
+    retry: "重试",
+    loadFailed: "无法加载项目，请重试。",
+    authenticationRequired: "登录状态已失效，请重新登录后重试。",
+    accessDenied: "您目前无权访问此项目。项目选择已清除。",
+    notFound: "项目或对话已不可用。项目选择已清除。",
+    stateChanged: "项目状态已更改，请刷新后重试。",
+    unavailable: "项目服务暂时不可用，请稍后重试。",
+    requestFailed: "项目请求失败，请重试。",
+    networkFailed: "网络请求未能确认结果。请重试；安全重试会沿用原操作编号。",
+    loadMoreChats: "加载更多项目对话",
+  },
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
     retrySave: "重新保存",
@@ -407,6 +487,7 @@ const zh: WorkspaceCopy = {
     customerEvidence: "客户文件证据",
     visionUnavailable: "需要视觉提取服务",
     signInForFiles: "登录账号后即可上传并管理文件。",
+    projectDocumentsUnavailable: "项目文件目前尚不可用。",
     warning: "仅向 AI 提供了文件中有界的提取内容。文件可能还包含其他信息。",
   },
   panels: {
@@ -549,6 +630,50 @@ const en: WorkspaceCopy = {
     startNewConversationHint:
       "This Project Chat remains available for reading while you are authorized.",
   },
+  projectEntry: {
+    createProject: "Create Project",
+    projects: "My Projects",
+    expandProjects: "Expand My Projects",
+    collapseProjects: "Collapse My Projects",
+    projectLabel: (date, shortId) => `Project · ${date} · #${shortId}`,
+    selectedProject: "Selected Project",
+    projectId: "Project ID",
+    createDialogTitle: "Create Project",
+    createDialogDescription:
+      "This creates an empty Project container for your own Project Chats. Project files, shared facts and study workflows are not available yet.",
+    createDialogCancel: "Cancel",
+    createDialogConfirm: "Create Project",
+    creatingProject: "Creating Project…",
+    loadingProjects: "Loading Projects…",
+    projectsEmpty: "You do not have any Projects yet.",
+    chatsTitle: "My Chats in this Project",
+    loadingChats: "Loading Project Chats…",
+    chatsEmpty: "This Project has no Chats yet. You can create a Project Chat.",
+    projectChatLabel: "Project Chat",
+    newProjectChat: "New Project Chat",
+    creatingChat: "Creating Project Chat…",
+    openingChat: "Opening Chat…",
+    backToConversations: "Back to all conversations",
+    standaloneConversation: "New standard conversation",
+    projectChatHistoryScope: "Each Project Chat has its own message history.",
+    projectContextUnavailable:
+      "Project files, shared facts and study workflows are not available yet. No Chat is open for this Project.",
+    readOnly: "Read-only",
+    retry: "Retry",
+    loadFailed: "Could not load Projects. Please try again.",
+    authenticationRequired: "Your sign-in has expired. Sign in and try again.",
+    accessDenied:
+      "You cannot access this Project now. Project selection was cleared.",
+    notFound:
+      "The Project or Chat is no longer available. Project selection was cleared.",
+    stateChanged: "Project state changed. Refresh and try again.",
+    unavailable:
+      "The Project service is temporarily unavailable. Try again later.",
+    requestFailed: "The Project request failed. Please try again.",
+    networkFailed:
+      "The network could not confirm the result. Retry safely; the same operation ID will be reused.",
+    loadMoreChats: "Load more Project Chats",
+  },
   persistence: {
     notSaved:
       "This answer was not saved to your account and may be lost after a refresh.",
@@ -684,6 +809,7 @@ const en: WorkspaceCopy = {
     customerEvidence: "Customer document evidence",
     visionUnavailable: "Vision extraction unavailable",
     signInForFiles: "Sign in to your account to upload and manage files.",
+    projectDocumentsUnavailable: "Project documents are not available yet.",
     warning:
       "Only bounded extracted portions of this file were supplied to the AI. The document may contain additional information.",
   },

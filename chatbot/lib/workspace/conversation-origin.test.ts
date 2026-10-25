@@ -74,6 +74,20 @@ test("Project Chat allows turns but excludes M1.3 unsupported workflows", () => 
   assert.equal(readOnly.canLoadOlderMessages, true);
 });
 
+test("Project Chat stays Project-origin and browseable when writes are disabled", () => {
+  const disabledProjectChat = resolveConversationInteraction({
+    origin: "project",
+    projectReadOnly: true,
+    conversationReady: true,
+  });
+
+  assert.equal(disabledProjectChat.origin, "project");
+  assert.equal(disabledProjectChat.readOnly, true);
+  assert.equal(disabledProjectChat.canSubmitMessage, false);
+  assert.equal(disabledProjectChat.canBrowseHistory, true);
+  assert.equal(disabledProjectChat.canLoadOlderMessages, true);
+});
+
 test("read-only never applies before the archived conversation is loaded", () => {
   // While another conversation is still loading, the workspace must not claim
   // read-only (nothing is applied yet) but must also refuse to submit.

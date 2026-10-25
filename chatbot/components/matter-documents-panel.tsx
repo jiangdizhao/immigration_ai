@@ -14,6 +14,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { matterDocumentDisplayStatus } from "@/lib/matter-documents/display-status";
 import { matterDocumentStatusLabel } from "@/lib/matter-documents/status-labels";
+import {
+  conversationDocumentListUrl,
+  fetchConversationDocumentList,
+  isCurrentConversationDocumentRequest,
+  visibleConversationDocuments,
+} from "@/lib/matter-documents/workspace-panel";
 import { cn } from "@/lib/utils";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
@@ -54,6 +60,7 @@ export function MatterDocumentsPanel({
   disabled = false,
   compact = false,
   accountAccess = true,
+  conversationDocumentsAvailable = true,
   onDocumentsChanged,
 }: {
   chatId: string | null;
@@ -66,6 +73,8 @@ export function MatterDocumentsPanel({
    * authorisation error, and it never calls the document API.
    */
   accountAccess?: boolean;
+  /** Explicit Project-origin read scope, separate from temporary write state. */
+  conversationDocumentsAvailable?: boolean;
   /**
    * Phase 12 Stage 2: called after a mutation that changes server-side document
    * state (upload, delete, reprocess) so the workspace can refresh the related
@@ -81,21 +90,39 @@ export function MatterDocumentsPanel({
   const [uploadState, setUploadState] = useState<UploadState>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestSequenceRef = useRef(0);
   const load = useCallback(async () => {
-    if (!(chatId && accountAccess)) {
+    const requestSequence = ++requestSequenceRef.current;
+    const requestUrl = conversationDocumentListUrl({
+      chatId,
+      accountAccess,
+      conversationDocumentsAvailable,
+    });
+    if (!requestUrl) {
       setDocuments([]);
       setRuns({});
+      setError(null);
       return;
     }
-    const response = await fetch(
-      `/api/matter-documents?chatId=${encodeURIComponent(chatId)}`,
-      { cache: "no-store" }
-    );
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error(body.error ?? labels.uploadError);
+    const next = await fetchConversationDocumentList<DocumentRecord>({
+      requestUrl,
+      isCurrentRequest: () =>
+        isCurrentConversationDocumentRequest(
+          requestSequence,
+          requestSequenceRef.current
+        ),
+      fetcher: (url, init) => fetch(url, init),
+      errorFallback: labels.uploadError,
+    });
+    if (
+      next === null ||
+      !isCurrentConversationDocumentRequest(
+        requestSequence,
+        requestSequenceRef.current
+      )
+    ) {
+      return;
     }
-    const next = (body.documents ?? []) as DocumentRecord[];
     setDocuments(next);
     const entries = await Promise.all(
       next.map(async (doc) => {
@@ -125,15 +152,39 @@ export function MatterDocumentsPanel({
         }
       })
     );
+    if (
+      !isCurrentConversationDocumentRequest(
+        requestSequence,
+        requestSequenceRef.current
+      )
+    ) {
+      return;
+    }
     setRuns(Object.fromEntries(entries));
-  }, [accountAccess, chatId, labels.uploadError]);
+  }, [
+    accountAccess,
+    chatId,
+    conversationDocumentsAvailable,
+    labels.uploadError,
+  ]);
   useEffect(() => {
     setDocuments([]);
     setRuns({});
     setError(null);
-    load().catch((e) =>
-      setError(e instanceof Error ? e.message : labels.uploadError)
-    );
+    const requestSequence = requestSequenceRef.current + 1;
+    load().catch((e) => {
+      if (
+        isCurrentConversationDocumentRequest(
+          requestSequence,
+          requestSequenceRef.current
+        )
+      ) {
+        setError(e instanceof Error ? e.message : labels.uploadError);
+      }
+    });
+    return () => {
+      requestSequenceRef.current += 1;
+    };
   }, [load, labels.uploadError]);
   const process = async (
     doc: DocumentRecord,
@@ -160,7 +211,7 @@ export function MatterDocumentsPanel({
     }
   };
   const upload = async (file: File) => {
-    if (!(chatId && accountAccess)) {
+    if (!(chatId && accountAccess && conversationDocumentsAvailable)) {
       return;
     }
     setBusy("upload");
@@ -237,6 +288,10 @@ export function MatterDocumentsPanel({
       setBusy(null);
     }
   };
+  const visibleDocuments = visibleConversationDocuments(
+    documents,
+    conversationDocumentsAvailable
+  );
   const statusLabel = (doc: DocumentRecord) => {
     const run = runs[doc.id];
     const status = matterDocumentDisplayStatus({
@@ -270,64 +325,81 @@ export function MatterDocumentsPanel({
             {labels.title}
           </h3>
         )}
-        <Button
-          aria-label={labels.upload}
-          className={compact ? "size-8 shrink-0 rounded-full" : undefined}
-          data-testid={
-            compact ? "composer-upload" : "conversation-files-upload"
-          }
-          disabled={!(chatId && accountAccess) || disabled || busy !== null}
-          onClick={() => inputRef.current?.click()}
-          size={compact ? "icon" : "sm"}
-          title={compact ? labels.upload : undefined}
-          type="button"
-          variant={compact ? "ghost" : "outline"}
-        >
-          {compact ? (
-            <Plus className="size-5" />
-          ) : (
-            <>
-              <Upload className="mr-1 size-4" />
-              {labels.upload}
-            </>
-          )}
-        </Button>
-        <input
-          accept={ACCEPT}
-          className="hidden"
-          onChange={async (event) => {
-            const input = event.currentTarget;
-            try {
-              const file = input.files?.[0];
-              if (file) {
-                await upload(file);
+        {conversationDocumentsAvailable ? (
+          <>
+            <Button
+              aria-label={labels.upload}
+              className={compact ? "size-8 shrink-0 rounded-full" : undefined}
+              data-testid={
+                compact ? "composer-upload" : "conversation-files-upload"
               }
-            } finally {
-              input.value = "";
-            }
-          }}
-          ref={inputRef}
-          type="file"
-        />
+              disabled={!(chatId && accountAccess) || disabled || busy !== null}
+              onClick={() => inputRef.current?.click()}
+              size={compact ? "icon" : "sm"}
+              title={compact ? labels.upload : undefined}
+              type="button"
+              variant={compact ? "ghost" : "outline"}
+            >
+              {compact ? (
+                <Plus className="size-5" />
+              ) : (
+                <>
+                  <Upload className="mr-1 size-4" />
+                  {labels.upload}
+                </>
+              )}
+            </Button>
+            <input
+              accept={ACCEPT}
+              className="hidden"
+              onChange={async (event) => {
+                const input = event.currentTarget;
+                try {
+                  const file = input.files?.[0];
+                  if (file) {
+                    await upload(file);
+                  }
+                } finally {
+                  input.value = "";
+                }
+              }}
+              ref={inputRef}
+              type="file"
+            />
+          </>
+        ) : null}
       </div>
-      {compact ? null : (
+      {compact || !conversationDocumentsAvailable ? null : (
         <p className="mt-1 text-xs text-slate-500">
           {labels.formats} {labels.unverified}
         </p>
       )}
-      {accountAccess ? null : (
-        <p
+      {conversationDocumentsAvailable ? (
+        accountAccess ? null : (
+          <p
+            className={
+              compact
+                ? "basis-full text-[11px] text-slate-500"
+                : "mt-2 text-xs text-slate-500"
+            }
+            data-testid="matter-documents-guest-hint"
+          >
+            {labels.signInForFiles}
+          </p>
+        )
+      ) : (
+        <output
           className={
             compact
               ? "basis-full text-[11px] text-slate-500"
               : "mt-2 text-xs text-slate-500"
           }
-          data-testid="matter-documents-guest-hint"
+          data-testid="project-documents-unavailable"
         >
-          {labels.signInForFiles}
-        </p>
+          {labels.projectDocumentsUnavailable}
+        </output>
       )}
-      {error ? (
+      {conversationDocumentsAvailable && error ? (
         <p
           className={
             compact
@@ -339,7 +411,9 @@ export function MatterDocumentsPanel({
           {error}
         </p>
       ) : null}
-      {uploadState === "uploaded" && !error ? (
+      {conversationDocumentsAvailable &&
+      uploadState === "uploaded" &&
+      !error ? (
         <p
           className={
             compact
@@ -351,9 +425,9 @@ export function MatterDocumentsPanel({
           {labels.uploaded}
         </p>
       ) : null}
-      {documents.length && !compact ? (
+      {visibleDocuments.length && !compact ? (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {documents.map((doc) => {
+          {visibleDocuments.map((doc) => {
             const run = runs[doc.id];
             const status = run?.status;
             return (
@@ -473,16 +547,18 @@ export function MatterDocumentsPanel({
           })}
         </ul>
       ) : null}
-      {compact && documents.length ? (
+      {compact && visibleDocuments.length ? (
         <span
           className="shrink-0 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600"
           data-testid="matter-documents-count"
           title={copy.panels.conversationFilesHint}
         >
-          {documents.length}
+          {visibleDocuments.length}
         </span>
       ) : null}
-      {!compact && !documents.length ? (
+      {conversationDocumentsAvailable &&
+      !compact &&
+      !visibleDocuments.length ? (
         <p className="mt-2 text-xs text-slate-500">{labels.documents}: —</p>
       ) : null}
     </section>
