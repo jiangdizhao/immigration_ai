@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+## Current Phase13 project state — A1.2 architecture frozen, A1.2-A not yet implemented (2026-10-25)
+
+- Current verified prior GitHub HEAD `c95282aed8d913c22875a8b38906b4a8f60e59cb` on `phase13-study-journey-project-centric`; A1.0 and A1.1 accepted, A1.2 not accepted.
+- New architect-controlled `tasks/PHASE13_M2_A1_2_PRIVATE_S3_TRUSTED_GUARDDUTY_ARCHITECTURE_CONTRACT.md` and `tasks/PHASE13_M2_A1_2_A_CODEX_IMPLEMENTATION_PACKET.md` define safe offline-only adapter work. GuardDuty AWS published events carry S3 versionId and scanStatus; require exact version/bytes plus independently proven delivery authorization. Raw event JSON or ETag cannot certify a clean document.
+- A1.2-A may be owner-dispatched solely for injected-mock code, no external calls or runtime route; S3/Object Lock/IAM/queue configuration, real GuardDuty verification, PostgreSQL audit DELETE protection, data retention/erasure and production billing are A1.2-B blockers requiring owner/operator policy. No real customer file, paid scan or Project AI/context use approved. Flags remain default-off.
+
+<!-- END PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
 ## Current Phase 13 project state — A1.1 accepted, A1.2 unapproved (2026-10-25)
 

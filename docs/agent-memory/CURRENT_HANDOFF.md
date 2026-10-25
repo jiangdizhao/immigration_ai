@@ -1,4 +1,14 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+## Current handoff — M2-A1.2 architect design and A1.2-A implementation gate (2026-10-25)
+
+- **Accepted baseline:** M2-A1.1 internal persistence at `752311535645343343d1e81ab569d5816e9608d5`; latest prior acceptance-docs HEAD `c95282aed8d913c22875a8b38906b4a8f60e59cb`, branch `phase13-study-journey-project-centric`. No A1.2 implementation or live activation exists at this checkpoint.
+- **Architecture:** `tasks/PHASE13_M2_A1_2_PRIVATE_S3_TRUSTED_GUARDDUTY_ARCHITECTURE_CONTRACT.md`, authored and frozen by ChatGPT; `tasks/PHASE13_M2_A1_2_A_CODEX_IMPLEMENTATION_PACKET.md` specifies only default-off, internal **offline** S3/GuardDuty adapter implementation and fake SDK/transport tests. Verified AWS public event format includes `scanStatus` and `s3ObjectDetails.versionId`; exact object version+SHA binding, independent queue/IAM delivery trust and explicit Plan ARN are mandatory. Neither JSON fields nor S3 ETag alone prove scan authenticity.
+- **A1.2-A next:** implement strictly isolated `lib/project-documents/aws/` ports, offline test fixtures and AWS security operator checklist; no runtime consumer, AWS calls, real storage, SQS poller, API, customer file, schema migration or deploy. Codex only implements after owner dispatch and stops uncommitted for independent patch review.
+- **A1.2-B later owner gate:** isolated AWS bucket Versioning, approved IAM/EventBridge/SQS/GuardDuty live source, exact versioned scan attestation, database scan audit deletion protection, deletion/retention/privacy and cost governance. No live AWS/customer data authorized by A1.2-A, and no A1.3/M2-D AI context authorized. M2-A1.2 and full M2 NOT ACCEPTED. Preserve previous milestone history.
+
+<!-- END PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
 ## Current handoff — M2-A1.1 durable Project document persistence ACCEPTED (2026-10-25)
 

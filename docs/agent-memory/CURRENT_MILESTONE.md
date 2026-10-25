@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+## Active milestone — M2-A1.2-A private S3/GuardDuty offline adapter design (2026-10-25)
+
+- M2-A1.1 ACCEPTED at `752311535645343343d1e81ab569d5816e9608d5` (docs baseline `c95282aed8d913c22875a8b38906b4a8f60e59cb`). M2-A1.2 design authored in `tasks/PHASE13_M2_A1_2_PRIVATE_S3_TRUSTED_GUARDDUTY_ARCHITECTURE_CONTRACT.md`; bounded Codex A1.2-A packet in `tasks/PHASE13_M2_A1_2_A_CODEX_IMPLEMENTATION_PACKET.md`.
+- Next implementation upon owner dispatch: default-off server-only S3 client-injected adapter, version-bound GuardDuty EventBridge candidate validator, mock transport and adversarial offline tests, security operator checklist. No new DB migration, live SQS worker, AWS resources, real files, APIs/UI, AI-context or deployment.
+- A1.2-B live AWS authenticity/IAM/version-binding, audit retention/delete protection and privacy/operator signoff are a later separate gate. A1.2 and M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_OWNER_ACCEPTED_2026_10_25 -->
 ## Current milestone — M2-A1.1 ACCEPTED; A1.2 architecture gate next (2026-10-25)
 
