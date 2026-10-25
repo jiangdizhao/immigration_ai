@@ -1,4 +1,22 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+## Current milestone — M2-A1.0 R1 explicit import-consent fix implemented (2026-10-25)
+
+- Project Chat imports now require `consentAccepted === true` before Project/source authorization or any source, intent or storage operation. The explicit acknowledgement is hashed with the operation request; false, absent and runtime-invalid values fail with `invalid_request`.
+- Validation: **21/21** focused service cases and **5/5** existing Project test files passed with zero failures/skips; Biome passed on `package.json` and all five module files. TypeScript reported 44 repository diagnostics, none in the new module. Full `pnpm test:unit` was not run.
+- The acknowledgement is synthetic only and proves no production consent. Durable provenance and authenticated UI acceptance remain future A1.1/A1.3 work. No schema, route, auth infrastructure, external adapter, runtime or DB change. Work remains uncommitted at base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`; independent review remains pending.
+
+<!-- END PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+## Current milestone — M2-A1.0 internal service core implemented; review pending (2026-10-25)
+
+- M2-A1.0 adds an internal synthetic-only Project Document Service under `chatbot/lib/project-documents/`, using injected authorization/source/repository/object-store/attestation ports and in-memory fakes. The core covers exact source-owner import, conditional new-object storage simulation, byte integrity checks, storage/security state separation, private per-purpose grants, current authorization, clean-version reads, revocation/withdrawal, scan identity/generation checks and idempotent replay.
+- Validation: **19/19** focused service tests and **5/5** existing Project test files passed with zero failures/skips; Biome passed on `chatbot/package.json` and all five new files. `tsc --noEmit --incremental false` reported 44 repository diagnostics, all outside the new module (0 new-module diagnostics). Full `pnpm test:unit` was not run.
+- The implementation is uncommitted at branch `phase13-study-journey-project-centric`, base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`; independent review is next. No schema/migration, DB repository, route, runtime consumer, real file, AWS/scanner adapter, feature activation, AI context or Phase 12/MatterDocument behavior change. A1.0 is **not accepted**; durable A1.1 and any live-file authorization remain separate gates.
+
+<!-- END PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
 ## Current milestone — M2-A1 architecture written; A1.0 code task next (2026-10-25)
 

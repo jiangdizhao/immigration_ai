@@ -1,4 +1,28 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+## Current handoff — M2-A1.0 R1 explicit import-consent fix (2026-10-25)
+
+- **Checkpoint:** preserved the complete uncommitted A1.0 worktree on `phase13-study-journey-project-centric`, base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`. No commit or push.
+- `ImportProjectChatDocumentInput` now requires `consentAccepted: boolean`. `importOwnedChatDocument()` accepts only the literal `true` before Project/source authorization, source reads, intent creation or storage. The accepted acknowledgement is included in the canonical operation request hash. Source-owner checks, byte/hash validation, current authorization recheck and copy semantics remain in place.
+- False, missing and runtime-invalid consent return `invalid_request`; tests prove no source ownership check/read, asset, version, operation or stored object is created. The successful import fixture supplies consent, the project-owner/cross-member denial remains covered, and source digest mismatch plus ownership revocation remain covered. This synthetic boolean is not verified or durable production consent; provenance and authenticated UI acceptance remain future A1.1/A1.3 work.
+- **Validation:** focused service tests **21 passed / 0 failed / 0 skipped**; existing Project foundation/schema/policy/HTTP set **5 test files passed / 0 failed / 0 skipped**; Biome passed on `chatbot/package.json` and all **5 module files**. TypeScript no-emit reported **44 diagnostics outside the new module and 0 within it**. Full `pnpm test:unit` was not run. `git diff --check` and untracked whitespace validation passed.
+- Schema/migrations, APIs, authentication, AWS/scanner adapters, production consent, real-file behavior and unrelated runtime paths are unchanged. M2-A1.0 remains pending independent review.
+- Updated cumulative uncommitted patch: `~/phase13_m2_a1_0_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+## Current handoff — M2-A1.0 internal Project Document Service implemented; independent review pending (2026-10-25)
+
+- **Checkpoint:** branch `phase13-study-journey-project-centric`, base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`. Implementation and handoff updates remain uncommitted and unpushed. M2-A1.0 is implemented within its packet boundary but is **not accepted**; M2-A1 and M2 remain unaccepted.
+- Added the internal `chatbot/lib/project-documents/` core: typed state/ports, deterministic in-memory repository, injected fake object store and synthetic attestation verifier, service, and focused tests. Registered the new test in `chatbot/package.json` `test:unit`. Direct upload and explicitly owned Chat-document imports validate/copy bytes into a unique new key; authorization, idempotency, storage integrity, pending scan status, explicit creator purpose grants, read gates, revocation/withdrawal and terminal scan replay are exercised. No filename or storage key is returned in metadata/receipts.
+- **Validation:** A1.0 focused tests **19 passed / 0 failed / 0 skipped**; existing Project foundation/schema/policy/HTTP regression set **5 test files passed / 0 failed / 0 skipped**; Biome passed on `chatbot/package.json` and all **5 new module files**. No-emit TypeScript reported **44 diagnostics outside `lib/project-documents/` and 0 in the new module**. Full `pnpm test:unit` was not run. `git diff --check` and untracked TypeScript whitespace validation passed.
+- **Boundary:** test-only synthetic bytes and injected in-memory ports. There is no database repository/atomic transaction, migration 0032, route or runtime consumer, AWS/S3/GuardDuty client, production feature activation, parser/extraction, AI context, or change to Phase 12 MatterDocument, Standalone, or ConversationTurn behavior. Durable operation/revision/event/worker semantics remain deferred to A1.1; no database or external service was used.
+- Static import checks found no API, app, component or other `lib` consumer of the service. Stop here for independent ChatGPT architecture/source review; do not treat this implementation as real-file authorization.
+- Complete cumulative uncommitted patch: `~/phase13_m2_a1_0_review.patch`.
+
+<!-- END PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
 ## Current handoff — M2-A1 Project Document Service architect design (2026-10-25)
 

@@ -1,4 +1,26 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+## Current Phase 13 state — M2-A1.0 R1 import consent enforced; review pending (2026-10-25)
+
+- Preserved the A1.0 implementation on `phase13-study-journey-project-centric`, base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`; all work is uncommitted/unpushed. The import API input requires `consentAccepted`, checks strict `true` before Project/source authorization or source/storage effects, and includes the acknowledgement in the canonical operation hash.
+- Regression tests cover explicit consent success, false/missing/runtime-invalid rejection before source access, zero asset/version/operation/object side effects, Project owner denial of another member's file, source digest/length integrity and source ownership revoked before finalization. The acknowledgement remains a synthetic flag, not durable or authenticated production consent; A1.1/A1.3 must establish its provenance and UI acceptance.
+- Validation: focused tests **21 passed / 0 failed / 0 skipped**; existing Project regressions **5 files passed / 0 failed / 0 skipped**; Biome passed on `chatbot/package.json` plus **5/5 module files**; TypeScript no-emit reported **44 diagnostics outside the module and 0 within it**. Full `pnpm test:unit` was not run. `git diff --check` and untracked whitespace checks passed.
+- No schema/migration, API, auth infrastructure, AWS/scanner adapter, DB, production behavior, commit or push change. Independent review remains pending.
+- Updated cumulative review patch: `~/phase13_m2_a1_0_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_0_R1_IMPORT_CONSENT_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+## Current Phase 13 state — M2-A1.0 service core implemented; independent review pending (2026-10-25)
+
+- Bounded internal implementation is present on `phase13-study-journey-project-centric` at base HEAD `f77fc8975a88768d5769b8903d6aedf63351a8b2`; all work remains uncommitted/unpushed. M2-A1.0 is implemented, not accepted. M2-A1/M2 and real Project file operations remain unaccepted and unauthorized.
+- New module files are limited to `chatbot/lib/project-documents/{types,ports,testing,service,service.test}.ts`; `chatbot/package.json` registers the focused test in `test:unit`. The injected fake repository/store/verifier exercise Project authorization, individual Chat-source ownership, new immutable copy semantics, bounded format/hash/length validation, storage-vs-scan lifecycle, creator-only exact-purpose grants, current authorization, clean-read gates, terminal scan identity/replay, idempotency, cleanup, and fail-closed revocation/withdrawal. Metadata and operation results do not expose the storage key or filename.
+- Evidence: focused service **19 passed / 0 failed / 0 skipped**; existing Project foundation/schema/policy/HTTP regressions **5 files passed / 0 failed / 0 skipped**; Biome passed on `chatbot/package.json` and **5/5 new module files**. TypeScript no-emit produced **44 diagnostics outside the new module; 0 within it**. Full `pnpm test:unit` was not run.
+- No schema or migration edits, DB writes, durable repository, route/runtime consumer, S3/AWS/GuardDuty adapter, real-file use, flag change, parser/extraction, FactAssertions, AI-context use, Phase 12 MatterDocument/Standalone/ConversationTurn changes, deployment, commit or push. No database or external service was used. A1.1 remains responsible for DB transaction/revision/event/worker durability. Stop for independent architecture/source review.
+- Complete cumulative uncommitted patch: `~/phase13_m2_a1_0_review.patch`.
+
+<!-- END PHASE13_M2_A1_0_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_ARCHITECT_DESIGN_2026_10_25 -->
 ## Current Phase 13 project state — M2-A1 architecture defined (2026-10-25)
 
