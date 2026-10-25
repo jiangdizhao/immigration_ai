@@ -1,4 +1,14 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+## Phase 13 current state — A1.2-A accepted, A1.2-B not approved (2026-10-25)
+
+- **Accepted** source commit `0209f718b7ec0eca9002b86fe36023ff905453b6`, GitHub branch `phase13-study-journey-project-centric`, exactly 13 reviewed files. The current top acceptance record supersedes the historical review-pending text retained below.
+- Default-off isolated `project-documents/aws/` S3 object-version adapter and GuardDuty EventBridge untrusted scan candidate correlation are implemented with injected fake-client offline tests. No actual AWS authentication, network, queue, Project API/consumer, production DB change, real scan or customer bytes enabled. GuardDuty raw event JSON cannot self-authenticate; A1.1 `finalizeScan()` is not wired.
+- Codex-reported offline focused tests **17/17 PASS**, seven existing regression test files passed, changed-file Biome/whitespace passed, 44 unchanged baseline TypeScript diagnostics, full unit suite not run. ChatGPT independent static patch review completed, local test execution not repeated.
+- **Next step:** architect-owned A1.2-B security/operations design and explicit owner gate for live synthetic-only AWS/IAM/KMS/SQS/EventBridge/GuardDuty exact-version proof, DB audit delete safeguards and policy/cost/retention decisions. Neither A1.2-B nor overall M2 is accepted, and customer document ingress is not authorized.
+
+<!-- END PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
 ## Current Phase 13 project state — A1.2-A offline adapters implemented; review pending (2026-10-25)
 

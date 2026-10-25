@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+## Current handoff — M2-A1.2-A offline AWS adapter ACCEPTED (2026-10-25)
+
+- **Accepted implementation:** GitHub commit `0209f718b7ec0eca9002b86fe36023ff905453b6` on `phase13-study-journey-project-centric`, independently verified against GitHub branch HEAD and the expected 13-file changed-file list. Owner push output confirms creation of the commit and remote update. Prior uncommitted/review-pending handoff below is historical, not current status.
+- **Delivered, approved limited scope:** isolated default-disabled `chatbot/lib/project-documents/aws/` module (8 files) with injected AWS client commands, conditional S3 writes, bounded explicit-VersionId HEAD/GET, computed SHA-256 and identity enforcement; bounded GuardDuty EventBridge candidate parser, independent *interface* for trusted delivery context, exact Project file/version correlation and mock fixtures; `PHASE13_M2_A1_2_AWS_SECURITY_OPERATOR_CHECKLIST.md` for subsequent owner/operator decisions. No added database migrations or changes to accepted A1.1 semantics, no real AWS network calls in the task, no production authenticator, public file route, SQS consumer, A1.1 `finalizeScan()` connection or activated feature flag.
+- **Validation evidence:** Codex-reported 17/17 focused AWS module tests with no failure/skip; seven existing Project/schema/document regression test files passed; changed-source Biome and whitespace checks passed; 44 unchanged existing TypeScript diagnostics, none in new AWS files. Full unit suite was not run; no DB or AWS tests were run. ChatGPT independently inspected cumulative patch `phase13_m2_a1_2_A_review.patch` and accepted the bounded offline code, but did not rerun local tests. No claim of production GuardDuty/IAM security certification.
+- **A1.2-B NEXT ARCHITECTURE GATE, NOT CODE-AUTHORIZED:** real account/region and protection plan, S3 Versioning / Object Lock and approved erasure policy, least privilege for IAM/KMS and dedicated EventBridge/SQS/DLQ, authentic transport provenance (raw JSON not sufficient), exact immutable version/sha256/byte-size live evidence, scan event replay and DB audit tamper/delete protection, residency/retention/legal-hold, incident recovery and cost decisions. Requires separate owner authorization, careful design and later isolated synthetic AWS trials; no production/customer files or deployment approved.
+- **Overall milestone:** M2-A1.2-A ACCEPTED; M2-A1.2-B and full M2 remain NOT ACCEPTED. Preserve all earlier acceptance records below.
+
+<!-- END PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
 ## Current handoff — M2-A1.2-A offline S3/GuardDuty adapters implemented; independent review pending (2026-10-25)
 

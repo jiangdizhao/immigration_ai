@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+## Active milestone — M2-A1.2-A ACCEPTED; A1.2-B pending architect design (2026-10-25)
+
+- Accepted and independently verified GitHub commit `0209f718b7ec0eca9002b86fe36023ff905453b6` (13 expected files) on `phase13-study-journey-project-centric`. Completed offline-only default-off S3 VersionId/sha256 adapter, GuardDuty untrusted candidate parser, typed delivery-authentication seam, fake tests and AWS operator checklist. A1.1 and migrations 0030–0032 remain preserved.
+- Reported validation: 17/17 focused fake AWS tests; seven existing regression test files passed; changed-file Biome/whitespace passed; TypeScript baseline 44 existing diagnostics, none in new module. No full suite, DB integration or AWS connectivity verification. This acceptance is **not** approval to enable trusted production scanner or real customer documents.
+- Next **architect-owned** A1.2-B design gate: verify source-authenticated EventBridge/SQS delivery, exact S3 version and independently computed digest, bucket/versioning/retention/IAM/KMS, PostgreSQL audit deletion restrictions, legal/privacy/storage lifecycle and operational cost. No live AWS implementation or feature activation authorized yet. A1.2 and M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
 ## Active milestone — M2-A1.2-A adapters implemented; source review pending (2026-10-25)
 
