@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+## Active Phase 13 milestone — B2-1 architecture frozen; offline code implementation pending
+
+- Accepted B2-0 source `3f2b8744bc4ba6b99d5d2339eac1f16c5a31c33e`, final docs `1fc3820b440fe1e74edbd4b24218d7717f61e234`. User's local HEAD was fast-forwarded to docs HEAD with a clean tree.
+- B2-1 dedicated real AWS CLI read-only executor contract and Codex task packet are now frozen in `tasks/`. B2-0 default offline mode stays intact. Architecture docs only; B2-1 code, tests and live AWS checks not started.
+- Next gate: owner-dispatched **offline** implementation (fake-executor tests) -> independent patch review -> owner commit/push -> separate explicit isolated AWS sandbox/account/profile/resource authorization and run. No implicit permission to touch current staging.
+- No B2-2 paid/mutating synthetic scans, B3 trusted SQS worker, A1.3, production migration or deployment. `NO_GO`, feature flags off, overall M2-A1.2 / M2 NOT ACCEPTED.
+<!-- END PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+
 # CURRENT_MILESTONE
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
 ## Active milestone — B2-0 offline security harness ACCEPTED; B2-1 read-only execution gate next (2026-10-25)

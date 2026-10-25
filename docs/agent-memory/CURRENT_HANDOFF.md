@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+## Current handoff — B2-1 narrow real AWS read-only executor architecture frozen (2026-10-26)
+
+- Owner reported local `git pull --ff-only` to accepted B2-0 docs HEAD `1fc3820b440fe1e74edbd4b24218d7717f61e234`, clean worktree. GitHub rechecked same remote branch HEAD.
+- Architect-frozen docs-only B2-1 contract: `tasks/PHASE13_M2_A1_2_B2_1_LIVE_READONLY_EXECUTOR_CONTRACT.md` and bounded Codex packet `tasks/PHASE13_M2_A1_2_B2_1_CODEX_IMPLEMENTATION_PACKET.md`. New independent B2-1 operator-only AWS CLI executor + sanitized live observation path; existing B2-0 offline plan/refusal unchanged. No code implemented yet.
+- **Next:** owner pulls this documentation commit, then may dispatch **offline fake-only Codex coding**; Codex must not call real AWS or touch credentials. ChatGPT independently reviews uncommitted patch. Real AWS read-only collection requires a later **separate** named sandbox account/profile/region/resource owner authorization and reviewed source. Staging != automatically sandbox.
+- No customer file, AWS API, STS, S3 scan, SQS Worker, Postgres, migration, code, deployment or production feature was changed/authorized by this documentation checkpoint. B2-2, B3, A1.3 and overall A1.2/M2 remain unapproved or not accepted; live `NO_GO` and default-off.
+<!-- END PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+
 # CURRENT_HANDOFF
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
 ## Current handoff — M2-A1.2-B2-0 offline AWS security evidence harness ACCEPTED (2026-10-25)

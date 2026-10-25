@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+## Phase 13 canonical state — B2-1 offline execution contract frozen (2026-10-26)
+
+- B2-0 offline security harness remains accepted at source `3f2b8744bc4ba6b99d5d2339eac1f16c5a31c33e`, docs `1fc3820b440fe1e74edbd4b24218d7717f61e234`. Existing B2-0 plan and real collection denial are immutable baseline.
+- Architect-authored B2-1 contract `tasks/PHASE13_M2_A1_2_B2_1_LIVE_READONLY_EXECUTOR_CONTRACT.md` and Codex implementation packet `tasks/PHASE13_M2_A1_2_B2_1_CODEX_IMPLEMENTATION_PACKET.md` bound a separate operator-only, AWS CLI v2 *read-only* executor, identity-first exact pinning, sanitized observation reports and offline adversarial testing. No implementation or real AWS execution yet.
+- Offline code dispatch is distinct from real AWS authorization; a **later explicit nonproduction isolated account/profile/resource owner consent** plus independent source review is mandatory. Existing aulawyers staging is not automatically a sandbox. Unknown security evidence -> `INCOMPLETE/NO_GO`; never mint trusted GuardDuty delivery or clean file status.
+- B2-2/B3/A1.3 and M2-A1.2/overall M2 remain not authorized/accepted; Project features default-off; no database, migration, S3, SQS, GuardDuty operation or deployment approved.
+<!-- END PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
+
 # PROJECT_STATE
 <!-- BEGIN PHASE13_M2_A1_2_B2_0_ACCEPTED_2026_10_25 -->
 ## Phase13 canonical state — B2-0 accepted; real AWS still gated (2026-10-25)
