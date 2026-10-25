@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+## Active milestone — M2-A1.2-A adapters implemented; source review pending (2026-10-25)
+
+- Implemented the bounded offline adapter task on `phase13-study-journey-project-centric` at base HEAD `ed41a3b935a7fe9bec86b4996812bd2671bbe4e2`; work is uncommitted/unpushed. The default-off S3 adapter uses injected AWS SDK commands and exact VersionId reads; GuardDuty JSON remains untrusted until a separate injected transport authenticator accepts its context. Exact stored Project version and independently recomputed bytes are required for an untrusted scan candidate.
+- Validation: focused AWS adapter suite **17/17**; seven existing Project/schema/document test files **7/7**; Biome passes; TypeScript comparison unchanged from baseline (**44 existing diagnostics, 0 in the new module**). No AWS or database calls; full unit suite not run. `git diff --check` and untracked whitespace checks passed.
+- Review patch: `~/phase13_m2_a1_2_A_review.patch`. Stop for independent review. No production S3 client, authenticated queue consumer, scan persistence, API/runtime consumer, migration or feature activation. A1.2-B AWS/IAM, database-audit, privacy/retention and owner gates remain open; A1.2/M2 are **NOT ACCEPTED**.
+
+<!-- END PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
 ## Active milestone — M2-A1.2-A private S3/GuardDuty offline adapter design (2026-10-25)
 

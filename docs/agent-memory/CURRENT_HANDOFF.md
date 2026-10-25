@@ -1,4 +1,17 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+## Current handoff — M2-A1.2-A offline S3/GuardDuty adapters implemented; independent review pending (2026-10-25)
+
+- **Checkpoint:** branch `phase13-study-journey-project-centric`, base HEAD `ed41a3b935a7fe9bec86b4996812bd2671bbe4e2`. All A1.2-A changes remain uncommitted and unpushed. Existing A1.1/migration 0032 behavior was preserved.
+- **Implementation:** added isolated server-only `chatbot/lib/project-documents/aws/` modules for injected S3 commands, strict Project-prefix/config validation, default-off `PHASE13_PROJECT_DOCUMENT_AWS_ADAPTERS_ENABLED`, conditional encrypted/checksummed writes, required concrete S3 VersionId, and bounded exact-version HEAD/GET with independently computed SHA-256/byte size. No `S3Client` construction, credential resolution, deletion API, or AWS call occurs at module import.
+- GuardDuty parsing follows the documented EventBridge shape and bounds input, JSON depth/size, identity, plan ARN, status pair, Project key and VersionId. A separate injected transport-authentication port creates an opaque in-process capability; the test-only fake cannot prove live IAM. Candidate correlation rechecks current Project/asset/version IDs, generation, stored identity, current lifecycle and exact bytes. Outputs remain explicitly **untrusted candidates**; no `VerifiedProjectDocumentScanAttestation`, `finalizeScan()` call, route, worker or runtime consumer exists.
+- Added offline fake SDK/event tests and `docs/agent-memory/tasks/PHASE13_M2_A1_2_AWS_SECURITY_OPERATOR_CHECKLIST.md`. The checklist leaves account/IAM, queue trust, retention, erasure, legal hold, database audit-delete protection, residency and cost decisions to A1.2-B owners.
+- **Validation:** focused A1.2-A **17 passed / 0 failed / 0 skipped**; existing Project/schema/document regression coverage **7 test files passed / 0 failed / 0 skipped**. Biome passed on the package file and all AWS module files; TypeScript baseline comparison is unchanged at **44 repository diagnostics**, with **0 diagnostics in the new AWS module**. `git diff --check` and untracked whitespace checks passed. Full `pnpm test:unit` was not run. No database, AWS account, S3 object, GuardDuty plan or queue was accessed.
+- Installed `@aws-sdk/client-s3` is **3.1139.0**. No dependency/lockfile change was needed. Independent source review is next. M2-A1.2 and full M2 remain **NOT ACCEPTED**; A1.2-B and A1.3 remain gated.
+- Cumulative uncommitted review patch: `~/phase13_m2_a1_2_A_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
 ## Current handoff — M2-A1.2 architect design and A1.2-A implementation gate (2026-10-25)
 

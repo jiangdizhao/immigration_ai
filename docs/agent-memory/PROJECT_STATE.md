@@ -1,4 +1,15 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+## Current Phase 13 project state — A1.2-A offline adapters implemented; review pending (2026-10-25)
+
+- Work is based on `ed41a3b935a7fe9bec86b4996812bd2671bbe4e2` on `phase13-study-journey-project-centric` and remains uncommitted/unpushed. The accepted A1.1 service, migration 0032 and schema were not changed.
+- Private server-only S3 adapter code uses injected commands, default-off configuration, conditional create, SHA-256, SSE-S3, concrete VersionId, explicit-version HEAD/GET, bounded reads and exact byte verification. GuardDuty events are bounded and strictly validated but stay untrusted; an independently authenticated transport capability, persisted current target, exact S3 version and byte verification are required before returning an **untrusted candidate**. There is no live authenticator, `finalizeScan()` bridge, runtime consumer, deletion path, AWS client, or API.
+- Validation: AWS fake adapter **17 passed / 0 failed / 0 skipped**; seven existing Project/schema/document test files **7 passed / 0 failed / 0 skipped**; Biome passes. Current and HEAD-baseline TypeScript output match exactly at **44 pre-existing diagnostics**, with no new AWS-module diagnostics. Full unit suite and DB/AWS integration were not run; no database/AWS resources were accessed. `git diff --check` and untracked whitespace checks passed.
+- A1.2-B still requires live account/region/IAM/queue proof, exact-version scan provenance, database audit deletion protection, privacy/residency/retention/erasure/legal-hold and cost decisions. The new operator checklist records these gates without choosing policy values. A1.2 and M2 remain **NOT ACCEPTED** pending independent review and later owner authorization.
+- Cumulative uncommitted patch: `~/phase13_m2_a1_2_A_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_A_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_ARCHITECT_GATE_2026_10_25 -->
 ## Current Phase13 project state — A1.2 architecture frozen, A1.2-A not yet implemented (2026-10-25)
 
