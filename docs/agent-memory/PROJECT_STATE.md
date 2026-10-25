@@ -1,4 +1,24 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+## Phase 13 state — B2-0 R1 security evidence corrections complete, review pending (2026-10-25)
+
+- Implemented the bounded static-evidence fixes on `phase13-study-journey-project-centric`, base HEAD `be91595757cd2b6d07067b15280b1b93f2bdb6f2`; all B2-0 and R1 work remains uncommitted/unpushed. SQS `SendMessage` wildcard grants and conflicting Deny statements no longer disappear from static analysis. EventBridge targets with `Input`, `InputPath`, `InputTransformer`, malformed shape or unexpected metadata cannot receive a local PASS. This is not a general IAM evaluator; live readiness remains `NO_GO`.
+- Validation: B2 harness **16/16**, B1 evaluator **16/16**, queue **11/11**, AWS adapters **17/17**; full unit suite **964/964**, all zero failures/skips. The three previously sandbox-failing files passed **24/24** outside the sandbox. Sandbox evidence included `tsx` IPC and loopback `EPERM`; the migration test's empty `POSTGRES_URL` exits before DB construction. No AWS calls or database changes/connections. Biome and whitespace checks passed; TypeScript reports 44 existing diagnostics, none in B2 files.
+- Earlier B2-0/B1/A1.2-A and migration history below is preserved. B2-0 remains REVIEW PENDING; B2-1, B2-2, B3, full M2-A1.2 and M2 remain unapproved/unaccepted. Cumulative patch: `~/phase13_m2_a1_2_B2_0_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+## Phase 13 state — B2-0 offline harness implemented, review pending (2026-10-25)
+
+- B2-0 implementation is on `phase13-study-journey-project-centric` from required HEAD `be91595757cd2b6d07067b15280b1b93f2bdb6f2`, uncommitted and unpushed. The operator CLI is plan-only, never resolves AWS credentials, and explicitly refuses live collection pending B2-1 approval.
+- New offline modules validate exact isolated-sandbox scope and time-limited approval, enumerate the fixed read-only inspection plan, and use a fixture-only STS-first sequence with wrong-account stop, bounded requests, response-size limits and sanitized observation fingerprints. The B2 schema's live decision is always `NO_GO`; incomplete IAM, event-origin, database and topology evidence stays incomplete. A B1 bridge requires explicit source parity. No trusted scan capability is issued.
+- Added `tasks/PHASE13_M2_A1_2_B2_LIVE_READONLY_OWNER_RUNBOOK.md` and appended B2-0 gates to the AWS operator checklist. Earlier B1/A1.2-A and migration history is preserved. No AWS, database, migration, customer data, production route, commit or push.
+- Focused tests passed: B2 harness **14/14**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A adapters **17/17**. Changed-source Biome passed on 10 TypeScript files; project TypeScript reports **44 pre-existing diagnostics**, none on changed paths. Full unit suite: **113/116 test files passed, 3 failed, 0 skipped** (two subprocess expected-error checks and three loopback tests failed with sandbox `EPERM`). `git diff --check` and untracked whitespace checks passed. No AWS/PostgreSQL calls were made. Cumulative patch is `~/phase13_m2_a1_2_B2_0_review.patch`; its SHA and file inventory are reported with the handoff.
+- B2-0 remains REVIEW PENDING; B2-1, B2-2, B3, full M2-A1.2 and M2 are not accepted/authorized.
+
+<!-- END PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
 ## Phase13 state — B2-0 architect-owned offline harness authorized, live B2 gated (2026-10-25)
 

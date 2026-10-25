@@ -1,4 +1,23 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+## Active milestone — B2-0 R1 security evidence corrections implemented; independent review pending (2026-10-25)
+
+- Hardened the bounded SQS policy check against matching IAM wildcards, extra Allow principals and explicit Deny statements. EventBridge target PASS now requires one exact SQS ARN, no unreviewed input transformation and no unsupported target metadata. Ambiguous evidence stays `INCOMPLETE`; live readiness remains `NO_GO`.
+- Focused validation passed: B2 harness **16**, B1 evaluator **16**, B1 queue **11**, A1.2-A adapters **17**; full unit suite **964/964**. The earlier three sandbox-failing files passed **24/24** outside the sandbox. Biome and whitespace checks passed; TypeScript remains at **44 existing diagnostics**, none in B2 paths. No AWS access or database changes/connections.
+- B2-0 remains REVIEW PENDING. B2-1/B2-2/B3 are not authorized; M2-A1.2 and M2 are not accepted. Cumulative patch: `~/phase13_m2_a1_2_B2_0_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+## Active milestone — M2-A1.2-B2-0 implemented; independent review pending (2026-10-25)
+
+- Added the plan-only, redacted AWS inspection CLI and isolated B2 readiness modules. The CLI has no live AWS executor and refuses `collect-read-only` until the separate B2-1 gate. The offline fixture sequence validates exact scope/approval, checks STS identity first, stops on mismatch and bounds requests/time/response size.
+- The versioned B2 observation remains unconditional live `NO_GO`; unknown policy, event-origin, IAM/KMS, database and topology evidence remains incomplete. B1 evaluator reuse requires explicit matching fixture/operator-export provenance. No trusted source capability is minted.
+- The owner runbook and B2 operator checklist are updated. Focused validation passed: harness **14/14**, evaluator **16/16**, queue **11/11**, A1.2-A adapters **17/17**. Biome passed on 10 changed TypeScript files; TypeScript remains at **44 existing diagnostics** with none on changed paths. Full unit validation was **113/116 test files passed, 3 failed, 0 skipped** due two subprocess expectation failures and three sandbox loopback `EPERM` failures. No AWS or PostgreSQL calls, migrations, production or customer-data operations were performed. Cumulative patch evidence is in the handoff; implementation remains uncommitted/unpushed.
+- B2-0 is REVIEW PENDING. B2-1 needs separate identity-scoped owner approval and independent source review; B2-2 and B3 remain unapproved. A1.2 and M2 remain NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
 ## Active milestone — A1.2-B2-0 read-only AWS audit tooling (2026-10-25)
 

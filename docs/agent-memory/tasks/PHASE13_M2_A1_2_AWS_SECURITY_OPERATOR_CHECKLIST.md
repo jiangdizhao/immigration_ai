@@ -115,3 +115,14 @@ This section defines the evidence required for a separately approved B2 exercise
 
 - [ ] B2 GO requires dated evidence for every applicable identity, effective-permission, event-origin, exact-version/digest, PostgreSQL privilege, privacy/retention, cost and rollback gate, plus independent operator/security and owner approval.
 - [ ] Any missing proof, unresolved spoofing path, policy ambiguity, customer-data exposure, wrong account/resource, unapproved cost or failed rollback is **NO-GO**. A B2 GO does not authorize B3 worker integration, trusted scan persistence, public APIs or customer document processing; those require a separate explicit authorization.
+
+## B2-0 offline harness record — 2026-10-25
+
+- [ ] B2-0 source patch has passed independent review before any live collector is considered.
+- [ ] The offline plan has been checked for exact account/partition/region/profile/resource selectors, STS-first ordering, fixed read-only API allowlist, request/page/byte/timeout bounds and explicit denied operations.
+- [ ] The typed local approval record matches the exact scope, is unexpired and no longer than one hour, and records read-only/nonproduction/no-mutation/no-object-access/no-message-consumption acknowledgements. This is workflow evidence only, not identity proof or verified production consent.
+- [ ] The owner has separately authorized B2-1 live read-only API access and named the operator and change window. B2-0 authorization alone is not sufficient.
+- [ ] Raw captures, if separately approved, remain outside Git in an owner-controlled restricted location with a retention and secure-disposal date. Only sanitized findings and non-sensitive fingerprints may enter the review package.
+- [ ] Every absent, denied, truncated, ambiguous or unreviewed result remains `INCOMPLETE`; overall live decision remains `NO_GO`.
+
+The B2-0 CLI is plan-only. Its `collect-read-only` option refuses execution pending B2-1 approval and source review. Do not bypass that refusal with AWS CLI/SDK, another profile or a shell command. This checklist does not authorize live reads, resource discovery, mutations, uploads, scans, queue consumption or database access.

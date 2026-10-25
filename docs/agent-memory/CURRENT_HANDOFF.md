@@ -1,4 +1,26 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+## Current handoff — B2-0 R1 static security evidence corrections implemented, review pending (2026-10-25)
+
+- Preserved the full B2-0 worktree on `phase13-study-journey-project-centric` at base HEAD `be91595757cd2b6d07067b15280b1b93f2bdb6f2`. Queue-policy analysis now recognizes bounded IAM `*`/`?` matching and fails or returns incomplete for additional matching Allow statements, unsupported patterns, broad principals and matching explicit Deny statements. EventBridge target analysis requires one exact queue target with only reviewed `Arn`/optional `Id`; `Input`, `InputPath`, `InputTransformer`, malformed targets and unexpected target metadata cannot PASS. Overall live readiness remains `NO_GO`.
+- Focused B2 harness **16/16**, B1 evaluator **16/16**, B1 queue disposition **11/11**, and A1.2-A adapters **17/17** passed (zero failures/skips). Complete `pnpm test:unit` passed **964/964**, zero failures/skips, in the approved local execution context. The three previously failing files passed separately **24/24** there. Initial sandbox failures were subprocess/loopback restrictions: `tsx` IPC creation returned `listen EPERM` on `/tmp/tsx-1000/16.pipe`, loopback listeners returned `EPERM`, and the S3 child assertion saw empty stderr. The migration-preflight test supplies `POSTGRES_URL=""` and exits before PostgreSQL client construction; the unit script excludes DB integration files. No AWS calls or database changes/connections were made.
+- Biome passed on the two R1-edited TypeScript files; the repository TypeScript check still reports **44 existing diagnostics**, with none in B2 files. `git diff --check` and untracked whitespace validation passed. The cumulative review patch is `~/phase13_m2_a1_2_B2_0_R1_review.patch`; changes remain uncommitted and unpushed.
+- **B2-0 remains REVIEW PENDING.** B2-1, B2-2 and B3 remain separately gated and unauthorized; A1.2 and overall M2 remain NOT ACCEPTED. Stop for independent review.
+
+<!-- END PHASE13_M2_A1_2_B2_0_R1_SECURITY_EVIDENCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+## Current handoff — M2-A1.2-B2-0 offline AWS evidence harness implemented, independent review pending (2026-10-25)
+
+- Implemented from required branch `phase13-study-journey-project-centric`, starting HEAD `be91595757cd2b6d07067b15280b1b93f2bdb6f2`; all changes remain uncommitted and unpushed. The CLI defaults to a redacted offline plan and refuses `collect-read-only` with a B2-1 authorization gate. No AWS SDK/CLI executor, credential lookup, database access, live collection or resource mutation was added.
+- Added strict sandbox scope and time-bounded approval validation, a fixed read-only request plan, a fixture-only STS-first sequence with account-mismatch short-circuit, typed `phase13.project_document.aws_b2_observation.v1` findings, redacted fingerprints, and a provenance-checked adapter to the accepted B1 evaluator. Fixture and policy observations remain incomplete where effective IAM, EventBridge/SQS origin, database grants or live owner verification are not proven; overall decision is always `NO_GO`. No `TrustedScanDeliveryContext` is created.
+- Added the B2 live-read-only owner runbook and appended the B2-0 status/checklist without modifying earlier milestone history. No migrations 0030–0033 or accepted A1.2-A/B1 transaction behavior were changed.
+- Validation: B2 harness **14/14**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A AWS adapters **17/17**; zero failures/skips. Changed-source Biome passed on 10 TypeScript files; TypeScript still has **44 existing repository diagnostics**, with none on changed paths. `git diff --check` and untracked-file whitespace validation passed. Full `pnpm test:unit` reported **113/116 test files passed, 3 failed, 0 skipped**: the S3 preflight subprocess returned empty stderr, the migration-preflight subprocess exited 1 instead of the expected 2, and three loopback tests failed to bind with `EPERM`. No AWS or PostgreSQL calls were made.
+- The cumulative patch path is `~/phase13_m2_a1_2_B2_0_review.patch`; exact SHA-256 and changed-file inventory are in the final response. No migration 0034 or schema changes.
+- **B2-0 remains REVIEW PENDING.** B2-1 live reads require separate owner authorization and source review; B2-2 paid/mutating trials and B3 worker/persistence remain unapproved. A1.2 and overall M2 remain NOT ACCEPTED. Stop for independent review.
+
+<!-- END PHASE13_M2_A1_2_B2_0_IMPLEMENTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
 ## Current handoff — A1.2-B2 architect freeze, B2-0 bounded offline collector (2026-10-25)
 
