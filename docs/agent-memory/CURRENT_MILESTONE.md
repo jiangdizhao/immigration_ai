@@ -1,4 +1,23 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+## Active milestone — M2-A1.2-B1 R1 trust-boundary correction, review pending (2026-10-25)
+
+- Queue disposition now checks the accepted A1.2-A opaque delivery context against the exact raw body; no caller-supplied string, plain object or cast can authorize ACK. Database commit/replay is explicitly an assertion from a future persistence integration. The planner stays pure and disconnected from SQS and `finalizeScan()`.
+- SQS policy analysis retains IAM Principal categories, requires the exact EventBridge `Service` principal, rejects AWS/Federated/mixed/unsupported alternatives, and preserves AWS role principal handling for KMS. Readiness remains live `NO_GO` until independent B2 verification.
+- Validation: queue **11/11**, evaluator **16/16**, A1.2-A adapters **17/17**, zero failures/skips; TypeScript exactly matches HEAD at 44 existing diagnostics. No DB or AWS operations in R1. Original B1 remains uncommitted; B1 **REVIEW PENDING**, B2/B3 **NOT AUTHORIZED**, A1.2/M2 **NOT ACCEPTED**.
+
+<!-- END PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+## Active milestone — M2-A1.2-B1 implemented, review pending (2026-10-25)
+
+- Additive migration 0033 and guarded PostgreSQL regressions are implemented on `phase13-study-journey-project-centric` from starting HEAD `b18935f72cb92c7b6942833dbd98968072fcac13`; no changes to migrations 0030–0032. The only migrated database was the identity-verified disposable `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`.
+- Pure offline security evaluator, adversarial tests, and abstract queue disposition planner are implemented. Evaluator output is redacted and permanently live `NO_GO`; queue logic does not acknowledge before commit/replay and never promotes clean. Updated the B2 operator checklist with live identity/effective-permission, EventBridge spoofing, GuardDuty origin, exact S3 VersionId/SHA-256/size, PostgreSQL role, retention/erasure/legal-hold, synthetic-only cost and rollback GO/NO-GO gates.
+- Final validation: guarded M1.1 **10/10**, M2-A0 **3/3**, A1.1 **18/18**; evaluator **14/14**, queue **8/8**, existing A1.2-A AWS **17/17**, and full unit suite **964/964**, all zero failures/skips. `pnpm db:check`, changed-source Biome and whitespace checks passed. TypeScript diagnostics match starting HEAD exactly: **44 pre-existing**, with none on changed paths.
+- **B1 remains REVIEW PENDING** and uncommitted/unpushed. B2 and B3 are NOT AUTHORIZED. A1.2 and overall M2 remain NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
 ## Active milestone — A1.2-B1 audit protection + AWS readiness proof foundation (2026-10-25)
 

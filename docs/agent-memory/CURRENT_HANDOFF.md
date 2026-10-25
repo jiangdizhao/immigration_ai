@@ -1,4 +1,26 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+## Current handoff — M2-A1.2-B1 R1 trust-boundary corrections implemented (2026-10-25)
+
+- Preserved the uncommitted B1 implementation at starting HEAD `b18935f72cb92c7b6942833dbd98968072fcac13`; no reset, stash, commit or push. R1-01 replaces the forgeable queue proof string with A1.2-A's WeakMap-backed `TrustedScanDeliveryContext` check bound to the exact raw body. Missing, forged, cast, manually built and body-mismatched contexts deny delivery. Persistence commit/replay remains an explicitly unverified assertion from a future trusted integration; no SQS consumer or A1.1 persistence bridge exists.
+- R1-02 preserves IAM Principal categories during policy evaluation. The EventBridge queue grant now requires exactly `Principal.Service = events.amazonaws.com`; `AWS`, `Federated`, mixed, unqualified and unsupported principal forms cannot pass. KMS assessment continues to accept required role ARNs only as `AWS` principals. Static readiness remains unconditional `NO_GO` pending B2.
+- R1 queue tests **11/11**, evaluator tests **16/16**, existing A1.2-A adapter tests **17/17**, zero failures/skips. TypeScript diagnostics match starting HEAD at **44 pre-existing diagnostics**, with no changed-path diagnostics. Changed-source Biome and whitespace checks passed. No PostgreSQL or AWS access was needed for R1; prior guarded B1 database regression results remain recorded in the next historical block.
+- B1 remains **REVIEW PENDING**; B2/B3 remain **NOT AUTHORIZED** and A1.2/M2 remain **NOT ACCEPTED**. Complete cumulative patch: `~/phase13_m2_a1_2_B1_R1_review.patch`. Stop for independent ChatGPT review.
+
+<!-- END PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+## Current handoff — M2-A1.2-B1 implemented; independent review pending (2026-10-25)
+
+- Implemented from branch `phase13-study-journey-project-centric`, starting HEAD `b18935f72cb92c7b6942833dbd98968072fcac13`; all changes remain uncommitted and unpushed. Additive migration 0033 protects operation/event/processing-run audit rows while preserving the M1 membership-invitation pre-event finalization and accepted A1.1 run lifecycle. Migrations 0030–0032 were not edited.
+- Static server-only AWS security evidence evaluation is bounded and fixture/operator-export only. It emits redacted PASS/FAIL/INCOMPLETE findings, rejects malformed or unsupported policy evidence, and always reports live `NO_GO` requiring owner verification. The pure queue planner denies missing transport proof, ACKs only committed or identical replay, retries transient failures within a supplied finite budget, and routes malformed/conflicting or exhausted deliveries without clean promotion. No trusted transport capability is minted and no A1.1 finalizer is called.
+- Migration 0033 was applied and tested only through the guarded procedure against `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`; verified identity was host `127.0.0.1`, port `5432`, exact database name, existing, with 48 public tables before the guarded reset/migration. The disposable target reached 34 migrations; no other database was touched.
+- Final guarded PostgreSQL suites: M1.1 **10/10**, M2-A0 **3/3**, A1.1 **18/18**, zero failures/skips. B1 offline evaluator **14/14**, queue protocol **8/8**, existing A1.2-A AWS adapters **17/17**, and `pnpm test:unit` **964/964**, all zero failures/skips. `pnpm db:check` and changed-source Biome passed. TypeScript output matches starting HEAD exactly at **44 pre-existing diagnostics**, with none on changed paths; final whitespace checks passed.
+- B1 remains **REVIEW PENDING**. Static evidence does not prove effective AWS permissions or GuardDuty origin; row triggers do not protect against owners/superusers, trigger disablement, `TRUNCATE`, DDL or restore. B2 live AWS verification and B3 trusted consumer/persistence remain **NOT AUTHORIZED**. A1.2 and overall M2 remain **NOT ACCEPTED**. No AWS calls/resources, routes, worker, customer files, activation, commit or push.
+- Complete cumulative review patch: `~/phase13_m2_a1_2_B1_review.patch`. Stop for independent ChatGPT source review.
+
+<!-- END PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
 ## Current handoff — M2-A1.2-B architect freeze, B1 bounded implementation next (2026-10-25)
 

@@ -65,7 +65,7 @@
 - [ ] Verify the application DB role is not a superuser, owner, or migration role and cannot arbitrarily update/delete finalized `ProjectDocumentProcessingRun`, `ProjectOperation`, `ProjectEvent`, document identity, or provenance rows.
 - [ ] Use a separately controlled migration role. Inspect grants, ownership, row-level/application controls, triggers, and operational break-glass access from the live database without exposing credentials.
 - [ ] Independently verify the A1.1 audit chain is present and consistent before a scan transition. Missing, deleted, conflicting, or unverifiable audit evidence must fail closed.
-- [ ] Approve the separate future migration/design for audit-row deletion protection and test it in an explicitly authorized disposable database before any live rollout. This checklist does not authorize migration 0033 or any database change.
+- [ ] Review the B1 additive migration 0033 and its guarded disposable-database evidence. This checklist does not authorize migration 0033 on any live database or any production database change.
 - [ ] Define backup/restore and incident procedures that preserve the relationship among scan run, operation, event, Project/version identity, generation, and exact S3 version.
 - [ ] Confirm the durable event/audit record contains bounded metadata only and excludes raw event payloads, malware details, object bytes, credentials, and unmasked storage keys.
 
@@ -85,3 +85,33 @@
 - [ ] Privacy/legal owners have resolved residency, retention, deletion, legal-hold, consent, and data-classification decisions.
 - [ ] Independent review has confirmed authenticated transport, exact-version integrity, replay/freshness behavior, least-privilege IAM, database audit protections, and rollback.
 - [ ] Any unresolved or unverifiable requirement remains a **NO-GO**. Do not enable the feature flag, consume live messages, or persist a GuardDuty result until a separate owner authorization explicitly approves the completed evidence package.
+
+## B2 live AWS verification gates — future authorization required
+
+This section defines the evidence required for a separately approved B2 exercise. B1 static findings and simulated fixtures do not satisfy any live GO gate. Begin with read-only verification; perform only explicitly approved synthetic non-production actions after identity, scope, owner, cost and rollback approvals are recorded.
+
+### Identity and effective authorization
+
+- [ ] Independently verify the live caller's AWS account ID, partition, role/session identity and region. Compare them with the separately approved account and resource inventory; stop on any mismatch or ambiguous credential chain.
+- [ ] Inspect effective permissions for the worker, EventBridge, SQS, KMS and administrators across identity policies, role trust, resource policies, session policies, permissions boundaries, SCPs/organization controls, grants and explicit denies. A supplied policy JSON export alone is not a GO.
+- [ ] Prove the worker cannot send arbitrary messages, change queue attributes/policies, change EventBridge rules/targets, call `events:PutEvents` on the matching bus, pass privileged roles, or change relevant bucket, key or GuardDuty configuration. Record the authorized exception owner for every required privileged principal.
+- [ ] Verify the SQS resource policy permits only the approved EventBridge service path with the exact rule `aws:SourceArn` and expected `aws:SourceAccount`; inspect direct cross-account/public sends and queue mutation grants.
+
+### Event origin and exact scan object
+
+- [ ] Demonstrate whether any principal can publish matching GuardDuty-shaped events with `events:PutEvents` on the matching bus, or alter the rule, target, queue policy or plan. Exercise only synthetic events and only under a separately approved test plan. If forged delivery cannot be excluded or independently authenticated, record **NO-GO**; JSON fields and SQS message IDs are not origin proof.
+- [ ] Independently verify the live GuardDuty Malware Protection Plan, status, account, region, bucket/prefix and rule-to-queue target. Capture the control-plane evidence and source-authentication basis; do not treat a matching event pattern as provenance.
+- [ ] For each synthetic scan result, prove its non-null exact S3 `VersionId` matches the persisted version identity, then independently read that version and compare byte length and recomputed SHA-256. No latest-version fallback, ETag substitution or customer file is permitted.
+- [ ] Demonstrate duplicate, delayed, conflicting and forged event handling with synthetic fixtures; DB commit must precede acknowledgement, and post-commit acknowledgement failure must replay idempotently without duplicate Project events or revisions.
+
+### PostgreSQL, lifecycle, and incident controls
+
+- [ ] Verify effective live grants show the application runtime role is not superuser, table owner or migration role and has no `TRUNCATE`, unrestricted DDL, schema creation, trigger disablement or audit-table mutation bypass. Keep migration and break-glass roles separately controlled. Row triggers do not protect against owners, superusers, trigger disablement, `TRUNCATE`, DDL or restore.
+- [ ] Independently verify audit rows and scan provenance are present and consistent before any candidate transition. Missing, deleted, conflicting or unverifiable evidence is **NO-GO**; document backup/restore and incident-recovery evidence that preserves the event, operation, run, Project/version and object-version relationships.
+- [ ] Obtain explicit privacy/legal/records-owner decisions for retention, lawful deletion, withdrawal, legal hold, Object Lock mode, backups and proof of erasure. Do not infer a retention period or enable Object Lock from B1 or this checklist.
+- [ ] Approve synthetic-only test objects, account/region, allowed action list, maximum scan/message volume, cost ceiling/alarms, test window, rollback owner and stop conditions before any data-plane trial. Record actual cost evidence and a tested rollback outcome.
+
+### B2 GO / NO-GO record
+
+- [ ] B2 GO requires dated evidence for every applicable identity, effective-permission, event-origin, exact-version/digest, PostgreSQL privilege, privacy/retention, cost and rollback gate, plus independent operator/security and owner approval.
+- [ ] Any missing proof, unresolved spoofing path, policy ambiguity, customer-data exposure, wrong account/resource, unapproved cost or failed rollback is **NO-GO**. A B2 GO does not authorize B3 worker integration, trusted scan persistence, public APIs or customer document processing; those require a separate explicit authorization.

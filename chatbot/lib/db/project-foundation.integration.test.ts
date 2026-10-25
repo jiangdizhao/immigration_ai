@@ -28,7 +28,7 @@ loadEnv({ path: resolve(".env.local") });
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0032_phase13_m2_a1_1_durable_document_audit";
+const EXPECTED_MIGRATION_HEAD = "0033_phase13_m2_a1_2_b1_audit_protection";
 const skipReason = TEST_DATABASE_URL
   ? false
   : "PHASE13_M1_1_TEST_DATABASE_URL is not configured (isolated database required)";
@@ -280,7 +280,7 @@ test(
       const [migrationCount] = await sql<{ count: string }[]>`
         select count(*)::text as count from drizzle.__drizzle_migrations
       `;
-      assert.equal(Number(migrationCount?.count), 33);
+      assert.equal(Number(migrationCount?.count), 34);
 
       const [inventory] = await sql<
         {

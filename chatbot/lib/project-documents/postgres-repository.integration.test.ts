@@ -26,7 +26,7 @@ loadEnv({ path: resolve(".env.local") });
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0032_phase13_m2_a1_1_durable_document_audit";
+const EXPECTED_MIGRATION_HEAD = "0033_phase13_m2_a1_2_b1_audit_protection";
 const EXPECTED_HOST = "127.0.0.1";
 const EXPECTED_PORT = 5432;
 const CONSENT_AT = "2026-10-25T00:00:00.000Z";
@@ -344,7 +344,7 @@ async function insertAuditedSyntheticScanFixture(
 
   await sql.begin(async (tx) => {
     await tx.unsafe(
-      'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "initiatedByUserId", "servicePrincipalCode", "objectSha256", "eventFingerprint", "status", "verdict", "startedAt", "completedAt", "errorCode") values ($1, $2, $3, $4, $5, $6, $7, null, $8, $9, $10, $11, $12, $13, $14, $15)',
+      'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "initiatedByUserId", "servicePrincipalCode", "objectSha256", "eventFingerprint", "status", "verdict", "startedAt", "completedAt", "errorCode") values ($1, $2, $3, $4, $5, $6, $7, null, $8, $9, $10, \'started\', null, $11, null, null)',
       [
         runId,
         input.projectId,
@@ -356,12 +356,12 @@ async function insertAuditedSyntheticScanFixture(
         "project_document_scan_worker",
         input.sha256,
         eventFingerprint,
-        runStatus,
-        verdict,
         startedAt.toISOString(),
-        completedAt.toISOString(),
-        errorCode,
       ]
+    );
+    await tx.unsafe(
+      'update "ProjectDocumentProcessingRun" set "status" = $2, "verdict" = $3, "completedAt" = $4, "errorCode" = $5 where "id" = $1',
+      [runId, runStatus, verdict, completedAt.toISOString(), errorCode]
     );
     const [project] = await tx.unsafe<{ revision: number }[]>(
       'select "revision" from "StudyJourneyProject" where "id" = $1 for update',
@@ -545,7 +545,7 @@ test(
         entries: Array<{ idx: number; tag: string }>;
       };
       assert.equal(journal.entries.at(-1)?.tag, EXPECTED_MIGRATION_HEAD);
-      assert.equal(journal.entries.at(-1)?.idx, 32);
+      assert.equal(journal.entries.at(-1)?.idx, 33);
       await migrate(database, { migrationsFolder: migrationDirectory });
       assert.equal(
         await count(
@@ -1267,7 +1267,7 @@ test(
           await expectConstraint(
             rows(
               sql,
-              'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "servicePrincipalCode", "objectSha256", "eventFingerprint", "status", "verdict", "completedAt") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())',
+              'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "servicePrincipalCode", "objectSha256", "eventFingerprint") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
               [
                 wrongProjectRunId,
                 closedProject.projectId,
@@ -1279,8 +1279,6 @@ test(
                 "project_document_scan_worker",
                 digest("concurrent direct document"),
                 digest(`wrong-project-${wrongProjectRunId}`),
-                "completed",
-                "clean",
               ]
             ),
             "23503",
@@ -1290,7 +1288,7 @@ test(
           await expectConstraint(
             rows(
               sql,
-              'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "servicePrincipalCode", "objectSha256", "eventFingerprint", "status", "verdict", "completedAt") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())',
+              'insert into "ProjectDocumentProcessingRun" ("id", "projectId", "versionId", "generation", "operationKind", "providerCode", "providerEventId", "servicePrincipalCode", "objectSha256", "eventFingerprint") values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
               [
                 wrongDigestRunId,
                 primary.projectId,
@@ -1302,8 +1300,6 @@ test(
                 "project_document_scan_worker",
                 digest("incorrect scan digest"),
                 digest(`wrong-digest-${wrongDigestRunId}`),
-                "completed",
-                "clean",
               ]
             ),
             "23503",
@@ -1856,25 +1852,31 @@ test(
             ),
             1
           );
-          await rows(
-            sql,
-            'delete from "ProjectDocumentProcessingRun" where "projectId" = $1 and "versionId" = $2 and "generation" = $3 and "operationKind" = $4',
-            [
-              primary.projectId,
-              sharedIntent.versionId,
-              sharedIntent.generation,
-              "scan",
-            ]
+          await expectConstraint(
+            sql`
+              delete from "ProjectDocumentProcessingRun"
+              where "projectId" = ${primary.projectId}
+                and "versionId" = ${sharedIntent.versionId}
+                and "generation" = ${sharedIntent.generation}
+                and "operationKind" = 'scan'
+            `,
+            "23514",
+            "ProjectDocumentProcessingRun_delete_protected"
           );
-          await expectPersistenceCode(
-            harness.repository.authorizeExactVersionRead({
+          assert.deepEqual(
+            await harness.repository.authorizeExactVersionRead({
               actorUserId: ownerId,
               projectId: primary.projectId,
               assetId: sharedIntent.assetId,
               versionId: sharedIntent.versionId,
               purpose: "content_read",
             }),
-            "project_forbidden"
+            {
+              projectId: primary.projectId,
+              assetId: sharedIntent.assetId,
+              versionId: sharedIntent.versionId,
+              purpose: "content_read",
+            }
           );
           await harness.repository.revokeCreatorGrant({
             actorUserId: ownerId,
@@ -2304,6 +2306,101 @@ test(
           );
           await assertProjectEventLedger(sql, primary.projectId);
           await assertProjectEventLedger(sql, closedProject.projectId);
+        }
+      );
+
+      await t.test(
+        "B1 audit rows block deletes and post-event changes without weakening the M1 pre-event invitation transition",
+        async () => {
+          const [event] = await rows<{ id: string; operationRecordId: string }>(
+            sql,
+            'select "id", "operationRecordId" from "ProjectEvent" where "projectId" = $1 order by "projectRevision" desc limit 1',
+            [primary.projectId]
+          );
+          assert.ok(event);
+          await expectConstraint(
+            sql`delete from "ProjectEvent" where "id" = ${event.id}`,
+            "23514",
+            "ProjectEvent_delete_protected"
+          );
+          await expectConstraint(
+            sql`update "ProjectEvent" set "createdAt" = "createdAt" + interval '1 millisecond' where "id" = ${event.id}`,
+            "23514",
+            "ProjectEvent_immutable"
+          );
+          await expectConstraint(
+            sql`delete from "ProjectOperation" where "id" = ${event.operationRecordId}`,
+            "23514",
+            "ProjectOperation_delete_protected"
+          );
+          await expectConstraint(
+            sql`update "ProjectOperation" set "requestHash" = ${"f".repeat(64)} where "id" = ${event.operationRecordId}`,
+            "23514",
+            "ProjectOperation_immutable"
+          );
+
+          const [run] = await rows<{ id: string }>(
+            sql,
+            'select "id" from "ProjectDocumentProcessingRun" where "projectId" = $1 and "status" in (\'completed\', \'failed\') limit 1',
+            [primary.projectId]
+          );
+          assert.ok(run);
+          await expectConstraint(
+            sql`delete from "ProjectDocumentProcessingRun" where "id" = ${run.id}`,
+            "23514",
+            "ProjectDocumentProcessingRun_delete_protected"
+          );
+          await expectConstraint(
+            sql`update "ProjectDocumentProcessingRun" set "errorCode" = 'tampered' where "id" = ${run.id}`,
+            "23514",
+            "ProjectDocumentProcessingRun_terminal_immutable"
+          );
+
+          const targetUserId = await insertUser(sql, "b1-invite-target");
+          userIds.push(targetUserId);
+          const operationKey = operationId("b1-invite-without-event");
+          const membershipId = randomUUID();
+          await assert.rejects(
+            sql.begin(async (tx) => {
+              await tx.unsafe(
+                'insert into "ProjectOperation" ("actorUserId", "operationType", "operationId", "requestHash", "resultKind", "resultId") values ($1, \'membership_invite\', $2, $3, \'project\', $4)',
+                [ownerId, operationKey, "a".repeat(64), primary.projectId]
+              );
+              await tx.unsafe(
+                'insert into "ProjectMembership" ("id", "projectId", "userId", "status", "invitedByUserId") values ($1, $2, $3, \'pending\', $4)',
+                [membershipId, primary.projectId, targetUserId, ownerId]
+              );
+              await tx.unsafe(
+                'update "ProjectOperation" set "resultKind" = \'membership\', "resultId" = $1 where "operationId" = $2',
+                [membershipId, operationKey]
+              );
+            }),
+            (error: unknown) => {
+              assert.ok(isPostgresError(error));
+              assert.equal(error.code, "23514");
+              assert.equal(
+                error.constraint_name,
+                "ProjectOperation_membership_event_required"
+              );
+              return true;
+            }
+          );
+          assert.equal(
+            await count(
+              sql,
+              'select count(*)::text as count from "ProjectOperation" where "operationId" = $1',
+              [operationKey]
+            ),
+            0
+          );
+          assert.equal(
+            await count(
+              sql,
+              'select count(*)::text as count from "ProjectMembership" where "id" = $1',
+              [membershipId]
+            ),
+            0
+          );
         }
       );
 

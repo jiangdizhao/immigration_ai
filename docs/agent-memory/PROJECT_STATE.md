@@ -1,4 +1,26 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+## Current Phase 13 state — M2-A1.2-B1 R1 trust-boundary corrections, review pending (2026-10-25)
+
+- Queue disposition requires the accepted A1.2-A `TrustedScanDeliveryContext` capability matched to the exact raw message body. Fabricated strings, manually constructed objects, casts, missing context and body substitution cannot authorize acknowledgement. The planner treats persistence outcomes as future-port assertions and does not verify or perform commits.
+- SQS resource-policy assessment preserves `Service`, `AWS`, `Federated`, `CanonicalUser` and unsupported categories. Only the exact EventBridge service principal passes its queue grant; KMS required role ARNs remain checked as AWS principals. Readiness remains unconditional `NO_GO` pending B2 live verification.
+- R1 tests: queue **11/11**, evaluator **16/16**, A1.2-A adapters **17/17**, zero failures/skips. TypeScript matches HEAD exactly at 44 existing diagnostics; no DB/AWS operations were performed for R1. Base B1 guarded DB results and scope remain preserved below.
+- B1 remains **REVIEW PENDING**; B2/B3 are **NOT AUTHORIZED**; A1.2 and M2 are **NOT ACCEPTED**. Cumulative R1 patch: `~/phase13_m2_a1_2_B1_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+## Current Phase 13 state — M2-A1.2-B1 implemented, independent review pending (2026-10-25)
+
+- Implemented from starting HEAD `b18935f72cb92c7b6942833dbd98968072fcac13` on `phase13-study-journey-project-centric`, uncommitted/unpushed. New additive migration 0033 protects ProjectOperation, ProjectEvent and ProjectDocumentProcessingRun audit rows while preserving legitimate M1 invitation finalization and A1.1 started-to-terminal transitions; 0030–0032 remain unchanged.
+- Migration 0033 was exercised only on the guarded, exact identity-verified disposable database `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` (48 public tables before reset; migration head 0033 / 34 journal entries after apply). Guarded integration results: M1.1 **10/10**, M2-A0 **3/3**, A1.1 **18/18**, zero failures/skips.
+- New offline server-only evidence evaluator accepts bounded supplied evidence, emits redacted PASS/FAIL/INCOMPLETE findings and unconditionally returns live `NO_GO`; the pure queue protocol handles untrusted delivery, post-commit ACK failure/idempotent replay, bounded transient retry, and quarantine/DLQ without clean promotion. Evaluator **14/14**, queue **8/8**, existing A1.2-A AWS adapter suite **17/17**, and `pnpm test:unit` **964/964**, zero failures/skips. `pnpm db:check`, changed-source Biome and whitespace checks passed. TypeScript diagnostics are identical to starting HEAD (**44 pre-existing**, none on changed paths).
+- The operator checklist now names the future B2 independent AWS identity/effective-IAM/SQS checks, event spoofing and GuardDuty origin proof, exact S3 version/hash/size checks, PostgreSQL privilege isolation, retention/Object Lock/legal deletion and incident recovery, plus synthetic-only cost and rollback gates. No retention period or infrastructure value was selected.
+- B1 is **REVIEW PENDING**. B2 live AWS and B3 worker/persistence are **NOT AUTHORIZED**; A1.2-B and overall M2 are **NOT ACCEPTED**. No live AWS/API, trusted scan persistence, customer files, production DB, route, feature activation, commit or push.
+- Complete cumulative review patch: `~/phase13_m2_a1_2_B1_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_B1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
 ## Current Phase 13 state — A1.2-B frozen, B1 implementation dispatched only (2026-10-25)
 
