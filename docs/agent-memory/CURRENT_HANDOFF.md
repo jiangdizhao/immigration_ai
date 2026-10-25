@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+## Current handoff — M2-A1.2-B1 durable audit and AWS security-readiness ACCEPTED (2026-10-25)
+
+- **Accepted source commit:** `91579b3713254e328ac10f54c87ccac9eff9307a` on `phase13-study-journey-project-centric`. Owner demonstrated equal local HEAD and `git ls-remote` values and empty `git status --short`; ChatGPT independently verified GitHub remote HEAD and all **15 expected changed files**. This new acceptance supersedes the older implementation/review-pending notes below, which remain historical evidence.
+- **Approved bounded B1 scope:** additive 0033 `0033_phase13_m2_a1_2_b1_audit_protection.sql` for guarded Project audit append-only/DELETE restrictions; preserves M1 invitation pre-event `ProjectOperation.resultKind/resultId` finalization and A1.1 `ProjectDocumentProcessingRun.started → completed/failed`; pure AWS static security-readiness evaluator and queue disposition protocol, plus operator checklist. Existing migrations 0030–0032 and accepted A1.2-A remain unchanged.
+- **R1 accepted:** Queue ACK planner requires the accepted WeakMap-backed `TrustedScanDeliveryContext` matched to raw message bytes, not a forgeable string/cast; database commit/replay status remains a future **trusted integration assertion**. SQS grant static evaluation distinguishes IAM Principal categories and accepts only `Principal.Service = events.amazonaws.com` for EventBridge; it does not mistake AWS/Federated principals for the EventBridge service principal. Static AWS readiness remains unconditional **NO_GO** for live deployment.
+- **Validation evidence:** Codex-reported guarded PostgreSQL M1.1 **10/10**, M2-A0 **3/3**, A1.1 **18/18**; B1-R1 pure queue **11/11**, evaluator **16/16**, accepted A1.2-A adapter **17/17**; full unit **964/964** was reported in B1 run (not rerun for R1). `pnpm db:check`, changed-file Biome, whitespace and unchanged TypeScript baseline of 44 pre-existing diagnostics reported PASS. Only reported migrated/reset DB `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`; R1 performed no DB or AWS actions. ChatGPT independently source-reviewed cumulative R1 patch, did not rerun local tests.
+- **Next gate:** B2 real AWS sandbox security and source-authenticity **architecture/owner approval first** (account/region/IAM, EventBridge `PutEvents` spoofing, dedicated SQS policy/DLQ/KMS, approved synthetic S3 object version, GuardDuty plan/event origin, exact bytes and database role/audit privileges, privacy/residency/retention/legal hold/cost). **No B2 AWS operation or B3 production trusted SQS worker/persistence authorized.** A1.2 overall and M2 remain **NOT ACCEPTED**, no customer documents, public APIs, AI context or feature activation.
+
+<!-- END PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
 ## Current handoff — M2-A1.2-B1 R1 trust-boundary corrections implemented (2026-10-25)
 

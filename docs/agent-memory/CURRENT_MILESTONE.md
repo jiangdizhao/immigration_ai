@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+## Active milestone — M2-A1.2-B1 ACCEPTED, B2 owner-security architecture gate next (2026-10-25)
+
+- **B1 ACCEPTED** at pushed and GitHub-verified code commit `91579b3713254e328ac10f54c87ccac9eff9307a` (15 expected files; owner local/remote SHA equal, worktree clean). Additive migration 0033 hardens audit history with M1/A1.1 legal transitions preserved, static AWS policy evidence evaluator stays live `NO_GO`, pure SQS disposition protocol checks exact-body opaque delivery context; forged queue evidence and incorrectly typed EventBridge IAM Principal paths were corrected in R1. The old review-pending B1 entries below are historical.
+- Codex local evidence: guarded DB M1.1 **10/10**, M2-A0 **3/3**, A1.1 **18/18**; R1 queue **11/11**, evaluator **16/16**, A1.2-A **17/17**; B1 full unit **964/964**. No AWS access; R1 re-ran no DB. Independent cumulative patch static review passed; no independent test rerun.
+- **B2 next:** architect and owner must authorize a bounded **read-only identity/configuration evidence phase first**, with named sandbox account, explicit costs and privacy/legal approvals. Synthetic AWS writes/scans need additional authorization. Check EventBridge bus/rule and queue anti-spoof posture, exact-VersionId GuardDuty provenance, IAM/KMS, S3 Versioning and application DB privileges; cannot infer origin from event JSON or SQS receipt. B3 live worker and persistence await separate future approval. **A1.2 and M2 NOT ACCEPTED; default-off.**
+
+<!-- END PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
 ## Active milestone — M2-A1.2-B1 R1 trust-boundary correction, review pending (2026-10-25)
 

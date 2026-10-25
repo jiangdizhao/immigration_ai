@@ -1,4 +1,14 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+## Phase 13 canonical state — B1 accepted, B2/B3 not authorized (2026-10-25)
+
+- **GitHub verified accepted B1 code:** `91579b3713254e328ac10f54c87ccac9eff9307a` on `phase13-study-journey-project-centric`, exact expected 15 files and owner-reported clean worktree. Previous review-pending B1 text lower in this document is retained only for milestone history, not current status.
+- M2-A1.2-B1 completes internal audit hardening migration 0033 (preserving accepted M1 invitation and A1.1 scan transactions), supplied-evidence-only AWS IAM/EventBridge/SQS readiness evaluation (**live NO_GO**), and pure queue ACK/retry/DLQ protocol with exact-body opaque transport context. R1 verifies typed EventBridge Service vs AWS/Federated principals and prevents literal token trust spoofing. No live queue authentication, SQS consumer, scan-to-`finalizeScan()` persistence wiring or AWS resource processing.
+- Codex-reported guarded PostgreSQL M1.1 10/10, M2-A0 3/3, A1.1 18/18, R1 queue 11/11, evaluator 16/16, A1.2-A adapters 17/17; full B1 unit 964/964. Source patch independently reviewed, local tests not independently executed. R1 performed no database or AWS operations.
+- **Next:** B2 owner-gated live sandbox account/IAM/GuardDuty/EventBridge/SQS/S3 provenance and exact-version verified synthetic evidence, database role grants and audit deletion permission checks. B2 requires architect-freeze and owner/operator approval before any live access; B3 source-authenticated worker/transaction bridge and A1.3 customer routes are separate future gates. No live AWS/customer files, production migrations, retention decisions, deployment or feature enablement authorized. M2-A1.2 and overall M2 remain **NOT ACCEPTED**.
+
+<!-- END PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_R1_TRUST_BOUNDARY_2026_10_25 -->
 ## Current Phase 13 state — M2-A1.2-B1 R1 trust-boundary corrections, review pending (2026-10-25)
 
