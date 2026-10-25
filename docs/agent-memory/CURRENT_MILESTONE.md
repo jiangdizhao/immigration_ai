@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+## Current milestone — M2-A0 accepted; M2-A1 design gate next (2026-10-25)
+
+- **M2-A0: ACCEPTED (bounded local schema milestone)** at implementation commit `b6cdd46d1a7289bccb30cb2257de613f5ea121f3` on `phase13-study-journey-project-centric`; independent GitHub remote SHA matched owner's local HEAD and clean status. Four inert Project document tables and migration 0031 were committed, including the corrected R1 terminal-state immutable processing-run trigger.
+- Evidence: local reported guarded synthetic PostgreSQL M2 3/3, focused unit 2/2, guarded M1.1 10/10, Drizzle/Biome/whitespace PASS; no full suite or M1.2/M1.3 rerun for R1. Independent cumulative source review PASS. No production, real-file or live-scanner authorization is implied.
+- **Next milestone: M2-A1 architecture/owner decision review, NOT implementation.** Architect must define secure file creation/import, independent scan verdict provenance, purpose-specific private-by-default grants, consent, deletion/retention and async version CAS; obtain explicit owner authorization. M2-B/C/D and Project AI context remain gated. Preserve M1.4 acceptance and default-off feature controls.
+
+<!-- END PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
 ## Current milestone — M2-A0 R1-01 terminal processing-run immutability fixed; review pending (2026-10-25)
 

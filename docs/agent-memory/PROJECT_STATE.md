@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+## Current Phase 13 project state — M2-A0 accepted, no real file pipeline (2026-10-25)
+
+- GitHub HEAD `b6cdd46d1a7289bccb30cb2257de613f5ea121f3`, branch `phase13-study-journey-project-centric`, exactly 11 M2-A0 implementation/validation/state files committed; verified remote SHA matches owner-provided local SHA and status clean.
+- Inert ProjectDocumentAsset/Version/Grant/ProcessingRun schema and `0031_sour_scarecrow` are accepted with R1 terminal-run immutability. Test claims are local/agent-reported: M2 PostgreSQL 3/3, unit 2/2, M1.1 10/10; full unit and M1.2/M1.3 not rerun for R1. No runtime API or scanner exists; ordinary local `chatbot`, production and staging migrations were not approved.
+- Current architecture source: `tasks/PHASE13_M2_001_PROJECT_DATA_FACTS_DOCUMENTS_CONTRACT.md` (architect-controlled R1). Before implementing M2-A1 the owner must resolve sharing/consent and file handling policy gates, professional/privacy/retention constraints, and independently trustworthy scanner events. M2-A1 and entire M2 remain unaccepted. Phase13 Project Chat flag stays default-off; original generic project-create rollout caveat remains.
+
+<!-- END PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
 ## Current Phase 13 state — M2-A0 R1-01 terminal processing-run immutability fixed (2026-10-25)
 

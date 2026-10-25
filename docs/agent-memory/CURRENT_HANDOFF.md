@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+## Current handoff — Phase 13 M2-A0 accepted and pushed (2026-10-25)
+
+- **Accepted bounded milestone:** M2-A0 inert Project document schema foundation, branch `phase13-study-journey-project-centric`, implementation commit `b6cdd46d1a7289bccb30cb2257de613f5ea121f3`. The owner provided matching local HEAD and `git ls-remote`, with empty `git status --short`; ChatGPT independently verified the matching GitHub branch SHA and exact 11 committed files.
+- **Scope accepted:** additive four-table ProjectDocumentAsset/Version/Grant/ProcessingRun foundation; Drizzle migration `0031_sour_scarecrow` and snapshot; same-Project FK and immutable identity restrictions; R1 terminal processing-run immutability (SQLSTATE 23514) allowing exact no-op updates. No runtime consumer, Project document API, upload, download, import, S3/scanner/extraction, Project facts, AI context, public feature activation, deployment or real customer data was authorized.
+- **Validation provenance:** Codex/local report: guarded disposable PostgreSQL `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` 3/3 passed; focused tests 2/2; M1.1 guarded regression 10/10; `pnpm db:check`, Biome, whitespace and migration metadata checks passed. M1.2/M1.3 and full unit suite were not rerun for R1; 44 baseline TypeScript diagnostics remained, none in changed files. ChatGPT source-reviewed the cumulative M2-A0 R1 patch and found no remaining blocking defect. These are bounded validations, not a live/staging/production test.
+- **Next:** M2-A1 requires an architect-authored, owner-reviewed contract for Project upload/import, per-purpose grants, independently verified scanner binding, asynchronous byte-lifecycle state, consent/retention and denial semantics. Until owner gates are accepted, no customer-file path or scanner may be implemented or enabled. Existing generic `POST /api/projects` feature-gate caveat remains. Keep Project Chat feature default-off.
+- This supersedes earlier M2-A0 `NOT ACCEPTED` progress entries; preserve them as historical checkpoints. M2 overall and M2-A1 are NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A0_OWNER_ACCEPTED_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A0_R1_TERMINAL_STATE_FIX_2026_10_25 -->
 ## Current handoff — M2-A0 R1-01 processing-run terminal immutability fixed; independent review pending (2026-10-25)
 
