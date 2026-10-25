@@ -1,4 +1,13 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+## Active milestone — A1.2-B2-0 read-only AWS audit tooling (2026-10-25)
+
+- Architect-frozen B2 contract: `tasks/PHASE13_M2_A1_2_B2_AWS_LIVE_EVIDENCE_ARCHITECTURE_CONTRACT.md`; bounded Codex task `tasks/PHASE13_M2_A1_2_B2_0_CODEX_IMPLEMENTATION_PACKET.md`. Start from B1 accepted docs SHA `d1f9c7788681d61a586c16c32530968d3d071244`.
+- **B2-0 only is authorized:** offline implementation of default-plan AWS security evidence collection with exact read-only API allowlist, STS-first account pinning, explicit separate operator authorization for any later real reads, redacted NO_GO result and fake-client tests. No AWS or DB connections, resource changes, files or credentials now. B1/A1.2-A preserved.
+- **B2-1** live AWS read-only operator collection occurs only after source review and explicit sandbox profile/account/resource approval. **B2-2** synthetic scan and resource provisioning needs separate owner-cost/retention/privacy permission. **B3** trusted message->A1.1 finalizeScan not approved. A1.2-B2-0 review pending until Codex implementation and independent patch review; full A1.2 and M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
 ## Active milestone — M2-A1.2-B1 ACCEPTED, B2 owner-security architecture gate next (2026-10-25)
 

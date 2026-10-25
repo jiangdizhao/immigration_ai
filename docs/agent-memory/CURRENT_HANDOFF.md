@@ -1,4 +1,14 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+## Current handoff — A1.2-B2 architect freeze, B2-0 bounded offline collector (2026-10-25)
+
+- **Accepted baseline:** B1 implementation `91579b3713254e328ac10f54c87ccac9eff9307a`, accepted documentation checkpoint `d1f9c7788681d61a586c16c32530968d3d071244`, branch `phase13-study-journey-project-centric`. B1 migration 0033, A1.2-A adapter and B1 static evidence evaluator remain accepted. No real AWS proof.
+- **Frozen B2 authority:** `tasks/PHASE13_M2_A1_2_B2_AWS_LIVE_EVIDENCE_ARCHITECTURE_CONTRACT.md`; Codex B2-0 task `tasks/PHASE13_M2_A1_2_B2_0_CODEX_IMPLEMENTATION_PACKET.md`. This supersedes older "B2 not authorized" status **only for B2-0 offline work**: exact-scoped, default-plan, mock-tested read-only AWS evidence harness and operator runbook. B2-1 actual read-only access requires separate owner profile/account/resource consent after source review; B2-2 synthetic uploads/scans and any infra creation require additional cost/privacy/retention approval; B3 trusted consumer/persistence remains prohibited.
+- **Evidence policy:** operator-selected non-default AWS profile, pinned account+region+resource selectors, explicit STS-first verification, strictly allowlisted read-only calls, sanitized findings, incompleteness = NO_GO. No real AWS calls while Codex implements B2-0; no credential collection, database access, upload/scan, queue consume, API, or production flag. EventBridge V2's `aws.` service-reserved source semantics must not be misapplied to the classic default bus; direct SQS injection and privileged rule/queue mutation remain distinct risks.
+- **Owner to do later:** sync architect docs, run Codex B2-0 then upload full patch; identify a **nonproduction** AWS profile/account/region and existing sandbox resources (or state absent). Do not send keys, tokens or raw IAM policies into chat. Source review before any live read-only collector invocation. B2 and full M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
 ## Current handoff — M2-A1.2-B1 durable audit and AWS security-readiness ACCEPTED (2026-10-25)
 

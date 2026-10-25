@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+## Phase13 state — B2-0 architect-owned offline harness authorized, live B2 gated (2026-10-25)
+
+- Accepted latest B1 code `91579b3713254e328ac10f54c87ccac9eff9307a`, prior docs `d1f9c7788681d61a586c16c32530968d3d071244`; current design files `tasks/PHASE13_M2_A1_2_B2_AWS_LIVE_EVIDENCE_ARCHITECTURE_CONTRACT.md` and `tasks/PHASE13_M2_A1_2_B2_0_CODEX_IMPLEMENTATION_PACKET.md`.
+- Only default-plan/mock-test code for a tightly scoped live-read-only AWS evidence harness is authorized. No real calls during B2-0 implementation. Authentication check must pin actual STS account before all resource reads. Evidence/readiness output remains `NO_GO`; AWS data and typed JSON don't self-authenticate GuardDuty origin. No file ingress, persistence bridge, AWS mutation, DB migration or customer data.
+- B2-1 read-only actual AWS requires owner identity-scoped approval and source-reviewed tool; B2-2 mutating/billable synthetic sandbox trial separately gated by IAM/retention/data residency/cost; B3 scan worker separate. A1.2 and full M2 NOT ACCEPTED; all feature flags remain off.
+
+<!-- END PHASE13_M2_A1_2_B2_ARCHITECT_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B1_ACCEPTED_2026_10_25 -->
 ## Phase 13 canonical state — B1 accepted, B2/B3 not authorized (2026-10-25)
 
