@@ -1,4 +1,13 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+## Current Phase 13 state — A1.2-B frozen, B1 implementation dispatched only (2026-10-25)
+
+- Latest pre-B checkpoint `ad688d4f9021d277c78078fc8af85e2e588c06b6` on `phase13-study-journey-project-centric`; A1.2-A accepted and offline-only, no real AWS integration.
+- Architect-owned contract `tasks/PHASE13_M2_A1_2_B_TRUSTED_DELIVERY_AUDIT_SECURITY_CONTRACT.md` and B1 Codex packet define: guarded additive migration 0033 for immutable audit/delete protection; supplied-fixture-only static AWS policy readiness assessment (always no live GO); queue acknowledgement/retry/DLQ abstract state machine. Preserve M1 preevent operation update and A1.1 terminal processing run; no real DB except the explicitly verified `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`.
+- Live AWS sandbox identity, queue/source anti-spoof verification, actual S3 VersionId/byte proof, DB runtime role, privacy/retention/legal-hold and costs remain B2 owner gates; authenticated queue consumer and scan persistence B3. No customer file/API/AI-context/production operations authorized. A1.2-B and full M2 not accepted; flags default off.
+
+<!-- END PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
 ## Phase 13 current state — A1.2-A accepted, A1.2-B not approved (2026-10-25)
 

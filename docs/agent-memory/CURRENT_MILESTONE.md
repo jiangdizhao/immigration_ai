@@ -1,4 +1,14 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+## Active milestone — A1.2-B1 audit protection + AWS readiness proof foundation (2026-10-25)
+
+- A1.2-A ACCEPTED (code `0209f718b7ec0eca9002b86fe36023ff905453b6`, docs `ad688d4f9021d277c78078fc8af85e2e588c06b6`). New architect authority `tasks/PHASE13_M2_A1_2_B_TRUSTED_DELIVERY_AUDIT_SECURITY_CONTRACT.md` and bounded Codex `tasks/PHASE13_M2_A1_2_B1_CODEX_IMPLEMENTATION_PACKET.md`.
+- **B1 only:** disposable-DB PostgreSQL migration 0033 to protect scan/operation/event audit history while preserving accepted M1/M2 workflows; pure read-only supplied-evidence IAM/EventBridge/SQS/GuardDuty policy auditor, pure queue disposition protocol; focused adversarial/DB tests, operator checklist updates. No AWS API, AWS resource modification, authenticated live message, worker or scan persistence, API or deployment.
+- **B2:** separately approve live read-only AWS configuration checks then explicitly allowed sandbox synthetic object/delivery trials with owner/cost/retention/security signoff. **B3:** only after B2, separately design and authorize authenticated queue consumer / A1.1 scan transaction bridge. Raw JSON/account/queue metadata alone must not mint a trusted capability.
+- A1.2-B1 is NOT YET IMPLEMENTED or accepted; A1.2 and M2 NOT ACCEPTED.
+
+<!-- END PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
 ## Active milestone — M2-A1.2-A ACCEPTED; A1.2-B pending architect design (2026-10-25)
 

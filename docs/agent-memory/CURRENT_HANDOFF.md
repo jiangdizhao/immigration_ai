@@ -1,4 +1,15 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+## Current handoff — M2-A1.2-B architect freeze, B1 bounded implementation next (2026-10-25)
+
+- **Accepted:** A1.2-A isolated default-off S3/GuardDuty offline adapter at `0209f718b7ec0eca9002b86fe36023ff905453b6`; subsequent acceptance-only docs baseline `ad688d4f9021d277c78078fc8af85e2e588c06b6`. No A1.2-B code accepted, and no live AWS authentication/consumer/persistence enabled.
+- **Architect freeze:** `tasks/PHASE13_M2_A1_2_B_TRUSTED_DELIVERY_AUDIT_SECURITY_CONTRACT.md`; Codex B1 packet `tasks/PHASE13_M2_A1_2_B1_CODEX_IMPLEMENTATION_PACKET.md`. A1.2-B is split into **B1 offline security foundations + guarded disposable PostgreSQL 0033**, **B2 separately approved live synthetic AWS sandbox verification**, **B3 separately approved trusted worker/persistence**. Only B1 is in scope now.
+- **B1 expected:** additive 0033 audit append-only/DELETE protections preserving M1 in-transaction ProjectOperation result update and A1.1 run transitions; pure typed/static IAM/EventBridge/SQS/GuardDuty readiness evidence evaluator that cannot authenticate live source; pure queue ACK/retry/DLQ protocol, adversarial offline + guarded DB tests, operator checklist and updated project state. Existing migrations 0030–0032 are frozen; never touch real databases, AWS, live customer files, Phase12 MatterDocument or product routes.
+- **Critical trust limitation:** a GuardDuty-shaped EventBridge JSON delivered through SQS is not cryptographic proof of GuardDuty origin; bus `PutEvents`/rule/queue policy injection capability must be independently evaluated at B2. Exact S3 VersionId+recomputed SHA-256 required; no clean declassification without source and object evidence. A1.2-A untrusted candidate output stays untrusted.
+- **Not authorized:** B2 AWS console/CLI mutation, account-cost actions, live source authenticator, SQS polling, B3 scan-persistence bridge, production/customer file use, public API or feature flag activation. **A1.2 and overall M2 NOT ACCEPTED.** Preserve earlier historical milestone entries below.
+
+<!-- END PHASE13_M2_A1_2_B_ARCHITECT_FREEZE_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_A_ACCEPTANCE_2026_10_25 -->
 ## Current handoff — M2-A1.2-A offline AWS adapter ACCEPTED (2026-10-25)
 
