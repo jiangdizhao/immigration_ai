@@ -1,4 +1,23 @@
 # CURRENT_MILESTONE
+<!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+## Active milestone — M2-A1.1 R1 scan provenance/schema parity fix complete; independent review pending (2026-10-25)
+
+- On `phase13-study-journey-project-centric` at base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`, migration 0032 now prevents direct or mismatched terminal security promotion, makes terminal security state immutable, and verifies scan-run, service-operation and ProjectEvent provenance at commit. Exact-version reads require matching clean scan evidence plus the existing current Project authorization and purpose grant.
+- `ProjectOperation_actor_type_check` in Drizzle now matches the SQL service-operation digest condition. Snapshot remains unchanged because Drizzle snapshots omit CHECK constraints; `pnpm db:check` passes.
+- Validation: A1.1 PostgreSQL **17/17**, M2-A0 **3/3**, M1.1 **10/10**, full unit **964/964**, all zero failures/skips; changed-source Biome and snapshot lint pass. TypeScript retains **44 unrelated diagnostics; 0 in changed A1.1 paths**. Only the identity-checked disposable Phase 13 test database was reset/migrated.
+- Synthetic attestation is not real scanner verification. No 0033, API, AWS/S3, customer data, production behavior, commit or push. Stop for independent review; cumulative patch: `~/phase13_m2_a1_1_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+## Active milestone — M2-A1.1 implementation complete; independent review pending (2026-10-25)
+
+- On branch `phase13-study-journey-project-centric` at base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`, added additive migration `0032_phase13_m2_a1_1_durable_document_audit`, Drizzle schema/snapshot, typed user/service actor extensions and an isolated synthetic-only PostgreSQL Project document repository. Existing `0030`/`0031` and M1 behavior remain intact.
+- Guarded PostgreSQL results: A1.1 **15/15**, M1.1 **10/10**, M2-A0 **3/3**; complete unit suite **964/964**. `db:check`, Biome, whitespace and changed-path TypeScript validation passed (44 existing TypeScript diagnostics, none in A1.1 changed paths).
+- No APIs, runtime consumers, actual customer files, S3/scanner integration, AI context or production behavior. Synthetic acknowledgement/attestation are not production consent or scan proof. Uncommitted/unpushed; stop for independent review. Complete patch: `~/phase13_m2_a1_1_review.patch`. A1.1 and overall M2 are **NOT ACCEPTED**.
+
+<!-- END PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
 ## Active milestone — M2-A1.1 durable PostgreSQL design ready (2026-10-25)
 

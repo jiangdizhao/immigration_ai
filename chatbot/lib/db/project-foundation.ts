@@ -13,9 +13,12 @@ import {
   validateProjectOperationId,
 } from "./project-foundation-utils";
 import { getLazyDatabase } from "./runtime-client";
+import type { ProjectEventSubjectKind } from "./schema";
 import {
   chat,
   immigrationConversation,
+  type PROJECT_EVENT_TYPES,
+  PROJECT_OPERATION_TYPES,
   projectConversation,
   projectEvent,
   projectMembership,
@@ -39,24 +42,8 @@ type Database = typeof db;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type ProjectFoundationTransaction = Transaction;
 
-export const PROJECT_OPERATION_TYPES = [
-  "project_create",
-  "project_close",
-  "membership_invite",
-  "membership_accept",
-  "membership_revoke",
-  "project_chat_create",
-] as const;
-
+export { PROJECT_EVENT_TYPES, PROJECT_OPERATION_TYPES } from "./schema";
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
-
-export const PROJECT_EVENT_TYPES = [
-  "project_created",
-  "membership_state_changed",
-  "project_chat_created",
-  "project_closed",
-] as const;
-
 export type ProjectEventType = (typeof PROJECT_EVENT_TYPES)[number];
 
 export type ProjectFoundationWriteBoundary =
@@ -276,7 +263,7 @@ async function appendEvent(
     actorUserId: string;
     projectRevision: number;
     eventType: ProjectEventType;
-    subjectKind: "project" | "membership" | "chat";
+    subjectKind: ProjectEventSubjectKind;
     subjectId: string;
     operationRecordId: string;
     hooks: ProjectFoundationTestHooks;

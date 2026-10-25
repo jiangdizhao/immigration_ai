@@ -1,4 +1,25 @@
 # CURRENT_HANDOFF
+<!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+## Current handoff — M2-A1.1 R1 scan provenance and schema parity fixed; independent review pending (2026-10-25)
+
+- **Checkpoint:** retained all A1.1 work on `phase13-study-journey-project-centric`, base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`. Still uncommitted and unpushed. R1 extends only migration 0032, its directly related schema/repository/tests, and these current-state records; migrations 0030 and 0031 remain unchanged.
+- The 0032 security transition guard now requires stored immutable object identity and an exact matching synthetic scan result before any terminal security promotion; terminal states cannot be rewritten. A deferred constraint also requires matching service-authored scan operation and ProjectEvent in the same transaction. `authorizeExactVersionRead()` now verifies the terminal clean run and its audit provenance alongside the existing active exact-purpose grant and Project authorization. This is synthetic provenance only, not proof of real malware scanning.
+- Drizzle `ProjectOperation_actor_type_check` now matches 0032's lowercase 64-hex service-operation ID rule; the user-operation ID policy is unchanged. No snapshot edit was needed: Drizzle snapshots omit CHECK constraints, and `pnpm db:check` passed.
+- **Validation:** A1.1 guarded PostgreSQL **17 passed / 0 failed / 0 skipped**; M2-A0 **3/3**; M1.1 **10/10**; full `pnpm test:unit` **964/964**. `pnpm db:check`, changed-source Biome, snapshot Biome lint, `git diff --check`, and untracked whitespace checks passed. TypeScript still reports **44 repository diagnostics, 0 in changed A1.1 paths**. Every database status/reset/test was scoped to verified disposable `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`.
+- No 0033, public API/UI, AWS/S3, real scanner, customer files, production behavior, commit or push. A1.1 and M2 remain **NOT ACCEPTED** pending independent review. Complete cumulative patch: `~/phase13_m2_a1_1_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+## Current handoff — M2-A1.1 durable Project document persistence implemented; independent review pending (2026-10-25)
+
+- **Checkpoint:** preserved the interrupted worktree on `phase13-study-journey-project-centric`, base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`. Work remains uncommitted and unpushed. Migration `0032_phase13_m2_a1_1_durable_document_audit` is additive; migrations `0030` and `0031` are unchanged.
+- Added durable PostgreSQL intent/import-consent state and a server-only repository for synthetic upload/import intents, storage outcomes, synthetic scan finalization, creator purpose grants, revocation, withdrawal and exact-purpose reads. User and worker operations/events have matching typed actor provenance; document mutation, Project revision and one event commit atomically with replay/CAS handling. No route, runtime consumer, real storage/scanner adapter, or production entrypoint was added. Consent and scan evidence remain synthetic test capabilities, not verified production provenance.
+- **Validation:** A1.1 guarded PostgreSQL integration **15 passed / 0 failed / 0 skipped**; existing M1.1 **10/10**, M2-A0 **3/3**; full `pnpm test:unit` **964 passed / 0 failed / 0 skipped**. Only `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` was status-verified, reset and migrated. `pnpm db:check`, changed-source Biome, generated-snapshot Biome lint and tracked/untracked whitespace checks passed. TypeScript no-emit reports **44 existing diagnostics, 0 in A1.1 changed paths**.
+- No customer database/data, public API/UI, AWS/S3, scanner integration, real files, deployment, commit or push. A1.1 and M2 remain **NOT ACCEPTED** pending independent review. Complete cumulative patch: `~/phase13_m2_a1_1_review.patch`.
+
+<!-- END PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
 ## Current handoff — M2-A1.1 durable transactions/audit architect contract (2026-10-25)
 

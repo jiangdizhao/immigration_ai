@@ -739,27 +739,87 @@ export const projectConversation = pgTable(
 
 export type ProjectConversation = InferSelectModel<typeof projectConversation>;
 
+export const PROJECT_AUDIT_ACTOR_KINDS = ["user", "service"] as const;
+export type ProjectAuditActorKind = (typeof PROJECT_AUDIT_ACTOR_KINDS)[number];
+
+export const PROJECT_DOCUMENT_SERVICE_PRINCIPALS = [
+  "project_document_storage_worker",
+  "project_document_scan_worker",
+] as const;
+
+export const PROJECT_OPERATION_TYPES = [
+  "project_create",
+  "project_close",
+  "membership_invite",
+  "membership_accept",
+  "membership_revoke",
+  "project_chat_create",
+  "project_document_upload_intent",
+  "project_document_import_intent",
+  "project_document_storage_finalize",
+  "project_document_storage_fail",
+  "project_document_scan_finalize",
+  "project_document_grant_create",
+  "project_document_grant_revoke",
+  "project_document_withdraw",
+] as const;
+
+export const PROJECT_OPERATION_RESULT_KINDS = [
+  "project",
+  "membership",
+  "chat",
+  "document_asset",
+  "document_version",
+  "document_scan_run",
+  "document_grant",
+] as const;
+
+export const PROJECT_EVENT_TYPES = [
+  "project_created",
+  "membership_state_changed",
+  "project_chat_created",
+  "project_closed",
+  "project_document_intent_created",
+  "project_document_storage_changed",
+  "project_document_security_changed",
+  "project_document_grant_changed",
+  "project_document_withdrawn",
+] as const;
+
+export const PROJECT_EVENT_SUBJECT_KINDS = [
+  "project",
+  "membership",
+  "chat",
+  "document_asset",
+  "document_version",
+  "document_scan_run",
+  "document_grant",
+] as const;
+export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
+export type ProjectOperationResultKind =
+  (typeof PROJECT_OPERATION_RESULT_KINDS)[number];
+export type ProjectEventType = (typeof PROJECT_EVENT_TYPES)[number];
+export type ProjectEventSubjectKind =
+  (typeof PROJECT_EVENT_SUBJECT_KINDS)[number];
+
 export const projectOperation = pgTable(
   "ProjectOperation",
   {
     id: uuid("id").primaryKey().notNull().defaultRandom(),
-    actorUserId: uuid("actorUserId")
+    actorUserId: uuid("actorUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    actorKind: varchar("actorKind", { enum: PROJECT_AUDIT_ACTOR_KINDS })
       .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
+      .default("user"),
+    servicePrincipalCode: varchar("servicePrincipalCode", { length: 64 }),
     operationType: varchar("operationType", {
-      enum: [
-        "project_create",
-        "project_close",
-        "membership_invite",
-        "membership_accept",
-        "membership_revoke",
-        "project_chat_create",
-      ],
+      enum: PROJECT_OPERATION_TYPES,
     }).notNull(),
     operationId: varchar("operationId", { length: 128 }).notNull(),
     requestHash: varchar("requestHash", { length: 64 }).notNull(),
     resultKind: varchar("resultKind", {
-      enum: ["project", "membership", "chat"],
+      enum: PROJECT_OPERATION_RESULT_KINDS,
     }).notNull(),
     resultId: uuid("resultId").notNull(),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -786,11 +846,19 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant')`
+    ),
+    actorShapeValid: check(
+      "ProjectOperation_actor_shape_check",
+      sql`(${table.actorKind} = 'user' and ${table.actorUserId} is not null and ${table.servicePrincipalCode} is null) or (${table.actorKind} = 'service' and ${table.actorUserId} is null and ${table.servicePrincipalCode} in ('project_document_storage_worker', 'project_document_scan_worker'))`
+    ),
+    actorTypeValid: check(
+      "ProjectOperation_actor_type_check",
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -804,20 +872,19 @@ export const projectEvent = pgTable(
     projectId: uuid("projectId")
       .notNull()
       .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
-    actorUserId: uuid("actorUserId")
+    actorUserId: uuid("actorUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    actorKind: varchar("actorKind", { enum: PROJECT_AUDIT_ACTOR_KINDS })
       .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
+      .default("user"),
+    servicePrincipalCode: varchar("servicePrincipalCode", { length: 64 }),
     projectRevision: integer("projectRevision").notNull(),
     eventType: varchar("eventType", {
-      enum: [
-        "project_created",
-        "membership_state_changed",
-        "project_chat_created",
-        "project_closed",
-      ],
+      enum: PROJECT_EVENT_TYPES,
     }).notNull(),
     subjectKind: varchar("subjectKind", {
-      enum: ["project", "membership", "chat"],
+      enum: PROJECT_EVENT_SUBJECT_KINDS,
     }),
     subjectId: uuid("subjectId"),
     operationRecordId: uuid("operationRecordId")
@@ -839,11 +906,19 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant') and ${table.subjectId} is not null)`
+    ),
+    actorShapeValid: check(
+      "ProjectEvent_actor_shape_check",
+      sql`(${table.actorKind} = 'user' and ${table.actorUserId} is not null and ${table.servicePrincipalCode} is null) or (${table.actorKind} = 'service' and ${table.actorUserId} is null and ${table.servicePrincipalCode} in ('project_document_storage_worker', 'project_document_scan_worker'))`
+    ),
+    documentEventSubjectValid: check(
+      "ProjectEvent_document_subject_check",
+      sql`(${table.eventType} not in ('project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn')) or (${table.eventType} = 'project_document_intent_created' and ${table.subjectKind} = 'document_asset') or (${table.eventType} = 'project_document_storage_changed' and ${table.subjectKind} = 'document_version') or (${table.eventType} = 'project_document_security_changed' and ${table.subjectKind} = 'document_scan_run') or (${table.eventType} = 'project_document_grant_changed' and ${table.subjectKind} = 'document_grant') or (${table.eventType} = 'project_document_withdrawn' and ${table.subjectKind} = 'document_asset')`
     ),
   })
 );
@@ -985,6 +1060,10 @@ export const projectDocumentVersion = pgTable(
       .notNull()
       .default("pending"),
     processingGeneration: integer("processingGeneration").notNull().default(1),
+    storageObjectVersionId: varchar("storageObjectVersionId", {
+      length: 256,
+    }),
+    storageVerifiedAt: timestamp("storageVerifiedAt"),
   },
   (table) => ({
     projectIdVersionUnique: uniqueIndex(
@@ -1046,6 +1125,10 @@ export const projectDocumentVersion = pgTable(
     securityStatusAllowed: check(
       "ProjectDocumentVersion_security_status_check",
       sql`${table.securityStatus} in ('pending', 'clean', 'rejected', 'failed')`
+    ),
+    storageObjectVersionShape: check(
+      "ProjectDocumentVersion_storage_object_version_shape_check",
+      sql`(${table.storageObjectVersionId} is null and ${table.storageVerifiedAt} is null) or (${table.storageObjectVersionId} is not null and length(trim(${table.storageObjectVersionId})) between 1 and 256 and ${table.storageVerifiedAt} is not null)`
     ),
   })
 );
@@ -1147,6 +1230,7 @@ export const projectDocumentProcessingRun = pgTable(
     }),
     servicePrincipalCode: varchar("servicePrincipalCode", { length: 64 }),
     objectSha256: varchar("objectSha256", { length: 64 }).notNull(),
+    eventFingerprint: varchar("eventFingerprint", { length: 64 }),
     status: varchar("status", {
       enum: PROJECT_DOCUMENT_RUN_STATUSES,
     })
@@ -1196,6 +1280,10 @@ export const projectDocumentProcessingRun = pgTable(
       "ProjectDocumentProcessingRun_object_sha256_check",
       sql`${table.objectSha256} ~ '^[0-9a-f]{64}$'`
     ),
+    eventFingerprintValid: check(
+      "ProjectDocumentProcessingRun_event_fingerprint_check",
+      sql`${table.eventFingerprint} is null or ${table.eventFingerprint} ~ '^[0-9a-f]{64}$'`
+    ),
     generationPositive: check(
       "ProjectDocumentProcessingRun_generation_check",
       sql`${table.generation} > 0`
@@ -1221,6 +1309,136 @@ export const projectDocumentProcessingRun = pgTable(
 
 export type ProjectDocumentProcessingRun = InferSelectModel<
   typeof projectDocumentProcessingRun
+>;
+
+export const PROJECT_DOCUMENT_INTENT_KINDS = [
+  "direct_upload",
+  "chat_document_import",
+] as const;
+export type ProjectDocumentIntentKind =
+  (typeof PROJECT_DOCUMENT_INTENT_KINDS)[number];
+
+export const PROJECT_DOCUMENT_INTENT_STATUSES = [
+  "intent_created",
+  "stored",
+  "failed",
+  "cleanup_pending",
+] as const;
+export type ProjectDocumentIntentStatus =
+  (typeof PROJECT_DOCUMENT_INTENT_STATUSES)[number];
+
+export const projectDocumentIntent = pgTable(
+  "ProjectDocumentIntent",
+  {
+    operationRecordId: uuid("operationRecordId")
+      .primaryKey()
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    assetId: uuid("assetId").notNull(),
+    versionId: uuid("versionId").notNull(),
+    intentKind: varchar("intentKind", {
+      enum: PROJECT_DOCUMENT_INTENT_KINDS,
+    }).notNull(),
+    status: varchar("status", {
+      enum: PROJECT_DOCUMENT_INTENT_STATUSES,
+    })
+      .notNull()
+      .default("intent_created"),
+    generation: integer("generation").notNull(),
+    errorCode: varchar("errorCode", { length: 64 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectOperationUnique: uniqueIndex(
+      "ProjectDocumentIntent_project_operation_unique"
+    ).on(table.projectId, table.operationRecordId),
+    projectVersionUnique: uniqueIndex(
+      "ProjectDocumentIntent_project_version_unique"
+    ).on(table.projectId, table.versionId),
+    exactVersionForeignKey: foreignKey({
+      columns: [table.projectId, table.assetId, table.versionId],
+      foreignColumns: [
+        projectDocumentVersion.projectId,
+        projectDocumentVersion.assetId,
+        projectDocumentVersion.versionId,
+      ],
+      name: "ProjectDocumentIntent_project_asset_version_fk",
+    }).onDelete("restrict"),
+    generationPositive: check(
+      "ProjectDocumentIntent_generation_check",
+      sql`${table.generation} > 0`
+    ),
+    statusAllowed: check(
+      "ProjectDocumentIntent_status_check",
+      sql`${table.status} in ('intent_created', 'stored', 'failed', 'cleanup_pending')`
+    ),
+    kindAllowed: check(
+      "ProjectDocumentIntent_kind_check",
+      sql`${table.intentKind} in ('direct_upload', 'chat_document_import')`
+    ),
+    outcomeConsistent: check(
+      "ProjectDocumentIntent_outcome_check",
+      sql`(${table.status} in ('intent_created', 'stored') and ${table.errorCode} is null) or (${table.status} in ('failed', 'cleanup_pending') and ${table.errorCode} is not null and length(trim(${table.errorCode})) between 1 and 64)`
+    ),
+    timestampsOrdered: check(
+      "ProjectDocumentIntent_timestamps_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+  })
+);
+
+export type ProjectDocumentIntent = InferSelectModel<
+  typeof projectDocumentIntent
+>;
+
+export const projectDocumentImportConsent = pgTable(
+  "ProjectDocumentImportConsent",
+  {
+    operationRecordId: uuid("operationRecordId")
+      .primaryKey()
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    projectId: uuid("projectId").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    sourceChatId: uuid("sourceChatId").notNull(),
+    sourceDocumentId: uuid("sourceDocumentId").notNull(),
+    sourceSha256: varchar("sourceSha256", { length: 64 }).notNull(),
+    noticeVersion: varchar("noticeVersion", { length: 128 }).notNull(),
+    acceptedAt: timestamp("acceptedAt").notNull(),
+    accepted: boolean("accepted").notNull().default(true),
+  },
+  (table) => ({
+    intentForeignKey: foreignKey({
+      columns: [table.projectId, table.operationRecordId],
+      foreignColumns: [
+        projectDocumentIntent.projectId,
+        projectDocumentIntent.operationRecordId,
+      ],
+      name: "ProjectDocumentImportConsent_project_intent_fk",
+    }).onDelete("restrict"),
+    sourceDigestValid: check(
+      "ProjectDocumentImportConsent_source_sha256_check",
+      sql`${table.sourceSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    noticeVersionPresent: check(
+      "ProjectDocumentImportConsent_notice_version_check",
+      sql`length(trim(${table.noticeVersion})) between 1 and 128`
+    ),
+    acceptedTrue: check(
+      "ProjectDocumentImportConsent_accepted_check",
+      sql`${table.accepted} is true`
+    ),
+  })
+);
+
+export type ProjectDocumentImportConsent = InferSelectModel<
+  typeof projectDocumentImportConsent
 >;
 
 export type ConsultationStatus =

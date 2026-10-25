@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { config as loadEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
@@ -22,10 +23,12 @@ import {
   ProjectFoundationError,
 } from "./project-foundation";
 
+loadEnv({ path: resolve(".env.local") });
+
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0031_sour_scarecrow";
+const EXPECTED_MIGRATION_HEAD = "0032_phase13_m2_a1_1_durable_document_audit";
 const skipReason = TEST_DATABASE_URL
   ? false
   : "PHASE13_M1_1_TEST_DATABASE_URL is not configured (isolated database required)";
@@ -38,10 +41,8 @@ function assertConfiguredTarget(url: string) {
     EXPECTED_DATABASE,
     "refusing M1.1 integration work against a database with the wrong configured name"
   );
-  assert.ok(
-    ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname),
-    "refusing M1.1 integration work against a non-local database host"
-  );
+  assert.equal(parsed.hostname, "127.0.0.1");
+  assert.equal(Number(parsed.port), 5432);
 }
 
 async function applyBaseMigrations(sql: ReturnType<typeof postgres>) {
@@ -225,16 +226,22 @@ test(
         {
           database: string;
           version: string;
+          host: string | null;
+          port: number;
         }[]
       >`
         select current_database() as database,
-               current_setting('server_version_num') as version
+               current_setting('server_version_num') as version,
+               host(inet_server_addr()) as host,
+               inet_server_port() as port
       `;
       assert.equal(
         identity?.database,
         EXPECTED_DATABASE,
         "refusing M1.1 integration work after connected database identity mismatch"
       );
+      assert.equal(identity?.host, "127.0.0.1");
+      assert.equal(Number(identity?.port), 5432);
       assert.ok(Number(identity?.version) >= 140_000);
       const [initial] = await sql<{ tables: string; hasLedger: boolean }[]>`
         select
@@ -273,7 +280,7 @@ test(
       const [migrationCount] = await sql<{ count: string }[]>`
         select count(*)::text as count from drizzle.__drizzle_migrations
       `;
-      assert.equal(Number(migrationCount?.count), 32);
+      assert.equal(Number(migrationCount?.count), 33);
 
       const [inventory] = await sql<
         {
@@ -314,6 +321,8 @@ test(
               "ProjectConversation",
               "ProjectDocumentAsset",
               "ProjectDocumentGrant",
+              "ProjectDocumentImportConsent",
+              "ProjectDocumentIntent",
               "ProjectDocumentProcessingRun",
               "ProjectDocumentVersion",
               "ProjectEvent",
@@ -330,6 +339,7 @@ test(
             operationColumns.map((row) => row.columnName).sort(),
             [
               "actorUserId",
+              "actorKind",
               "createdAt",
               "id",
               "operationId",
@@ -337,6 +347,7 @@ test(
               "requestHash",
               "resultId",
               "resultKind",
+              "servicePrincipalCode",
             ].sort()
           );
         }

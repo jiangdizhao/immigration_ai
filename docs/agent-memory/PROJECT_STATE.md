@@ -1,4 +1,24 @@
 # PROJECT_STATE
+<!-- BEGIN PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+## Current Phase 13 state — M2-A1.1 R1 scan provenance/schema parity fixed; independent review pending (2026-10-25)
+
+- Preserved the complete A1.1 worktree on `phase13-study-journey-project-centric` at base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`; uncommitted and unpushed. Migration 0032 now guards pending-to-terminal security changes against exact storage identity and matching scan result, rejects terminal rewrites, and checks the final service-authored operation/event audit at transaction commit. The repository read gate also verifies exact clean scan and audit evidence in addition to current Project authority and the exact active purpose grant.
+- Drizzle's `ProjectOperation_actor_type_check` mirrors SQL's lowercase 64-character service digest requirement. No snapshot change was needed because Drizzle snapshots do not represent CHECK constraints; `pnpm db:check` passed. Migration 0030 and 0031 were not modified.
+- Guarded PostgreSQL results: A1.1 **17/17**, M2-A0 **3/3**, M1.1 **10/10**; full unit suite **964/964**, all with zero failures/skips. Changed-source Biome, snapshot Biome lint, `git diff --check`, and untracked whitespace checks passed. TypeScript reports **44 existing diagnostics, none in changed A1.1 paths**. Only `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` was used after identity verification.
+- Scan provenance remains synthetic and is not a claim of actual malware scanning. No migration 0033, APIs, AWS/S3, production scanner, real customer documents, production behavior, commit or push. A1.1 and overall M2 remain **NOT ACCEPTED** pending independent review. Cumulative patch: `~/phase13_m2_a1_1_R1_review.patch`.
+
+<!-- END PHASE13_M2_A1_1_R1_SCAN_PROVENANCE_2026_10_25 -->
+
+<!-- BEGIN PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+## Current Phase 13 state — M2-A1.1 durable implementation complete; independent review pending (2026-10-25)
+
+- Preserved implementation on `phase13-study-journey-project-centric` at base HEAD `c859a97ce98c219a7adf18e35c229de6e26ed94d`; no commit or push. Additive migration 0032 and Drizzle metadata extend durable Project document intents, synthetic import-consent receipts, worker actor audit, object-version identity and scan-event fingerprints. Existing migration 0030/0031 files remain unchanged.
+- An isolated server-only PostgreSQL repository now provides synthetic-only durable intent/replay, storage/scan state transitions, creator purpose grants, withdrawal and scoped reads with Project revision/Event atomicity and worker/user identity checks. No route/runtime consumer, actual upload/download, S3/scanner adapter, AI context or production feature was added. Synthetic consent and scan verification do not establish production provenance.
+- Validation: A1.1 PostgreSQL **15 passed**, M1.1 **10 passed**, M2-A0 **3 passed**, and `pnpm test:unit` **964 passed**, all zero failures/skips. `pnpm db:check`, changed-source Biome, snapshot lint and whitespace validation passed. TypeScript remains at **44 diagnostics outside A1.1 changed paths; 0 within them**. The only database used was the guarded disposable `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`.
+- A1.1 and overall M2 remain **NOT ACCEPTED**; independent patch review is next. Cumulative uncommitted patch: `~/phase13_m2_a1_1_review.patch`.
+
+<!-- END PHASE13_M2_A1_1_IMPLEMENTATION_2026_10_25 -->
+
 <!-- BEGIN PHASE13_M2_A1_1_ARCHITECT_CONTRACT_2026_10_25 -->
 ## Current Phase 13 state — M2-A1.1 contract authored, no code yet (2026-10-25)
 

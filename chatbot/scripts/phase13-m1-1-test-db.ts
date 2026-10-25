@@ -22,7 +22,8 @@ loadEnv({ path: resolve(".env.local") });
 
 export const ISOLATED_TEST_DATABASE = "immigration_ai_phase13_m1_1_test";
 const MAINTENANCE_DATABASE = "postgres";
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const EXPECTED_HOST = "127.0.0.1";
+const EXPECTED_PORT = "5432";
 
 function configuredTarget(): URL {
   const configured = process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim();
@@ -33,7 +34,8 @@ function configuredTarget(): URL {
   if (
     !["postgres:", "postgresql:"].includes(parsed.protocol) ||
     parsed.pathname.replace(/^\//u, "") !== ISOLATED_TEST_DATABASE ||
-    !LOOPBACK_HOSTS.has(parsed.hostname)
+    parsed.hostname !== EXPECTED_HOST ||
+    parsed.port !== EXPECTED_PORT
   ) {
     throw new Error("isolated_database_target_rejected");
   }
@@ -70,10 +72,22 @@ async function assertActualDatabase(
   client: ReturnType<typeof postgres>,
   expected: string
 ) {
-  const rows = await client<{ database: string }[]>`
-    select current_database() as database
+  const rows = await client<
+    {
+      database: string;
+      host: string | null;
+      port: number;
+    }[]
+  >`
+    select current_database() as database,
+           host(inet_server_addr()) as host,
+           inet_server_port() as port
   `;
-  if (rows[0]?.database !== expected) {
+  if (
+    rows[0]?.database !== expected ||
+    rows[0]?.host !== EXPECTED_HOST ||
+    Number(rows[0]?.port) !== Number(EXPECTED_PORT)
+  ) {
     throw new Error("connected_database_identity_mismatch");
   }
 }

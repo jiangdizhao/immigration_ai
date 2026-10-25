@@ -12,14 +12,17 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { config as loadEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
+loadEnv({ path: resolve(".env.local") });
+
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0031_sour_scarecrow";
+const EXPECTED_MIGRATION_HEAD = "0032_phase13_m2_a1_1_durable_document_audit";
 const skipReason = TEST_DATABASE_URL
   ? false
   : "PHASE13_M1_1_TEST_DATABASE_URL is not configured (isolated database required)";
@@ -30,10 +33,8 @@ function assertConfiguredTarget(url: string) {
   const parsed = new URL(url);
   assert.ok(["postgres:", "postgresql:"].includes(parsed.protocol));
   assert.equal(parsed.pathname.replace(/^\//u, ""), EXPECTED_DATABASE);
-  assert.ok(
-    ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname),
-    "refusing a non-local PostgreSQL target"
-  );
+  assert.equal(parsed.hostname, "127.0.0.1");
+  assert.equal(Number(parsed.port), 5432);
 }
 
 async function migrateThroughM1(sql: TestSql) {
@@ -51,7 +52,7 @@ async function migrateThroughM1(sql: TestSql) {
     }>;
   };
   assert.equal(journal.entries.at(-1)?.tag, EXPECTED_MIGRATION_HEAD);
-  const m1Entries = journal.entries.slice(0, -1);
+  const m1Entries = journal.entries.slice(0, -2);
   const scratch = await mkdtemp(join(tmpdir(), "phase13-m2-a0-base-"));
   try {
     await mkdir(join(scratch, "meta"), { recursive: true });
@@ -191,10 +192,27 @@ async function insertVersion(
     ) values (
       ${versionId}, ${input.projectId}, ${input.assetId}, ${input.versionNumber},
       ${storageKey}, ${sha256}, 128, 'application/pdf', ${input.originKind ?? "direct_upload"},
-      ${input.uploadedByUserId}, ${input.storageStatus ?? "pending"},
+      ${input.uploadedByUserId}, 'pending',
       ${input.securityStatus ?? "pending"}
     )
   `;
+  if (input.storageStatus && input.storageStatus !== "pending") {
+    if (input.storageStatus === "stored") {
+      await sql`
+        update "ProjectDocumentVersion"
+        set "storageStatus" = 'stored',
+            "storageObjectVersionId" = ${`synthetic-version-${randomUUID()}`},
+            "storageVerifiedAt" = now()
+        where "versionId" = ${versionId}
+      `;
+    } else {
+      await sql`
+        update "ProjectDocumentVersion"
+        set "storageStatus" = ${input.storageStatus}
+        where "versionId" = ${versionId}
+      `;
+    }
+  }
   return { versionId, storageKey, sha256 };
 }
 
@@ -259,12 +277,21 @@ test(
 
     try {
       const [identity] = await sql<
-        { database: string; serverVersion: string }[]
+        {
+          database: string;
+          serverVersion: string;
+          host: string | null;
+          port: number;
+        }[]
       >`
         select current_database() as database,
-               current_setting('server_version_num') as "serverVersion"
+               current_setting('server_version_num') as "serverVersion",
+               host(inet_server_addr()) as host,
+               inet_server_port() as port
       `;
       assert.equal(identity?.database, EXPECTED_DATABASE);
+      assert.equal(identity?.host, "127.0.0.1");
+      assert.equal(Number(identity?.port), 5432);
       assert.ok(Number(identity?.serverVersion) >= 140_000);
       const [initial] = await sql<{ tables: string; hasLedger: boolean }[]>`
         select
@@ -292,10 +319,14 @@ test(
         select * from "StudyJourneyProject" where "id" = ${projectId}
       `;
       const [operationBefore] = await sql<Record<string, unknown>[]>`
-        select * from "ProjectOperation" where "resultId" = ${projectId}
+        select "id", "actorUserId", "operationType", "operationId", "requestHash",
+               "resultKind", "resultId", "createdAt"
+        from "ProjectOperation" where "resultId" = ${projectId}
       `;
       const [eventBefore] = await sql<Record<string, unknown>[]>`
-        select * from "ProjectEvent" where "projectId" = ${projectId}
+        select "id", "projectId", "actorUserId", "projectRevision", "eventType",
+               "subjectKind", "subjectId", "operationRecordId", "createdAt"
+        from "ProjectEvent" where "projectId" = ${projectId}
       `;
 
       await migrate(drizzle(sql), {
@@ -305,19 +336,43 @@ test(
       const [migrationCount] = await sql<{ count: string }[]>`
         select count(*)::text as count from drizzle.__drizzle_migrations
       `;
-      assert.equal(Number(migrationCount?.count), 32);
+      assert.equal(Number(migrationCount?.count), 33);
       const [projectAfter] = await sql<Record<string, unknown>[]>`
         select * from "StudyJourneyProject" where "id" = ${projectId}
       `;
       const [operationAfter] = await sql<Record<string, unknown>[]>`
-        select * from "ProjectOperation" where "resultId" = ${projectId}
+        select "id", "actorUserId", "operationType", "operationId", "requestHash",
+               "resultKind", "resultId", "createdAt"
+        from "ProjectOperation" where "resultId" = ${projectId}
       `;
       const [eventAfter] = await sql<Record<string, unknown>[]>`
-        select * from "ProjectEvent" where "projectId" = ${projectId}
+        select "id", "projectId", "actorUserId", "projectRevision", "eventType",
+               "subjectKind", "subjectId", "operationRecordId", "createdAt"
+        from "ProjectEvent" where "projectId" = ${projectId}
       `;
       assert.deepEqual(projectAfter, projectBefore);
       assert.deepEqual(operationAfter, operationBefore);
       assert.deepEqual(eventAfter, eventBefore);
+      const [operationActor] = await sql<
+        { actorKind: string; servicePrincipalCode: string | null }[]
+      >`
+        select "actorKind", "servicePrincipalCode"
+        from "ProjectOperation" where "resultId" = ${projectId}
+      `;
+      assert.deepEqual(operationActor, {
+        actorKind: "user",
+        servicePrincipalCode: null,
+      });
+      const [eventActor] = await sql<
+        { actorKind: string; servicePrincipalCode: string | null }[]
+      >`
+        select "actorKind", "servicePrincipalCode"
+        from "ProjectEvent" where "projectId" = ${projectId}
+      `;
+      assert.deepEqual(eventActor, {
+        actorKind: "user",
+        servicePrincipalCode: null,
+      });
       const [chatAfter] = await sql<Record<string, unknown>[]>`
         select * from "Chat" where "id" = ${standalone.chatId}
       `;
@@ -348,6 +403,8 @@ test(
           "ProjectConversation",
           "ProjectDocumentAsset",
           "ProjectDocumentGrant",
+          "ProjectDocumentImportConsent",
+          "ProjectDocumentIntent",
           "ProjectDocumentProcessingRun",
           "ProjectDocumentVersion",
           "ProjectEvent",
@@ -401,7 +458,10 @@ test(
             processingGeneration: 1,
           });
           await sql`
-          update "ProjectDocumentVersion" set "storageStatus" = 'stored'
+          update "ProjectDocumentVersion"
+          set "storageStatus" = 'stored',
+              "storageObjectVersionId" = 'synthetic-phase13-m2-a0-object-v1',
+              "storageVerifiedAt" = now()
           where "versionId" = ${version.versionId}
         `;
           const [afterStorage] = await sql<
@@ -414,10 +474,14 @@ test(
             storageStatus: "stored",
             securityStatus: "pending",
           });
-          await sql`
-          update "ProjectDocumentVersion" set "securityStatus" = 'failed'
-          where "versionId" = ${version.versionId}
-        `;
+          await expectConstraint(
+            sql`
+            update "ProjectDocumentVersion" set "securityStatus" = 'failed'
+            where "versionId" = ${version.versionId}
+          `,
+            "23514",
+            "ProjectDocumentVersion_security_scan_provenance"
+          );
           const [afterSecurity] = await sql<
             { storageStatus: string; securityStatus: string }[]
           >`
@@ -426,7 +490,7 @@ test(
         `;
           assert.deepEqual(afterSecurity, {
             storageStatus: "stored",
-            securityStatus: "failed",
+            securityStatus: "pending",
           });
 
           await expectConstraint(
@@ -496,7 +560,7 @@ test(
               securityStatus: "scan_complete",
             }),
             "23514",
-            "ProjectDocumentVersion_security_status_check"
+            "ProjectDocumentVersion_security_status_terminal"
           );
           await expectConstraint(
             sql`
@@ -903,10 +967,14 @@ test(
           `
           );
 
-          await sql`
-          update "ProjectDocumentVersion" set "securityStatus" = 'clean'
-          where "versionId" = ${version.versionId}
-        `;
+          await expectConstraint(
+            sql`
+            update "ProjectDocumentVersion" set "securityStatus" = 'clean'
+            where "versionId" = ${version.versionId}
+          `,
+            "23514",
+            "ProjectDocumentVersion_security_scan_provenance"
+          );
           const [cleanState] = await sql<
             { storageStatus: string; securityStatus: string }[]
           >`
@@ -915,7 +983,7 @@ test(
         `;
           assert.deepEqual(cleanState, {
             storageStatus: "stored",
-            securityStatus: "clean",
+            securityStatus: "pending",
           });
 
           await expectConstraint(
