@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M3_001_OFFLINE_ACCEPTED_AND_M3_002_DISPATCHED_2026_10_27 -->
+## Canonical M3 checkpoint — M3-001 OFFLINE ACCEPTED; M3-002 durable catalog ready (2026-10-27)
+
+- **Independently verified code:** GitHub branch at f13cb89f5e27248d9b7eaff96290d2c8cebfc1b9, exactly eight new Education Intelligence TS/test files and three status docs (11 files), one commit after f89bcb3 design. No migration, runtime, API or customer-facing code change.
+- **Tests/review:** Independent R1 source review PASS. Codex reports focused education 38/38 and changed-file Biome, 44 preexisting TypeScript diagnostics with none in module. Ubuntu host capture: pnpm test:unit **964 passed, 0 failed, 0 skipped**; pnpm db:check **Everything's fine**. **Evidence limitation:** host capture does not include the separate focused 38-test run; package.json test:unit has an explicit list excluding M3 focused files. See [M3-001 acceptance matrix](./tasks/PHASE13_M3_001_OFFLINE_ACCEPTANCE_2026_10_27.md).
+- **Disposition:** M3-001 **OFFLINE ACCEPTED**, M3 milestone **OPEN**, Phase 13 production/live **NO_GO**. Historical pending/uncommitted Codex entries below are superseded but preserved for traceability.
+- **Active next task:** [M3-002 Durable Education Catalog](./tasks/PHASE13_M3_002_DURABLE_EDUCATION_CATALOG_2026_10_27.md), isolated Provider/Course/Delivery/Intake/Source/Snapshot/Observation normalized schema and transactional exact-scope repository. Repo journal ends 0039; next expected 0040 only after inspecting actual migration metadata. **Migration FILE creation only**; applying against even a disposable database requires separate owner exact-target authorization.
+- **Workflow:** owner ff-only pulls this new docs-only acceptance/task commit before Codex M3-002. Codex does only bounded M3-002, leaves patch uncommitted/unpushed, records tests and any DB skip honestly; independent source review -> owner host validation -> commit/push -> independent remote verification.
+<!-- END PHASE13_M3_001_OFFLINE_ACCEPTED_AND_M3_002_DISPATCHED_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
 ## Current milestone — M3-001-R1 corrections ready for independent review (2026-10-27)
 

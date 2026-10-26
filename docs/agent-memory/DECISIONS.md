@@ -1,5 +1,16 @@
 # DECISIONS
 
+<!-- BEGIN DECISION_PHASE13_M3_001_ACCEPTANCE_2026_10_27 -->
+## D-P13-009 — M3-001 offline accepted, M3-002 durability boundary
+
+Date: 2026-10-27. Status: M3-001 OFFLINE ACCEPTED / M3-002 CODE TASK READY / M3 PRODUCTION NO_GO.
+
+Owner-pushed SHA f13cb89f5e27248d9b7eaff96290d2c8cebfc1b9 was independently verified as the exact remote HEAD with 11 expected files. R1 source review passed. Ubuntu host captured 964/964 existing tests and successful db:check; 38 new focused M3 tests were Codex-reported and independently adapted, but their separate Ubuntu host run is not in captured evidence. Preserve this distinction.
+
+M3-002 builds only an isolated Education Catalog schema and repository from M3-001 contracts. Migration authoring is allowed; migration execution/application against ANY database (even disposable) is NOT authorized without separate owner exact-target approval. No policy legal publication semantics, Project user data access, real education acquisition, customer serving, production activation or M3-003 is authorized. See [M3-002 task](./tasks/PHASE13_M3_002_DURABLE_EDUCATION_CATALOG_2026_10_27.md).
+<!-- END DECISION_PHASE13_M3_001_ACCEPTANCE_2026_10_27 -->
+
+
 <!-- BEGIN DECISION_PHASE13_M3_EDUCATION_ARCHITECTURE_2026_10_27 -->
 ## D-P13-008 — Education Intelligence M3 architecture frozen; offline M3-001 dispatched
 
