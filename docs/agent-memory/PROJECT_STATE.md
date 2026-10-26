@@ -1,3 +1,25 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+## Phase 13 canonical state — B2-1 R2 correction pending final independent review (2026-10-26)
+
+- Current uncommitted B2-1 includes R1 and R2 corrections. Numeric `execFile()` exit codes and bounded stderr are retained for safe AWS error classification; AccessDenied/NoSuchBucket, timeout, abort, missing executable, output limit and unexpected process failures remain distinct, with diagnostics sanitized. Prior R1 checks still enforce the official GuardDuty response fields, current approval at every request boundary, and explicit report/identity/incomplete-collection CLI results.
+- Focused offline results: B2-1 **28/28**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**. Full unit: **113/116 passed, 3 failed, 0 skipped** (missing-config subprocess stderr mismatch; empty-`POSTGRES_URL` migration CLI status mismatch; loopback `EPERM`). Changed-file Biome and whitespace passed. TypeScript remains at 44 diagnostics in unchanged files, none in B2-1 paths.
+- No AWS API/CLI/profile, credentials, PostgreSQL, migration, S3/SQS, deployment, customer data, feature change, commit or push. Readiness remains `NO_GO`; acceptance is not claimed. Cumulative patch: `~/phase13_m2_a1_2_B2_1_R2_review.patch`.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+## Historical canonical checkpoint — B2-1 initial implementation before R1/R2 corrections (2026-10-26)
+
+This checkpoint is retained for implementation history; current status and validation are in the R2 section above.
+
+- B2-1 is implemented but not accepted, committed or pushed. Branch `phase13-study-journey-project-centric`; starting HEAD `a8f2e36053987c045b8105a148e9d67497ec0c6a`. B2-0 plan/help/collection-denial code remains unchanged.
+- A separate operator-only CLI now has strict scope/approval/account/profile preflight, STS-first exact identity verification, an allowlisted read-only AWS CLI v2 runner, bounded pagination/IAM lookups/time/output/calls, sanitized errors and restrictive external reports. Observation provenance distinguishes live executor findings from fixtures. Live decisions remain unconditionally `NO_GO`; local approval is self-attested and is not verified production consent. No trust capability, customer route, scan consumer, DB behavior or feature toggle was added.
+- Offline tests: B2-1 **23/23**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A adapters **17/17**. Full `pnpm test:unit`: **113/116 test files passed, 3 failed, 0 skipped** (two subprocess CLI expectations and loopback listener `EPERM`). Biome and whitespace passed. TypeScript remains at **44 diagnostics in unchanged files**, none in B2-1 paths.
+- No AWS API/STS or live profile was invoked; no credential store was inspected; no database was contacted or migrated; no S3/SQS/GuardDuty action, deployment, customer file access, commit or push occurred. Cumulative patch: `~/phase13_m2_a1_2_B2_1_review.patch`.
+- **Stop for independent ChatGPT source review.** Real AWS experiment requires a separate explicit owner authorization after review. B2-2, B3, A1.3, A1.2 and overall M2 remain separately gated/not accepted.
+
+<!-- END PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
 ## Phase 13 canonical state — B2-1 offline execution contract frozen (2026-10-26)
 
@@ -1511,3 +1533,10 @@ Detailed task packet: `docs/agent-memory/tasks/STRIPE-CHINA-PAYMENTS-2026-10-10.
 - **Standing instruction:** No further billing code, Stripe, live payment, database or AWS mutation without a new explicit owner request. Continue unrelated product development independently.
 
 This entry supersedes any earlier "ACTIVE / implementation pending" instructions for China Stripe payments; earlier records remain historical implementation evidence.
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->
+## Historical canonical state — B2-1 R1 before R2 (2026-10-26)
+
+R1 GuardDuty schema, approval-expiry and CLI-result corrections passed independent review. That review identified the numeric AWS CLI process-exit classification defect recorded and fixed in the current R2 section above. R1 focused validation was B2-1 **27/27**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**. Historical patch: `~/phase13_m2_a1_2_B2_1_R1_review.patch`. No acceptance was claimed at that checkpoint.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->

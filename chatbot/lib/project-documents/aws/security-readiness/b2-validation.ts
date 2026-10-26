@@ -141,7 +141,9 @@ export function isB2Observation(value: unknown): value is B2Observation {
     }
     return (
       boundedText(finding.requirement, 96, /^[a-z0-9_.:-]+$/u) &&
-      (finding.source === "plan" || finding.source === "fixture_executor") &&
+      (value.source === "fixture"
+        ? finding.source === "plan" || finding.source === "fixture_executor"
+        : finding.source === "live_executor") &&
       (finding.status === "PASS" ||
         finding.status === "FAIL" ||
         finding.status === "INCOMPLETE") &&

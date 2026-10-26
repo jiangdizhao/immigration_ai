@@ -1,3 +1,24 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+## Active milestone — B2-1 R2 correction implemented, final review pending (2026-10-26)
+
+- R2 preserves Node `execFile()` numeric exit codes and bounded stderr so AWS AccessDenied and missing-resource errors reach the existing safe classifier. Timeout, abort, ENOENT, output-buffer and unexpected infrastructure failures remain separately typed. Offline regression tests use simulated Node callback errors; no AWS command is invoked. R1 GuardDuty schema, expiry recheck and operator outcome corrections remain present.
+- Offline tests: B2-1 **28/28**, B2-0 **16/16**, B1 evaluator **16/16**, queue **11/11**, A1.2-A adapters **17/17**. Full unit: **113/116 passed, 3 failed, 0 skipped** (child missing-config stderr mismatch; empty-`POSTGRES_URL` migration CLI returned 1 instead of 2; loopback listener `EPERM`). Biome and whitespace passed. TypeScript has 44 unchanged-file diagnostics and none in changed paths.
+- Changes remain uncommitted/unpushed. No AWS, credential, PostgreSQL, S3, SQS or deployment access occurred; readiness stays `NO_GO`. Independent review is pending; no acceptance is claimed.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+## Historical milestone — B2-1 initial implementation before R1/R2 corrections (2026-10-26)
+
+This checkpoint is retained for implementation history; current status and validation are in the R2 section above.
+
+- B2-1 implementation is uncommitted/unpushed on `phase13-study-journey-project-centric`, based on expected HEAD `a8f2e36053987c045b8105a148e9d67497ec0c6a`. Existing B2-0 offline plan/help/collection refusal is preserved.
+- The separate operator path requires explicit scope, short-lived approval, confirmed account, bounded SSO profile configuration, and an external private report destination. STS exact identity is checked before scoped reads. The AWS CLI executor uses a fixed read-only command allowlist, no shell, bounded output/time/calls/pages, no retries, redacted typed errors and safe finding provenance. Every live observation remains `NO_GO`; self-attested approval is not verified production consent.
+- Focused offline tests: B2-1 **23/23**, B2-0 **16/16**, B1 evaluator **16/16**, queue **11/11**, A1.2-A **17/17**, all zero failures/skips. Full unit: **113/116 files passed, 3 failed, 0 skipped**; two subprocess expected-error assertions and three loopback binds are sandbox-restricted. Biome and whitespace pass; TypeScript has 44 unchanged-file diagnostics and no changed-path diagnostics.
+- No AWS, STS, credentials, database, migration, deployment, customer data, feature-flag, commit or push operation was performed. Patch `~/phase13_m2_a1_2_B2_1_review.patch`; stop for independent review. Actual AWS reads require separate explicit owner authorization after source acceptance. B2-2/B3/A1.3 and M2 remain unaccepted.
+
+<!-- END PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
 ## Active Phase 13 milestone — B2-1 architecture frozen; offline code implementation pending
 
@@ -2079,3 +2100,10 @@ Owner ruling: minimal structural exclusion, default publication, lawyer final au
 - Feature: `publishOfficialSource` in the editorial service publishes the item's persisted official snapshot through D-072's `source_first` representation (no AI/analyzer/verifier/gate), sets `human_protected` in the same transaction, keeps the honest `unknown` status when legal effect is unestablished, and appends a `publish_official_source` audit event. Idempotent per (item, snapshot) with no duplicate revision/audit; archived items are refused; missing snapshot is a controlled 400.
 - API/UI: `PATCH /api/admin/policy-intelligence` `{ itemId, action: "publish_source" }` and `POST /api/policy-editor/publish-source`; Admin row button **Publish Official Source / 发布官方来源** with an inline confirmation.
 - Validation: `pnpm test:unit` 877/877 pass (0 skip, 6 new focused tests), `pnpm build` exit 0, `tsc --noEmit` 44 (below the 45 baseline), Biome clean; no migration, no new table, no live sync, no paid call, no DB mutation; nothing committed or pushed.
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->
+## Historical milestone — B2-1 R1 corrections before R2 (2026-10-26)
+
+R1 corrected GuardDuty response schema validation, request-boundary approval expiry checks, and operator result semantics. Its independent review passed those changes and then found the separate numeric `execFile()` exit classification defect corrected in the current R2 status above. R1 focused suites passed B2-1 **27/27**, B2-0 **16/16**, B1 evaluator **16/16**, queue **11/11**, and A1.2-A **17/17**. Historical R1 patch: `~/phase13_m2_a1_2_B2_1_R1_review.patch`. This record does not claim acceptance.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->

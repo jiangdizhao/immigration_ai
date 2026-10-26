@@ -1,3 +1,26 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+## Current handoff — B2-1 R2 correction implemented; final independent review pending (2026-10-26)
+
+- Preserved the uncommitted B2-1/R1 worktree at base HEAD `a8f2e36053987c045b8105a148e9d67497ec0c6a`. R2 fixes Node `execFile()` result normalization: numeric nonzero exit codes and bounded stderr are retained for safe AWS service-error classification; AccessDenied and NoSuchBucket are distinct from timeout, abort, executable-not-found, output-limit and unexpected subprocess failures. Typed reports do not expose raw stderr. R1 fixes remain: GuardDuty response-schema validation without an invented response PlanId, per-request approval-expiry checks, and explicit CLI report/identity/collection outcomes.
+- Focused offline suites: B2-1 **28/28**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A adapters **17/17**; no failures or skips. Full `pnpm test:unit`: **113/116 files passed, 3 failed, 0 skipped**. Failures: `s3-preflight-cli.test.ts` received empty child stderr instead of the missing-config message; `stage3-hardening.test.ts` returned CLI status 1 instead of expected 2 for empty `POSTGRES_URL`; `server-http-timeouts.test.ts` loopback bind failed with `EPERM` on `127.0.0.1`. TypeScript reports 44 diagnostics in unchanged files and none in changed B2-1 paths. Changed-file Biome and whitespace checks passed.
+- No AWS CLI/API/profile, credentials, PostgreSQL, migration, S3/SQS, deployment, customer data, feature toggle, commit or push was used/changed. Live observations remain `NO_GO`; this is not an acceptance claim.
+- Cumulative R2 review patch: `~/phase13_m2_a1_2_B2_1_R2_review.patch`. Stop uncommitted and unpushed for final independent review.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+## Historical handoff — B2-1 initial implementation before R1/R2 corrections (2026-10-26)
+
+This checkpoint is retained for implementation history; the authoritative current status and validation are in the R2 section above.
+
+- Implemented on `phase13-study-journey-project-centric` from expected starting HEAD `a8f2e36053987c045b8105a148e9d67497ec0c6a`; work remains uncommitted and unpushed. B2-0 plan, help and real-collection refusal behavior remain intact.
+- Added a separate operator entry, injected AWS CLI v2 argument-vector executor, strict scope/approval/SSO preflight, STS-first exact account/caller verification, fixed B2-0 primary allowlist, bounded pagination and dependent IAM reads, response/deadline/call limits, typed redacted failures, live finding provenance, and sanitized external 0600 NO_GO reports. Local approval remains self-attested; this implementation does not claim verified production consent or create trusted scan capability.
+- Offline validation: B2-1 **23/23**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A adapters **17/17**; all focused suites had zero failures/skips. `pnpm test:unit`: **113/116 files passed, 3 failed, 0 skipped**. Two unchanged subprocess CLI checks failed their expected output/status; three loopback checks were denied with `listen EPERM` on `127.0.0.1`. The subprocess failures and loopback restriction are unrelated to changed files. Changed-source Biome passed. TypeScript reports 44 diagnostics in unchanged files and none in B2-1 paths. Whitespace checks passed.
+- No AWS API/STS call, AWS profile invocation, credentials inspection, database connection/change, migration, deployment, customer file access, feature change, commit or push occurred. No real AWS experiment was conducted.
+- Cumulative review patch: `~/phase13_m2_a1_2_B2_1_review.patch`. **B2-1 implementation pending independent source review.** B2-2, B3, A1.3, live AWS access and overall M2 acceptance remain separately gated.
+
+<!-- END PHASE13_M2_A1_2_B2_1_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_ARCHITECT_2026_10_26 -->
 ## Current handoff — B2-1 narrow real AWS read-only executor architecture frozen (2026-10-26)
 
@@ -5657,3 +5680,12 @@ The final local production image built successfully on Node 22.23.3 `linux/amd64
 The standalone project `tsc --noEmit --pretty false --incremental false` remains non-green with 44 diagnostics, matching the audit baseline; there are no diagnostics in the changed implementation, runtime verifier, or newly added E2E test. Two diagnostics appear in unchanged helper assertions in the modified `processing.test.ts` (`state === "deleted"` and `run?.id`). `git diff --check` passed after the final documentation update.
 
 Detailed implementation, all-format p50/p95 measurements, the baseline comparison, and in-memory stage timings are in `docs/agent-memory/audits/DOCUMENT_PROCESSING_HOTFIX_PERFORMANCE_2026_10_16.md`. These are synthetic local measurements, not Staging measurements. The exact ECS `:46` image and runtime platform were not inspected, and no AWS deployment, customer document, database, live AI request, payment, or malware-scanner/security-state operation was performed. Stop after the authorized branch push for external review; do not deploy.
+
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->
+## Historical handoff — B2-1 R1 implementation before the additional R2 correction (2026-10-26)
+
+- At the R1 checkpoint, GuardDuty response validation omitted the nonexistent response PlanId, checked returned ARN/bucket/prefix/status, approval expiry was checked before each request, and CLI output distinguished identity from incomplete collection. Independent R1 review later passed those corrections and identified the separate numeric `execFile()` exit classification defect now addressed in the authoritative R2 section above.
+- R1 focused results were B2-1 **27/27**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**. Full unit had the same three restricted-environment failures recorded in the R2 section. R1 patch: `~/phase13_m2_a1_2_B2_1_R1_review.patch`.
+- This is a historical implementation checkpoint, not an acceptance record.
+
+<!-- END PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->

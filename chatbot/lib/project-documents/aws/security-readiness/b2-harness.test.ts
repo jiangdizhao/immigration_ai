@@ -483,7 +483,6 @@ test("static S3, GuardDuty, EventBridge and SQS findings enforce exact scope but
       case "guardduty:GetMalwareProtectionPlan":
         return {
           MalwareProtectionPlan: {
-            MalwareProtectionPlanId: scope.resourceSelectors.guardDutyPlanId,
             Arn: scope.resourceSelectors.guardDutyPlanArn,
             Status: "ACTIVE",
             ProtectedResource: {
@@ -666,7 +665,6 @@ test("missing S3 Versioning, mismatched GuardDuty scope and broad SQS principals
     if (request.operation === "guardduty:GetMalwareProtectionPlan") {
       return {
         MalwareProtectionPlan: {
-          MalwareProtectionPlanId: scope.resourceSelectors.guardDutyPlanId,
           Arn: scope.resourceSelectors.guardDutyPlanArn,
           Status: "ACTIVE",
           ProtectedResource: {

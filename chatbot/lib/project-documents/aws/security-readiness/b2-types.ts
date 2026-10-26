@@ -85,7 +85,7 @@ export type B2FindingStatus = "PASS" | "FAIL" | "INCOMPLETE";
 
 export type B2ObservationFinding = {
   requirement: string;
-  source: "plan" | "fixture_executor";
+  source: "plan" | "fixture_executor" | "live_executor";
   status: B2FindingStatus;
   reasonCode: string;
   observedAt: string;

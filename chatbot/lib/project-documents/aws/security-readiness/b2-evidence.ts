@@ -505,16 +505,14 @@ export function evaluateB2ApiResponse(
       : null;
     const expectedBucket = scope.resourceSelectors.bucket;
     const bucketName = record(bucket) ? own(bucket, "BucketName") : null;
-    const idMatches =
-      own(plan, "MalwareProtectionPlanId") ===
-      scope.resourceSelectors.guardDutyPlanId;
     const arnMatches =
       own(plan, "Arn") === scope.resourceSelectors.guardDutyPlanArn;
     const status = own(plan, "Status");
     if (
       prefixes === null ||
       typeof bucketName !== "string" ||
-      typeof status !== "string"
+      typeof status !== "string" ||
+      !["ACTIVE", "WARNING", "ERROR"].includes(status)
     ) {
       return incomplete(
         operation,
@@ -524,7 +522,6 @@ export function evaluateB2ApiResponse(
       );
     }
     const scoped =
-      idMatches &&
       arnMatches &&
       bucketName === expectedBucket &&
       prefixes.length === 1 &&
