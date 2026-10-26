@@ -6,6 +6,9 @@ export const PROJECT_DOCUMENT_PURPOSES = [
   "download",
 ] as const;
 
+export const PROJECT_DOCUMENT_IMPORT_NOTICE_VERSION =
+  "project-document-import-v1" as const;
+
 export type ProjectDocumentPurpose = (typeof PROJECT_DOCUMENT_PURPOSES)[number];
 
 export type ProjectDocumentActor =

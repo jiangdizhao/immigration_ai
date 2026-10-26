@@ -18,6 +18,7 @@ import {
   runProjectNavigationAction,
 } from "@/lib/workspace/project-entry";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
+import { ProjectDocumentsPanel } from "./project-documents-panel";
 
 type ProjectEntryCopy = WorkspaceCopy["projectEntry"];
 
@@ -64,6 +65,7 @@ export function ProjectEntryPanel({
   onSelectedProjectChange,
   clearSelectionSignal,
   navigationBusy,
+  projectDocumentsEnabled = false,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
@@ -73,6 +75,8 @@ export function ProjectEntryPanel({
   clearSelectionSignal: number;
   /** Mirrors the Workspace's conversation load and active-turn state. */
   navigationBusy: boolean;
+  /** This remains false until separate privacy and scan-trust approval. */
+  projectDocumentsEnabled?: boolean;
 }) {
   const [controller] = useState(() => createProjectEntryController({ copy }));
   const state = useSyncExternalStore(
@@ -284,6 +288,12 @@ export function ProjectEntryPanel({
           <p className="text-[11px] leading-4 text-slate-600">
             {copy.projectChatHistoryScope}
           </p>
+          <ProjectDocumentsPanel
+            copy={copy.documents}
+            enabled={projectDocumentsEnabled}
+            projectId={selectedProject.id}
+            projectRevision={selectedProject.revision}
+          />
           <h4 className="pt-1 text-xs font-semibold text-slate-800">
             {copy.chatsTitle}
           </h4>

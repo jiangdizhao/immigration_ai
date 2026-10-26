@@ -95,6 +95,34 @@ export type WorkspaceCopy = {
     requestFailed: string;
     networkFailed: string;
     loadMoreChats: string;
+    documents: {
+      title: string;
+      unavailable: string;
+      ownOnly: string;
+      scannerGate: string;
+      loading: string;
+      empty: string;
+      loadFailed: string;
+      upload: string;
+      importing: string;
+      sourceChatId: string;
+      sourceDocumentId: string;
+      consent: string;
+      import: string;
+      download: string;
+      withdraw: string;
+      pendingScan: string;
+      stored: string;
+      clean: string;
+      rejected: string;
+      failed: string;
+      uploading: string;
+      storagePending: string;
+      storageStored: string;
+      cleanupPending: string;
+      securityPending: string;
+      securityFailed: string;
+    };
   };
   persistence: {
     notSaved: string;
@@ -365,6 +393,37 @@ const zh: WorkspaceCopy = {
     requestFailed: "项目请求失败，请重试。",
     networkFailed: "网络请求未能确认结果。请重试；安全重试会沿用原操作编号。",
     loadMoreChats: "加载更多项目对话",
+    documents: {
+      title: "项目文件",
+      unavailable: "项目文件功能尚未开放。此处不会显示模拟文件。",
+      ownOnly:
+        "文件访问仅限本人，并按用途单独授权；项目所有者不会自动看到其他成员的文件。",
+      scannerGate:
+        "上传、导入和下载将在扫描来源认证、隐私告知与保留规则获批后开放。",
+      loading: "正在加载授权访问的文件…",
+      empty: "此项目没有您可查看的文件。",
+      loadFailed: "无法加载文件。",
+      upload: "上传项目文件",
+      importing: "从我的对话导入",
+      sourceChatId: "来源对话编号",
+      sourceDocumentId: "来源文件编号",
+      consent:
+        "我确认将此文件复制到所选项目，并了解项目成员不会因此自动获得访问权限。",
+      import: "确认并导入",
+      download: "下载",
+      withdraw: "撤回文件",
+      pendingScan: "等待安全扫描；尚不可下载。",
+      stored: "文件已存储",
+      clean: "已完成可信扫描",
+      rejected: "扫描未通过；不可下载。",
+      failed: "文件不可用",
+      uploading: "正在处理…",
+      storagePending: "存储状态：等待中",
+      storageStored: "存储状态：已保存",
+      cleanupPending: "存储状态：等待安全清理",
+      securityPending: "安全状态：等待扫描",
+      securityFailed: "安全状态：扫描失败",
+    },
   },
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
@@ -673,6 +732,38 @@ const en: WorkspaceCopy = {
     networkFailed:
       "The network could not confirm the result. Retry safely; the same operation ID will be reused.",
     loadMoreChats: "Load more Project Chats",
+    documents: {
+      title: "Project documents",
+      unavailable:
+        "Project documents are not enabled. No sample files are shown here.",
+      ownOnly:
+        "Access is limited to the owner and grants for a specific purpose; Project owners do not automatically see members' files.",
+      scannerGate:
+        "Upload, import and download require approved scan-origin authentication, privacy notice and retention rules.",
+      loading: "Loading files you are authorized to see…",
+      empty: "This Project has no files available to you.",
+      loadFailed: "Could not load documents.",
+      upload: "Upload a Project document",
+      importing: "Import from my Chat",
+      sourceChatId: "Source Chat ID",
+      sourceDocumentId: "Source document ID",
+      consent:
+        "I agree to copy this file into the selected Project and understand membership does not automatically grant access.",
+      import: "Confirm and import",
+      download: "Download",
+      withdraw: "Withdraw document",
+      pendingScan: "Waiting for security scan; download is unavailable.",
+      stored: "Stored",
+      clean: "Trusted scan complete",
+      rejected: "Scan rejected; download unavailable.",
+      failed: "Unavailable",
+      uploading: "Working…",
+      storagePending: "Storage: pending",
+      storageStored: "Storage: stored",
+      cleanupPending: "Storage: cleanup pending",
+      securityPending: "Security: scan pending",
+      securityFailed: "Security: scan failed",
+    },
   },
   persistence: {
     notSaved:

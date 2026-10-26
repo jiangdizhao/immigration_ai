@@ -1151,7 +1151,7 @@ function listSourceFiles(directory: string): string[] {
   });
 }
 
-test("internal Project document modules have no API/widget consumer or live AWS/scanner adapter", () => {
+test("Project document HTTP routes remain isolated behind the unavailable trusted runtime", () => {
   const appRoot = process.cwd();
   const consumerRoots = ["app", "components", "lib"]
     .map((relative) => path.join(appRoot, relative))
@@ -1171,12 +1171,43 @@ test("internal Project document modules have no API/widget consumer or live AWS/
     );
   for (const file of externalFiles) {
     const source = readFileSync(file, "utf8");
+    if (
+      /app\/api\/projects\/.*\/(?:documents|document-imports|document-grants)\//u.test(
+        file
+      )
+    ) {
+      assert.match(source, /@\/lib\/project-documents\/runtime/u, file);
+      continue;
+    }
+    if (
+      file.endsWith(
+        `${path.sep}components${path.sep}project-documents-panel.tsx`
+      )
+    ) {
+      assert.match(source, /@\/lib\/project-documents\/types/u, file);
+      assert.doesNotMatch(
+        source,
+        /@\/lib\/project-documents\/(?:service|runtime|postgres-repository)/u,
+        file
+      );
+      continue;
+    }
     assert.doesNotMatch(
       source,
       /(?:@\/lib\/project-documents|\.\/project-documents\/service)/u,
       file
     );
   }
+
+  const runtimeSource = readFileSync(
+    path.join(appRoot, "lib/project-documents/runtime.ts"),
+    "utf8"
+  );
+  assert.match(
+    runtimeSource,
+    /trustedLiveReadiness:\s*async\s*\(\)\s*=>\s*false/u
+  );
+  assert.match(runtimeSource, /application:\s*null/u);
 
   const moduleFiles = ["types.ts", "ports.ts", "testing.ts", "service.ts"].map(
     (file) => path.join(appRoot, "lib/project-documents", file)

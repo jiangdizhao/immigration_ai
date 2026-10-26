@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
+## Active milestone — A1.3 R1 corrections implemented; adapter/security gates pending (2026-10-26)
+
+- Added injectable HTTP handlers and route seams for document list, direct-upload intent, versioned import-consent acknowledgement/import, metadata, exact-version download, withdrawal and creator-grant revocation. Request identity is server-session-derived; guest/anonymous and unregistered access is denied. The handler validates bounded file bodies and MatterDocument content signatures using the existing validator, requires idempotency/revision inputs, applies rate limits, sanitizes responses, and verifies returned download bytes/hash plus the application's exact-version-clean authorization.
+- Added bilingual selected-Project document panel. Default UI gate is false; no mock records or upload/import/download actions appear while disabled. The separately gated view renders owned metadata and storage/security states and submits upload/import consent/download/withdraw only through the new APIs.
+- Production remains **hard fail-closed**: the normal runtime's independent trusted-readiness provider returns false and the customer application adapter is null. Setting `PHASE13_PROJECT_DOCUMENTS_ENABLED=true` cannot pass the second gate. The typed application port explicitly requires authorization/grant/source checks and rechecks around reads, but a concrete A1.1/A1.2/B3 persistence adapter and durable authenticated consent verifier are still absent. Real routes return 503 until those contracts are composed and approved; no actual file processing is active.
+- R1 validates and allowlists the four mutation result types and rejects malformed/mismatched identities; panel remount keys isolate Project and enabled-state changes, and fetch-generation guards suppress stale results. Tests: A1.3 HTTP **17/17**, client UI **5/5**, Project Document service **21/21**. Full unit **113/116 passed, 3 failed, 0 skipped** (missing CLI stderr; migration CLI exit mismatch; three loopback `EPERM`). TypeScript has 44 diagnostics and none in changed files; Biome and whitespace checks pass.
+- A1.3 R1 is **implemented for offline review, not accepted**. No PostgreSQL integration, AWS, migration, production DB, credentials, S3/SQS or customer file access. M2 remains open. Patch: `~/phase13_m2_a1_3_R1_review.patch`.
+<!-- END PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
 ## Milestone update — B3 offline ACCEPTED, A1.3 contracted, M2 OPEN (2026-10-26)
 

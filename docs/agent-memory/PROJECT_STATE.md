@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
+## PROJECT_STATE — A1.3 R1 API sanitization and Project isolation implemented; review pending (2026-10-26)
+
+- Work is uncommitted on `phase13-study-journey-project-centric` at expected HEAD `a3759ce5fc2b88e4636b7fd81d0281a1ae67bf33`. New pure HTTP handler/application port and Next route modules cover bounded list/upload, server-issued import-consent acknowledgement and import, private metadata/status, exact-version download, withdrawal and creator-grant revocation. A1.0's in-memory repository is not cast to the A1.1 PostgreSQL contract. The UI is bilingual and Project-scoped, has no fabricated records, and is off by default.
+- The ordinary feature flag cannot activate the routes: the server runtime has `application: null` and an independently false trusted-live-readiness provider. Therefore production operations return 503. Current Project/membership/document grant enforcement, durable consent issuance/verifier, S3 storage/finalization and trusted exact-version scan evidence have typed application-layer seams but no production composition. Do not enable until B2 producer authentication, consent/privacy/retention approval and owner review are complete.
+- R1 mutation handlers validate runtime results and emit allowlisted fields only; private keys, scan metadata and provider identifiers never enter JSON responses, malformed results fail closed, and replay semantics are preserved. Project UI identity is keyed by Project plus enabled state, with per-instance generation guards and empty-on-refresh failure behavior.
+- Tests: A1.3 HTTP **17/17**, UI **5/5**, Project Document service **21/21**. Full unit **113/116 passed, 3 failed, 0 skipped**: missing child stderr in `s3-preflight-cli.test.ts`; empty-`POSTGRES_URL` migration CLI status 1 vs expected 2; three loopback `listen EPERM` cases in `server-http-timeouts.test.ts`. TypeScript **44 diagnostics, none in changed paths**; changed-file Biome and whitespace checks passed.
+- No database integration, AWS/API/credentials/S3/SQS, production DB, migration, deployment or customer document processing was performed. R1 is **not acceptance**; no commit or push. Cumulative patch `~/phase13_m2_a1_3_R1_review.patch`; SHA-256 is reported with the final handoff.
+- Recommended next step: build/review the concrete server-only adapter that composes accepted A1.1 repository, A1.2 exact-version storage and B3 trusted delivery; add verified durable consent provenance and owner-approved privacy/retention/readiness gates, then keep customer operations blocked pending independent review.
+<!-- END PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
 ## Project state — Phase13 B3 durable integration accepted OFFLINE; A1.3 next (2026-10-26)
 
