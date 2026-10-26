@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_SHARED_ACCOUNT_SYNTHETIC_AWS_PILOT_2026_10_26 -->
+## Phase 13 milestone update — manual synthetic AWS scan pilot SUCCESS / cleaned; B2-1 live collector still NOT VERIFIED (2026-10-26)
+
+- Owner's AWS Console screenshots and copied SQS bodies substantiate temporary shared-account test: versioned private `phase13-sbx-documents-test` bucket; GuardDuty test plan `14d0bb07810c52250395` monitoring `project-document/`; default EventBridge rule `phase13-b2-guardduty-scan-events` -> `phase13-b2-scan-events` with SQS DLQ `phase13-b2-scan-dlq`. Two messages `COMPLETED / NO_THREATS_FOUND` observed: 58-byte TXT and 0-byte folder marker. TXT versionId `CAcfPnJqli4jMmDxNN68geUU6dnmklRL` confirmed against actual S3 object version by owner.
+- Owner deleted test Protection Plan, exact EventBridge rule, two test queues, test IAM Role and customer-managed Policy, all 3 S3 object/version records and the test Bucket. Screenshot shows staging resources retained. Monetary charges already accrued may post later; **no final Cost Explorer check yet**.
+- **Do not overstate:** manual event delivery and version-ID equality != verified content SHA-256, authenticated event producer provenance, B2-1 operator CLI run or milestone-level B2-2 sign-off. Shared AWS account contained pre-existing real staging/production resources; the frozen B2-1 `isolated_sandbox` + SSO-profile preflight was not bypassed or run. Original accepted B2-1 offline code and 964-host-unit evidence unchanged.
+- **Next gate:** maintain code default-off and `NO_GO`; do not recreate paid test resources automatically. Choose a minimal documented shared-account contract correction with independent review before any B2-1 live run, or isolated sandbox. No B3 trusted queue consumer/finalizeScan, no A1.3 customer upload and no overall M2-A1.2 / M2 acceptance.
+<!-- END PHASE13_SHARED_ACCOUNT_SYNTHETIC_AWS_PILOT_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
 ## Active milestone — B2-1 implementation accepted OFFLINE; operator AWS evidence pending (2026-10-26)
 

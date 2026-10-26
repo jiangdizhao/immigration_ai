@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_SHARED_ACCOUNT_SYNTHETIC_AWS_PILOT_2026_10_26 -->
+## Phase 13 shared-account synthetic AWS experiment — observed pass, full test resource cleanup (2026-10-26)
+
+- **Operator-side evidence only:** user, via AWS Console, temporarily established S3/versioning + GuardDuty Malware Protection Plan + default EventBridge rule + SQS/DLQ in the **existing shared production/staging account**, deliberately using new `phase13-` names. SQS policy granted `events.amazonaws.com` to send to exact test queue conditioned on matching `aws:SourceArn`; omitted explicit `aws:SourceAccount`. No GitHub application code or DB was deployed/touched in this experiment.
+- **Observed data:** test TXT `project-document/phase13-guardduty-test.txt` 58 bytes and 0-byte folder marker each produced `GuardDuty Malware Protection Object Scan Result` `COMPLETED` / `NO_THREATS_FOUND` delivered into dedicated SQS. Exact test plan ID `14d0bb07810c52250395`, Region `ap-southeast-2`; TXT event versionId `CAcfPnJqli4jMmDxNN68geUU6dnmklRL` matched S3 Version ID confirmed by user. No SHA-256 byte recomputation, no cryptographic or independently authenticated origin, no B3 ingest or durable scan finalization.
+- **Cleanup evidence:** GuardDuty test plan off, specific EventBridge rule deleted, two `phase13-b2-` queues deleted, dedicated GuardDuty test IAM role and remaining phase13 customer-managed policy deleted, S3 Empty Bucket removed 3 entries with 0 failures, and Bucket itself deleted. Existing staging queue/rule/plan/role/buckets visible intact in user screenshots. Outstanding verification: delayed Billing/Cost Explorer charges, if any.
+- **Engineering state:** B2-1 **offline implementation** accepted code `e4d80cff45236e616bb03107269c055aaafb2638`; real B2-1 CLI **NOT EXECUTED** (frozen isolated-sandbox and named SSO preflight incompatible with current shared-account exploration). Pilot is **not** blanket B2-2 acceptance or production security certification. Retain `NO_GO`, explicit consents, customer-document gates and B3 separation. Before repeating with CLI, either independently review minimal shared-account architecture/contract revision and code or use properly isolated AWS sandbox; operator must separately authorize any live calls/resource recreation.
+<!-- END PHASE13_SHARED_ACCOUNT_SYNTHETIC_AWS_PILOT_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
 ## Phase 13 project state — B2-1 offline code accepted; live AWS Gate B pending (2026-10-26)
 
