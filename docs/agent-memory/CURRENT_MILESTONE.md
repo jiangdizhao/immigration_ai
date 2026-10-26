@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
+## Phase 13 M3 Education Intelligence — architecture frozen, M3-001 dispatched (2026-10-27)
+
+- **Current milestone:** M3 Education Intelligence DESIGN FROZEN / M3-001 OFFLINE TASK READY / IMPLEMENTATION NOT STARTED. Owner explicitly authorized ChatGPT to record the design without a separate review cycle; this is NOT professional/legal sign-off, live-source acquisition approval or implementation acceptance.
+- **Git baseline:** phase13-study-journey-project-centric at M2 final documented remote HEAD 6e502c8fb8b94b8a99efac96b60ef4786def566b before this design-only commit. Existing M2 code b4e639a9fb9cbdc92a9f6cf50bf93c6319644516 and M2 OFFLINE ACCEPTED_WITH_LIMITATIONS / PRODUCTION NO_GO remain unchanged.
+- **Canonical design:** [PHASE13_M3_EDUCATION_INTELLIGENCE_ARCHITECTURE_2026_10_27.md](./PHASE13_M3_EDUCATION_INTELLIGENCE_ARCHITECTURE_2026_10_27.md), decision D-P13-008. Separate source-specific CRICOS / Study Australia / institution evidence; scoped Provider -> Course -> Delivery -> Intake; immutable snapshots and field-level source/date/fees/provenance; explicit UNKNOWN, STALE, CONFLICTED; later authorized tri-valued possible-option matching. Reuse Policy Intelligence patterns but NOT policy auto-publication semantics or M2 personal fact tables.
+- **First Codex work order:** [tasks/PHASE13_M3_001_OFFLINE_SOURCE_CONTRACT_AND_FIXTURES_2026_10_27.md](./tasks/PHASE13_M3_001_OFFLINE_SOURCE_CONTRACT_AND_FIXTURES_2026_10_27.md). Pure TS offline typed contracts/identity/field resolver plus clearly synthetic ELICOS/VET/undergrad/coursework-master/research fixtures and focused tests. Codex leaves implementation uncommitted for independent patch review and host tests.
+- **Forbidden in first packet:** database migrations, real course import/crawling, network/paid models, AWS/Stripe, Project or Policy serving changes, real customer data, feature activation or deployments. M2 safety/permission and customer-visible code remain untouched.
+- **Next operational action:** owner fast-forward-pulls the new remote docs; Codex reads AGENTS.md, these M3 documents and canonical state, then performs only M3-001. ChatGPT reviews patch, owner validates and pushes, ChatGPT verifies remote SHA before M3-002.
+<!-- END PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M2_OFFLINE_ACCEPTED_WITH_LIMITATIONS_2026_10_27 -->
 ## Canonical M2 offline milestone acceptance — ACCEPTED_WITH_LIMITATIONS (2026-10-27)
 

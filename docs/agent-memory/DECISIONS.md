@@ -1,5 +1,19 @@
 # DECISIONS
 
+<!-- BEGIN DECISION_PHASE13_M3_EDUCATION_ARCHITECTURE_2026_10_27 -->
+## D-P13-008 — Education Intelligence M3 architecture frozen; offline M3-001 dispatched
+
+**Date:** 2026-10-27  
+**Status:** OWNER AUTHORIZED IMMEDIATE DESIGN/REPO RECORDING; TECHNICAL ARCHITECTURE FROZEN; M3-001 OFFLINE CODING READY. **Not** legal/admissions/business standard approval; no production/migration/live acquisition authorization.
+
+The owner waived a separate architecture review round and instructed ChatGPT to design M3, record it directly in GitHub and issue Codex's first task. M3 is education-source and option intelligence, not the lawyer-collaboration/contract or School Admissions workflow milestones. Design authority: [M3 Architecture](./PHASE13_M3_EDUCATION_INTELLIGENCE_ARCHITECTURE_2026_10_27.md); first work order: [M3-001](./tasks/PHASE13_M3_001_OFFLINE_SOURCE_CONTRACT_AND_FIXTURES_2026_10_27.md). Existing [Phase 13 Roadmap](./PHASE13_STUDY_JOURNEY_ROADMAP.md) M0–M10 numbering is unchanged.
+
+**Decisions:** Distinguish CRICOS registration identity from institution entry rules and specific intakes; independent Provider/Course/Delivery/Intake entities; immutable field-level source observations and source-as-of identity; explicit UNKNOWN/STALE/CONFLICTED rather than guessed tuition/deadlines; claim-specific source priority; deterministic tri-valued possible-option matching only after the grounded catalog exists. Education public source records are a separate domain from M2 private ProjectFacts/ProjectDocuments, Phase 12 Policy Intelligence and legal facts. Reuse provenance patterns, not legal policy publication decisions. No live scraping or assumed official bulk API.
+
+**First dispatch:** M3-001 is pure offline TypeScript contracts/identities/field resolution and entirely synthetic fixtures/tests, with no database, network, API, AWS, provider model, UI or other serving-path mutations. Later data migrations, live acquisition and public release require separate authorizations. M2 remains ACCEPTED_WITH_LIMITATIONS (offline), Phase 13 production NO_GO.
+<!-- END DECISION_PHASE13_M3_EDUCATION_ARCHITECTURE_2026_10_27 -->
+
+
 <!-- BEGIN DECISION_PHASE13_M1_4_UX_DIRECTION_2026_10_24 -->
 ## D-P13-007 — Project-centric UX direction and bounded M1.4 start
 

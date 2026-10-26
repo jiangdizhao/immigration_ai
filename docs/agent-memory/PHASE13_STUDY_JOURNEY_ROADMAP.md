@@ -1,5 +1,10 @@
 # Phase 13 - Study Journey Project-Centric Roadmap (PROVISIONAL)
 
+<!-- BEGIN PHASE13_M3_ARCHITECTURE_POINTER_2026_10_27 -->
+**2026-10-27 M3 architecture freeze:** Owner requested immediate M3 design and task dispatch without another design-review round. [Education Intelligence architecture](./PHASE13_M3_EDUCATION_INTELLIGENCE_ARCHITECTURE_2026_10_27.md) freezes source/identity/evidence/freshness/matching boundaries; [M3-001 offline task](./tasks/PHASE13_M3_001_OFFLINE_SOURCE_CONTRACT_AND_FIXTURES_2026_10_27.md) is first dispatch. M3 is NOT already implemented. M2 offline acceptance and Phase 13 production NO_GO remain intact; existing M0–M10 milestone numbering and professional approval requirements are unchanged.
+<!-- END PHASE13_M3_ARCHITECTURE_POINTER_2026_10_27 -->
+
+
 <!-- BEGIN PHASE13_UI_PRODUCT_BLUEPRINT_POINTER_2026_10_24 -->
 **2026-10-24 owner-accepted UX elaboration:** [PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md](./PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md) maps the lawyer's step-centric mockups into *existing* roadmap phases without renumbering or prematurely implementing lawyer review/Project documents. [M1.4 bounded UI task](./tasks/PHASE13_M1_004_MINIMAL_CUSTOMER_WORKSPACE_CONTRACT.md) covers only genuine Project create/select and own Project Chat entry on the existing Workspace. No new migration, legal approval, professional review or production enablement is authorized by this design note.
 <!-- END PHASE13_UI_PRODUCT_BLUEPRINT_POINTER_2026_10_24 -->
