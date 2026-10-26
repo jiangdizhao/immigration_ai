@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+## Active milestone — M2 accelerated Round 1 coding: A1.3 adapter + M2-C (2026-10-26)
+
+- Accepted A1.3 default-off offline HTTP/UI owner pushed `98678ba19806f2e3f916725b8bbcb0abf7b14c07` (remote independently checked 19 files); owner full unit 964/964, HTTP 17/17, UI 5/5. Production file readiness `NO_GO`; no concrete app adapter or trusted GuardDuty issuer in this accepted checkpoint.
+- New consolidated task `tasks/PHASE13_M2_ROUND1_A13_ADAPTER_C_REQUIREMENTS_2026_10_26.md`: implement two **offline** components together, with fake/guarded DB tests and one independent patch review. Workstream A implements real PostgreSQL app-layer mapping but never connects live; Workstream C authors provisional four-category templates + versioned collection state and safe proposed additive migration 0034. No migration deployment/application to normal DB.
+- Required after Round 1: A2 file extraction/evidence refs + M2-B facts and grant/conflict management, then M2-D cross-Chat resolver and full offline end-to-end. No M2 release or legal/agent approvals yet.
+<!-- END PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
 ## Active milestone — A1.3 R1 corrections implemented; adapter/security gates pending (2026-10-26)
 

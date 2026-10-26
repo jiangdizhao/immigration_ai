@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+## M2 accelerated Round 1 dispatched — A1.3 application adapter + M2-C provisional requirements (2026-10-26)
+
+- Owner pushed A1.3 R1 at `98678ba19806f2e3f916725b8bbcb0abf7b14c07`; ChatGPT independently verified exact GitHub branch HEAD and 19 changed files. Owner Ubuntu reported 964/964 full unit plus separate A1.3 HTTP 17/17 and UI 5/5 (React UI suite must run without `react-server`); worktree and remote status matched. Accepted as **offline HTTP/UI** only; trusted-live runtime stays `application:null`, readiness false.
+- Under owner-requested rapid M2 closeout, architect froze a consolidated two-workstream task: `tasks/PHASE13_M2_ROUND1_A13_ADAPTER_C_REQUIREMENTS_2026_10_26.md`. Workstream A: typed A1.3/A1.1 Postgres application adapter with fake conditional object storage, current membership/creator grants, exact-byte scans, durable import consent or explicit fail-closed; no production activation. Workstream C: four-family **provisional** versioned requirement registry, Project-scoped collection state/events and independently reviewed proposed additive 0034 migration **source authoring only**. Single cumulative uncommitted patch and independent review.
+- No AWS, credentials, deployment, migration in ordinary/staging/prod DB, real customer file processing, lawyer approval, staff or AI-context grant. No runtime enablement. M2 remains OPEN; Round 2 A2/B and Round 3 D + offline acceptance outstanding.
+<!-- END PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
 ## CURRENT HANDOFF — A1.3 R1 corrections implemented; independent review pending (2026-10-26)
 

@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+## Phase 13 M2 — accepted A1.3 offline checkpoint; accelerated Round 1 planned (2026-10-26)
+
+- Branch `phase13-study-journey-project-centric` at owner-pushed independently remote-verified `98678ba19806f2e3f916725b8bbcb0abf7b14c07`, 19 A1.3 R1 files. Owner host 964/964 unit, separate HTTP 17/17 and UI 5/5 (different Node conditions), zero failures/skips. B3 earlier offline `a14d53227003a1f9bf41bc86688995deaf63daac`. Live GuardDuty producer attestation/production worker not implemented; feature OFF and `NO_GO`.
+- Next source task `tasks/PHASE13_M2_ROUND1_A13_ADAPTER_C_REQUIREMENTS_2026_10_26.md`: A1.3 durable adapter + M2-C provisional requirements **one cumulative offline task**. C may author additive 0034 migration source but not apply to production/ordinary DB. Missing qualified sources/reviewer remain provisional/unknown; Project owner does not override creator document grants. No real customer upload/AWS/production.
+- Offline M2 remains open for Round 2 A2+B and Round 3 D+integrated acceptance. Commit/source review gates remain.
+<!-- END PHASE13_M2_ROUND1_A_C_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_3_IMPLEMENTED_2026_10_26 -->
 ## PROJECT_STATE — A1.3 R1 API sanitization and Project isolation implemented; review pending (2026-10-26)
 
