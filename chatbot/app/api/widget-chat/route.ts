@@ -46,6 +46,7 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
+import { projectContextRequestPayload } from "@/lib/projects/project-context";
 import { preservePublicAnswer } from "@/lib/public-answer-preservation";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
@@ -1062,6 +1063,8 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const currentProjectContext =
+      await workspaceContext.refreshProjectContextBeforeProvider();
     const legalServiceResult = await fetchLegalServiceJson({
       requestId,
       url: `${legalServiceUrl}/api/v1/query`,
@@ -1096,6 +1099,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
          * extraction produced nothing usable.
          */
         customer_document_summary: customerDocumentStatus,
+        ...projectContextRequestPayload(currentProjectContext),
       },
     });
 

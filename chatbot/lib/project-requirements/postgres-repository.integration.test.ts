@@ -62,7 +62,7 @@ test(
       );
       assert.equal(
         journal.entries.at(-1)?.tag,
-        "0038_phase13_m2_a2_b_fact_version_pin"
+        "0039_phase13_m2_round2_event_actor_scope"
       );
       await migrate(drizzle(sql), { migrationsFolder: migrationDir });
 

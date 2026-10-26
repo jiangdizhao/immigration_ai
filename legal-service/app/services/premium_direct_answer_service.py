@@ -15,6 +15,7 @@ from app.services.customer_document_context import (
     customer_document_usage_fields,
     format_customer_document_prompt_section,
 )
+from app.services.project_context import render_project_context_prompt_section
 from app.services.openai_responses_adapter import (
     ResponsesStreamAccumulator,
     consume_responses_stream,
@@ -325,6 +326,7 @@ class PremiumDirectAnswerService:
         document_context = format_customer_document_prompt_section(payload)
         if document_context:
             model_input = f"{model_input}\n\n{document_context}"
+        model_input = self._append_project_context(payload, model_input)
         high_risk = self._looks_high_risk(original_question) or self._looks_high_risk(
             effective_question
         )
@@ -1183,6 +1185,11 @@ class PremiumDirectAnswerService:
                 f"{latest_question}"
             )
         return latest_question
+
+    @staticmethod
+    def _append_project_context(payload: QueryRequest, model_input: str) -> str:
+        project_context = render_project_context_prompt_section(payload.project_context)
+        return f"{model_input}\n\n{project_context}" if project_context else model_input
 
     def _model_instructions(self, *, is_zh: bool) -> str:
         if is_zh:

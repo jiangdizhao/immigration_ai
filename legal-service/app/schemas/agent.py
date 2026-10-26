@@ -199,6 +199,7 @@ class AgentRuntimeRequest(StrictContract):
     # current law and official source status independently before any substantive
     # conclusion. Absent/empty for conversations without a policy binding.
     policy_topic_context: str = Field(default="", max_length=4_000)
+    project_context: str = Field(default="", max_length=16_000)
 
 
 class DeadlineCheckpoint(StrictContract):

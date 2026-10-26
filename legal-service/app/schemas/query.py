@@ -110,6 +110,57 @@ class CustomerDocumentSummary(BaseSchema):
                 raise ValueError("customer document summary filename exceeds its bounds")
         return values
 
+class ProjectContextFact(BaseSchema):
+    assertion_id: str = Field(min_length=1, max_length=80)
+    assertion_version: int = Field(ge=1)
+    key: str = Field(min_length=1, max_length=128)
+    value_type: Literal["string", "number", "boolean", "date", "json"]
+    value: Any
+    origin_kind: Literal["customer_stated", "document_extracted"]
+    confirmed_by_user_id: str = Field(min_length=1, max_length=80)
+    effective_from: str | None = Field(default=None, max_length=40)
+    effective_to: str | None = Field(default=None, max_length=40)
+    observed_at: str | None = Field(default=None, max_length=40)
+    source_evidence_ref: str | None = Field(default=None, max_length=160)
+    verification_label: Literal["customer-confirmed; not independently verified"]
+
+
+class ProjectContextDocumentEvidence(BaseSchema):
+    evidence_ref: str = Field(min_length=1, max_length=160)
+    version_id: str = Field(min_length=1, max_length=255)
+    run_id: str = Field(min_length=1, max_length=80)
+    mime_type: str = Field(min_length=1, max_length=120)
+    locator: dict[str, str | int] = Field(max_length=8)
+    excerpt: str = Field(min_length=1, max_length=1500)
+    content_untrusted: Literal[True]
+
+    @field_validator("locator")
+    @classmethod
+    def bounded_locator(cls, locator: dict[str, str | int]) -> dict[str, str | int]:
+        if any(
+            len(key) > 64
+            or (isinstance(value, str) and len(value) > 256)
+            for key, value in locator.items()
+        ):
+            raise ValueError("Project document locator exceeds its bounds")
+        return locator
+
+
+class ProjectContextPacket(BaseSchema):
+    schema_version: Literal["phase13.project-context.v1"]
+    context_origin: Literal["project_chat"]
+    project_id: str = Field(min_length=1, max_length=80)
+    confirmed_project_facts: list[ProjectContextFact] = Field(default_factory=list, max_length=20)
+    document_evidence: list[ProjectContextDocumentEvidence] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def bounded_payload(self):
+        import json
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False).encode("utf-8")) > 12_000:
+            raise ValueError("Project context packet exceeds its byte bound")
+        return self
+
+
 class QueryRequest(BaseSchema):
     question: str = Field(min_length=1, max_length=4000)
 
@@ -148,6 +199,10 @@ class QueryRequest(BaseSchema):
     # usable extracted text. Absent (older/direct callers) means "unknown", which
     # must not be rendered as either availability or unavailability.
     customer_document_summary: CustomerDocumentSummary | None = None
+    # Server-derived, permission-filtered Project facts/evidence. Clients may
+    # not provide this field through the widget; the authenticated server path
+    # constructs it. Older/direct callers omit it.
+    project_context: ProjectContextPacket | None = None
 
     @field_validator("question")
     @classmethod

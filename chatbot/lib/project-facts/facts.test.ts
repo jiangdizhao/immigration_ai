@@ -1,7 +1,15 @@
 // biome-ignore-all lint/suspicious/useAwait: In-memory repository fakes return immediate promise values.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
+import { createProjectDocumentEvidenceService } from "../project-documents/evidence";
+import {
+  hashRequirementTemplateContent,
+  PROVISIONAL_REQUIREMENT_CATALOG,
+  validateRequirementStateShape,
+} from "../project-requirements/catalog";
+import { resolveProjectContext } from "../projects/context-resolver";
+import { mapProjectFactAssertion } from "../projects/project-context";
 import {
   createProjectFactManagementService,
   type ProjectFactAssertion,
@@ -132,6 +140,10 @@ class MemoryFactRepository implements ProjectFactRepository {
       ),
     };
   }
+}
+
+function createHashForFixture(bytes: Uint8Array) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function setup() {
@@ -360,4 +372,318 @@ test("a hidden member conflict suppresses AI eligibility without disclosing priv
   assert.equal(serialized.includes("document_extracted"), false);
   assert.equal(serialized.includes("private-evidence-ref"), false);
   assert.equal(serialized.includes("customer-b"), false);
+});
+
+test("synthetic two-Chat extraction, fact authorization, revocation and conflict invalidation", async () => {
+  const requirementFamily = PROVISIONAL_REQUIREMENT_CATALOG.find(
+    (item) => item.family === "school_facts"
+  );
+  assert.ok(requirementFamily);
+  const requirementItem = requirementFamily.items[0];
+  assert.ok(requirementItem);
+  const requirementVersionId = hashRequirementTemplateContent({
+    schemaVersion: requirementFamily.schemaVersion,
+    items: requirementFamily.items,
+    sourceProvenance: requirementFamily.sourceProvenance,
+  });
+  validateRequirementStateShape({
+    family: requirementFamily.family,
+    templateKey: requirementFamily.templateKey,
+    templateVersionId: requirementVersionId,
+    itemKey: requirementItem.key,
+    applicability: "unknown",
+    collectionState: "not_started",
+    factLocator: null,
+    evidenceLocator: null,
+  });
+  assert.match(
+    requirementFamily.sourceProvenance.note,
+    /not an official checklist/u
+  );
+  const bytes = new TextEncoder().encode(
+    "Synthetic study start date: 2027-02-01."
+  );
+  const sha256 = createHashForFixture(bytes);
+  const source = {
+    projectId: "project-a",
+    assetId: "asset-a",
+    versionId: "version-a",
+    generation: 1,
+    lifecycle: "active" as const,
+    storageStatus: "stored" as const,
+    securityStatus: "clean" as const,
+    storageKey: "synthetic/private/object",
+    objectVersionId: "object-version-a",
+    sha256,
+    byteSize: bytes.byteLength,
+    canonicalMime: "text/plain",
+  };
+  const runs = new Map<
+    string,
+    import("../project-documents/evidence").ProjectEvidenceRun
+  >();
+  const refs = new Map<
+    string,
+    {
+      run: import("../project-documents/evidence").ProjectEvidenceRun;
+      candidate: import("../project-documents/evidence").ProjectEvidenceCandidate;
+    }
+  >();
+  let aiContextGrantActive = true;
+  const evidenceService = createProjectDocumentEvidenceService({
+    persistence: {
+      async findSource() {
+        return source;
+      },
+      async canExtract({ actorUserId }) {
+        return actorUserId === "actor-a";
+      },
+      async findReplay() {
+        return null;
+      },
+      async findRunForReferenceIssue({ runId }) {
+        return runs.get(runId) ?? null;
+      },
+      async saveRun({ run }) {
+        runs.set(run.id, run);
+        return run;
+      },
+      async issueReference({ runId, candidateOrdinal }) {
+        const run = runs.get(runId);
+        assert.ok(run);
+        const candidate = run.candidates.find(
+          (item) => item.ordinal === candidateOrdinal
+        );
+        assert.ok(candidate);
+        const evidenceRef = "opaque-project-evidence-ref";
+        refs.set(evidenceRef, { run, candidate });
+        return evidenceRef;
+      },
+      async resolveReference({ evidenceRef }) {
+        return refs.get(evidenceRef) ?? null;
+      },
+    },
+    reader: {
+      async readExactVersion(input) {
+        assert.equal(input.objectVersionId, source.objectVersionId);
+        assert.equal(input.expectedSha256, source.sha256);
+        assert.equal(input.expectedByteSize, source.byteSize);
+        return bytes;
+      },
+    },
+    verifyAuthenticatedScan: async () => ({
+      projectId: source.projectId,
+      versionId: source.versionId,
+      generation: source.generation,
+      objectVersionId: source.objectVersionId ?? "",
+      sha256: source.sha256,
+      verdict: "clean" as const,
+      authenticated: true as const,
+    }),
+  });
+  const run = await evidenceService.extract({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    assetId: "asset-a",
+    versionId: "version-a",
+    operationId: "extract-a",
+    expectedProjectRevision: 1,
+  });
+  assert.equal(run.status, "complete");
+  const [evidenceRef] = await evidenceService.issueEvidenceRefs({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    runId: run.id,
+  });
+  assert.ok(evidenceRef);
+
+  const repository = new MemoryFactRepository();
+  const factService = createProjectFactManagementService({
+    repository,
+    verifyEvidence: async ({ actorUserId, projectId, evidenceRef: ref }) =>
+      aiContextGrantActive &&
+      projectId === "project-a" &&
+      Boolean(
+        await evidenceService.resolveEvidenceRef({
+          actorUserId,
+          projectId,
+          evidenceRef: ref,
+        })
+      ),
+  });
+  const candidate = await factService.propose({
+    ...base,
+    actorUserId: "actor-a",
+    operationId: "e2e-propose",
+    expectedProjectRevision: 1,
+    originKind: "document_extracted",
+    sourceEvidenceRef: evidenceRef,
+  });
+  const confirmed = await factService.confirm({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    operationId: "e2e-confirm",
+    expectedProjectRevision: 2,
+    assertionId: candidate.id,
+    assertionVersion: candidate.version,
+  });
+  await factService.publish({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    operationId: "e2e-publish",
+    expectedProjectRevision: 3,
+    assertionId: candidate.id,
+    assertionVersion: confirmed.version,
+    audience: "project",
+  });
+  await factService.grantAIUse({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    operationId: "e2e-grant",
+    expectedProjectRevision: 4,
+    assertionId: candidate.id,
+    assertionVersion: confirmed.version,
+    audience: "project",
+  });
+
+  const dependencies = {
+    schemaStatus: async () => "ready" as const,
+    getOrigin: async (chatId: string) =>
+      ["chat-a", "chat-b"].includes(chatId) ? { projectId: "project-a" } : null,
+    authorize: async () => ({ id: "project-a", status: "active" }),
+    projectChatEnabled: () => true,
+    contextEnabled: () => true,
+    stableFacts: async (input: { actorUserId: string; projectId: string }) => {
+      const projection = await factService.stableProjection(input);
+      return {
+        ...projection,
+        authorizedForAI: projection.authorizedForAI.map(
+          mapProjectFactAssertion
+        ),
+      };
+    },
+    async resolveTrustedAIContextEvidence({
+      actorUserId,
+      projectId,
+    }: {
+      actorUserId: string;
+      projectId: string;
+    }) {
+      if (!aiContextGrantActive) {
+        return [];
+      }
+      const resolved = await evidenceService.resolveEvidenceRef({
+        actorUserId,
+        projectId,
+        evidenceRef,
+      });
+      if (
+        !resolved ||
+        resolved.run.status !== "complete" ||
+        resolved.run.versionId !== source.versionId
+      ) {
+        return [];
+      }
+      return [
+        {
+          evidenceRef,
+          versionId: resolved.run.versionId,
+          runId: resolved.run.id,
+          mimeType: source.canonicalMime,
+          locator: {
+            kind: resolved.candidate.locator.kind,
+            start:
+              "start" in resolved.candidate.locator
+                ? resolved.candidate.locator.start
+                : 0,
+          },
+          excerpt: resolved.candidate.excerpt,
+          contentUntrusted: true as const,
+        },
+      ];
+    },
+  };
+  const memberChat = await resolveProjectContext({
+    actorUserId: "actor-b",
+    chatId: "chat-b",
+    dependencies: dependencies as never,
+  });
+  assert.equal(memberChat.projectId, "project-a");
+  assert.equal(
+    memberChat.packet?.confirmedProjectFacts[0]?.assertionId,
+    candidate.id
+  );
+  assert.equal(
+    memberChat.packet?.documentEvidence[0]?.versionId,
+    source.versionId
+  );
+
+  aiContextGrantActive = false;
+  const afterDocumentGrantRevocation = await resolveProjectContext({
+    actorUserId: "actor-b",
+    chatId: "chat-b",
+    dependencies: dependencies as never,
+  });
+  assert.equal(afterDocumentGrantRevocation.packet, null);
+
+  aiContextGrantActive = true;
+  await factService.revokeAIUse({
+    actorUserId: "actor-a",
+    projectId: "project-a",
+    operationId: "e2e-revoke",
+    expectedProjectRevision: 5,
+    assertionId: candidate.id,
+    assertionVersion: confirmed.version,
+  });
+  const afterFactGrantRevocation = await resolveProjectContext({
+    actorUserId: "actor-b",
+    chatId: "chat-b",
+    dependencies: dependencies as never,
+  });
+  assert.equal(
+    afterFactGrantRevocation.packet?.confirmedProjectFacts.length,
+    0
+  );
+  assert.equal(afterFactGrantRevocation.packet?.documentEvidence.length, 1);
+
+  const rival = await factService.propose({
+    ...base,
+    actorUserId: "actor-b",
+    operationId: "e2e-rival",
+    expectedProjectRevision: 6,
+    value: "2027-03-01",
+    originKind: "customer_stated",
+  });
+  const rivalConfirmed = await factService.confirm({
+    actorUserId: "actor-b",
+    projectId: "project-a",
+    operationId: "e2e-rival-confirm",
+    expectedProjectRevision: 7,
+    assertionId: rival.id,
+    assertionVersion: rival.version,
+  });
+  await factService.publish({
+    actorUserId: "actor-b",
+    projectId: "project-a",
+    operationId: "e2e-rival-publish",
+    expectedProjectRevision: 8,
+    assertionId: rival.id,
+    assertionVersion: rivalConfirmed.version,
+    audience: "project",
+  });
+  await factService.grantAIUse({
+    actorUserId: "actor-b",
+    projectId: "project-a",
+    operationId: "e2e-rival-grant",
+    expectedProjectRevision: 9,
+    assertionId: rival.id,
+    assertionVersion: rivalConfirmed.version,
+    audience: "project",
+  });
+  const afterConflict = await resolveProjectContext({
+    actorUserId: "actor-a",
+    chatId: "chat-a",
+    dependencies: dependencies as never,
+  });
+  assert.equal(afterConflict.packet?.confirmedProjectFacts.length, 0);
 });

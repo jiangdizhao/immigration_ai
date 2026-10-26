@@ -2296,6 +2296,8 @@ class AgentRuntimeService:
         # the official source status.
         if request.policy_topic_context:
             parts.append(render_policy_topic_prompt_section(request.policy_topic_context))
+        if request.project_context:
+            parts.append(request.project_context)
         parts.append(f"\n\nRespond in: {request.response_language}")
         parts.append(f"\nAs of date: {request.as_of_date.isoformat()}")
         return "\n".join(parts)

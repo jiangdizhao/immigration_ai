@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M2_ROUND3_D_IMPLEMENTED_REVIEW_PENDING_2026_10_26 -->
+## Current milestone — M2 Round 3 D implemented offline; acceptance pending
+
+- Shared Project Context resolver and provider packet integration are implemented in the uncommitted Round3 worktree based on `9fa881e70114719c7ed417ad5e58950b935f0fb2`. Current actor/Chat/Project authorization is derived from persisted association and rechecked before Fast, Default and Premium provider submission. Stable facts use the guarded R1 projection only; standalone Chat stays conversation-scoped. New resolver/packet tests pass 8/8.
+- Offline provider construction tests pass. M2-B and M2-C guarded PostgreSQL integration passed on the exact disposable database. A1.1 PostgreSQL verification is blocked by its non-empty-schema precondition (60 existing rows), and no reset was attempted. Full `pnpm test:unit` passed 964/964, 0 failed and 0 skipped on authorized outside-sandbox retry.
+- Project Document evidence is intentionally empty in production because trusted scan and independent AI-context grant issuance are missing. An injected in-memory synthetic two-Chat scenario now covers exact-version extraction, a provisional versioned requirement, fact confirmation/publication/grant, retrieval, revocation and conflict invalidation; DB-backed full-stack E2E remains UNVERIFIED. M2 remains OPEN; independent review and acceptance are pending. Production Documents disabled, readiness false, no AWS/live activity.
+- See `tasks/PHASE13_M2_ROUND3_OFFLINE_ACCEPTANCE_MATRIX_2026_10_26.md` for the requirement-by-requirement evidence and limitations.
+- **R1 status before the final compatibility hotfix (superseded below):** The initial populated-DB test exposed migration 0035 rejecting service audit events. Migration 0039 below corrects and validates that regression. The empty-schema legacy A1.1 suite remains unrun.
+- **Final database compatibility hotfix — 2026-10-27:** Migration 0039 was applied incrementally after the guarded test verified exact disposable DB identity and ledger 0038. ProjectEvent actor scope now preserves A1.1 storage/scan service events through the 0032 provenance checks while restricting Round 2 event semantics to their two event types. A1.1/A2 regression 1/1, M2-B 1/1, M2-C 1/1; full unit 964/964, provider 3/3, `db:check`, Biome, TypeScript 44/44 unchanged and whitespace pass. No 0032–0038 edits or snapshot were made. Production trust/privacy and live operations remain NO_GO; M2 is open.
+<!-- END PHASE13_M2_ROUND3_D_IMPLEMENTED_REVIEW_PENDING_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
 ## Phase 13 M2 — Round 2 OFFLINE accepted, Round 3 D and closeout validation active (2026-10-26)
 

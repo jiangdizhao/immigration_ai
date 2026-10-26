@@ -27,6 +27,7 @@ from app.services.customer_document_context import (
 )
 from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
 from app.services.policy_topic_context import extract_policy_topic_context
+from app.services.project_context import render_project_context_prompt_section
 from app.services.request_evidence_registry import RequestEvidenceRegistry, create_registry
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ class DefaultAgentServingService:
                 customer_document_context=customer_document_context,
                 customer_document_evidence_present=customer_document_evidence_present,
                 policy_topic_context=policy_topic_context,
+                project_context=render_project_context_prompt_section(payload.project_context),
             )
             registry = create_registry(request_id)
 

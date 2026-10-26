@@ -44,6 +44,7 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
+import { projectContextRequestPayload } from "@/lib/projects/project-context";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { isPremiumAllowed, premiumDeniedResponse } from "@/lib/vip/entitlement";
 import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
@@ -588,6 +589,8 @@ export async function POST(request: Request) {
     const apiKey = process.env.LEGAL_SERVICE_API_KEY;
     const jurisdiction = process.env.LEGAL_SERVICE_JURISDICTION ?? "Cth";
 
+    const currentProjectContext =
+      await workspaceContext.refreshProjectContextBeforeProvider();
     const legalServiceResult = await fetchLegalServiceDirect({
       url: `${legalServiceUrl}/api/v1/query`,
       apiKey,
@@ -620,6 +623,7 @@ export async function POST(request: Request) {
          * extraction produced nothing usable.
          */
         customer_document_summary: customerDocumentStatus,
+        ...projectContextRequestPayload(currentProjectContext),
       },
     });
 

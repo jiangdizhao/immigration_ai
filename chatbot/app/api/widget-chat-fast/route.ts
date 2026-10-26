@@ -42,6 +42,7 @@ import {
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
 import { guardProjectChatIngress } from "@/lib/projects/chat-ingress";
+import { projectContextRequestPayload } from "@/lib/projects/project-context";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { FAST_LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
 import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
@@ -444,6 +445,8 @@ export async function POST(request: Request) {
       }
     );
     const customerDocumentStatus = workspaceContext.documents.status;
+    const currentProjectContext =
+      await workspaceContext.refreshProjectContextBeforeProvider();
     const result = await requestLegalService({
       url: `${process.env.LEGAL_SERVICE_URL ?? "http://127.0.0.1:8000"}/api/v1/query`,
       apiKey: process.env.LEGAL_SERVICE_API_KEY,
@@ -478,6 +481,7 @@ export async function POST(request: Request) {
          * extracted", so an answer never implies it read a file it never got.
          */
         customer_document_summary: customerDocumentStatus,
+        ...projectContextRequestPayload(currentProjectContext),
       },
     });
 
