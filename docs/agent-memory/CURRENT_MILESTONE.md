@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+## Active milestone M2 — Round 1 accepted OFFLINE; Round 2 A2+B next (2026-10-26)
+
+- Accepted Round1 owner-pushed GitHub SHA `27235afb944163eada77e7c68ff28f9cefd3388f` (19 files independently verified). Host full unit 964/964; M2-C guarded identity-verified PostgreSQL integration 1/1, 0034 migration succeeds on disposable fixture database; Drizzle check exit 0. Some separate focused tests were not evidenced in user logs. This acceptance is offline implementation only; production file operations `NO_GO`.
+- Round2 combines A2 exact-run document extraction/provenance and M2-B versioned Project-level synthetic facts, explicit customer confirmation vs publication vs AI grants, conflicts, revocation/invalidation and separate project authorization. Contract `tasks/PHASE13_M2_ROUND2_A2_EVIDENCE_B_FACTS_2026_10_26.md`. Schema migration **0035 source** may be authored/reviewed; existing dedicated test DB has 0034 and may be reused for incremental guarded tests, never reset existing 48+ tables.
+- Remaining Round3 = M2-D server-derived shared cross-Chat resolver in three widget modes, per-purpose authorized facts/evidence, isolation and E2E acceptance. M2 not closed; production GuardDuty identity, durable import consent and privacy/human/legal review not approved.
+<!-- END PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND1_R1_CORRECTIONS_2026_10_26 -->
 ## M2 accelerated Round 1 R1 corrections implemented — independent review pending (2026-10-26)
 

@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+## Latest handoff — M2 Round 1 offline accepted; Round 2 A2+B contracted (2026-10-26)
+
+- Owner committed/pushed **`27235afb944163eada77e7c68ff28f9cefd3388f`** on `phase13-study-journey-project-centric`; ChatGPT independently re-fetched GitHub branch and commit and confirmed exact SHA and **19** changed files, including 0034 migration, PostgreSQL app adapter, M2-C provisional requirement registry and three canonical state docs. Owner shell `git rev-parse HEAD` and `git ls-remote` matched.
+- **Offline acceptance evidence:** Ubuntu `pnpm test:unit` **964/964 passed**, 0 failure/skip; `pnpm db:check` Exit 0; isolated `127.0.0.1:5432/immigration_ai_phase13_m1_1_test` confirmed by read-only preflight. M2-C guarded PostgreSQL integration **1/1 passed** after 0034 index-before-FK correction and `async setCollectionState` correction. Migration 0034 is applied in disposable DB; it is **not** a production migration. No standalone migration-order test result or A1.3 end-to-end PG adapter result was independently reported: do not imply either tested.
+- **Round 1 ACCEPTED offline only.** No live S3/SQS or trusted GuardDuty provenance; default-off A1.3 runtime remains `application:null`, readiness false. Durable pre-import consent, automatic uncertain-upload reconciliation and eventual production security/privacy gates remain blocked; M2-C requirements are only provisional/unapproved.
+- **Round 2 now dispatched** under `tasks/PHASE13_M2_ROUND2_A2_EVIDENCE_B_FACTS_2026_10_26.md`: one consolidated Codex task implementing A2 exact-version extracted evidence units/opaque refs and M2-B immutable synthetic Project-level fact assertions, explicit confirmation, separate publication, revocable AI grant, conflicts and invalidation. May author additive **0035** source; no ordinary DB migration, AWS, real files, deployment or direct AI model wiring. One cumulative uncommitted patch for independent review.
+- Round 3 still required: M2-D bounded cross-Chat resolver across modes, synthetic document/fact/requirements E2E and truthful offline exit. M2 remains OPEN. Real customer/production approval separate.
+<!-- END PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND1_R1_CORRECTIONS_2026_10_26 -->
 ## M2 accelerated Round 1 R1 corrections implemented — independent review pending (2026-10-26)
 

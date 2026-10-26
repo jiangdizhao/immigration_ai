@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+## Phase 13 M2 state — accepted Round1 at 27235af; Round2 A2+B contracted (2026-10-26)
+
+- `phase13-study-journey-project-centric` owner pushed `27235afb944163eada77e7c68ff28f9cefd3388f`; GitHub independent branch/commit check SHA=SHA, 19 files. Ubuntu 964/964 unit, M2-C identity-verified dedicated PG 1/1, db:check 0. 0034 migration applied on isolated `immigration_ai_phase13_m1_1_test` only, no ordinary data DB mutation. A1.3 PostgreSQL adapter full system integration remains separately unverified; consent issuer missing; live file/scanner trust NO_GO.
+- M2-C four template families remain synthetic provisional; no official/qualified/legal readiness inference. Round2 single source contract `tasks/PHASE13_M2_ROUND2_A2_EVIDENCE_B_FACTS_2026_10_26.md`, A2 extraction evidence/opaque exact-run refs + M2-B Project fact confirmation, publication, separately revocable AI grant and conflict lifecycle. Additive 0035 only as source/guarded disposable test; no AWS, production rollout or personal real customer data.
+- Round3 M2-D cross-Chat resolver and synthetic end-to-end; M2 OPEN. Production scan attestation, file retention and real-person/guardian/professional scope remain separate owner gates.
+<!-- END PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND1_R1_CORRECTIONS_2026_10_26 -->
 ## M2 accelerated Round 1 R1 corrections implemented — independent review pending (2026-10-26)
 
