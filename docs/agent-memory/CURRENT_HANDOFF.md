@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+## Current handoff — M2 Round 2 R1 offline accepted; final Round 3 M2-D dispatched (2026-10-26)
+
+- Owner reported successful final Round2 host tests and pushed **`23d97ce8883df589bba0d8ac7f2bb43d94f9ea57`** on `phase13-study-journey-project-centric`; ChatGPT independently verified exact GitHub branch HEAD and expected **25** changed files, and owner local SHA matched `git ls-remote`. Codex prior report: full 964/964 unit, fact/requirement guarded PG 2/2, db:check passed; user confirmed tests passed but final individual counts were not re-pasted, so report separately. Migration 0035–0038 applied incrementally **only** to identity-verified disposable `immigration_ai_phase13_m1_1_test`, not production.
+- Accepted **Round2 offline code**: A2 immutable exact-run evidence/candidate provenance, and B Project-level synthetic fact assertions, creator-only confirmation/publication/independent AI-use grants and revocation, conflicts including private hidden possible conflicts suppressing authorized AI projection, with no hidden fact disclosure. Do NOT pass raw `projection()` to model; use authorized `stableProjection()` and source-grant verification.
+- Final accelerated Round3 source contract `tasks/PHASE13_M2_ROUND3_D_CROSS_CHAT_OFFLINE_CLOSEOUT_2026_10_26.md` is prepared. Shared `lib/workspace/context-resolver.ts` used by three Fast/Default/Premium widget routes still represents `projectId:null` from Phase12; Round3 must derive real Project Chat origin from server DB + actor-owned Chat + active Project membership, compose bounded fact/evidence under original turn and policy scope, wire real provider payload across all modes and verify no private leaks/fallback.
+- Round3 is **pending Codex/independent review**. M2 OPEN. Live Project Document runtime `application:null`, trusted scan readiness false; missing real GuardDuty publisher proof, durable import consent, production retention/privacy, person/guardian/professional roles, independent async extraction service-principal audit. No AWS, real customer files, deployment or production readiness.
+<!-- END PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND2_R1_SECURITY_CORRECTIONS_2026_10_26 -->
 ## Latest handoff — Round 2 R1 authorization/privacy corrections implemented (2026-10-26)
 

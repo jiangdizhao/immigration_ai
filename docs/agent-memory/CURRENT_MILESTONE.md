@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+## Phase 13 M2 — Round 2 OFFLINE accepted, Round 3 D and closeout validation active (2026-10-26)
+
+- Round2 R1 owner push/remote HEAD `23d97ce8883df589bba0d8ac7f2bb43d94f9ea57`, 25 files verified. Owner confirms host tests passed. Codex earlier: 964/964 full unit, 2/2 guarded fact/requirements PG, 0 skips; migrations 0035–0038 applied only to dedicated disposable test DB. A2/B offline code accepted; live gates still NO_GO.
+- Round3 one task `tasks/PHASE13_M2_ROUND3_D_CROSS_CHAT_OFFLINE_CLOSEOUT_2026_10_26.md`: use ProjectConversation + exact owned Chat + current Project authority to populate shared server-resolved Project scope; `stableProjection` with full hidden-conflict suppression and audience grants, exact clean+ai_context granted Project document excerpts, common typed context packet across Fast/Default/Premium provider calls, standalone unchanged; bounded synthetic integration and mode-specific tests.
+- M2 exit only after actual cross-Chat E2E/negative tests, independent review, Ubuntu host validation and remote commit. Retain separate production approvals for scanner provenance, durable consent, real personal data, retention/professional source authority and staff roles. Do not mislabel provisional checklist completeness as legal eligibility.
+<!-- END PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND2_R1_SECURITY_CORRECTIONS_2026_10_26 -->
 ## Active milestone M2 — Round 2 R1 security corrections implemented; review pending (2026-10-26)
 

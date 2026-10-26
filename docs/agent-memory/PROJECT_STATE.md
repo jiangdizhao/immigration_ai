@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+## Phase13 M2 — Round2 accepted offline; Round3 D contract active (2026-10-26)
+
+- `phase13-study-journey-project-centric` HEAD owner/remote-verified `23d97ce8883df589bba0d8ac7f2bb43d94f9ea57`, exactly 25 Round2 R1 files. Owner final host tests confirmed passed; Codex reported 964/964 unit and 2/2 guarded PG in prior final report. 0035–0038 are applied only in identity-verified disposable test DB. No prod AWS/migrations/customer data.
+- A2 candidates are untrusted and require exact scanner proof+per-purpose grants; M2-B records synthetic Project-level immutable facts, creator-only confirmation vs publication vs revocable AI grant, complete-Project hidden conflict suppression with caller-private projection. No real-person or professional authority. M2-C still provisional four-family collection registry.
+- M2-D final Round3 contract `tasks/PHASE13_M2_ROUND3_D_CROSS_CHAT_OFFLINE_CLOSEOUT_2026_10_26.md` specifies shared Project scope resolver, no other-member Chat transcript, all three legal widget modes common authorized context, guarded synthetic PG + fake-model tests and M2 offline acceptance matrix. Implementation pending review, M2 remains open. Production file/scanner/auth/consent/privacy gates NO_GO.
+<!-- END PHASE13_M2_ROUND2_ACCEPTED_ROUND3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND2_R1_SECURITY_CORRECTIONS_2026_10_26 -->
 ## Phase 13 M2 Round 2 R1 — owner authorization and conflict privacy fixed (2026-10-26)
 
