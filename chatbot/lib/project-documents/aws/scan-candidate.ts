@@ -55,6 +55,7 @@ export type ProjectDocumentScanCandidate = {
   readonly trust: "untrusted_scan_candidate";
   readonly verdict: "clean" | "rejected";
   readonly eventId: string;
+  readonly occurredAt: string;
   readonly eventFingerprint: string;
   readonly replay: "new" | "duplicate";
   readonly projectId: string;
@@ -120,11 +121,14 @@ function assertTargetIsCurrent(
   ) {
     throw new ProjectDocumentAwsError("scan_identity_mismatch");
   }
+  // Terminal status is admitted only as an untrusted candidate so A1.1 can
+  // verify an exact durable replay. Its transaction rejects any new or
+  // conflicting terminal transition; this verifier never changes scan state.
   if (
     target.storageStatus !== "stored" ||
     typeof target.storageVerifiedAt !== "string" ||
     !Number.isFinite(Date.parse(target.storageVerifiedAt)) ||
-    target.securityStatus !== "pending"
+    !["pending", "clean", "rejected", "failed"].includes(target.securityStatus)
   ) {
     throw new ProjectDocumentAwsError("scan_target_not_active");
   }
@@ -273,6 +277,7 @@ export function createProjectDocumentScanCandidateVerifier(input: {
       trust: "untrusted_scan_candidate" as const,
       verdict: event.candidateVerdict,
       eventId: event.eventId,
+      occurredAt: event.occurredAt,
       eventFingerprint: event.fingerprint,
       replay,
       projectId: target.projectId,

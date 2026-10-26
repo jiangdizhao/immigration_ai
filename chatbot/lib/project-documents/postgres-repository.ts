@@ -119,6 +119,8 @@ export type ScanAttestationExpectation = {
   byteSize: number;
   providerCode: string;
   providerEventId: string;
+  /** Canonical source-event fingerprint, when supplied by a trusted adapter. */
+  eventFingerprint?: string;
   occurredAt: string;
   result: "clean" | "rejected" | "failed";
 };
@@ -835,6 +837,8 @@ function validateScanAttestation(
     typeof attestation.providerEventId !== "string" ||
     attestation.providerEventId.trim().length < 1 ||
     attestation.providerEventId.length > 128 ||
+    (attestation.eventFingerprint !== undefined &&
+      !/^[0-9a-f]{64}$/u.test(attestation.eventFingerprint)) ||
     !["clean", "rejected", "failed"].includes(attestation.result)
   ) {
     return fail("worker_untrusted");

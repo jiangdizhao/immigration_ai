@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
+## PROJECT_STATE — B3 R1 corrections pending independent review (2026-10-26)
+
+- Current uncommitted B3 work is based on `c714e72566940c4f6bb24b2f8580617df6906b66` on `phase13-study-journey-project-centric`. The A1.1 PostgreSQL integration test's original replay assertions are restored; separate B3 PostgreSQL coverage verifies ACK failure after commit, identical attestation replay, modified-attestation conflict, and exactly one scan run, scan operation, security event, and project revision increment.
+- The worker validates finalizer response shape and exact project/version/generation/verdict/security status before ACK; adversarial mismatches quarantine. FAILED, SKIPPED, UNSUPPORTED and ACCESS_DENIED results stay unavailable and retry to queue redrive/DLQ, with no clean promotion or ACK. A1.1 does not durably record these failed scan results; doing so needs a separately reviewed attestation-contract extension. Invalid status pairs quarantine; existing A1.2-A trust semantics are preserved.
+- Validation: B3 worker **11/11**, guarded B3 PostgreSQL **1/1**, A1.1 service **21/21**, A1.2-A **17/17**, B1 **11/11**, B2-0 **16/16**. Full `pnpm test:unit`: **113/116 passed, 3 failed, 0 skipped**: empty child stderr in `s3-preflight-cli.test.ts`; `stage3-hardening.test.ts` returned 1 instead of 2 with empty `POSTGRES_URL`; three loopback `listen EPERM` failures in `server-http-timeouts.test.ts`. TypeScript: **44 diagnostics total, none in changed paths**. Changed-file Biome and whitespace checks passed.
+- B3 used only the identity-verified disposable DB `127.0.0.1:5432/immigration_ai_phase13_m1_1_test`; no reset or migration occurred, and uniquely labeled synthetic audit fixtures remain. A1.1 PostgreSQL integration is **UNVERIFIED**: its empty-schema precondition is unavailable on the existing DB; the sandbox attempt failed `EPERM` before connecting. No AWS/credentials/S3/SQS, production DB, deployment or customer files were accessed.
+- This is **not acceptance**. Runtime remains unwired/default-off, live readiness `NO_GO`; production producer authentication and attestation issuance remain unresolved. Preserve for independent review, then separately design/review those production integrations and authorize any live test. A1.3 and M2-B/C/D remain open.
+- Cumulative R1 review patch: `~/phase13_m2_a1_2_B3_R1_review.patch`; SHA-256 is reported with the final handoff.
+<!-- END PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B3_OFFLINE_DISPATCH_2026_10_26 -->
 ## PROJECT_STATE — B3 rapid offline queue-to-PG integration contracted (2026-10-26)
 

@@ -871,7 +871,7 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
-test("AWS adapter remains isolated with no runtime consumer, S3 client, or deletion API", () => {
+test("AWS adapters remain isolated and B3 is the only persistence consumer", () => {
   const appRoot = process.cwd();
   const awsRoot = path.join(appRoot, "lib/project-documents/aws");
   const consumerRoots = ["app", "components", "lib"]
@@ -894,14 +894,22 @@ test("AWS adapter remains isolated with no runtime consumer, S3 client, or delet
       file
     );
   }
-  const moduleSources = sourceFiles(awsRoot)
-    .filter(
-      (file) => !file.endsWith(".test.ts") && !file.endsWith("/testing.ts")
-    )
+  const allModuleFiles = sourceFiles(awsRoot).filter(
+    (file) => !file.endsWith(".test.ts") && !file.endsWith("/testing.ts")
+  );
+  const b3Files = allModuleFiles.filter((file) =>
+    file.includes(`${path.sep}b3${path.sep}`)
+  );
+  const moduleSources = allModuleFiles
+    .filter((file) => !file.includes(`${path.sep}b3${path.sep}`))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
   assert.doesNotMatch(moduleSources, /new\s+S3Client\s*\(/u);
   assert.doesNotMatch(moduleSources, /DeleteObjectCommand|deleteObject\s*\(/u);
   assert.doesNotMatch(moduleSources, /fetch\s*\(|https?\.request\s*\(/u);
   assert.doesNotMatch(moduleSources, /\.finalizeScan\s*\(/u);
+  assert.match(
+    b3Files.map((file) => readFileSync(file, "utf8")).join("\n"),
+    /\.finalizeScan\s*\(/u
+  );
 });

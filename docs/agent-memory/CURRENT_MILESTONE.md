@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
+## Active milestone — B3 R1 corrections implemented; independent review pending (2026-10-26)
+
+- The original A1.1 integration replay assertions are restored. Dedicated B3 PostgreSQL integration covers durable commit, ACK failure, exact attestation replay, same-event changed-attestation conflict, and no duplicate run/operation/event/revision. Finalizer results are matched to the candidate before ACK.
+- Failed/skipped/unsupported/access-denied scan outcomes remain unavailable under A1.2-A; B3 retries without ACK and eventually leaves disposition to configured queue redrive. Invalid status pairs quarantine. No failed scan run is written; durable failed-result recording remains a future contract decision.
+- Tests: B3 worker **11/11**, guarded B3 PostgreSQL **1/1**, A1.1 service **21/21**, A1.2-A **17/17**, B1 **11/11**, B2-0 **16/16**. Full unit **113/116 passed, 3 failed, 0 skipped** (empty child stderr; migration CLI exit 1 vs 2; three loopback `EPERM`). TypeScript has **44 existing diagnostics**, none in changed paths. Biome and whitespace passed. The A1.1 PostgreSQL suite is **UNVERIFIED** because no separate empty-schema disposable DB is available; no reset was performed.
+- No AWS, credentials, S3/SQS, production DB, deployment or customer files were accessed. B3 remains **pending independent review**, not accepted; live readiness remains `NO_GO`. Cumulative patch: `~/phase13_m2_a1_2_B3_R1_review.patch`.
+<!-- END PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B3_OFFLINE_DISPATCH_2026_10_26 -->
 ## CURRENT_MILESTONE — B3 rapid offline queue-to-PG integration contracted (2026-10-26)
 
