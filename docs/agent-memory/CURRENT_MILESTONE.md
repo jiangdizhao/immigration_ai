@@ -1,3 +1,24 @@
+<!-- BEGIN PHASE13_M2_ROUND2_R1_SECURITY_CORRECTIONS_2026_10_26 -->
+## Active milestone M2 — Round 2 R1 security corrections implemented; review pending (2026-10-26)
+
+- Current cumulative A2/B work remains uncommitted at base `f0e2ad4ac2b5ac2b4aadf956fbe86ef1fa2bcab4`. R1 is implemented for independent review, not accepted.
+- Fact target operations now require the assertion creator, including when a different Project owner tries to mutate it, and authorization is checked before replay. Guarded PostgreSQL coverage uses two registered customers, proves denials create no operation/event/revision, and verifies creator success and revoked/closed authority failures.
+- AI projection now suppresses a fact for any unresolved Project conflict while returning conflict details only for caller-visible assertions. A hidden possible-conflict fixture proves no private value, evidence ref, provenance or ID is disclosed and no winner is selected.
+- Synchronous user extraction keeps user attribution; any future async worker must use a separately authorized service-principal audit path.
+- Validation: focused A2/B/Project 7/7; guarded fact/M2-C PostgreSQL 2/2; full unit 964/964 with no skips; Drizzle, Biome and whitespace pass. TypeScript has 44 diagnostics at the same baseline locations/codes, none in changed files. No migration changes were made; 0035–0038 remain as applied in the disposable DB.
+- Production document processing remains disabled; trusted-live readiness false; no Project facts enter chatbot models. M2-D, production scan trust, separate async audit principal and independent review remain outstanding.
+<!-- END PHASE13_M2_ROUND2_R1_SECURITY_CORRECTIONS_2026_10_26 -->
+
+<!-- BEGIN PHASE13_M2_ROUND2_A2_B_IMPLEMENTED_2026_10_26 -->
+## Active milestone M2 — Round 2 A2 + B implemented offline; review pending (2026-10-26)
+
+- Implementation remains uncommitted on base `f0e2ad4ac2b5ac2b4aadf956fbe86ef1fa2bcab4`; no acceptance is claimed.
+- A2 now extracts bounded untrusted candidate evidence only from independently scan-verified exact immutable versions with a distinct extraction grant, exact VersionId/size/SHA-256 validation, immutable runs/units and opaque Project-scoped refs. B adds synthetic Project facts with attributed confirmation, separate publication, revocable AI-use grants, conflict/supersession/stale handling and audit. A bounded read-only projection is provided but no cross-Chat AI context is activated.
+- Validation: focused A2/B/Project regressions 6/6; guarded disposable PostgreSQL fact and M2-C regressions 2/2 after incremental migrations through 0038; full unit suite 964/964 with 0 skips; Drizzle check, changed-file Biome and whitespace checks passed. TypeScript baseline remains 44 diagnostics; none are in changed paths.
+- Migration 0035 plus corrective additive migrations 0036–0038 are applied only to identity-verified `immigration_ai_phase13_m1_1_test` at `127.0.0.1:5432`, without reset. No ordinary/staging/production DB use.
+- Production file handling remains disabled; trusted-live readiness false. No AWS, customer files, deployment, professional approvals or AI context activation. M2 remains OPEN pending independent review and M2-D integration/acceptance.
+<!-- END PHASE13_M2_ROUND2_A2_B_IMPLEMENTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_ROUND1_ACCEPTED_ROUND2_DISPATCH_2026_10_26 -->
 ## Active milestone M2 — Round 1 accepted OFFLINE; Round 2 A2+B next (2026-10-26)
 

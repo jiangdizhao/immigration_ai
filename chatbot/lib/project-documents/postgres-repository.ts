@@ -848,7 +848,9 @@ function validateScanAttestation(
 }
 
 function isGrantPurpose(value: string): value is ProjectDocumentPurpose {
-  return ["metadata_read", "content_read", "download"].includes(value);
+  return ["metadata_read", "content_read", "download", "extract"].includes(
+    value
+  );
 }
 
 function resultToIntentOutcome(input: {

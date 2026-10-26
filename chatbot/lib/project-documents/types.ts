@@ -4,6 +4,7 @@ export const PROJECT_DOCUMENT_PURPOSES = [
   "metadata_read",
   "content_read",
   "download",
+  "extract",
 ] as const;
 
 export const PROJECT_DOCUMENT_IMPORT_NOTICE_VERSION =

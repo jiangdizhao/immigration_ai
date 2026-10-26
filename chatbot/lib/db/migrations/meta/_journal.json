@@ -246,6 +246,34 @@
       "when": 1792993671922,
       "tag": "0034_phase13_m2_c_requirement_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793003518723,
+      "tag": "0035_phase13_m2_a2_b_facts",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793003518724,
+      "tag": "0036_phase13_m2_a2_b_facts_json_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793003518725,
+      "tag": "0037_phase13_m2_a2_b_revocation_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793003518726,
+      "tag": "0038_phase13_m2_a2_b_fact_version_pin",
+      "breakpoints": true
     }
   ]
 }

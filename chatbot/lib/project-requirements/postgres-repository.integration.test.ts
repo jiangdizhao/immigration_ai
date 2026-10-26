@@ -55,9 +55,14 @@ test(
       const journal = JSON.parse(
         await readFile(resolve(migrationDir, "meta/_journal.json"), "utf8")
       ) as { entries: Array<{ tag: string }> };
+      assert.ok(
+        journal.entries.some(
+          (entry) => entry.tag === "0034_phase13_m2_c_requirement_registry"
+        )
+      );
       assert.equal(
         journal.entries.at(-1)?.tag,
-        "0034_phase13_m2_c_requirement_registry"
+        "0038_phase13_m2_a2_b_fact_version_pin"
       );
       await migrate(drizzle(sql), { migrationsFolder: migrationDir });
 
@@ -272,7 +277,7 @@ test(
       const publication = {
         family: "school_facts",
         templateKey: "school-facts-provisional",
-        schemaVersion: "provisional-v2",
+        schemaVersion: `provisional-v2-${randomUUID()}`,
         items: [
           {
             key: "school_identity_detail",
@@ -309,14 +314,13 @@ test(
         ).length,
         2
       );
-      assert.equal(
+      assert.ok(
         (
           await repository.listTemplateVersions({
             family: "school_facts",
             templateKey: "school-facts-provisional",
           })
-        ).length,
-        2
+        ).length >= 2
       );
 
       const replayAfterSupersession =

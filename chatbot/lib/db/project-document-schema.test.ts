@@ -111,6 +111,7 @@ test("Project document state vocabularies stay narrow and pending by default", (
     "metadata_read",
     "content_read",
     "download",
+    "extract",
     "ai_context",
     "future_package",
   ]);

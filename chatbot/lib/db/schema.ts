@@ -763,6 +763,8 @@ export const PROJECT_OPERATION_TYPES = [
   "project_document_grant_revoke",
   "project_document_withdraw",
   "project_requirement_state_change",
+  "project_evidence_extract",
+  "project_fact_mutation",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -774,6 +776,8 @@ export const PROJECT_OPERATION_RESULT_KINDS = [
   "document_scan_run",
   "document_grant",
   "project_requirement_state",
+  "document_extraction_run",
+  "project_fact_assertion",
 ] as const;
 
 export const PROJECT_EVENT_TYPES = [
@@ -787,6 +791,8 @@ export const PROJECT_EVENT_TYPES = [
   "project_document_grant_changed",
   "project_document_withdrawn",
   "project_requirement_state_changed",
+  "project_evidence_extraction_completed",
+  "project_fact_changed",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -798,6 +804,8 @@ export const PROJECT_EVENT_SUBJECT_KINDS = [
   "document_scan_run",
   "document_grant",
   "requirement_state",
+  "document_extraction_run",
+  "project_fact_assertion",
 ] as const;
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
 export type ProjectOperationResultKind =
@@ -850,11 +858,11 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion')`
     ),
     actorShapeValid: check(
       "ProjectOperation_actor_shape_check",
@@ -862,7 +870,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -910,11 +918,11 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state') and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion') and ${table.subjectId} is not null)`
     ),
     actorShapeValid: check(
       "ProjectEvent_actor_shape_check",
@@ -974,6 +982,7 @@ export const PROJECT_DOCUMENT_GRANT_PURPOSES = [
   "metadata_read",
   "content_read",
   "download",
+  "extract",
   "ai_context",
   "future_package",
 ] as const;
@@ -1204,7 +1213,7 @@ export const projectDocumentGrant = pgTable(
     ),
     purposeAllowed: check(
       "ProjectDocumentGrant_purpose_check",
-      sql`${table.purpose} in ('metadata_read', 'content_read', 'download', 'ai_context', 'future_package')`
+      sql`${table.purpose} in ('metadata_read', 'content_read', 'download', 'extract', 'ai_context', 'future_package')`
     ),
     revisionPositive: check(
       "ProjectDocumentGrant_revision_check",
@@ -1255,14 +1264,22 @@ export const projectDocumentProcessingRun = pgTable(
       ],
       name: "ProjectDocumentProcessingRun_project_version_sha256_fk",
     }).onDelete("restrict"),
-    projectVersionGenerationKindUnique: uniqueIndex(
-      "ProjectDocRun_project_version_generation_kind_unique"
-    ).on(
-      table.projectId,
-      table.versionId,
-      table.generation,
-      table.operationKind
-    ),
+    scanGenerationUnique: uniqueIndex("ProjectDocRun_scan_generation_unique")
+      .on(table.projectId, table.versionId, table.generation)
+      .where(sql`${table.operationKind} = 'scan'`),
+    extractionParserUnique: uniqueIndex(
+      "ProjectDocRun_extract_parser_generation_unique"
+    )
+      .on(
+        table.projectId,
+        table.versionId,
+        table.generation,
+        table.providerCode
+      )
+      .where(sql`${table.operationKind} = 'extract'`),
+    runIdentityUnique: uniqueIndex(
+      "ProjectDocRun_project_version_generation_id_unique"
+    ).on(table.projectId, table.versionId, table.generation, table.id),
     providerEventUnique: uniqueIndex(
       "ProjectDocumentProcessingRun_provider_event_unique"
     )
@@ -2585,3 +2602,364 @@ export const projectRequirementStateEvent = pgTable(
 export type ProjectRequirementStateEvent = InferSelectModel<
   typeof projectRequirementStateEvent
 >;
+
+// Round 2 candidate evidence is exact-run scoped and never itself an AI grant.
+export const projectDocumentEvidenceUnit = pgTable(
+  "ProjectDocumentEvidenceUnit",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assetId: uuid("assetId").notNull(),
+    versionId: uuid("versionId").notNull(),
+    processingRunId: uuid("processingRunId").notNull(),
+    generation: integer("generation").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    parserVersion: varchar("parserVersion", { length: 64 }).notNull(),
+    locator: json("locator").$type<Record<string, unknown>>().notNull(),
+    excerpt: text("excerpt").notNull(),
+    excerptSha256: varchar("excerptSha256", { length: 64 }).notNull(),
+    provenance: json("provenance").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectRunOrdinalUnique: uniqueIndex(
+      "ProjectDocumentEvidenceUnit_project_run_ordinal_unique"
+    ).on(table.projectId, table.processingRunId, table.ordinal),
+    projectRunUnitUnique: uniqueIndex(
+      "ProjectDocumentEvidenceUnit_project_run_id_unique"
+    ).on(table.projectId, table.processingRunId, table.id),
+    projectAssetVersionForeignKey: foreignKey({
+      columns: [table.projectId, table.assetId, table.versionId],
+      foreignColumns: [
+        projectDocumentVersion.projectId,
+        projectDocumentVersion.assetId,
+        projectDocumentVersion.versionId,
+      ],
+      name: "ProjectDocumentEvidenceUnit_project_asset_version_fk",
+    }).onDelete("restrict"),
+    runForeignKey: foreignKey({
+      columns: [
+        table.projectId,
+        table.versionId,
+        table.generation,
+        table.processingRunId,
+      ],
+      foreignColumns: [
+        projectDocumentProcessingRun.projectId,
+        projectDocumentProcessingRun.versionId,
+        projectDocumentProcessingRun.generation,
+        projectDocumentProcessingRun.id,
+      ],
+      name: "ProjectDocumentEvidenceUnit_run_fk",
+    }).onDelete("restrict"),
+    ordinalPositive: check(
+      "ProjectDocumentEvidenceUnit_ordinal_check",
+      sql`${table.ordinal} > 0`
+    ),
+    excerptBounded: check(
+      "ProjectDocumentEvidenceUnit_excerpt_check",
+      sql`length(${table.excerpt}) between 1 and 2000`
+    ),
+    excerptDigestValid: check(
+      "ProjectDocumentEvidenceUnit_excerpt_sha256_check",
+      sql`${table.excerptSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type ProjectDocumentEvidenceUnit = InferSelectModel<
+  typeof projectDocumentEvidenceUnit
+>;
+
+export const projectEvidenceRef = pgTable(
+  "ProjectEvidenceRef",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    processingRunId: uuid("processingRunId").notNull(),
+    unitId: uuid("unitId").notNull(),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    projectIdUnique: uniqueIndex("ProjectEvidenceRef_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    activeUnitUnique: uniqueIndex("ProjectEvidenceRef_active_unit_unique")
+      .on(table.projectId, table.unitId)
+      .where(sql`${table.revokedAt} is null`),
+    projectUnitRunForeignKey: foreignKey({
+      columns: [table.projectId, table.processingRunId, table.unitId],
+      foreignColumns: [
+        projectDocumentEvidenceUnit.projectId,
+        projectDocumentEvidenceUnit.processingRunId,
+        projectDocumentEvidenceUnit.id,
+      ],
+      name: "ProjectEvidenceRef_unit_fk",
+    }).onDelete("restrict"),
+    projectCreatedIndex: index("ProjectEvidenceRef_project_created_idx").on(
+      table.projectId,
+      table.createdAt
+    ),
+  })
+);
+export type ProjectEvidenceRef = InferSelectModel<typeof projectEvidenceRef>;
+
+export const PROJECT_FACT_ORIGINS = [
+  "customer_stated",
+  "document_extracted",
+  "ai_inferred",
+  "professional_determination",
+] as const;
+export const PROJECT_FACT_STATES = [
+  "proposed",
+  "customer_confirmed",
+  "rejected",
+  "disputed",
+  "stale",
+  "superseded",
+] as const;
+export const PROJECT_FACT_CONFLICT_KINDS = [
+  "conflict",
+  "possible_conflict",
+] as const;
+export const PROJECT_FACT_AUDIENCES = ["actor_only", "project"] as const;
+
+export const projectFactAssertion = pgTable(
+  "ProjectFactAssertion",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    key: varchar("key", { length: 128 }).notNull(),
+    valueType: varchar("valueType", { length: 16 }).notNull(),
+    value: json("value").$type<unknown>().notNull(),
+    normalizedComparison: varchar("normalizedComparison", {
+      length: 64,
+    }).notNull(),
+    originKind: varchar("originKind", { enum: PROJECT_FACT_ORIGINS }).notNull(),
+    state: varchar("state", { enum: PROJECT_FACT_STATES })
+      .notNull()
+      .default("proposed"),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    confirmedByUserId: uuid("confirmedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    effectiveFrom: timestamp("effectiveFrom"),
+    effectiveTo: timestamp("effectiveTo"),
+    observedAt: timestamp("observedAt"),
+    supersedesAssertionId: uuid("supersedesAssertionId"),
+    version: integer("version").notNull().default(1),
+    stale: boolean("stale").notNull().default(false),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex("ProjectFactAssertion_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    projectAssertionVersionUnique: uniqueIndex(
+      "ProjectFactAssertion_project_id_version_unique"
+    ).on(table.projectId, table.id, table.version),
+    projectKeyCreatedIndex: index(
+      "ProjectFactAssertion_project_key_created_idx"
+    ).on(table.projectId, table.key, table.createdAt),
+    keyValid: check(
+      "ProjectFactAssertion_key_check",
+      sql`${table.key} ~ '^[a-z][a-z0-9_.-]{0,127}$'`
+    ),
+    valueTypeValid: check(
+      "ProjectFactAssertion_value_type_check",
+      sql`${table.valueType} in ('string','number','boolean','date','json')`
+    ),
+    stateValid: check(
+      "ProjectFactAssertion_state_check",
+      sql`${table.state} in ('proposed','customer_confirmed','rejected','disputed','stale','superseded')`
+    ),
+    versionPositive: check(
+      "ProjectFactAssertion_version_check",
+      sql`${table.version} > 0`
+    ),
+  })
+);
+export type ProjectFactAssertion = InferSelectModel<
+  typeof projectFactAssertion
+>;
+
+export const projectFactAssertionEvidence = pgTable(
+  "ProjectFactAssertionEvidence",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assertionId: uuid("assertionId").notNull(),
+    assertionVersion: integer("assertionVersion").notNull(),
+    evidenceRefId: uuid("evidenceRefId").notNull(),
+    linkedByUserId: uuid("linkedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    assertionForeignKey: foreignKey({
+      columns: [table.projectId, table.assertionId, table.assertionVersion],
+      foreignColumns: [
+        projectFactAssertion.projectId,
+        projectFactAssertion.id,
+        projectFactAssertion.version,
+      ],
+      name: "ProjectFactAssertionEvidence_assertion_fk",
+    }).onDelete("restrict"),
+    evidenceForeignKey: foreignKey({
+      columns: [table.projectId, table.evidenceRefId],
+      foreignColumns: [projectEvidenceRef.projectId, projectEvidenceRef.id],
+      name: "ProjectFactAssertionEvidence_evidence_fk",
+    }).onDelete("restrict"),
+    assertionEvidenceUnique: uniqueIndex(
+      "ProjectFactAssertionEvidence_assertion_ref_unique"
+    ).on(table.assertionId, table.assertionVersion, table.evidenceRefId),
+  })
+);
+
+export const projectFactAssertionEvent = pgTable(
+  "ProjectFactAssertionEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assertionId: uuid("assertionId").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    eventKind: varchar("eventKind", { length: 32 }).notNull(),
+    oldValue: json("oldValue").$type<Record<string, unknown> | null>(),
+    newValue: json("newValue").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    assertionForeignKey: foreignKey({
+      columns: [table.projectId, table.assertionId],
+      foreignColumns: [projectFactAssertion.projectId, projectFactAssertion.id],
+      name: "ProjectFactAssertionEvent_assertion_fk",
+    }).onDelete("restrict"),
+    operationUnique: uniqueIndex(
+      "ProjectFactAssertionEvent_operation_unique"
+    ).on(table.operationRecordId),
+    eventKindValid: check(
+      "ProjectFactAssertionEvent_kind_check",
+      sql`${table.eventKind} in ('proposed','confirmed','rejected','disputed','published','grant_created','grant_revoked','superseded','stale')`
+    ),
+  })
+);
+
+export const projectFactPublication = pgTable(
+  "ProjectFactPublication",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assertionId: uuid("assertionId").notNull(),
+    assertionVersion: integer("assertionVersion").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    audience: varchar("audience", { enum: PROJECT_FACT_AUDIENCES }).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    assertionForeignKey: foreignKey({
+      columns: [table.projectId, table.assertionId, table.assertionVersion],
+      foreignColumns: [
+        projectFactAssertion.projectId,
+        projectFactAssertion.id,
+        projectFactAssertion.version,
+      ],
+      name: "ProjectFactPublication_assertion_fk",
+    }).onDelete("restrict"),
+    activeVersionUnique: uniqueIndex(
+      "ProjectFactPublication_active_version_unique"
+    )
+      .on(table.projectId, table.assertionId, table.assertionVersion)
+      .where(sql`${table.active}`),
+  })
+);
+
+export const projectFactUseGrant = pgTable(
+  "ProjectFactUseGrant",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    assertionId: uuid("assertionId").notNull(),
+    assertionVersion: integer("assertionVersion").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    purpose: varchar("purpose", { length: 32 }).notNull(),
+    audience: varchar("audience", { enum: PROJECT_FACT_AUDIENCES }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    assertionForeignKey: foreignKey({
+      columns: [table.projectId, table.assertionId, table.assertionVersion],
+      foreignColumns: [
+        projectFactAssertion.projectId,
+        projectFactAssertion.id,
+        projectFactAssertion.version,
+      ],
+      name: "ProjectFactUseGrant_assertion_fk",
+    }).onDelete("restrict"),
+    activeScopeUnique: uniqueIndex("ProjectFactUseGrant_active_scope_unique")
+      .on(
+        table.projectId,
+        table.assertionId,
+        table.assertionVersion,
+        table.actorUserId,
+        table.purpose
+      )
+      .where(sql`${table.revokedAt} is null`),
+    purposeValid: check(
+      "ProjectFactUseGrant_purpose_check",
+      sql`${table.purpose} = 'ai_context'`
+    ),
+  })
+);
+
+export const projectFactConflict = pgTable(
+  "ProjectFactConflict",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    leftAssertionId: uuid("leftAssertionId").notNull(),
+    rightAssertionId: uuid("rightAssertionId").notNull(),
+    kind: varchar("kind", { enum: PROJECT_FACT_CONFLICT_KINDS }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    resolvedAt: timestamp("resolvedAt"),
+    resolvedByUserId: uuid("resolvedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+  },
+  (table) => ({
+    leftForeignKey: foreignKey({
+      columns: [table.projectId, table.leftAssertionId],
+      foreignColumns: [projectFactAssertion.projectId, projectFactAssertion.id],
+      name: "ProjectFactConflict_left_assertion_fk",
+    }).onDelete("restrict"),
+    rightForeignKey: foreignKey({
+      columns: [table.projectId, table.rightAssertionId],
+      foreignColumns: [projectFactAssertion.projectId, projectFactAssertion.id],
+      name: "ProjectFactConflict_right_assertion_fk",
+    }).onDelete("restrict"),
+    pairUnique: uniqueIndex("ProjectFactConflict_pair_unique").on(
+      table.projectId,
+      table.leftAssertionId,
+      table.rightAssertionId
+    ),
+  })
+);
