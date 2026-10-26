@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B3_OFFLINE_DISPATCH_2026_10_26 -->
+## CURRENT_MILESTONE — B3 rapid offline queue-to-PG integration contracted (2026-10-26)
+
+- Owner explicitly requested **expedited B3 development** to progress Phase 13 M2. Architect prepared `tasks/PHASE13_M2_A1_2_B3_RAPID_INTEGRATION_CONTRACT_2026_10_26.md`, Codex implementation packet `tasks/PHASE13_M2_A1_2_B3_CODEX_IMPLEMENTATION_PACKET_2026_10_26.md`, and `tasks/PHASE13_M2_RAPID_CLOSEOUT_PATH_2026_10_26.md`. New contract permits **offline code and guarded synthetic disposable-DB tests only**, not production or cloud operations.
+- Base remote HEAD `7a078ed329a775e788941a44ac3809ca18da34f1`. Previously owner-run shared-account disposable AWS demonstration succeeded for synthetic TXT+folder marker (`COMPLETED/NO_THREATS_FOUND`, matched S3 Version ID), and owner deleted GuardDuty/SQS/EventBridge/S3/IAM test assets; not a B2 live provenance approval. B2-1 operator collector not executed.
+- Current A1.1 `PostgresProjectDocumentRepository.finalizeScan()` already includes atomic ProjectOperation/ProjectEvent/ProcessingRun audit and provider-event uniqueness; A1.2-A provides body-bound scan context, strict GuardDuty parser and exact S3 version/sha256 read; B1 provides pure ack/retry planner. B3 coding should integrate these rather than inventing another ledger. Never mint trusted delivery from `source` JSON, queue ID or raw policy.
+- Next: owner fast-forwards this docs-only change; dispatch Codex with new implementation packet; Codex leaves cumulative B3 patch **uncommitted/unpushed** for independent review. No real AWS/SQS/S3, production DB/credentials, new migration, deployment or customer files authorized. B3 offline completion does **not** close M2; remaining A1.3, M2-B (facts), M2-C (requirements), M2-D (cross-Chat resolver) tracked explicitly. Feature flags default-off and live readiness `NO_GO`.
+<!-- END PHASE13_M2_A1_2_B3_OFFLINE_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_SHARED_ACCOUNT_SYNTHETIC_AWS_PILOT_2026_10_26 -->
 ## Phase 13 milestone update — manual synthetic AWS scan pilot SUCCESS / cleaned; B2-1 live collector still NOT VERIFIED (2026-10-26)
 
