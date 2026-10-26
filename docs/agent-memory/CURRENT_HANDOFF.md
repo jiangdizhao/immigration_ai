@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+## CURRENT HANDOFF — B3 offline accepted; A1.3 offline customer API/UI contracted (2026-10-26)
+
+- **Accepted B3 R1 owner commit:** `a14d53227003a1f9bf41bc86688995deaf63daac` on `phase13-study-journey-project-centric`; owner `git rev-parse HEAD` and `git ls-remote` matched this SHA with clean status. ChatGPT independently fetched remote GitHub branch and commit, confirming 10 reviewed B3 R1 files. Owner-host `pnpm test:unit` **964 passed / 0 failed / 0 skipped** (`UNIT_TEST_EXIT=0`), and the separately invoked B3 worker + guarded PostgreSQL tests **12 passed / 0 failed / 0 skipped** (`B3_TEST_EXIT=0`). ChatGPT independently reviewed R1 correction; **B3 offline implementation ACCEPTED**, **not** B3 live/overall A1.2/M2 production acceptance.
+- **Known constraints:** Real GuardDuty/EventBridge provenance independent authentication, production SQS transport/attestation issuer, B2-1 live collector run, live remediation and durable FAILED/SKIPPED scan-state treatment remain unresolved; **LIVE NO_GO**. The earlier synthetic AWS Console demo succeeded but all disposable AWS assets were deleted. Host A1.1 full PostgreSQL empty-schema integration remains **UNVERIFIED** because existing disposable DB is not empty; don't reset it.
+- **Next Codex task:** one default-OFF **A1.3 offline API/UI** slice specified in `tasks/PHASE13_M2_A1_3_CUSTOMER_DOCUMENT_API_UI_OFFLINE_CONTRACT_2026_10_26.md` and `tasks/PHASE13_M2_A1_3_CODEX_IMPLEMENTATION_PACKET_2026_10_26.md`, using original Project/membership/document boundaries and exact source Chat consent. No live AWS/customer files, deployment, production DB or migration; independent review on cumulative uncommitted patch. A1.3 runtime cannot be enabled merely from a flag without B2 evidence and owner privacy/retention signoff.
+- **M2 OPEN:** after A1.3 offline work, continue M2-B fact assertions/confirmation/publication and AI-use grants; M2-C provisional versioned requirements; M2-D cross-Chat server-scoped resolver and final end-to-end acceptance. Never claim M2 done from B3 alone.
+<!-- END PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
 ## CURRENT_HANDOFF — B3 R1 corrections implemented; independent review pending (2026-10-26)
 

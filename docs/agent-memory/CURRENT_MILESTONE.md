@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+## Milestone update — B3 offline ACCEPTED, A1.3 contracted, M2 OPEN (2026-10-26)
+
+- B3 R1 reviewed source and **accepted offline** at owner-pushed/remote-verified commit `a14d53227003a1f9bf41bc86688995deaf63daac` (10 files). Ubuntu host full unit **964/964**; explicit B3 worker + guarded disposable PostgreSQL **12/12**, 0 failures/skips; owner HEAD/remote SHA equal, clean tree. Does not prove live AWS producer origin, enable the worker, accept customer uploads or close M2. A1.1 clean-schema PostgreSQL suite remains unverified (no reset performed).
+- A1.3 new **default-off offline** typed authenticated HTTP handlers + compact bilingual Project UI contracted in `PHASE13_M2_A1_3_CUSTOMER_DOCUMENT_API_UI_OFFLINE_CONTRACT_2026_10_26.md`; details for Codex in `PHASE13_M2_A1_3_CODEX_IMPLEMENTATION_PACKET_2026_10_26.md`. Scope excludes AWS credentials/calls, production and regular DBs, migrations and real files. Missing producer proof, privacy/consent, retention/legal-hold or genuine scan evidence causes failed-closed download/upload; no flag-only safety bypass. Requires separate R1 patch review and host validation.
+- **M2 exit not yet satisfied:** A1.3, M2-B (confirmed/published versioned facts), M2-C (versioned provisional School+Student500 requirement registry) and M2-D (bounded cross-Chat Project resolver + real-format synthetic fixtures) still to build/accept. No professional eligibility/legal signoff or M2 release.
+<!-- END PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
 ## Active milestone — B3 R1 corrections implemented; independent review pending (2026-10-26)
 

@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+## Project state — Phase13 B3 durable integration accepted OFFLINE; A1.3 next (2026-10-26)
+
+- Branch `phase13-study-journey-project-centric`; GitHub independently verified new B3 R1 SHA `a14d53227003a1f9bf41bc86688995deaf63daac`, 10 reviewed files; owner local SHA and `ls-remote` match, clean working tree. Ubuntu full unit **964/964**, standalone B3 worker/PG **12/12**, all zero fails/skips. **B3 offline acceptance only.**
+- Trusted GuardDuty producer proof and live worker runtime not available, no production S3/SQS. B2-1 collector live not run, synthetic pilot fully cleaned. FAILED/SKIPPED messages do not create durable A1.1 failure outcomes. Existing test DB contains fixtures; legacy A1.1 suite requiring empty schema still unverified. B2/B3 live `NO_GO`.
+- Architect prepared `tasks/PHASE13_M2_A1_3_CUSTOMER_DOCUMENT_API_UI_OFFLINE_CONTRACT_2026_10_26.md` and `tasks/PHASE13_M2_A1_3_CODEX_IMPLEMENTATION_PACKET_2026_10_26.md` authorizing only Code + fake/guarded DB offline work with server flag OFF, independent live-trust gate, creator-private purpose grants/consent and bilingual UI. No migration/AWS/customer files/deploy/ordinary DB or implicit cross-Project authority. Codex cumulative patch uncommitted/unpushed for independent review.
+- Subsequent M2: factual extraction/provenance/explicit confirmation/publication+AI-use grants (M2-B); provisional versioned requirements (M2-C); server-authorized cross-Chat context resolver (M2-D); comprehensive synthetic acceptance; M2 still OPEN.
+<!-- END PHASE13_B3_ACCEPTED_A1_3_DISPATCH_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B3_IMPLEMENTED_2026_10_26 -->
 ## PROJECT_STATE — B3 R1 corrections pending independent review (2026-10-26)
 
