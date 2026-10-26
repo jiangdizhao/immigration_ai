@@ -40,6 +40,7 @@ export type ProjectDocumentApplicationFailureCode =
   | "idempotency_conflict"
   | "state_conflict"
   | "storage_failed"
+  | "recovery_needed"
   | "unavailable";
 
 export class ProjectDocumentApplicationError extends Error {
@@ -277,6 +278,7 @@ function applicationFailureResponse(
     case "document_not_clean":
     case "scan_unverified":
     case "storage_failed":
+    case "recovery_needed":
     case "unavailable":
       return error(fallbackMessage, 503);
     default:

@@ -762,6 +762,7 @@ export const PROJECT_OPERATION_TYPES = [
   "project_document_grant_create",
   "project_document_grant_revoke",
   "project_document_withdraw",
+  "project_requirement_state_change",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -772,6 +773,7 @@ export const PROJECT_OPERATION_RESULT_KINDS = [
   "document_version",
   "document_scan_run",
   "document_grant",
+  "project_requirement_state",
 ] as const;
 
 export const PROJECT_EVENT_TYPES = [
@@ -784,6 +786,7 @@ export const PROJECT_EVENT_TYPES = [
   "project_document_security_changed",
   "project_document_grant_changed",
   "project_document_withdrawn",
+  "project_requirement_state_changed",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -794,6 +797,7 @@ export const PROJECT_EVENT_SUBJECT_KINDS = [
   "document_version",
   "document_scan_run",
   "document_grant",
+  "requirement_state",
 ] as const;
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
 export type ProjectOperationResultKind =
@@ -846,11 +850,11 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state')`
     ),
     actorShapeValid: check(
       "ProjectOperation_actor_shape_check",
@@ -858,7 +862,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -906,11 +910,11 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant') and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state') and ${table.subjectId} is not null)`
     ),
     actorShapeValid: check(
       "ProjectEvent_actor_shape_check",
@@ -2313,3 +2317,271 @@ export const policyIntelligenceSyncRun = pgTable(
     ).on(table.status, table.startedAt),
   })
 );
+
+export const PROJECT_REQUIREMENT_FAMILIES = [
+  "school_facts",
+  "school_evidence",
+  "student500_facts",
+  "student500_evidence",
+] as const;
+export type ProjectRequirementFamily =
+  (typeof PROJECT_REQUIREMENT_FAMILIES)[number];
+
+export const REQUIREMENT_TEMPLATE_REVIEW_STATES = [
+  "draft",
+  "provisional",
+] as const;
+export type RequirementTemplateReviewState =
+  (typeof REQUIREMENT_TEMPLATE_REVIEW_STATES)[number];
+
+export const PROJECT_REQUIREMENT_APPLICABILITY = [
+  "unknown",
+  "true",
+  "false",
+] as const;
+export type ProjectRequirementApplicability =
+  (typeof PROJECT_REQUIREMENT_APPLICABILITY)[number];
+
+export const PROJECT_REQUIREMENT_COLLECTION_STATES = [
+  "not_started",
+  "in_progress",
+  "evidence_attached",
+  "needs_review",
+  "blocked",
+  "complete",
+] as const;
+export type ProjectRequirementCollectionState =
+  (typeof PROJECT_REQUIREMENT_COLLECTION_STATES)[number];
+
+export const requirementTemplate = pgTable(
+  "RequirementTemplate",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    family: varchar("family", { enum: PROJECT_REQUIREMENT_FAMILIES }).notNull(),
+    templateKey: varchar("templateKey", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    familyKeyUnique: uniqueIndex("RequirementTemplate_family_key_unique").on(
+      table.family,
+      table.templateKey
+    ),
+    familyAllowed: check(
+      "RequirementTemplate_family_check",
+      sql`${table.family} in ('school_facts', 'school_evidence', 'student500_facts', 'student500_evidence')`
+    ),
+    keyPresent: check(
+      "RequirementTemplate_key_check",
+      sql`length(trim(${table.templateKey})) between 1 and 128`
+    ),
+  })
+);
+export type RequirementTemplate = InferSelectModel<typeof requirementTemplate>;
+
+export const requirementTemplateVersion = pgTable(
+  "RequirementTemplateVersion",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    templateId: uuid("templateId")
+      .notNull()
+      .references(() => requirementTemplate.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    contentHash: varchar("contentHash", { length: 64 }).notNull(),
+    schemaVersion: varchar("schemaVersion", { length: 64 }).notNull(),
+    items: json("items")
+      .$type<Array<{ key: string; label: string; kind: "fact" | "evidence" }>>()
+      .notNull(),
+    sourceProvenance: json("sourceProvenance")
+      .$type<{
+        sourceIdentity: string | null;
+        observedAt: string | null;
+        effectiveAt: string | null;
+        note: string;
+      }>()
+      .notNull(),
+    reviewState: varchar("reviewState", {
+      enum: REQUIREMENT_TEMPLATE_REVIEW_STATES,
+    })
+      .notNull()
+      .default("draft"),
+    authoredByUserId: uuid("authoredByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    reviewedByUserId: uuid("reviewedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    templateVersionUnique: uniqueIndex(
+      "RequirementTemplateVersion_template_version_unique"
+    ).on(table.templateId, table.version),
+    idTemplateUnique: uniqueIndex(
+      "RequirementTemplateVersion_id_template_unique"
+    ).on(table.id, table.templateId),
+    templateForeignKey: foreignKey({
+      columns: [table.templateId],
+      foreignColumns: [requirementTemplate.id],
+      name: "RequirementTemplateVersion_template_fk",
+    }).onDelete("restrict"),
+    versionPositive: check(
+      "RequirementTemplateVersion_version_check",
+      sql`${table.version} > 0`
+    ),
+    contentHashValid: check(
+      "RequirementTemplateVersion_content_hash_check",
+      sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`
+    ),
+    schemaVersionPresent: check(
+      "RequirementTemplateVersion_schema_version_check",
+      sql`length(trim(${table.schemaVersion})) between 1 and 64`
+    ),
+    reviewStateAllowed: check(
+      "RequirementTemplateVersion_review_state_check",
+      sql`${table.reviewState} in ('draft', 'provisional')`
+    ),
+    reviewerUnknown: check(
+      "RequirementTemplateVersion_reviewer_unknown_check",
+      sql`${table.reviewedByUserId} is null`
+    ),
+  })
+);
+export type RequirementTemplateVersion = InferSelectModel<
+  typeof requirementTemplateVersion
+>;
+
+export const PROJECT_REQUIREMENT_COLLECTION_ACTOR_BASES = [
+  "customer_collection_update",
+  "template_version_invalidation",
+  "reconciliation",
+] as const;
+export type ProjectRequirementCollectionActorBasis =
+  (typeof PROJECT_REQUIREMENT_COLLECTION_ACTOR_BASES)[number];
+
+export const projectRequirementState = pgTable(
+  "ProjectRequirementState",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    templateId: uuid("templateId")
+      .notNull()
+      .references(() => requirementTemplate.id, { onDelete: "restrict" }),
+    templateVersionId: uuid("templateVersionId").notNull(),
+    itemKey: varchar("itemKey", { length: 128 }).notNull(),
+    applicability: varchar("applicability", {
+      enum: PROJECT_REQUIREMENT_APPLICABILITY,
+    })
+      .notNull()
+      .default("unknown"),
+    collectionState: varchar("collectionState", {
+      enum: PROJECT_REQUIREMENT_COLLECTION_STATES,
+    })
+      .notNull()
+      .default("not_started"),
+    factLocator: json("factLocator").$type<{
+      projectId: string;
+      assertionId: string;
+      version: number;
+    } | null>(),
+    evidenceLocator: json("evidenceLocator").$type<{
+      projectId: string;
+      evidenceRef: string;
+      version: number;
+    } | null>(),
+    revision: integer("revision").notNull().default(1),
+    staleAt: timestamp("staleAt"),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex(
+      "ProjectRequirementState_project_id_unique"
+    ).on(table.projectId, table.id),
+    projectTemplateItemUnique: uniqueIndex(
+      "ProjectRequirementState_project_template_item_unique"
+    ).on(table.projectId, table.templateVersionId, table.itemKey),
+    templateVersionForeignKey: foreignKey({
+      columns: [table.templateVersionId, table.templateId],
+      foreignColumns: [
+        requirementTemplateVersion.id,
+        requirementTemplateVersion.templateId,
+      ],
+      name: "ProjectRequirementState_template_version_fk",
+    }).onDelete("restrict"),
+    itemKeyPresent: check(
+      "ProjectRequirementState_item_key_check",
+      sql`length(trim(${table.itemKey})) between 1 and 128`
+    ),
+    applicabilityAllowed: check(
+      "ProjectRequirementState_applicability_check",
+      sql`${table.applicability} in ('unknown', 'true', 'false')`
+    ),
+    collectionStateAllowed: check(
+      "ProjectRequirementState_collection_state_check",
+      sql`${table.collectionState} in ('not_started', 'in_progress', 'evidence_attached', 'needs_review', 'blocked', 'complete')`
+    ),
+    revisionPositive: check(
+      "ProjectRequirementState_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    factLocatorProjectMatch: check(
+      "ProjectRequirementState_fact_locator_project_check",
+      sql`${table.factLocator} is null or ${table.factLocator}->>'projectId' = ${table.projectId}::text`
+    ),
+    evidenceLocatorProjectMatch: check(
+      "ProjectRequirementState_evidence_locator_project_check",
+      sql`${table.evidenceLocator} is null or ${table.evidenceLocator}->>'projectId' = ${table.projectId}::text`
+    ),
+  })
+);
+export type ProjectRequirementState = InferSelectModel<
+  typeof projectRequirementState
+>;
+
+export const projectRequirementStateEvent = pgTable(
+  "ProjectRequirementStateEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    stateId: uuid("stateId").notNull(),
+    actorUserId: uuid("actorUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    actorBasis: varchar("actorBasis", {
+      enum: PROJECT_REQUIREMENT_COLLECTION_ACTOR_BASES,
+    }).notNull(),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    oldValue: json("oldValue").$type<Record<string, unknown> | null>(),
+    newValue: json("newValue").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    stateForeignKey: foreignKey({
+      columns: [table.projectId, table.stateId],
+      foreignColumns: [
+        projectRequirementState.projectId,
+        projectRequirementState.id,
+      ],
+      name: "ProjectRequirementStateEvent_state_fk",
+    }).onDelete("restrict"),
+    operationStateUnique: uniqueIndex(
+      "ProjectRequirementStateEvent_operation_state_unique"
+    ).on(table.operationRecordId, table.stateId),
+    projectCreatedIndex: index(
+      "ProjectRequirementStateEvent_project_created_idx"
+    ).on(table.projectId, table.createdAt),
+    actorShapeValid: check(
+      "ProjectRequirementStateEvent_actor_shape_check",
+      sql`(${table.actorBasis} = 'customer_collection_update' and ${table.actorUserId} is not null) or (${table.actorBasis} = 'template_version_invalidation' and ${table.actorUserId} is not null) or (${table.actorBasis} = 'reconciliation' and ${table.actorUserId} is not null)`
+    ),
+  })
+);
+export type ProjectRequirementStateEvent = InferSelectModel<
+  typeof projectRequirementStateEvent
+>;

@@ -26,7 +26,7 @@ loadEnv({ path: resolve(".env.local") });
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0033_phase13_m2_a1_2_b1_audit_protection";
+const EXPECTED_MIGRATION_HEAD = "0034_phase13_m2_c_requirement_registry";
 const EXPECTED_HOST = "127.0.0.1";
 const EXPECTED_PORT = 5432;
 const CONSENT_AT = "2026-10-25T00:00:00.000Z";
@@ -545,7 +545,7 @@ test(
         entries: Array<{ idx: number; tag: string }>;
       };
       assert.equal(journal.entries.at(-1)?.tag, EXPECTED_MIGRATION_HEAD);
-      assert.equal(journal.entries.at(-1)?.idx, 33);
+      assert.equal(journal.entries.at(-1)?.idx, 34);
       await migrate(database, { migrationsFolder: migrationDirectory });
       assert.equal(
         await count(

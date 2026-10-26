@@ -239,6 +239,13 @@
       "when": 1792922064171,
       "tag": "0033_phase13_m2_a1_2_b1_audit_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792993671922,
+      "tag": "0034_phase13_m2_c_requirement_registry",
+      "breakpoints": true
     }
   ]
 }

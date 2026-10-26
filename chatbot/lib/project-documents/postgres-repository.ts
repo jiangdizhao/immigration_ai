@@ -2232,6 +2232,56 @@ export class PostgresProjectDocumentRepository {
     });
   }
 
+  async getExactVersionStorageDescriptor(input: {
+    actorUserId: string;
+    projectId: string;
+    assetId: string;
+    versionId: string;
+    purpose: "content_read" | "download";
+  }): Promise<{
+    projectId: string;
+    assetId: string;
+    versionId: string;
+    storageKey: string;
+    storageObjectVersionId: string;
+    sha256: string;
+    byteSize: number;
+    canonicalMime: string;
+  }> {
+    await this.authorizeExactVersionRead(input);
+    const [version] = await this.database
+      .select({
+        projectId: projectDocumentVersion.projectId,
+        assetId: projectDocumentVersion.assetId,
+        versionId: projectDocumentVersion.versionId,
+        storageKey: projectDocumentVersion.storageKey,
+        storageObjectVersionId: projectDocumentVersion.storageObjectVersionId,
+        sha256: projectDocumentVersion.sha256,
+        byteSize: projectDocumentVersion.byteSize,
+        canonicalMime: projectDocumentVersion.canonicalMime,
+      })
+      .from(projectDocumentVersion)
+      .where(
+        and(
+          eq(projectDocumentVersion.projectId, input.projectId),
+          eq(projectDocumentVersion.assetId, input.assetId),
+          eq(projectDocumentVersion.versionId, input.versionId),
+          eq(projectDocumentVersion.storageStatus, "stored"),
+          eq(projectDocumentVersion.securityStatus, "clean"),
+          isNotNull(projectDocumentVersion.storageObjectVersionId),
+          isNotNull(projectDocumentVersion.storageVerifiedAt)
+        )
+      )
+      .limit(1);
+    if (!version?.storageObjectVersionId) {
+      return fail("project_forbidden");
+    }
+    return {
+      ...version,
+      storageObjectVersionId: version.storageObjectVersionId,
+    };
+  }
+
   authorizeExactVersionRead(input: {
     actorUserId: string;
     projectId: string;

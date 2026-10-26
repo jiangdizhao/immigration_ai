@@ -22,7 +22,7 @@ loadEnv({ path: resolve(".env.local") });
 const TEST_DATABASE_URL =
   process.env.PHASE13_M1_1_TEST_DATABASE_URL?.trim() ?? "";
 const EXPECTED_DATABASE = "immigration_ai_phase13_m1_1_test";
-const EXPECTED_MIGRATION_HEAD = "0033_phase13_m2_a1_2_b1_audit_protection";
+const EXPECTED_MIGRATION_HEAD = "0034_phase13_m2_c_requirement_registry";
 const skipReason = TEST_DATABASE_URL
   ? false
   : "PHASE13_M1_1_TEST_DATABASE_URL is not configured (isolated database required)";
