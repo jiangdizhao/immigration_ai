@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
+## Active milestone — B2-1 implementation accepted OFFLINE; operator AWS evidence pending (2026-10-26)
+
+- Code acceptance: `e4d80cff45236e616bb03107269c055aaafb2638`, 12 changed files, reviewed R1/R2 cumulative code and clean owner-pushed branch; independently verified by ChatGPT against remote GitHub. New separate operator-only AWS CLI v2 read-only execution gate, exact STS-first identity check, narrow operation allowlist, bounded evidence collection and private sanitized `NO_GO` report. Original B2-0 plan/refusal remains unchanged.
+- Codex reported focused B2-1 fake **28/28**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**, changed-file lint/whitespace clean, 44 existing unrelated TS diagnostics. Owner demonstrated `pnpm test:unit` on local Ubuntu: **964/964, zero failures/skips, exit 0**. Explicit `test:unit` list does **not** include the B2-1 focused test file; do not call this host run B2-1 focused test validation.
+- B2-1 actual AWS evidence: **NOT STARTED / NOT ACCEPTED**. No account or real resource has been approved; no AWS calls authorized. Next separate Gate B: owner-designated nonproduction sandbox, exact profile/account/region/caller/resource selector and time-bounded owner approval -> safe live read-only report, `NO_GO`; otherwise missing infrastructure/INCOMPLETE and deliberate B2-2 decision.
+- No B2-2 paid scans/mutations, B3 queue worker, A1.3 customer files, production release, DB change, or overall M2-A1.2/M2 acceptance.
+<!-- END PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
 ## Active milestone — B2-1 R2 correction implemented, final review pending (2026-10-26)
 

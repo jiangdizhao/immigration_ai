@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
+## Phase 13 project state — B2-1 offline code accepted; live AWS Gate B pending (2026-10-26)
+
+- Current source baseline: `phase13-study-journey-project-centric` at independently verified commit `e4d80cff45236e616bb03107269c055aaafb2638`, containing 12 B2-1 source/tests/state files. Contract/docs baseline `a8f2e36053987c045b8105a148e9d67497ec0c6a`. Separate operator-only AWS CLI collector and R1/R2 corrections accepted by ChatGPT source review for offline implementation. Not a live AWS validation or feature enablement.
+- Test provenance: Codex separately reported B2-1 fake 28/28, B2-0 16/16, B1 evaluator 16/16, B1 queue 11/11, A1.2-A 17/17, lint/whitespace clean; 44 unchanged TS diagnostics. Owner Ubuntu `pnpm test:unit` passed **964/964** with exit 0; explicit `test:unit` command excludes new B2-1 dedicated test suite, so coverage claims remain separate.
+- Invariants: existing B2-0 default offline/refusal, exact resource/identity profile gating, short-lived owner approval per AWS request, no writes/reads of objects or SQS messages, no trusted delivery/finalizeScan, source/finding provenance, redacted operator report and unconditional `NO_GO`. Self-authored approval is not cryptographically verified owner consent.
+- Next owner-controlled Gate B: prepare isolated nonproduction account, preexisting exact resources (if any), named nondefault read-only SSO profile and approval outside repo. Independently authorize bounded AWS metadata read, manually run approved collector, review only sanitized findings. If infrastructure absent, return `INCOMPLETE`, do not discover/provision under B2-1. No current authorization for B2-2, B3, A1.3, production deployment, migrations or customer upload; M2-A1.2 and M2 not accepted.
+<!-- END PHASE13_M2_A1_2_B2_1_OFFLINE_ACCEPTED_2026_10_26 -->
+
 <!-- BEGIN PHASE13_M2_A1_2_B2_1_R2_2026_10_26 -->
 ## Phase 13 canonical state — B2-1 R2 correction pending final independent review (2026-10-26)
 
