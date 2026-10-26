@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+## Current milestone — M3-001-R1 corrections ready for independent review (2026-10-27)
+
+- Corrected conflicting source dispositions, synthetic/unverified record-class isolation and required display names/titles, snapshot temporal applicability without latest-wins assertion selection, and intake-code identity collisions. Changes and regressions remain within chatbot/lib/education-intelligence/.
+- Focused tests **38/38**, 0 skipped; Biome passed on all eight module files; TypeScript remains at the documented **44** repo diagnostics with **0** in this module; `git diff --check` passed.
+- Full `pnpm test:unit`: **113 passed, 3 failed, 0 skipped**. Exact failures and host rerun commands are recorded in CURRENT_HANDOFF.md.
+- Uncommitted on expected branch/HEAD. Independent review and owner-host validation remain pending. M3-001 only; no migration, DB modification, M3-002, commit or push.
+<!-- END PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
 ## Phase 13 M3 Education Intelligence — architecture frozen, M3-001 dispatched (2026-10-27)
 

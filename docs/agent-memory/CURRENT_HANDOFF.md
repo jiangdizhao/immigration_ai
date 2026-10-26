@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+## Phase 13 M3-001-R1 — independent review corrections applied; review pending (2026-10-27)
+
+- Implemented R1-01 conflicting disposition handling, R1-02 entity/source/snapshot/observation RecordClass consistency and required provider/course names, R1-03 snapshot/observation temporal applicability without latest-wins assertions, and R1-04 composite intake identity under chatbot/lib/education-intelligence/. No Project, Policy Intelligence, customer-answer, API/UI, migration or serving files changed.
+- Focused tests: **38 passed, 0 failed, 0 skipped** across four files. Changed-module Biome passed on all eight files. TypeScript reports **44 repository diagnostics**, matching the documented pre-change baseline; **0** are in this module. `git diff --check` passed.
+- Full `pnpm test:unit`: **113 passed, 3 failed, 0 skipped** (116 file-level tests). Existing failures: `lib/production/s3-preflight-cli.test.ts` expected missing S3 configuration on stderr but received empty stderr; `lib/production/stage3-hardening.test.ts` expected migration CLI exit 2 but received 1; three `lib/server-http-timeouts.test.ts` subtests could not bind loopback (`listen EPERM`, 127.0.0.1). Host rerun: `cd /home/rico/immigration_ai/chatbot && pnpm test:unit`; isolate the sandbox loopback case with `cd /home/rico/immigration_ai/chatbot && node --import tsx lib/server-http-timeouts.test.ts`.
+- Implementation and R1 corrections remain uncommitted on `phase13-study-journey-project-centric`, HEAD `f89bcb3adc1c0a6c910da18dae3cd6f2e6df8e4f`. Pending independent patch review and owner-host validation. No M3-002, commit, push, migration, network, AWS, model or deployment work started.
+<!-- END PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
 ## Phase 13 M3 Education Intelligence — architecture frozen, M3-001 dispatched (2026-10-27)
 

@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+## Phase 13 M3-001-R1 — corrections prepared, pending independent review (2026-10-27)
+
+- Offline education kernel R1 corrections address disposition conflicts, RecordClass isolation and required labels, snapshot date applicability, and intake identity collisions; scope remains chatbot/lib/education-intelligence/ plus these pending-review status records.
+- Focused tests **38 passed / 0 failed / 0 skipped**; changed-file Biome passed; TypeScript retains **44** documented repo diagnostics and **0** in this module; `git diff --check` passed.
+- Full unit suite **113 passed / 3 failed / 0 skipped**. Failures: S3 child-stderr expectation, migration CLI exit-code expectation, and loopback `listen EPERM`; exact details and host reruns are in CURRENT_HANDOFF.md.
+- Expected M3 branch and HEAD retained; cumulative changes remain uncommitted for independent review. M3-002 and all live/DB/deployment operations remain out of scope.
+<!-- END PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
 ## Phase 13 M3 Education Intelligence — architecture frozen, M3-001 dispatched (2026-10-27)
 
