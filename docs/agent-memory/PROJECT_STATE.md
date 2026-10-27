@@ -1,23 +1,25 @@
-<!-- BEGIN PHASE13_M3_001_OFFLINE_ACCEPTED_AND_M3_002_DISPATCHED_2026_10_27 -->
-## Canonical M3 checkpoint — M3-001 OFFLINE ACCEPTED; M3-002 durable catalog ready (2026-10-27)
+<!-- BEGIN PHASE13_M3_002_R3_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
+## Canonical M3 checkpoint — M3-002-R3 PostgreSQL negative-test fixture repair implemented; independent acceptance pending (2026-10-27)
 
-- **Independently verified code:** GitHub branch at f13cb89f5e27248d9b7eaff96290d2c8cebfc1b9, exactly eight new Education Intelligence TS/test files and three status docs (11 files), one commit after f89bcb3 design. No migration, runtime, API or customer-facing code change.
-- **Tests/review:** Independent R1 source review PASS. Codex reports focused education 38/38 and changed-file Biome, 44 preexisting TypeScript diagnostics with none in module. Ubuntu host capture: pnpm test:unit **964 passed, 0 failed, 0 skipped**; pnpm db:check **Everything's fine**. **Evidence limitation:** host capture does not include the separate focused 38-test run; package.json test:unit has an explicit list excluding M3 focused files. See [M3-001 acceptance matrix](./tasks/PHASE13_M3_001_OFFLINE_ACCEPTANCE_2026_10_27.md).
-- **Disposition:** M3-001 **OFFLINE ACCEPTED**, M3 milestone **OPEN**, Phase 13 production/live **NO_GO**. Historical pending/uncommitted Codex entries below are superseded but preserved for traceability.
-- **Active next task:** [M3-002 Durable Education Catalog](./tasks/PHASE13_M3_002_DURABLE_EDUCATION_CATALOG_2026_10_27.md), isolated Provider/Course/Delivery/Intake/Source/Snapshot/Observation normalized schema and transactional exact-scope repository. Repo journal ends 0039; next expected 0040 only after inspecting actual migration metadata. **Migration FILE creation only**; applying against even a disposable database requires separate owner exact-target authorization.
-- **Workflow:** owner ff-only pulls this new docs-only acceptance/task commit before Codex M3-002. Codex does only bounded M3-002, leaves patch uncommitted/unpushed, records tests and any DB skip honestly; independent source review -> owner host validation -> commit/push -> independent remote verification.
-<!-- END PHASE13_M3_001_OFFLINE_ACCEPTED_AND_M3_002_DISPATCHED_2026_10_27 -->
+- **Repository state:** `phase13-study-journey-project-centric`, base HEAD `20cd1a340e3a8aa4ce05ac6dc0fe3427e2f1cf0d`; cumulative M3-002/R1/R2/R3 work remains uncommitted and unpushed.
+- **Owner-reported database state:** migration 0040 has been applied to isolated `immigration_ai_phase13_m3_002_test`. The owner reports 41 migration-ledger entries, seven Education tables, 50 CHECK constraints, 12 foreign keys and five custom triggers. Codex did not connect to the database. The local 0040 migration file retains SHA-256 `43fef570551335d4d116ac53e4e240868240c5f4fbedc7e6b071e500bf067c96`.
+- **R3 test correction:** the owner-reported `23505` at the delivery RecordClass test came from its cloned location/mode identity. The negative fixtures now use distinct delivery location, intake code/period and provider-scoped course codes. Host-rejection rows use unique canonical URLs. Observation FK cases isolate the requested FK where possible; cases whose shape inherently violates two related FKs accept only their explicitly named FK set. Every rejected statement now reports its case name and expected versus actual SQLSTATE/constraint.
+- **Validation:** focused offline education tests passed across **6 files** (51 test declarations; 0 failed / 0 skipped); changed-file Biome passed; TypeScript diagnostics match the clean expected-HEAD baseline (**44 unchanged**, no M3 diagnostics); `pnpm db:check` and `git diff --check` passed. Full `pnpm test:unit`: **113 passed / 3 failed / 0 skipped** (116 file-level tests). Sandbox failures: S3 preflight expected `/MATTER_DOCUMENTS_S3_BUCKET and AWS_REGION are required/u` on stderr but received empty stderr; stage-3 hardening expected exit 2 and got 1; three HTTP timeout cases failed to bind `127.0.0.1` with `listen EPERM`. Host reruns: `cd /home/rico/immigration_ai/chatbot && pnpm test:unit`; isolated failures: `cd /home/rico/immigration_ai/chatbot && node --import tsx --test lib/production/s3-preflight-cli.test.ts lib/production/stage3-hardening.test.ts lib/server-http-timeouts.test.ts`.
+- **Database acceptance:** the owner ran the opt-in PostgreSQL test and reported its initial fixture collision. Codex did not rerun it, connect, or execute a migration. The corrected test is **PENDING INDEPENDENT POSTGRESQL ACCEPTANCE** on the same authorized isolated database; no database reset or schema edit was made.
+- **Disposition:** M3-001 remains **OFFLINE ACCEPTED**. M3-002-R3 is **IMPLEMENTED / PENDING INDEPENDENT POSTGRESQL ACCEPTANCE**. Phase 13 remains **NO_GO** for production/live use. Stop before commit, push or M3-003.
+<!-- END PHASE13_M3_002_R3_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
 
 <!-- BEGIN PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
-## Phase 13 M3-001-R1 — corrections prepared, pending independent review (2026-10-27)
+## Historical Phase 13 M3-001-R1 checkpoint — superseded by M3-001 offline acceptance
 
 - Offline education kernel R1 corrections address disposition conflicts, RecordClass isolation and required labels, snapshot date applicability, and intake identity collisions; scope remains chatbot/lib/education-intelligence/ plus these pending-review status records.
 - Focused tests **38 passed / 0 failed / 0 skipped**; changed-file Biome passed; TypeScript retains **44** documented repo diagnostics and **0** in this module; `git diff --check` passed.
 - Full unit suite **113 passed / 3 failed / 0 skipped**. Failures: S3 child-stderr expectation, migration CLI exit-code expectation, and loopback `listen EPERM`; exact details and host reruns are in CURRENT_HANDOFF.md.
-- Expected M3 branch and HEAD retained; cumulative changes remain uncommitted for independent review. M3-002 and all live/DB/deployment operations remain out of scope.
+- At that earlier checkpoint the R1 correction packet was pending review; M3-001 was later independently accepted before M3-002 began.
 <!-- END PHASE13_M3_001_CODEX_IMPLEMENTATION_PENDING_REVIEW_2026_10_27 -->
 
 <!-- BEGIN PHASE13_M3_ARCHITECTURE_FROZEN_2026_10_27 -->
+> Historical design and first-dispatch snapshot. The current milestone status is recorded in the M3-002 pending-review block above.
 ## Phase 13 M3 Education Intelligence — architecture frozen, M3-001 dispatched (2026-10-27)
 
 - **Current milestone:** M3 Education Intelligence DESIGN FROZEN / M3-001 OFFLINE TASK READY / IMPLEMENTATION NOT STARTED. Owner explicitly authorized ChatGPT to record the design without a separate review cycle; this is NOT professional/legal sign-off, live-source acquisition approval or implementation acceptance.

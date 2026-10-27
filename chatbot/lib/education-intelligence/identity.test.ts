@@ -3,16 +3,60 @@ import test from "node:test";
 import { validateEducationDataset } from "./contracts";
 import { createSyntheticEducationFixture } from "./fixtures";
 import {
+  canonicalizeEducationUrl,
   courseExternalIdentityKey,
   deliveryExternalIdentityKey,
   findIntakeIdentityCollisions,
   intakeExternalIdentityKey,
+  isReservedSyntheticHostForFamily,
   normalizeDisplayName,
   normalizeExternalCode,
   normalizeNameForComparison,
   providerExternalIdentityKey,
   sourceIdentityKey,
 } from "./identity";
+
+test("synthetic URL host classification uses the exact source-family host mapping", () => {
+  const familyHosts = [
+    ["CRICOS", "https://registry.cricos.example/provider/"],
+    ["STUDY_AUSTRALIA", "https://directory.study-australia.example/course/"],
+    ["INSTITUTION", "https://school.institution.example/course/"],
+  ] as const;
+  for (const [family, url] of familyHosts) {
+    assert.equal(
+      isReservedSyntheticHostForFamily(canonicalizeEducationUrl(url), family),
+      true
+    );
+    for (const otherFamily of [
+      "CRICOS",
+      "STUDY_AUSTRALIA",
+      "INSTITUTION",
+    ] as const) {
+      if (otherFamily !== family) {
+        assert.equal(isReservedSyntheticHostForFamily(url, otherFamily), false);
+      }
+    }
+  }
+
+  for (const url of [
+    "https://catalog.education.gov.au/path/.example",
+    "https://catalog.education.gov.au/search?mirror=.example",
+    "https://registry.cricos.example.attacker.invalid/provider",
+    "https://unrelated.example/provider",
+  ]) {
+    const canonicalUrl = canonicalizeEducationUrl(url);
+    for (const family of [
+      "CRICOS",
+      "STUDY_AUSTRALIA",
+      "INSTITUTION",
+    ] as const) {
+      assert.equal(
+        isReservedSyntheticHostForFamily(canonicalUrl, family),
+        false
+      );
+    }
+  }
+});
 
 test("normalization is bounded and exact; names do not become identity", () => {
   assert.equal(

@@ -1,4 +1,4 @@
-import { type InferSelectModel, sql } from "drizzle-orm";
+import { type InferSelectModel, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -7,14 +7,20 @@ import {
   index,
   integer,
   json,
+  jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type {
+  ClaimDomain,
+  EducationFieldValue,
+} from "@/lib/education-intelligence/contracts";
 import { MATTER_DOCUMENT_MIME_TYPES } from "@/lib/matter-documents/formats";
 
 export const user = pgTable(
@@ -2963,3 +2969,691 @@ export const projectFactConflict = pgTable(
     ),
   })
 );
+
+// Phase 13 M3-002 public/general catalog. These relations deliberately have
+// no FK or data dependency on Projects, private documents, or Policy Intelligence.
+export const EDUCATION_RECORD_CLASSES = ["SYNTHETIC", "UNVERIFIED"] as const;
+export const EDUCATION_SOURCE_FAMILIES = [
+  "CRICOS",
+  "STUDY_AUSTRALIA",
+  "INSTITUTION",
+] as const;
+export const EDUCATION_ENTITY_TYPES = [
+  "PROVIDER",
+  "COURSE",
+  "DELIVERY",
+  "INTAKE",
+] as const;
+export const EDUCATION_SOURCE_SCOPE_KINDS = ["CATALOG", "PROVIDER"] as const;
+export const EDUCATION_SOURCE_ACCESS_MODES = [
+  "SYNTHETIC_FIXTURE",
+  "CURATED_REFERENCE",
+] as const;
+export const EDUCATION_ACQUISITION_OUTCOMES = [
+  "CAPTURED",
+  "FAILED_FETCH",
+  "FAILED_PARSE",
+] as const;
+export const EDUCATION_OBSERVATION_DISPOSITIONS = [
+  "ASSERTION",
+  "WITHDRAWAL",
+  "NOT_APPLICABLE",
+] as const;
+export const EDUCATION_CLAIM_DOMAINS = [
+  "CRICOS_REGISTRATION",
+  "INSTITUTION_COURSE",
+  "INSTITUTION_ADMISSIONS",
+  "INSTITUTION_AVAILABILITY",
+  "INSTITUTION_FEE",
+  "INSTITUTION_DELIVERY",
+  "INSTITUTION_INTAKE",
+  "DISCOVERY",
+] as const satisfies readonly ClaimDomain[];
+export const EDUCATION_FIELD_KEYS = [
+  "PROVIDER_LEGAL_NAME",
+  "CRICOS_PROVIDER_STATUS",
+  "COURSE_TITLE",
+  "COURSE_QUALIFICATION_LEVEL",
+  "CRICOS_COURSE_STATUS",
+  "INSTITUTION_COURSE_CODE",
+  "COURSE_ADMISSIONS_CRITERIA",
+  "COURSE_AVAILABILITY",
+  "TUITION_FEE",
+  "CAMPUS_NAME",
+  "DELIVERY_MODE",
+  "DELIVERY_AVAILABILITY",
+  "INTAKE_PERIOD",
+  "INTAKE_START_DATE",
+  "APPLICATION_DEADLINE",
+  "INTAKE_AVAILABILITY",
+  "DISCOVERY_REFERENCE",
+] as const;
+
+const educationOpaqueId = (column: AnyPgColumn) =>
+  sql`${column} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`;
+const educationNormalizedToken = (column: SQLWrapper) =>
+  sql`regexp_replace(trim(normalize(${column}, NFKC)), '[[:space:]]+', ' ', 'g')`;
+const educationNormalizedCode = (column: SQLWrapper) =>
+  sql`upper(${educationNormalizedToken(column)})`;
+const educationNormalizedLabel = (column: SQLWrapper) =>
+  sql`lower(${educationNormalizedToken(column)})`;
+const educationUrlHostname = (column: SQLWrapper) =>
+  sql`case when substring(${column} from '^https://[^/?#]+') ~ '^https://[^/@:?#]+$' then lower(substring(${column} from '^https://([^/@:?#]+)')) else null end`;
+
+export const educationProvider = pgTable(
+  "EducationProvider",
+  {
+    providerId: varchar("providerId", { length: 128 }).primaryKey().notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    displayName: varchar("displayName", { length: 512 }).notNull(),
+    legalName: varchar("legalName", { length: 512 }),
+    aliases: jsonb("aliases").$type<readonly string[]>(),
+    cricosProviderCode: varchar("cricosProviderCode", { length: 128 }),
+    category: varchar("category", { length: 128 }),
+  },
+  (table) => ({
+    idRecordClassUnique: unique("EducationProvider_id_record_class_unique").on(
+      table.providerId,
+      table.recordClass
+    ),
+    cricosProviderCodeUnique: uniqueIndex(
+      "EducationProvider_cricos_code_unique"
+    )
+      .on(educationNormalizedCode(table.cricosProviderCode))
+      .where(sql`${table.cricosProviderCode} is not null`),
+    idValid: check(
+      "EducationProvider_id_check",
+      educationOpaqueId(table.providerId)
+    ),
+    recordClassValid: check(
+      "EducationProvider_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    displayNameValid: check(
+      "EducationProvider_display_name_check",
+      sql`length(trim(${table.displayName})) between 1 and 512`
+    ),
+    legalNameValid: check(
+      "EducationProvider_legal_name_check",
+      sql`${table.legalName} is null or length(trim(${table.legalName})) between 1 and 512`
+    ),
+    aliasesArray: check(
+      "EducationProvider_aliases_check",
+      sql`${table.aliases} is null or jsonb_typeof(${table.aliases}) = 'array'`
+    ),
+  })
+);
+export type EducationProviderRow = InferSelectModel<typeof educationProvider>;
+
+export const educationCourse = pgTable(
+  "EducationCourse",
+  {
+    courseId: varchar("courseId", { length: 128 }).primaryKey().notNull(),
+    providerId: varchar("providerId", { length: 128 }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    title: varchar("title", { length: 512 }).notNull(),
+    qualificationLevel: varchar("qualificationLevel", { length: 128 }),
+    sector: varchar("sector", { length: 128 }),
+    cricosCourseCode: varchar("cricosCourseCode", { length: 128 }),
+    institutionCourseCode: varchar("institutionCourseCode", { length: 128 }),
+    studyField: varchar("studyField", { length: 256 }),
+  },
+  (table) => ({
+    providerForeignKey: foreignKey({
+      columns: [table.providerId, table.recordClass],
+      foreignColumns: [
+        educationProvider.providerId,
+        educationProvider.recordClass,
+      ],
+      name: "EducationCourse_provider_record_class_fk",
+    }).onDelete("restrict"),
+    idRecordClassUnique: unique("EducationCourse_id_record_class_unique").on(
+      table.courseId,
+      table.recordClass
+    ),
+    idProviderClassUnique: unique(
+      "EducationCourse_id_provider_class_unique"
+    ).on(table.courseId, table.providerId, table.recordClass),
+    cricosCourseIdentityUnique: uniqueIndex(
+      "EducationCourse_provider_cricos_code_unique"
+    )
+      .on(table.providerId, educationNormalizedCode(table.cricosCourseCode))
+      .where(sql`${table.cricosCourseCode} is not null`),
+    institutionCourseIdentityUnique: uniqueIndex(
+      "EducationCourse_provider_institution_code_unique"
+    )
+      .on(
+        table.providerId,
+        educationNormalizedCode(table.institutionCourseCode)
+      )
+      .where(sql`${table.institutionCourseCode} is not null`),
+    idValid: check(
+      "EducationCourse_id_check",
+      educationOpaqueId(table.courseId)
+    ),
+    recordClassValid: check(
+      "EducationCourse_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    titleValid: check(
+      "EducationCourse_title_check",
+      sql`length(trim(${table.title})) between 1 and 512`
+    ),
+  })
+);
+export type EducationCourseRow = InferSelectModel<typeof educationCourse>;
+
+export const educationDelivery = pgTable(
+  "EducationDelivery",
+  {
+    deliveryId: varchar("deliveryId", { length: 128 }).primaryKey().notNull(),
+    courseId: varchar("courseId", { length: 128 }).notNull(),
+    // Denormalized solely for composite provider-scope evidence constraints.
+    providerId: varchar("providerId", { length: 128 }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    campusId: varchar("campusId", { length: 128 }),
+    siteId: varchar("siteId", { length: 128 }),
+    campusName: varchar("campusName", { length: 512 }),
+    city: varchar("city", { length: 512 }),
+    state: varchar("state", { length: 128 }),
+    mode: varchar("mode", { length: 128 }),
+  },
+  (table) => ({
+    courseProviderClassForeignKey: foreignKey({
+      columns: [table.courseId, table.providerId, table.recordClass],
+      foreignColumns: [
+        educationCourse.courseId,
+        educationCourse.providerId,
+        educationCourse.recordClass,
+      ],
+      name: "EducationDelivery_course_provider_class_fk",
+    }).onDelete("restrict"),
+    idRecordClassUnique: unique("EducationDelivery_id_record_class_unique").on(
+      table.deliveryId,
+      table.recordClass
+    ),
+    idProviderClassUnique: unique(
+      "EducationDelivery_id_provider_class_unique"
+    ).on(table.deliveryId, table.providerId, table.recordClass),
+    externalIdentityUnique: uniqueIndex(
+      "EducationDelivery_course_location_mode_unique"
+    )
+      .on(
+        table.courseId,
+        educationNormalizedToken(
+          sql`coalesce(${table.siteId}, ${table.campusId})`
+        ),
+        educationNormalizedLabel(table.mode)
+      )
+      .where(
+        sql`coalesce(${table.siteId}, ${table.campusId}) is not null and ${table.mode} is not null and length(trim(${table.mode})) > 0`
+      ),
+    idValid: check(
+      "EducationDelivery_id_check",
+      educationOpaqueId(table.deliveryId)
+    ),
+    recordClassValid: check(
+      "EducationDelivery_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+  })
+);
+export type EducationDeliveryRow = InferSelectModel<typeof educationDelivery>;
+
+export const educationIntake = pgTable(
+  "EducationIntake",
+  {
+    intakeId: varchar("intakeId", { length: 128 }).primaryKey().notNull(),
+    deliveryId: varchar("deliveryId", { length: 128 }).notNull(),
+    // Denormalized solely for composite provider-scope evidence constraints.
+    providerId: varchar("providerId", { length: 128 }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    intakeCode: varchar("intakeCode", { length: 128 }),
+    term: varchar("term", { length: 512 }),
+    year: integer("year"),
+    startDate: varchar("startDate", { length: 10 }),
+    applicationDeadline: varchar("applicationDeadline", { length: 10 }),
+  },
+  (table) => ({
+    deliveryProviderClassForeignKey: foreignKey({
+      columns: [table.deliveryId, table.providerId, table.recordClass],
+      foreignColumns: [
+        educationDelivery.deliveryId,
+        educationDelivery.providerId,
+        educationDelivery.recordClass,
+      ],
+      name: "EducationIntake_delivery_provider_class_fk",
+    }).onDelete("restrict"),
+    idRecordClassUnique: unique("EducationIntake_id_record_class_unique").on(
+      table.intakeId,
+      table.recordClass
+    ),
+    idProviderClassUnique: unique(
+      "EducationIntake_id_provider_class_unique"
+    ).on(table.intakeId, table.providerId, table.recordClass),
+    codedIdentityUnique: uniqueIndex(
+      "EducationIntake_delivery_code_period_unique"
+    )
+      .on(
+        table.deliveryId,
+        educationNormalizedCode(table.intakeCode),
+        educationNormalizedToken(sql`coalesce(${table.term}, '')`),
+        sql`coalesce(${table.year}, -1)`,
+        sql`coalesce(${table.startDate}, '')`
+      )
+      .where(
+        sql`${table.intakeCode} is not null and (${table.year} is not null or ${table.startDate} is not null)`
+      ),
+    datedIdentityUnique: uniqueIndex(
+      "EducationIntake_delivery_date_period_unique"
+    )
+      .on(
+        table.deliveryId,
+        table.startDate,
+        educationNormalizedToken(sql`coalesce(${table.term}, '')`),
+        sql`coalesce(${table.year}, -1)`
+      )
+      .where(
+        sql`${table.intakeCode} is null and ${table.startDate} is not null`
+      ),
+    idValid: check(
+      "EducationIntake_id_check",
+      educationOpaqueId(table.intakeId)
+    ),
+    recordClassValid: check(
+      "EducationIntake_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    yearValid: check(
+      "EducationIntake_year_check",
+      sql`${table.year} is null or ${table.year} between 1900 and 2200`
+    ),
+    datesValid: check(
+      "EducationIntake_dates_check",
+      sql`(${table.startDate} is null or ${table.startDate} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$') and (${table.applicationDeadline} is null or ${table.applicationDeadline} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')`
+    ),
+  })
+);
+export type EducationIntakeRow = InferSelectModel<typeof educationIntake>;
+
+export const educationSource = pgTable(
+  "EducationSource",
+  {
+    sourceId: varchar("sourceId", { length: 128 }).primaryKey().notNull(),
+    sourceFamily: varchar("sourceFamily", {
+      enum: EDUCATION_SOURCE_FAMILIES,
+    }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    authorityName: varchar("authorityName", { length: 256 }).notNull(),
+    originalUrl: varchar("originalUrl", { length: 2048 }).notNull(),
+    canonicalUrl: varchar("canonicalUrl", { length: 2048 }).notNull(),
+    scopeKind: varchar("scopeKind", {
+      enum: EDUCATION_SOURCE_SCOPE_KINDS,
+    }).notNull(),
+    providerId: varchar("providerId", { length: 128 }),
+    // Empty for CATALOG; equal to providerId for PROVIDER. Non-null so scope FKs are exact.
+    scopeKey: varchar("scopeKey", { length: 128 }).notNull(),
+    language: varchar("language", { length: 35 }).notNull(),
+    accessMode: varchar("accessMode", {
+      enum: EDUCATION_SOURCE_ACCESS_MODES,
+    }).notNull(),
+  },
+  (table) => ({
+    providerRecordClassForeignKey: foreignKey({
+      columns: [table.providerId, table.recordClass],
+      foreignColumns: [
+        educationProvider.providerId,
+        educationProvider.recordClass,
+      ],
+      name: "EducationSource_provider_record_class_fk",
+    }).onDelete("restrict"),
+    idFamilyClassUnique: unique("EducationSource_id_family_class_unique").on(
+      table.sourceId,
+      table.sourceFamily,
+      table.recordClass
+    ),
+    idClassCanonicalUrlUnique: unique("EducationSource_id_class_url_unique").on(
+      table.sourceId,
+      table.recordClass,
+      table.canonicalUrl
+    ),
+    scopeIdentityUnique: unique("EducationSource_scope_identity_unique").on(
+      table.sourceId,
+      table.sourceFamily,
+      table.recordClass,
+      table.scopeKind,
+      table.scopeKey
+    ),
+    catalogIdentityUnique: uniqueIndex(
+      "EducationSource_catalog_family_url_unique"
+    )
+      .on(table.sourceFamily, table.canonicalUrl)
+      .where(sql`${table.scopeKind} = 'CATALOG'`),
+    providerIdentityUnique: uniqueIndex(
+      "EducationSource_provider_family_url_unique"
+    )
+      .on(table.sourceFamily, table.canonicalUrl, table.providerId)
+      .where(sql`${table.scopeKind} = 'PROVIDER'`),
+    idValid: check(
+      "EducationSource_id_check",
+      educationOpaqueId(table.sourceId)
+    ),
+    familyValid: check(
+      "EducationSource_family_check",
+      sql`${table.sourceFamily} in ('CRICOS', 'STUDY_AUSTRALIA', 'INSTITUTION')`
+    ),
+    recordClassValid: check(
+      "EducationSource_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    scopeValid: check(
+      "EducationSource_scope_check",
+      sql`((${table.scopeKind} = 'CATALOG' and ${table.providerId} is null and ${table.scopeKey} = '' and ${table.sourceFamily} <> 'INSTITUTION') or (${table.scopeKind} = 'PROVIDER' and ${table.providerId} is not null and ${table.scopeKey} = ${table.providerId} and ${table.sourceFamily} = 'INSTITUTION'))`
+    ),
+    accessClassValid: check(
+      "EducationSource_access_class_check",
+      sql`(${table.recordClass} = 'SYNTHETIC' and ${table.accessMode} = 'SYNTHETIC_FIXTURE') or (${table.recordClass} = 'UNVERIFIED' and ${table.accessMode} = 'CURATED_REFERENCE')`
+    ),
+    authorityValid: check(
+      "EducationSource_authority_check",
+      sql`length(trim(${table.authorityName})) between 1 and 256`
+    ),
+    urlsValid: check(
+      "EducationSource_urls_check",
+      sql`${table.originalUrl} like 'https://%' and ${table.canonicalUrl} like 'https://%' and position('#' in ${table.canonicalUrl}) = 0`
+    ),
+    classHostValid: check(
+      "EducationSource_class_host_check",
+      sql`${educationUrlHostname(table.canonicalUrl)} is not null and ((${table.recordClass} = 'SYNTHETIC' and ((${table.sourceFamily} = 'CRICOS' and ${educationUrlHostname(table.canonicalUrl)} ~ '[.]cricos[.]example$') or (${table.sourceFamily} = 'STUDY_AUSTRALIA' and ${educationUrlHostname(table.canonicalUrl)} ~ '[.]study-australia[.]example$') or (${table.sourceFamily} = 'INSTITUTION' and ${educationUrlHostname(table.canonicalUrl)} ~ '[.]institution[.]example$'))) or (${table.recordClass} = 'UNVERIFIED' and ${educationUrlHostname(table.canonicalUrl)} !~ '[.]example$'))`
+    ),
+    languageValid: check(
+      "EducationSource_language_check",
+      sql`length(trim(${table.language})) between 1 and 35`
+    ),
+  })
+);
+export type EducationSourceRow = InferSelectModel<typeof educationSource>;
+
+export const educationSnapshot = pgTable(
+  "EducationSnapshot",
+  {
+    snapshotId: varchar("snapshotId", { length: 128 }).primaryKey().notNull(),
+    sourceId: varchar("sourceId", { length: 128 }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 2048 }).notNull(),
+    // Text preserves date-only versus offset-bearing source boundaries verbatim.
+    retrievedAt: varchar("retrievedAt", { length: 64 }).notNull(),
+    observedAt: varchar("observedAt", { length: 64 }).notNull(),
+    publishedAt: varchar("publishedAt", { length: 64 }),
+    effectiveFrom: varchar("effectiveFrom", { length: 64 }),
+    effectiveTo: varchar("effectiveTo", { length: 64 }),
+    contentSha256: varchar("contentSha256", { length: 64 }),
+    parserVersion: varchar("parserVersion", { length: 128 }),
+    contentExcerpt: varchar("contentExcerpt", { length: 4096 }),
+    locator: varchar("locator", { length: 512 }),
+    acquisitionOutcome: varchar("acquisitionOutcome", {
+      enum: EDUCATION_ACQUISITION_OUTCOMES,
+    }).notNull(),
+  },
+  (table) => ({
+    sourceClassUrlForeignKey: foreignKey({
+      columns: [table.sourceId, table.recordClass, table.sourceUrl],
+      foreignColumns: [
+        educationSource.sourceId,
+        educationSource.recordClass,
+        educationSource.canonicalUrl,
+      ],
+      name: "EducationSnapshot_source_class_url_fk",
+    }).onDelete("restrict"),
+    idSourceEvidenceUnique: unique(
+      "EducationSnapshot_id_source_evidence_unique"
+    ).on(
+      table.snapshotId,
+      table.sourceId,
+      table.recordClass,
+      table.sourceUrl,
+      table.contentSha256,
+      table.acquisitionOutcome
+    ),
+    sourceRetrievedIndex: index("EducationSnapshot_source_retrieved_idx").on(
+      table.sourceId,
+      table.retrievedAt,
+      table.snapshotId
+    ),
+    idValid: check(
+      "EducationSnapshot_id_check",
+      educationOpaqueId(table.snapshotId)
+    ),
+    recordClassValid: check(
+      "EducationSnapshot_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    outcomeValid: check(
+      "EducationSnapshot_outcome_check",
+      sql`${table.acquisitionOutcome} in ('CAPTURED', 'FAILED_FETCH', 'FAILED_PARSE')`
+    ),
+    sourceTimesValid: check(
+      "EducationSnapshot_times_check",
+      sql`${table.retrievedAt} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}T.+(Z|[+-][0-9]{2}:[0-9]{2})$' and ${table.observedAt} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}T.+(Z|[+-][0-9]{2}:[0-9]{2})$'`
+    ),
+    sourceDatesValid: check(
+      "EducationSnapshot_source_dates_check",
+      sql`(${table.publishedAt} is null or ${table.publishedAt} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}(T.+(Z|[+-][0-9]{2}:[0-9]{2}))?$') and (${table.effectiveFrom} is null or ${table.effectiveFrom} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}(T.+(Z|[+-][0-9]{2}:[0-9]{2}))?$') and (${table.effectiveTo} is null or ${table.effectiveTo} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}(T.+(Z|[+-][0-9]{2}:[0-9]{2}))?$')`
+    ),
+    contentHashValid: check(
+      "EducationSnapshot_hash_check",
+      sql`(${table.contentSha256} is null or ${table.contentSha256} ~ '^[a-fA-F0-9]{64}$') and (${table.acquisitionOutcome} = 'FAILED_FETCH' or ${table.contentSha256} is not null)`
+    ),
+  })
+);
+export type EducationSnapshotRow = InferSelectModel<typeof educationSnapshot>;
+
+export const educationFieldObservation = pgTable(
+  "EducationFieldObservation",
+  {
+    observationId: varchar("observationId", { length: 128 })
+      .primaryKey()
+      .notNull(),
+    targetType: varchar("targetType", {
+      enum: EDUCATION_ENTITY_TYPES,
+    }).notNull(),
+    targetProviderId: varchar("targetProviderId", { length: 128 }).notNull(),
+    providerTargetId: varchar("providerTargetId", { length: 128 }),
+    courseTargetId: varchar("courseTargetId", { length: 128 }),
+    deliveryTargetId: varchar("deliveryTargetId", { length: 128 }),
+    intakeTargetId: varchar("intakeTargetId", { length: 128 }),
+    fieldKey: varchar("fieldKey", { enum: EDUCATION_FIELD_KEYS }).notNull(),
+    claimDomain: varchar("claimDomain", {
+      enum: EDUCATION_CLAIM_DOMAINS,
+    }).notNull(),
+    recordClass: varchar("recordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }).notNull(),
+    disposition: varchar("disposition", {
+      enum: EDUCATION_OBSERVATION_DISPOSITIONS,
+    }).notNull(),
+    value: jsonb("value").$type<EducationFieldValue | null>(),
+    sourceId: varchar("sourceId", { length: 128 }).notNull(),
+    sourceFamily: varchar("sourceFamily", {
+      enum: EDUCATION_SOURCE_FAMILIES,
+    }).notNull(),
+    sourceScopeKind: varchar("sourceScopeKind", {
+      enum: EDUCATION_SOURCE_SCOPE_KINDS,
+    }).notNull(),
+    sourceScopeKey: varchar("sourceScopeKey", { length: 128 }).notNull(),
+    snapshotId: varchar("snapshotId", { length: 128 }).notNull(),
+    // A fixed value participates in the evidence FK so failed snapshots cannot support fields.
+    snapshotOutcome: varchar("snapshotOutcome", {
+      enum: EDUCATION_ACQUISITION_OUTCOMES,
+    })
+      .notNull()
+      .default("CAPTURED"),
+    sourceUrl: varchar("sourceUrl", { length: 2048 }).notNull(),
+    contentSha256: varchar("contentSha256", { length: 64 }).notNull(),
+    locator: varchar("locator", { length: 512 }).notNull(),
+    excerpt: varchar("excerpt", { length: 4096 }),
+    observedAt: varchar("observedAt", { length: 64 }).notNull(),
+    effectiveFrom: varchar("effectiveFrom", { length: 64 }),
+    effectiveTo: varchar("effectiveTo", { length: 64 }),
+  },
+  (table) => ({
+    targetProviderForeignKey: foreignKey({
+      columns: [table.targetProviderId, table.recordClass],
+      foreignColumns: [
+        educationProvider.providerId,
+        educationProvider.recordClass,
+      ],
+      name: "EducationFieldObservation_target_provider_class_fk",
+    }).onDelete("restrict"),
+    providerTargetForeignKey: foreignKey({
+      columns: [table.providerTargetId, table.recordClass],
+      foreignColumns: [
+        educationProvider.providerId,
+        educationProvider.recordClass,
+      ],
+      name: "EducationFieldObservation_provider_target_fk",
+    }).onDelete("restrict"),
+    courseTargetForeignKey: foreignKey({
+      columns: [
+        table.courseTargetId,
+        table.targetProviderId,
+        table.recordClass,
+      ],
+      foreignColumns: [
+        educationCourse.courseId,
+        educationCourse.providerId,
+        educationCourse.recordClass,
+      ],
+      name: "EducationFieldObservation_course_target_fk",
+    }).onDelete("restrict"),
+    deliveryTargetForeignKey: foreignKey({
+      columns: [
+        table.deliveryTargetId,
+        table.targetProviderId,
+        table.recordClass,
+      ],
+      foreignColumns: [
+        educationDelivery.deliveryId,
+        educationDelivery.providerId,
+        educationDelivery.recordClass,
+      ],
+      name: "EducationFieldObservation_delivery_target_fk",
+    }).onDelete("restrict"),
+    intakeTargetForeignKey: foreignKey({
+      columns: [
+        table.intakeTargetId,
+        table.targetProviderId,
+        table.recordClass,
+      ],
+      foreignColumns: [
+        educationIntake.intakeId,
+        educationIntake.providerId,
+        educationIntake.recordClass,
+      ],
+      name: "EducationFieldObservation_intake_target_fk",
+    }).onDelete("restrict"),
+    sourceScopeForeignKey: foreignKey({
+      columns: [
+        table.sourceId,
+        table.sourceFamily,
+        table.recordClass,
+        table.sourceScopeKind,
+        table.sourceScopeKey,
+      ],
+      foreignColumns: [
+        educationSource.sourceId,
+        educationSource.sourceFamily,
+        educationSource.recordClass,
+        educationSource.scopeKind,
+        educationSource.scopeKey,
+      ],
+      name: "EducationFieldObservation_source_scope_fk",
+    }).onDelete("restrict"),
+    snapshotEvidenceForeignKey: foreignKey({
+      columns: [
+        table.snapshotId,
+        table.sourceId,
+        table.recordClass,
+        table.sourceUrl,
+        table.contentSha256,
+        table.snapshotOutcome,
+      ],
+      foreignColumns: [
+        educationSnapshot.snapshotId,
+        educationSnapshot.sourceId,
+        educationSnapshot.recordClass,
+        educationSnapshot.sourceUrl,
+        educationSnapshot.contentSha256,
+        educationSnapshot.acquisitionOutcome,
+      ],
+      name: "EducationFieldObservation_snapshot_evidence_fk",
+    }).onDelete("restrict"),
+    targetShapeValid: check(
+      "EducationFieldObservation_target_shape_check",
+      sql`(${table.targetType} = 'PROVIDER' and ${table.providerTargetId} is not null and ${table.providerTargetId} = ${table.targetProviderId} and ${table.courseTargetId} is null and ${table.deliveryTargetId} is null and ${table.intakeTargetId} is null) or (${table.targetType} = 'COURSE' and ${table.providerTargetId} is null and ${table.courseTargetId} is not null and ${table.deliveryTargetId} is null and ${table.intakeTargetId} is null) or (${table.targetType} = 'DELIVERY' and ${table.providerTargetId} is null and ${table.courseTargetId} is null and ${table.deliveryTargetId} is not null and ${table.intakeTargetId} is null) or (${table.targetType} = 'INTAKE' and ${table.providerTargetId} is null and ${table.courseTargetId} is null and ${table.deliveryTargetId} is null and ${table.intakeTargetId} is not null)`
+    ),
+    sourceScopeMatchesTarget: check(
+      "EducationFieldObservation_source_scope_target_check",
+      sql`(${table.sourceScopeKind} = 'CATALOG' and ${table.sourceScopeKey} = '') or (${table.sourceScopeKind} = 'PROVIDER' and ${table.sourceScopeKey} = ${table.targetProviderId})`
+    ),
+    valueDispositionValid: check(
+      "EducationFieldObservation_value_disposition_check",
+      sql`(${table.disposition} = 'ASSERTION' and ${table.value} is not null and jsonb_typeof(${table.value}) = 'object' and (${table.value}->>'kind') in ('text', 'enum', 'boolean', 'date', 'money')) or (${table.disposition} in ('WITHDRAWAL', 'NOT_APPLICABLE') and ${table.value} is null)`
+    ),
+    fieldTypeValid: check(
+      "EducationFieldObservation_field_type_check",
+      sql`(${table.disposition} <> 'ASSERTION') or (${table.fieldKey} in ('PROVIDER_LEGAL_NAME', 'COURSE_TITLE', 'INSTITUTION_COURSE_CODE', 'COURSE_ADMISSIONS_CRITERIA', 'CAMPUS_NAME', 'INTAKE_PERIOD', 'DISCOVERY_REFERENCE') and ${table.value}->>'kind' = 'text') or (${table.fieldKey} in ('CRICOS_PROVIDER_STATUS', 'COURSE_QUALIFICATION_LEVEL', 'CRICOS_COURSE_STATUS', 'COURSE_AVAILABILITY', 'DELIVERY_MODE', 'DELIVERY_AVAILABILITY', 'INTAKE_AVAILABILITY') and ${table.value}->>'kind' = 'enum') or (${table.fieldKey} = 'TUITION_FEE' and ${table.value}->>'kind' = 'money') or (${table.fieldKey} in ('INTAKE_START_DATE', 'APPLICATION_DEADLINE') and ${table.value}->>'kind' = 'date')`
+    ),
+    fieldClaimDomainValid: check(
+      "EducationFieldObservation_field_domain_check",
+      sql`(${table.fieldKey} in ('PROVIDER_LEGAL_NAME', 'COURSE_TITLE', 'COURSE_QUALIFICATION_LEVEL', 'INSTITUTION_COURSE_CODE') and ${table.claimDomain} = 'INSTITUTION_COURSE') or (${table.fieldKey} in ('CRICOS_PROVIDER_STATUS', 'CRICOS_COURSE_STATUS') and ${table.claimDomain} = 'CRICOS_REGISTRATION') or (${table.fieldKey} = 'COURSE_ADMISSIONS_CRITERIA' and ${table.claimDomain} = 'INSTITUTION_ADMISSIONS') or (${table.fieldKey} in ('COURSE_AVAILABILITY', 'DELIVERY_AVAILABILITY') and ${table.claimDomain} = 'INSTITUTION_AVAILABILITY') or (${table.fieldKey} = 'TUITION_FEE' and ${table.claimDomain} = 'INSTITUTION_FEE') or (${table.fieldKey} in ('CAMPUS_NAME', 'DELIVERY_MODE') and ${table.claimDomain} = 'INSTITUTION_DELIVERY') or (${table.fieldKey} in ('INTAKE_PERIOD', 'INTAKE_START_DATE', 'APPLICATION_DEADLINE', 'INTAKE_AVAILABILITY') and ${table.claimDomain} = 'INSTITUTION_INTAKE') or (${table.fieldKey} = 'DISCOVERY_REFERENCE' and ${table.claimDomain} = 'DISCOVERY')`
+    ),
+    fieldTargetTypeValid: check(
+      "EducationFieldObservation_field_target_check",
+      sql`(${table.fieldKey} in ('PROVIDER_LEGAL_NAME', 'CRICOS_PROVIDER_STATUS') and ${table.targetType} = 'PROVIDER') or (${table.fieldKey} in ('COURSE_TITLE', 'COURSE_QUALIFICATION_LEVEL', 'CRICOS_COURSE_STATUS', 'INSTITUTION_COURSE_CODE', 'COURSE_ADMISSIONS_CRITERIA', 'COURSE_AVAILABILITY', 'DISCOVERY_REFERENCE') and ${table.targetType} = 'COURSE') or (${table.fieldKey} in ('CAMPUS_NAME', 'DELIVERY_MODE', 'DELIVERY_AVAILABILITY') and ${table.targetType} = 'DELIVERY') or (${table.fieldKey} in ('INTAKE_PERIOD', 'INTAKE_START_DATE', 'APPLICATION_DEADLINE', 'INTAKE_AVAILABILITY') and ${table.targetType} = 'INTAKE') or (${table.fieldKey} = 'TUITION_FEE' and ${table.targetType} in ('COURSE', 'DELIVERY', 'INTAKE'))`
+    ),
+    sourceDomainValid: check(
+      "EducationFieldObservation_source_domain_check",
+      sql`(${table.claimDomain} = 'CRICOS_REGISTRATION' and ${table.sourceFamily} = 'CRICOS') or (${table.claimDomain} = 'DISCOVERY' and ${table.sourceFamily} = 'STUDY_AUSTRALIA') or (${table.claimDomain} like 'INSTITUTION_%' and ${table.sourceFamily} = 'INSTITUTION')`
+    ),
+    capturedSnapshotOnly: check(
+      "EducationFieldObservation_snapshot_outcome_check",
+      sql`${table.snapshotOutcome} = 'CAPTURED'`
+    ),
+    idValid: check(
+      "EducationFieldObservation_id_check",
+      educationOpaqueId(table.observationId)
+    ),
+    recordClassValid: check(
+      "EducationFieldObservation_record_class_check",
+      sql`${table.recordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    sourceTimesValid: check(
+      "EducationFieldObservation_source_dates_check",
+      sql`${table.observedAt} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}T.+(Z|[+-][0-9]{2}:[0-9]{2})$' and (${table.effectiveFrom} is null or ${table.effectiveFrom} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}(T.+(Z|[+-][0-9]{2}:[0-9]{2}))?$') and (${table.effectiveTo} is null or ${table.effectiveTo} ~* '^[0-9]{4}-[0-9]{2}-[0-9]{2}(T.+(Z|[+-][0-9]{2}:[0-9]{2}))?$')`
+    ),
+    hashValid: check(
+      "EducationFieldObservation_hash_check",
+      sql`${table.contentSha256} ~ '^[a-fA-F0-9]{64}$'`
+    ),
+    locatorValid: check(
+      "EducationFieldObservation_locator_check",
+      sql`length(trim(${table.locator})) between 1 and 512`
+    ),
+  })
+);
+export type EducationFieldObservationRow = InferSelectModel<
+  typeof educationFieldObservation
+>;

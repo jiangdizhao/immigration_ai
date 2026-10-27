@@ -281,6 +281,13 @@
       "when": 1793026866913,
       "tag": "0039_phase13_m2_round2_event_actor_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793052726837,
+      "tag": "0040_phase13_m3_education_catalog",
+      "breakpoints": true
     }
   ]
 }
