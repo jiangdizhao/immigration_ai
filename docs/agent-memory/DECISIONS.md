@@ -1,3 +1,13 @@
+<!-- BEGIN DECISION_PHASE13_M3_003_ACCEPTANCE_2026_10_27 -->
+## D-P13-011 — M3-003 offline acquisition accepted; M3-004 contract prepared
+
+**Date:** 2026-10-27. **Status:** M3-003 OFFLINE ACCEPTED; M3-004 detailed bounded task PREPARED (NOT IMPLEMENTED); real-source, production and user-facing Project matching **NO_GO**.
+
+The owner pushed M3-003 commit `40cd52ff1d1b1fcb11810beab8801bc91cce69ac`; independent GitHub verification confirmed exact remote SHA, one fast-forward commit and precisely **10** expected changed files. The owner-host dedicated acquisition/manifest tests passed **24/24**, focused education tests **75/75**, full `pnpm test:unit` **964/964**, each zero failures/skips. The independent source review passed after R1 corrections to immutable snapshot/observation replay and path-secret redaction. Codex's Biome/whitespace checks passed and TypeScript remained at 44 baseline diagnostics. See [M3-003 acceptance](./tasks/PHASE13_M3_003_OFFLINE_ACCEPTANCE_2026_10_27.md).
+
+M3-004 [bounded offline contract](./tasks/PHASE13_M3_004_RESOLVED_READ_MODEL_AND_EXPLAINABLE_OPTIONS_2026_10_27.md) prepares a deterministic exact-scope catalog read, source-status projection and explainable three-valued *possible* option comparisons using only currently authorized M2 stable Project facts in an injected harness. Applicant facts are customer-confirmed but not independently verified; Education evidence remains SYNTHETIC_ONLY/UNVERIFIED. Admissions narrative prose cannot automatically become an executable school rule. Project/Chat current access and revocable publication/AI grants must be rechecked and enforced at the outbound boundary. No live Project endpoint, data import, service availability claim, admission, CoE, visa, lawyer review or M3-005 is authorized. Production NO_GO and future exact-target approvals remain unchanged.
+<!-- END DECISION_PHASE13_M3_003_ACCEPTANCE_2026_10_27 -->
+
 <!-- BEGIN DECISION_PHASE13_M3_002_ACCEPTANCE_2026_10_27 -->
 ## D-P13-010 — M3-002 durable Education Catalog accepted; M3-003 offline source acquisition authorized
 
