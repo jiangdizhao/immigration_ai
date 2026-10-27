@@ -12,6 +12,21 @@ type RateLimitOptions = {
   ttlSeconds?: number;
 };
 
+type RateLimitStore = {
+  isReady: boolean;
+  incrementWithExpiry: (
+    key: string,
+    ttlSeconds: number
+  ) => Promise<number | undefined>;
+};
+
+type RateLimitCheckerDependencies = {
+  getStore?: () => RateLimitStore | null;
+  isProduction?: boolean;
+};
+
+type RateLimitCheckMode = { failClosed?: boolean };
+
 let client: ReturnType<typeof createClient> | null = null;
 
 function getClient() {
@@ -25,35 +40,99 @@ function getClient() {
   return client;
 }
 
-export async function checkIpRateLimit(
+function getRedisRateLimitStore(): RateLimitStore | null {
+  const redis = getClient();
+  if (!redis) {
+    return null;
+  }
+  return {
+    get isReady() {
+      return redis.isReady;
+    },
+    async incrementWithExpiry(key, ttlSeconds) {
+      const [count] = await redis
+        .multi()
+        .incr(key)
+        .expire(key, ttlSeconds, "NX")
+        .exec();
+      return typeof count === "number" ? count : undefined;
+    },
+  };
+}
+
+export function createIpRateLimitChecker(
+  dependencies: RateLimitCheckerDependencies = {}
+) {
+  const getStore = dependencies.getStore ?? getRedisRateLimitStore;
+  const isProduction = dependencies.isProduction ?? isProductionEnvironment;
+
+  return async function checkIpRateLimitWithMode(
+    ip: string | undefined,
+    options: RateLimitOptions = {},
+    mode: RateLimitCheckMode = {}
+  ) {
+    const failClosed = mode.failClosed === true;
+    if (!failClosed && (!isProduction || !ip)) {
+      return;
+    }
+    if (!ip) {
+      throw new ChatbotError("offline:api");
+    }
+
+    let store: RateLimitStore | null;
+    try {
+      store = getStore();
+    } catch {
+      if (failClosed) {
+        throw new ChatbotError("offline:api");
+      }
+      return;
+    }
+    if (!store?.isReady) {
+      if (failClosed) {
+        throw new ChatbotError("offline:api");
+      }
+      return;
+    }
+
+    try {
+      const key = `${options.keyPrefix ?? "ip-rate-limit"}:${ip}`;
+      const count = await store.incrementWithExpiry(
+        key,
+        options.ttlSeconds ?? TTL_SECONDS
+      );
+      if (typeof count !== "number") {
+        if (failClosed) {
+          throw new ChatbotError("offline:api");
+        }
+        return;
+      }
+      if (count > (options.maxRequests ?? MAX_MESSAGES)) {
+        throw new ChatbotError("rate_limit:chat");
+      }
+    } catch (error) {
+      if (error instanceof ChatbotError) {
+        throw error;
+      }
+      if (failClosed) {
+        throw new ChatbotError("offline:api");
+      }
+    }
+  };
+}
+
+const checkIpRateLimitWithMode = createIpRateLimitChecker();
+
+export function checkIpRateLimit(
   ip: string | undefined,
   options: RateLimitOptions = {}
 ) {
-  if (!isProductionEnvironment || !ip) {
-    return;
-  }
+  return checkIpRateLimitWithMode(ip, options);
+}
 
-  const redis = getClient();
-  if (!redis?.isReady) {
-    return;
-  }
-
-  try {
-    const key = `${options.keyPrefix ?? "ip-rate-limit"}:${ip}`;
-    const maxRequests = options.maxRequests ?? MAX_MESSAGES;
-    const ttlSeconds = options.ttlSeconds ?? TTL_SECONDS;
-    const [count] = await redis
-      .multi()
-      .incr(key)
-      .expire(key, ttlSeconds, "NX")
-      .exec();
-
-    if (typeof count === "number" && count > maxRequests) {
-      throw new ChatbotError("rate_limit:chat");
-    }
-  } catch (error) {
-    if (error instanceof ChatbotError) {
-      throw error;
-    }
-  }
+export function checkIpRateLimitStrict(
+  ip: string | undefined,
+  options: RateLimitOptions = {}
+) {
+  return checkIpRateLimitWithMode(ip, options, { failClosed: true });
 }
