@@ -1,3 +1,8 @@
+<!-- BEGIN PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+**Current Phase 13 M4 (2026-10-27):** M4-001 read-only audit accepted. Owner selected Option A admin-proposed / customer-owner-approved / lawyer-accepted staff assignment; [M4-002 offline implementation contract](./tasks/PHASE13_M4_002_OPTION_A_STAFF_ASSIGNMENT_OFFLINE_IMPLEMENTATION_2026_10_27.md) is frozen/dispatched for source/test/unapplied migration authoring only. M4-003–007 and any DB execution or production remain unauthorized. This updates earlier time-local M4 planning pointers below without changing the canonical M0–M10 milestone scope.
+<!-- END PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+
+
 # Phase 13 - Study Journey Project-Centric Roadmap (PROVISIONAL)
 
 <!-- BEGIN PHASE13_M4_WORKBREAKDOWN_POINTER_2026_10_27 -->

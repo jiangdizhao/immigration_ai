@@ -1,3 +1,16 @@
+<!-- BEGIN PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+## Latest Phase 13 checkpoint — M4-002 Option A OFFLINE IMPLEMENTATION DISPATCHED (2026-10-27)
+
+- **Owner choice (D-P13-016):** admin proposes one named verified-email lawyer for one known Project/purpose → exact Project owner explicitly approves → same lawyer accepts → restricted active shell only. No admin Project catalog, no client/member private data, no staff-content disclosure. Admin may manage only own assignment proposals; no global Project access.
+- **Frozen current task:** [M4-002 Option A offline Task Packet](./tasks/PHASE13_M4_002_OPTION_A_STAFF_ASSIGNMENT_OFFLINE_IMPLEMENTATION_2026_10_27.md). **IMPLEMENTATION DISPATCHED for offline source/tests and drafting an additive migration only; NOT DB migration execution, PostgreSQL, external service or production.** M4-001 previously ACCEPTED at 5ac4c85f8066d16b5561f14728d8f3a1c418dc58.
+- **Staff identity:** existing non-guest, email-verified User.role = lawyer; this is assignment/shell identity **only**, not professional accreditation. Admin proposer uses current non-guest User.role = admin. No education agent registration introduced in this task.
+- **Shell boundary:** opaque project ID, assignment ID/status/role, active lifecycle and nonsensitive timestamps only after owner approval + lawyer acceptance; no applicant name/email, Project title, Facts, documents/names/counts, AI/member Chats, requirements, messages, contract/payment/approval claims. M4-004 disclosure always fail-closed.
+- **Migrations:** source and new additive Drizzle migration authoring allowed. No local/isolated/normal/staging/prod PostgreSQL, SQL execution or schema push; DB tests deferred for explicit exact-target approval. Preserve SQL CHECK/ProjectEvent uniqueness/actor provenance.
+- **Codex review output:** uncommitted/unpushed **complete tracked+untracked patch** at /home/rico/phase13_m4_002_review.patch, SHA-256 and exact checks. User uploads patch and report; ChatGPT independently reviews before owner commit.
+- **M4-003–007 and release:** no implementation authorization; M2/M3 offline limitations stand; M4 and Phase 13 live/production **NO_GO**. Earlier headers below describing M4-002 as draft are historical.
+<!-- END PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+
+
 <!-- BEGIN PHASE13_M4_001_ACCEPTED_M4_002_DRAFT_2026_10_27 -->
 ## Phase 13 M4 checkpoint — M4-001 ACCEPTED; M4-002 DRAFT NOT DISPATCHED (2026-10-27)
 

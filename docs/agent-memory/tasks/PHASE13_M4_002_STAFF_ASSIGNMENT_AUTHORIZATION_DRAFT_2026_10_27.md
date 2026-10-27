@@ -1,3 +1,8 @@
+<!-- BEGIN PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+**Superseded draft notice (2026-10-27):** Owner explicitly chose **Option A**. This document is the historical candidate draft and no longer the active execution contract. Use [M4-002 Option A frozen offline Task Packet](./PHASE13_M4_002_OPTION_A_STAFF_ASSIGNMENT_OFFLINE_IMPLEMENTATION_2026_10_27.md) and D-P13-016. Offline implementation only; migration execution, customer/AWS data and production still not authorized.
+<!-- END PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
+
+
 # Phase 13 M4-002 — Project Staff Assignment and Authorization Foundation
 
 **Status: DRAFT / NOT DISPATCHED / NO CODING AUTHORIZED**  

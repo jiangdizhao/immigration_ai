@@ -1,3 +1,20 @@
+<!-- BEGIN D_P13_016_M4_002_OPTION_A_2026_10_27 -->
+## D-P13-016 — M4-002 staff assignment Option A frozen; offline coding dispatched
+
+**Date:** 2026-10-27. **Owner choice:** Option A = a current non-guest administrator **proposes** a named existing, email-verified lawyer account for one known Project/purpose; only that Project's authenticated customer owner **explicitly approves** the exact immutable proposal/notice; then the named lawyer **accepts**. No member/admin approval substitute, no auto-assign, and no access for merely proposed or owner-approved status. Approval of staff relationship is **not** M4-004 resource disclosure permission.
+
+**Other bounded policy defaults adopted to make this specific implementation executable:**
+- M4-002 staff scope **lawyer-role account only**, not education representative; verification of email/account/role is not professional licence/credential verification and authorizes no legal advice/approval.
+- Admin may propose/revoke/list **their own limited assignment records** by supplied opaque Project ID, but cannot list arbitrary Projects or see customer identity/title, content or private Chat. Owner may decline/revoke; invited lawyer may decline/resign. All terminal assignments require a fresh record and fresh customer approval to restart.
+- Minimal active lawyer shell DTO after 3-party sequence: opaque project ID, assignment ID/role/status, Project active state, nonsensitive timestamps. No customer PII, Project title, Facts, file names/counts/bytes, Chats, requirements, messages, contract/payment or approval data. Per-resource M4-004 authorizer must fail closed.
+- Customer-only Project membership/Chat authorization and existing mode/billing/legal paths remain intact. Preserve ProjectOperation/Event SQL CHECK and actor/event consistency, one event per Project revision and idempotent locked transitions; add only verified required schema.
+- New staff routes are default-off; **Codex may write source, tests and an unapplied additive migration/journal offline, without any PostgreSQL connection or migration execution**. No real customer data, AWS, live HTTP/DNS, paid providers, deployment or other milestone coding.
+- Complete tracked + untracked review patch must be written under **/home/rico/phase13_m4_002_review.patch**, never inside Git repository, with SHA-256 and exact test/skip report. Codex does not git add/commit/push.
+
+[**Authoritative frozen Task Packet**](./tasks/PHASE13_M4_002_OPTION_A_STAFF_ASSIGNMENT_OFFLINE_IMPLEMENTATION_2026_10_27.md). This supersedes the previous M4-002 candidate DRAFT for this task only. **M4-002 = DISPATCHED OFFLINE, NOT YET IMPLEMENTED/ACCEPTED**. M4-003–007 not dispatched; M4 live/prod remains NO_GO.
+<!-- END D_P13_016_M4_002_OPTION_A_2026_10_27 -->
+
+
 <!-- BEGIN D_P13_015_M4_001_ACCEPTED_2026_10_27 -->
 ## D-P13-015 — M4-001 accepted; M4-002 candidate prepared without implementation authorization
 
