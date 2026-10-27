@@ -1,3 +1,13 @@
+<!-- BEGIN DECISION_PHASE13_M3_002_ACCEPTANCE_2026_10_27 -->
+## D-P13-010 — M3-002 durable Education Catalog accepted; M3-003 offline source acquisition authorized
+
+**Date:** 2026-10-27. **Status:** M3-002 **ACCEPTED (isolated dev/test)**; M3-003 **OFFLINE CODE TASK READY**; Phase13 production **NO_GO**.
+
+Owner committed/pushed SHA `bda4487f000c43f6dda2955ae28067a1938b4199`; GitHub independent remote SHA and exact 13-file scope verified. Owner separately authorized isolated PostgreSQL `immigration_ai_phase13_m3_002_test` for a 0000–0039 baseline and 0040 schema only; ledger **41** to `1793052726837`; seven Education tables, **50 CHECK**, **12 FK**, **5 triggers**. The opt-in owner-host R3 behavioral test **passed 1/1** and rolled back all seven Education tables to zero rows. Owner-host existing unit suite **964/964** and `db:check` passed. New education focused offline 51/51 were Codex reported; separate owner-host capture not provided. M3-002 acceptance matrix: [M3-002](./tasks/PHASE13_M3_002_ACCEPTANCE_2026_10_27.md).
+
+Next bounded M3-003 implementation is OFFLINE operator-reviewed manifest, safe injected transport, provenance-preserving curated import preview and fixtures only, according to [M3-003 task](./tasks/PHASE13_M3_003_OPERATOR_CURATED_OFFICIAL_SOURCE_ACQUISITION_2026_10_27.md). It does **NOT** approve accessing actual official sources, issuing HTTP requests, legal/admissions verification, DB insert/migration, public publication, production crawler, live UI or M3-004. Future real-source pilot requires exact-target authorization and evidence for permissions/access/TOS. Earlier M3-002-R3 pending entries are superseded historical checkpoints.
+<!-- END DECISION_PHASE13_M3_002_ACCEPTANCE_2026_10_27 -->
+
 # DECISIONS
 
 <!-- BEGIN DECISION_PHASE13_M3_001_ACCEPTANCE_2026_10_27 -->
