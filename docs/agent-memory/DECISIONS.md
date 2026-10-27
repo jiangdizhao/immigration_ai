@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_013_M3_FINAL_OFFLINE_ACCEPTANCE_2026_10_27 -->
+## D-P13-013 — Phase 13 M3 offline milestone accepted with explicit limitations
+
+**Date:** 2026-10-27. **Decision:** M3-005 **OFFLINE ACCEPTED**, entire M3 **OFFLINE ACCEPTED_WITH_LIMITATIONS**, **LIVE/PRODUCTION NO_GO**. This supersedes previous implementation-time `M3-005 review pending / M3 OPEN` checkpoints for offline code only.
+
+The owner pushed M3-005 SHA `225422d5c8f80c472cfd9807be99a5752aed8c2d`; GitHub independently verified exactly one fast-forward commit and seven intended files. Independent source audit including R1 deterministic, capacity-checked Snapshot evidence passed. Subsequent owner Ubuntu runs passed **9/9 integrated tests**, Education Intelligence **114 pass / 0 fail / 1 explicitly skipped guarded PostgreSQL test**, and **964/964** existing unit tests with no failures/skips. Codex sandbox 113 pass / 3 fail remains an unchanged provenance-bearing older result and is not re-labelled. Baseline TypeScript 44 diagnostic errors remain unaddressed, none new in touched paths. The previous owner-authorized M3-002 isolated PostgreSQL acceptance is separately retained and was not rerun.
+
+Formal scope: [M3-005 final offline acceptance](./tasks/PHASE13_M3_005_FINAL_OFFLINE_ACCEPTANCE_2026_10_27.md) + original [M3-005 machine report](./tasks/PHASE13_M3_005_OFFLINE_ACCEPTANCE_REPORT_2026_10_27.json). Next steps: [separately permissioned real-world readiness gates](./tasks/PHASE13_M3_POST_OFFLINE_REAL_WORLD_READINESS_GATES_2026_10_27.md). No actual source fetching, official-source verification, DB import, live Project/Chat user data, admissions judgment, Offer/CoE/visa approval, model/cloud use, user-facing production activation or M3-006 is authorized. Phase 13 overall remains under development.
+<!-- END D_P13_013_M3_FINAL_OFFLINE_ACCEPTANCE_2026_10_27 -->
+
 <!-- BEGIN DECISION_PHASE13_M3_004_ACCEPTANCE_2026_10_27 -->
 ## D-P13-012 — M3-004 offline accepted; M3-005 final integration test contract prepared
 
