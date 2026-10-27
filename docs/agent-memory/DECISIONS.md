@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_017_M4_002_R1_OFFLINE_ACCEPTED_2026_10_28 -->
+## D-P13-017 — M4-002-R1 offline accepted with unresolved database and suite limits
+
+**Date:** 2026-10-28. **Owner GitHub commit:** `079804f02486f5c3acab75f3a8270e676fd679ec`; one fast-forward commit from `eab171c29c062601810f034d9eb3b5f496dac689`, 24 exact M4-002-R1 implementation files, no M4-003. Independent review of the complete R1 patch and selected pushed source verified Option A scope: admin proposes → actual Project owner explicitly approves → same named lawyer accepts, minimal shell only, admin denies customer content, M4-004 disclosure always denied, independent feature flag OFF.
+
+**Decision:** **M4-002 = OFFLINE ACCEPTED_WITH_LIMITATIONS**, not database/integration acceptance or production deployment. R1 addressed three found defects: gap-tolerant strictly increasing assignment lastProjectRevision, controlled admin changed-request idempotency 409, strict fail-closed Redis limiter without breaking legacy limiter defaults. Only code/test/migration **authorship** has been performed; migration 0041 is unapplied. Professional licensing proof is NOT inferred from account role/email.
+
+**Reported tests:** focused 4/4 passed; full unit **117 PASS / 3 FAIL / 0 SKIP** with failures in S3-preflight, Stage-3 hardening and loopback/EPERM suites; TypeScript 44 existing diagnostics (none changed-path); reported Biome, drizzle-kit check, whitespace and reverse patch check PASS. No reviewer-run DB tests. Three full-suite failures remain unclassified until matched with a clean-HEAD comparison under like conditions. [Formal evidence](./tasks/PHASE13_M4_002_R1_OFFLINE_ACCEPTANCE_2026_10_28.md).
+
+**Next gate, NOT AUTHORIZED:** [isolated PostgreSQL validation design](./tasks/PHASE13_M4_002_ISOLATED_POSTGRES_VALIDATION_DRAFT_2026_10_28.md) with explicit owner approval for an identified disposable database and fixed migration/test boundary. Never run 0041 against authoritative host `immigration_legal` or business/staging/production databases by assumption. M4-003–007 remain not dispatched. M4 and Phase 13 live/prod **NO_GO**.
+<!-- END D_P13_017_M4_002_R1_OFFLINE_ACCEPTED_2026_10_28 -->
+
 <!-- BEGIN D_P13_016_M4_002_OPTION_A_2026_10_27 -->
 ## D-P13-016 — M4-002 staff assignment Option A frozen; offline coding dispatched
 

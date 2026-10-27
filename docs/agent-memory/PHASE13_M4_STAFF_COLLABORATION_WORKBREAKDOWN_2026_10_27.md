@@ -1,3 +1,7 @@
+<!-- BEGIN PHASE13_M4_002_R1_OFFLINE_ACCEPTANCE_2026_10_28 -->
+**Latest status (2026-10-28):** M4-002 R1 source pushed at `079804f02486f5c3acab75f3a8270e676fd679ec`; **OFFLINE ACCEPTED_WITH_LIMITATIONS** (see [acceptance record](./tasks/PHASE13_M4_002_R1_OFFLINE_ACCEPTANCE_2026_10_28.md)). Migration 0041 remains **unapplied**, PostgreSQL behavior unverified, and full unit suite has three unresolved failures. [Isolated DB validation plan](./tasks/PHASE13_M4_002_ISOLATED_POSTGRES_VALIDATION_DRAFT_2026_10_28.md) is design-only, pending explicit owner authorization. No M4-003–007 dispatch or Phase 13 live/production go-ahead. Earlier milestone dispatch notes below are historical.
+<!-- END PHASE13_M4_002_R1_OFFLINE_ACCEPTANCE_2026_10_28 -->
+
 <!-- BEGIN PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
 **M4-002 status update (2026-10-27):** Owner selected **Option A** (admin proposes → owner approves → named lawyer accepts). [Frozen M4-002 OFFLINE implementation task](./tasks/PHASE13_M4_002_OPTION_A_STAFF_ASSIGNMENT_OFFLINE_IMPLEMENTATION_2026_10_27.md) is **DISPATCHED FOR OFFLINE CODING ONLY**; NO database connection/migration execution, live customer/staff data or production. Existing earlier work breakdown statuses below are historical. M4-003–007 not dispatched.
 <!-- END PHASE13_M4_002_OPTION_A_OFFLINE_DISPATCH_2026_10_27 -->
