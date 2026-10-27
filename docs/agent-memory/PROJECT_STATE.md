@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M3_005_R1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_2026_10_27 -->
+## Latest canonical Phase 13 M3 status — M3-005-R1 implementation pending independent review (2026-10-27)
+
+- Base branch/HEAD: `phase13-study-journey-project-centric` / `70087b3a8ec253c9be6811e6d2330421aebbf41d`. M3-005 changes remain uncommitted and unpushed. M3-001 through M3-004 stay accepted; M3 remains **OPEN**, live/production **NO_GO**.
+- M3-005 adds a real synthetic composition test through manifest/acquisition, provenance review, the accepted repository core and transactional store port, consistent repository-backed catalog read, M3 field/read resolution, trusted reviewed criteria, and injected Project authorization checks. The reader test adapter traverses the stored course/delivery/intake hierarchy and checks the memory-store revision before returning, refusing partial/mixed results.
+- Acquisition snapshot excerpts are now deduplicated, canonically ordered and lossless within the 4096-character contract bound. An over-bound set fails as `FAILED_PARSE / INVALID_CANDIDATE`, with no partial successful snapshot evidence or observations. R1 test IDs `M3-005-R1-01` and `M3-005-R1-02` pass.
+- Acceptance matrix/report: [PHASE13_M3_005_OFFLINE_ACCEPTANCE_REPORT_2026_10_27.json](./tasks/PHASE13_M3_005_OFFLINE_ACCEPTANCE_REPORT_2026_10_27.json). Education suite **114 pass / 0 fail / 1 guarded PostgreSQL skip**; connected M3-005 integration **9/9 pass**; changed-file Biome and `git diff --check` pass; TypeScript **44 diagnostics, unchanged, 0 in changed paths**. Full unit **113 pass / 3 sandbox failures / 0 skip**, exact details and host rerun in the report.
+- Prior M3-002 isolated PostgreSQL acceptance is historical and was not repeated. M3-005 made no live HTTP/DNS request, database connection/write, migration, AWS/model call, customer Project access, API/UI integration, school application operation or deployment. Actual source truth, admissions accuracy, real M2/M1 Project authorization, and production readiness remain unverified/NO_GO.
+- **Disposition:** M3-005 **IMPLEMENTED / PENDING INDEPENDENT REVIEW**. Wait for independent review and owner-host reruns. Do not mark the M3 milestone accepted or start M3-006.
+<!-- END PHASE13_M3_005_R1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_004_OFFLINE_ACCEPTED_M3_005_READY_2026_10_27 -->
 ## Latest canonical Phase 13 M3 — M3-004 OFFLINE ACCEPTED, M3-005 INTEGRATION TASK PREPARED (2026-10-27)
 

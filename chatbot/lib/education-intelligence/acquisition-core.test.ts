@@ -149,6 +149,41 @@ function candidateExtractor(input: {
   };
 }
 
+function orderedCandidateExtractor(
+  allQuotes: readonly string[],
+  outputQuotes: readonly string[] = allQuotes
+): CandidateExtractor {
+  const indexByQuote = new Map(allQuotes.map((quote, index) => [quote, index]));
+  return {
+    mode: "DETERMINISTIC_RULES",
+    parserVersion: "test-parser-v1",
+    extract: () =>
+      outputQuotes.map((quote) => {
+        const index = indexByQuote.get(quote);
+        if (index === undefined) {
+          throw new Error("Unknown synthetic candidate quote.");
+        }
+        return {
+          target: { type: "COURSE", id: "course-demo" },
+          fieldKey: "COURSE_ADMISSIONS_CRITERIA",
+          value: {
+            kind: "text",
+            value: `TEST_ONLY_SYNTHETIC rule ${index}`,
+          },
+          quote,
+          locator: `/synthetic/candidate-${index}`,
+        };
+      }),
+  };
+}
+
+function syntheticCandidateQuotes(count: number, length: number): string[] {
+  return Array.from({ length: count }, (_, index) => {
+    const prefix = `${String(index).padStart(2, "0")}:`;
+    return `${prefix}${"x".repeat(length - prefix.length)}`;
+  });
+}
+
 function acquisition(
   input: {
     readonly manifest?: EducationSourceManifest;
@@ -223,6 +258,13 @@ test("captured institution evidence is provenance-rich, unverified and only a pe
     attempt.candidateObservations[0].provenance.snapshotId,
     attempt.snapshot?.snapshotId
   );
+  assert.equal(
+    attempt.snapshot?.contentExcerpt?.includes(
+      attempt.candidateObservations[0].provenance.excerpt as string
+    ),
+    true
+  );
+  assert.equal(attempt.snapshot?.contentExcerpt?.includes("<html>"), false);
 
   const review = buildEducationAcquisitionReviewPacket({
     attempt,
@@ -1237,6 +1279,82 @@ test("reusing an attempt ID rejects changed snapshot content and observation pro
   assert.equal(changedObservationSet.snapshot, undefined);
   assert.deepEqual(recorded.snapshots, recordedSnapshots);
   assert.deepEqual(recorded.observations, recordedObservations);
+});
+
+test("M3-005-R1-01 snapshot evidence replay is deterministic when extractor candidate order changes", async () => {
+  const base = createUnverifiedEducationDataset();
+  const quotes = syntheticCandidateQuotes(2, 20);
+  const body = quotes.join("\n");
+  const manifest = createAcquisitionManifest();
+  const firstRun = acquisition({
+    manifest,
+    baseDataset: base,
+    attemptId: "candidate-order-replay",
+    attemptedAt: ACQUISITION_FIXTURE_TIME,
+    ports: fakePorts({ respond: () => httpResponse(200, body) }),
+    extractor: orderedCandidateExtractor(quotes),
+  });
+  const first = await firstRun.promise;
+  assert.equal(first.outcome, "CAPTURED");
+  assert.equal(first.snapshot?.contentExcerpt, [...quotes].sort().join("\n"));
+
+  const replayRun = acquisition({
+    manifest,
+    baseDataset: datasetAfter(base, first),
+    attemptId: "candidate-order-replay",
+    attemptedAt: ACQUISITION_FIXTURE_TIME,
+    ports: fakePorts({ respond: () => httpResponse(200, body) }),
+    extractor: orderedCandidateExtractor(quotes, [...quotes].reverse()),
+  });
+  const replay = await replayRun.promise;
+  assert.equal(replay.outcome, "CAPTURED");
+  assert.equal(replay.diagnostic?.code, undefined);
+  assert.deepEqual(replay.snapshot, first.snapshot);
+  assert.deepEqual(
+    replay.candidateObservations
+      .map((observation) => observation.observationId)
+      .sort(),
+    first.candidateObservations
+      .map((observation) => observation.observationId)
+      .sort()
+  );
+});
+
+test("M3-005-R1-02 snapshot evidence overflow fails explicitly without a partial successful capture", async () => {
+  const base = createUnverifiedEducationDataset();
+  const manifest = createAcquisitionManifest();
+  const capture = async (count: number) => {
+    const quotes = syntheticCandidateQuotes(count, 500);
+    const body = quotes.join("\n");
+    const run = acquisition({
+      manifest,
+      baseDataset: base,
+      attemptId: `bounded-evidence-${count}`,
+      attemptedAt: ACQUISITION_FIXTURE_TIME,
+      ports: fakePorts({ respond: () => httpResponse(200, body) }),
+      extractor: orderedCandidateExtractor(quotes),
+    });
+    return { quotes, attempt: await run.promise };
+  };
+
+  const withinBound = await capture(8);
+  assert.equal(withinBound.attempt.outcome, "CAPTURED");
+  assert.equal(withinBound.attempt.snapshot?.contentExcerpt?.length, 4007);
+  assert.ok(
+    withinBound.attempt.candidateObservations.every((observation) =>
+      withinBound.attempt.snapshot?.contentExcerpt?.includes(
+        observation.provenance.excerpt ?? ""
+      )
+    )
+  );
+  assert.equal(withinBound.attempt.candidateObservations.length, 8);
+
+  const overBound = await capture(9);
+  assert.equal(overBound.attempt.outcome, "FAILED_PARSE");
+  assert.equal(overBound.attempt.diagnostic?.code, "INVALID_CANDIDATE");
+  assert.equal(overBound.attempt.snapshot?.acquisitionOutcome, "FAILED_PARSE");
+  assert.equal(overBound.attempt.snapshot?.contentExcerpt, undefined);
+  assert.deepEqual(overBound.attempt.candidateObservations, []);
 });
 
 test("the offline entrypoint uses only injected ports and rejects an unpinned adapter", async () => {

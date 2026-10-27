@@ -14,6 +14,7 @@ import {
   type EducationSource,
   FIELD_DEFINITIONS,
   MAX_CANDIDATES_PER_FIELD,
+  MAX_TEXT_LENGTH,
   validateEducationDataset,
 } from "./contracts";
 import { findSourceIdentityCollisions } from "./identity";
@@ -1139,10 +1140,32 @@ export async function acquireEducationSource(
           response.status
         );
       }
+      // Keep only bounded, extractor-validated excerpts. This lets later
+      // trusted criterion review bind a quantitative rule to text actually
+      // present in this immutable snapshot without retaining the response body.
+      const excerptParts = [
+        ...new Set(
+          candidateObservations
+            .map((observation) => observation.provenance.excerpt)
+            .filter((excerpt): excerpt is string => Boolean(excerpt))
+        ),
+      ].sort();
+      const contentExcerpt = excerptParts.join("\n");
+      if (contentExcerpt.length > MAX_TEXT_LENGTH) {
+        throw new AcquisitionRunError(
+          "PARSE",
+          "INVALID_CANDIDATE",
+          response.status
+        );
+      }
+      const snapshotWithEvidence: EducationSnapshot = {
+        ...snapshot,
+        ...(contentExcerpt ? { contentExcerpt } : {}),
+      };
       if (
         hasImmutableReplayConflict({
           dataset: input.baseDataset,
-          snapshot,
+          snapshot: snapshotWithEvidence,
           observations: candidateObservations,
         })
       ) {
@@ -1160,10 +1183,10 @@ export async function acquireEducationSource(
           ? input.baseDataset.sources
           : [...input.baseDataset.sources, source],
         snapshots: input.baseDataset.snapshots.some(
-          (item) => item.snapshotId === snapshot.snapshotId
+          (item) => item.snapshotId === snapshotWithEvidence.snapshotId
         )
           ? input.baseDataset.snapshots
-          : [...input.baseDataset.snapshots, snapshot],
+          : [...input.baseDataset.snapshots, snapshotWithEvidence],
         observations: [
           ...input.baseDataset.observations,
           ...candidateObservations.filter(
@@ -1187,7 +1210,7 @@ export async function acquireEducationSource(
         attemptId: input.attemptId,
         outcome: "CAPTURED",
         source,
-        snapshot,
+        snapshot: snapshotWithEvidence,
         candidateObservations,
         requestedUrl: safeDiagnosticUrl(requestedUrl),
         finalUrl: safeDiagnosticUrl(currentUrl),

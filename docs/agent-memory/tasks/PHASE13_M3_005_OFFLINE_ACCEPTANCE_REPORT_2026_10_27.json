@@ -1,0 +1,278 @@
+{
+  "schema": "phase13.m3-005.offline-acceptance.v1",
+  "date": "2026-10-27",
+  "branch": "phase13-study-journey-project-centric",
+  "baseHead": "70087b3a8ec253c9be6811e6d2330421aebbf41d",
+  "revision": "M3-005-R1",
+  "disposition": "IMPLEMENTED_PENDING_INDEPENDENT_REVIEW",
+  "m3Overall": "OPEN",
+  "productionReadiness": "NO_GO",
+  "integratedFlow": {
+    "status": "PASS",
+    "testIds": ["M3-005-INT-01"],
+    "stages": [
+      "synthetic operator-approved manifest",
+      "injected fake DNS and pinned transport",
+      "acquisition snapshot and observation with bounded candidate excerpt",
+      "provenance-preserving review packet",
+      "EducationCatalogRepositoryCore ingest through EducationCatalogStore memory transaction",
+      "exact-target repository reads including delivery and intake branches",
+      "EducationCatalogReader consistent snapshot adapter with revision recheck",
+      "buildEducationResolvedReadModel",
+      "trusted evidence-bound reviewed criterion",
+      "buildProjectPossibleOptions with two simulated current-authorization reads"
+    ],
+    "evidenceOrigin": "Codex sandbox; TEST_ONLY_SYNTHETIC records and .example host; no live or customer data"
+  },
+  "offlineTestRun": {
+    "educationSuite": {
+      "status": "PASS",
+      "testCases": 115,
+      "passed": 114,
+      "failed": 0,
+      "skipped": 1,
+      "files": 13,
+      "skipReason": "The opt-in PostgreSQL test requires separate exact-database authorization; both PHASE13_M3_002_POSTGRES_TESTS and PHASE13_M3_002_TEST_DATABASE_URL were unset.",
+      "command": "env -u PHASE13_M3_002_TEST_DATABASE_URL -u PHASE13_M3_002_POSTGRES_TESTS node --conditions=react-server --import tsx --input-type=module -e 'import { readdir } from \"node:fs/promises\"; const files = (await readdir(\"./lib/education-intelligence\")).filter((name) => name.endsWith(\".test.ts\")); await Promise.all(files.map((name) => import(`./lib/education-intelligence/${name}`)));'",
+      "evidenceOrigin": "Codex sandbox"
+    },
+    "m3IntegrationTests": {
+      "status": "PASS",
+      "testCases": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "testIds": [
+        "M3-005-INT-01",
+        "M3-005-INT-02",
+        "M3-005-INT-03",
+        "M3-005-INT-04",
+        "M3-005-INT-05",
+        "M3-005-INT-06",
+        "M3-005-INT-07",
+        "M3-005-INT-08",
+        "M3-005-INT-09"
+      ],
+      "command": "node --conditions=react-server --import tsx --input-type=module -e 'await import(\"./lib/education-intelligence/milestone-integration.test.ts\")'",
+      "evidenceOrigin": "Codex sandbox"
+    },
+    "snapshotEvidenceAssemblyRegressions": {
+      "status": "PASS",
+      "testCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "testIds": ["M3-005-R1-01", "M3-005-R1-02"],
+      "observed": [
+        "Candidate enumeration reversal with the same immutable Observation set replays CAPTURED with a byte-identical Snapshot excerpt.",
+        "Eight 500-character excerpts fit intact; nine exceed the bound and return FAILED_PARSE/INVALID_CANDIDATE with no successful Snapshot excerpt or candidate observations."
+      ],
+      "evidenceOrigin": "Codex sandbox; injected fake transport only"
+    },
+    "changedFileBiome": {
+      "status": "PASS",
+      "files": 4,
+      "evidenceOrigin": "Codex sandbox"
+    },
+    "typescriptDiagnostics": {
+      "status": "PASS",
+      "baselineDiagnostics": 44,
+      "currentDiagnostics": 44,
+      "newDiagnosticsInChangedFiles": 0,
+      "compilerExitCode": 2,
+      "note": "The compiler still exits nonzero for the same unrelated repository diagnostics; no diagnostics reference the changed TypeScript files.",
+      "evidenceOrigin": "Codex sandbox"
+    },
+    "gitDiffCheck": {
+      "status": "PASS",
+      "evidenceOrigin": "Codex sandbox"
+    },
+    "fullUnitSuite": {
+      "status": "FAIL",
+      "testCases": 116,
+      "passed": 113,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "test": "lib/production/s3-preflight-cli.test.ts:53",
+          "observed": "expected missing-configuration diagnostic /MATTER_DOCUMENTS_S3_BUCKET and AWS_REGION are required/u on stderr; stderr was empty"
+        },
+        {
+          "test": "lib/production/stage3-hardening.test.ts:135",
+          "observed": "stock migration CLI expected exit code 2; observed exit code 1"
+        },
+        {
+          "test": "lib/server-http-timeouts.test.ts",
+          "observed": "three loopback tests failed to bind 127.0.0.1 with listen EPERM: scoped dispatcher outlives a shorter global dispatcher; widget AbortController fires before the scoped dispatcher timeout; successful legal-service response through the dedicated dispatcher"
+        }
+      ],
+      "evidenceOrigin": "Codex sandbox",
+      "ownerHostRerun": "cd /home/rico/immigration_ai/chatbot && pnpm test:unit"
+    },
+    "databaseCheck": {
+      "status": "NOT_APPLICABLE",
+      "reason": "No schema, migration, journal, or Drizzle metadata changed."
+    }
+  },
+  "acceptanceMatrix": [
+    {
+      "gate": "Five synthetic pathways, source authority roles, and exact provider/course identities",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-02", "M3-005-INT-09"],
+      "sourceEvidence": [
+        "fixtures.test.ts: five pathway fixtures",
+        "identity.test.ts: provider/course code separation and same-title ambiguity",
+        "read-model.test.ts: source authority projection"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "CRICOS registration, Study Australia discovery, and institution admissions remain distinct",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-01", "M3-005-INT-02"],
+      "sourceEvidence": [
+        "contracts.test.ts: CRICOS claim-domain protection",
+        "acquisition-core.test.ts: source-family authority domains",
+        "read-model.test.ts: registration is not fee/deadline/eligibility"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Distinct campus, delivery, intake, year, and deadline scope",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-09"],
+      "sourceEvidence": [
+        "read-model.test.ts: exact hierarchy and intake-year identity",
+        "identity.test.ts: intake identity and ambiguous matching"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Compatible fee conflicts and incompatible currency/audience/basis scopes",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-06"],
+      "sourceEvidence": [
+        "field-resolution.test.ts: comparable conflicts and incompatible scopes",
+        "option-comparison.test.ts: fee comparison scope mismatch"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Missing, stale, withdrawn, conflicted, not-applicable, future-effective, and expired fields preserve uncertainty and history",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-06", "M3-005-INT-07"],
+      "sourceEvidence": [
+        "field-resolution.test.ts: temporal and disposition cases",
+        "read-model.test.ts: deadline status and future/expired source cases"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Exact acquisition replay, immutable ID collision, A-B-A history, and transaction rollback",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-03", "M3-005-INT-07"],
+      "sourceEvidence": [
+        "catalog-repository-core.test.ts: exact replay and rollback",
+        "acquisition-core.test.ts: exact capture replay, A-B-A, and changed attempt collision"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Reviewed comparator grounding, trust boundary, fact version, and date semantics",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-01"],
+      "sourceEvidence": [
+        "option-comparison.test.ts: exact evidence binding, unsupported prose, caller-only approval, date-only and zoned timestamp cases",
+        "project-options.test.ts: current authorized facts and trusted review"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic tests"
+    },
+    {
+      "gate": "Project scope, fresh authorization, revocation/TOCTOU refusal, and private fact non-disclosure",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-01", "M3-005-INT-04"],
+      "sourceEvidence": [
+        "project-options.test.ts: owner/member/chat/project/access and revision changes",
+        "M3-005-INT-04: authorization revision changes during catalog processing"
+      ],
+      "evidenceOrigin": "Codex sandbox synthetic authorization harness; not a live Project service"
+    },
+    {
+      "gate": "Acquisition scope, hostile URL/DNS/redirect, timeout, response budget, and redacted diagnostics",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-05"],
+      "sourceEvidence": [
+        "acquisition-core.test.ts: URL, DNS, redirects, timeout, resource limits, and diagnostic redaction",
+        "source-manifest.test.ts: access review and exact scope"
+      ],
+      "evidenceOrigin": "Codex sandbox with injected fake resolver and transport"
+    },
+    {
+      "gate": "Deterministic output for identical evidence and authorization revisions",
+      "status": "PASS",
+      "testIds": ["M3-005-INT-08", "M3-005-R1-01"],
+      "sourceEvidence": [
+        "milestone-integration.test.ts: repeat normalized Project options result",
+        "acquisition-core.test.ts: candidate enumeration order does not change immutable snapshot replay"
+      ],
+      "evidenceOrigin": "Codex sandbox"
+    },
+    {
+      "gate": "Snapshot evidence excerpt set is canonical, complete, and bounded without truncation",
+      "status": "PASS",
+      "testIds": ["M3-005-R1-01", "M3-005-R1-02"],
+      "sourceEvidence": [
+        "acquisition-core.test.ts: opposite-order exact replay and intact below-bound excerpts",
+        "acquisition-core.test.ts: over-bound excerpt set fails as INVALID_CANDIDATE without partial successful evidence"
+      ],
+      "evidenceOrigin": "Codex sandbox"
+    }
+  ],
+  "independentEvidenceDimensions": {
+    "offlineCodeCorrectness": {
+      "status": "PASS_WITH_LIMITATIONS",
+      "limitations": [
+        "Only synthetic source evidence and in-memory repositories/readers were used.",
+        "The Project authority and trusted review authorities were injected test doubles.",
+        "No admissions accuracy or real institution truth was assessed."
+      ]
+    },
+    "previouslyAcceptedM3_002PostgreSQL": {
+      "status": "PASS_PREVIOUSLY_ACCEPTED_NOT_RERUN",
+      "evidence": "Owner-host guarded test passed 1/1 against immigration_ai_phase13_m3_002_test after exact DB and migration-ledger guards; prior acceptance record PHASE13_M3_002_ACCEPTANCE_2026_10_27.md.",
+      "evidenceOrigin": "Previously accepted owner-host evidence; not M3-005 execution"
+    },
+    "M3_005PostgreSQL": {
+      "status": "NOT_RUN",
+      "reason": "No database connection or mutation was authorized; guarded test remained skipped."
+    },
+    "realOfficialSourceAcquisition": {
+      "status": "NOT_RUN",
+      "reason": "No internet request or live DNS lookup was made or authorized."
+    },
+    "realProjectFactsOrAuthorization": {
+      "status": "NOT_RUN",
+      "reason": "Only injected synthetic authorization contexts and synthetic facts were used."
+    },
+    "admissionsAccuracyAndProductionRelease": {
+      "status": "NOT_RUN",
+      "reason": "Synthetic fixtures cannot establish actual admission rules, eligibility, offer, CoE, visa outcome, or production readiness; release remains NO_GO."
+    }
+  },
+  "sideEffectBoundaries": {
+    "liveHttp": "NOT_USED",
+    "realDns": "NOT_USED; resolver injected and returns a fixed test address",
+    "postgresqlConnectionOrWrite": "NOT_USED; opt-in suite disabled and database URL environment variable unset",
+    "migrationOrSchemaChange": "NOT_USED",
+    "awsOrCloudModel": "NOT_USED",
+    "customerProjectData": "NOT_USED",
+    "apiUiOrApplicationSubmission": "NOT_USED"
+  },
+  "remainingGates": [
+    "ChatGPT independent code review",
+    "Owner-host focused M3-005 and full unit rerun",
+    "Owner commit/push and remote SHA verification after acceptance",
+    "Separate exact-target authorization for any real source, database import, Project service, or production operation"
+  ]
+}

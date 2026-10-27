@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M3_005_R1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_2026_10_27 -->
+## Current milestone — M3-005-R1 implemented; independent review pending (2026-10-27)
+
+- **Status:** M3-001 to M3-004 remain accepted; M3-005 offline integration and acceptance packet is implemented on `phase13-study-journey-project-centric` at base HEAD `70087b3a8ec253c9be6811e6d2330421aebbf41d`. Work is uncommitted/unpushed. M3 overall is still **OPEN** and production/live remains **NO_GO**.
+- **Connected evidence:** nine new test cases include a real offline cross-layer flow from injected acquisition through immutable repository storage and consistent exact-target read, field resolution, trusted evidence-bound criterion comparison and the injected Project-options authorization path. The 5-pathway, identity, authority, fee, deadline, history, privacy and authorization matrix is recorded in [the machine-readable M3-005 report](./tasks/PHASE13_M3_005_OFFLINE_ACCEPTANCE_REPORT_2026_10_27.json).
+- **R1-01 / R1-02:** excerpts are unique and canonically sorted; the full set is rejected explicitly when it exceeds `MAX_TEXT_LENGTH`. No quote is sliced or dropped from a successful capture. Two regression cases pass: candidate-order replay is idempotent, and 8 × 500-character excerpts succeed intact while 9 fail as `FAILED_PARSE / INVALID_CANDIDATE` with no observations.
+- **Validation:** education suite **114/114 passed, 0 failed, 1 PostgreSQL test skipped**; the nine connected M3-005 integration tests passed 9/9. Changed-file Biome and whitespace checks passed; TypeScript diagnostic count is the known 44 with zero new changed-file diagnostics. Full `pnpm test:unit` had 113 pass and 3 sandbox-specific failures; see the report for exact failures and owner-host rerun.
+- **Next gate:** ChatGPT independent review, then owner-host focused M3-005 and full unit tests. Do not commit/push before review acceptance. No real source, database, Project service, AWS/model, production route, application action, deployment or M3-006 work is authorized by this implementation.
+<!-- END PHASE13_M3_005_R1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_004_OFFLINE_ACCEPTED_M3_005_READY_2026_10_27 -->
 ## Latest canonical Phase 13 M3 — M3-004 OFFLINE ACCEPTED, M3-005 INTEGRATION TASK PREPARED (2026-10-27)
 
