@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_018_M4_002_DB_VALIDATED_2026_10_28 -->
+## D-P13-018 — M4-002 isolated PostgreSQL verification accepted, not a production gate
+
+**Date:** 2026-10-28. **GitHub source/test checkpoint:** `a02720f7653689efcc8576b56be9cdaac65fb248` on `phase13-study-journey-project-centric`, one fast-forward from `fb83190ff95409d2beab55e1284252cbcd624947`; five expected Stage 3B files only. Prior M4-002 R1 source commit `079804f02486f5c3acab75f3a8270e676fd679ec` and D-P13-017 remain authoritative historical evidence.
+
+**Decision:** M4-002 Option A progresses from R1 offline acceptance to **DATABASE VALIDATED / ACCEPTED_WITH_LIMITATIONS**. Owner-controlled Docker PostgreSQL 17.11 at 127.0.0.1:55432 / `immigration_ai_phase13_m4_002_test` applied all 42 migrations through 0041 (current ledger); guarded Stage 3B R5 synthetic DB tests yielded **23 PASS / 0 FAIL / 0 SKIP / exit 0** (17 leaf tests). Reviewer independently checked uploaded Stage 3A/3B output and five-file pushed GitHub diff, **did not independently execute SQL or tests**. [Full scoped acceptance record](./tasks/PHASE13_M4_002_ISOLATED_POSTGRES_ACCEPTANCE_2026_10_28.md).
+
+**Boundaries:** this authorizes no migration on existing or production DB, no staff feature enablement, no Redis deployment claims, no protected Project resource disclosure, no professional license/legal-approval claims, and no M4-003 implementation. Prior 3 failed full-unit suites remain unclassified and 44 TypeScript baseline diagnostics remain. Owner consent and lawyer acceptance are still required for minimal shell; feature flag OFF; M4-004 disclosure DENY; Phase 13 production **NO_GO**.
+<!-- END D_P13_018_M4_002_DB_VALIDATED_2026_10_28 -->
+
 <!-- BEGIN D_P13_017_M4_002_R1_OFFLINE_ACCEPTED_2026_10_28 -->
 ## D-P13-017 — M4-002-R1 offline accepted with unresolved database and suite limits
 
