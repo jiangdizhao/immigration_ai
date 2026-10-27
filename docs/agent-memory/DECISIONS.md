@@ -1,3 +1,13 @@
+<!-- BEGIN DECISION_PHASE13_M3_004_ACCEPTANCE_2026_10_27 -->
+## D-P13-012 — M3-004 offline accepted; M3-005 final integration test contract prepared
+
+**Date:** 2026-10-27. **Status:** M3-004 **OFFLINE ACCEPTED**; M3-005 bounded offline integration/test **TASK PREPARED / NOT IMPLEMENTED**. Phase13 production/live **NO_GO**.
+
+The owner committed and pushed `eefb6eb7fee187e99c10790075967a73f4976f92`; independent GitHub SHA/branch comparison confirmed precisely one fast-forward commit and nine expected files. Independent source review approved R1 intake-date provenance, immutable school evidence + injected trusted criterion approval binding, generic input errors, and R2 zoned timestamp calendar semantics. Ubuntu owner-host: **28/28 M3-004 dedicated**, **103/103 focused M3**, **964/964 full existing unit**, 0 failures/skips; unchanged 44 existing TypeScript diagnostics. [Formal acceptance](./tasks/PHASE13_M3_004_OFFLINE_ACCEPTANCE_2026_10_27.md).
+
+The [M3-005 integration acceptance task](./tasks/PHASE13_M3_005_INTEGRATION_AND_MILESTONE_ACCEPTANCE_2026_10_27.md) is prepared. It must demonstrate at least one **genuine connected synthetic** acquisition -> review -> existing catalog repository contract -> consistent field read -> reviewed criterion -> fresh authorized M2 Project options path, plus the frozen M3 adversarial matrix. Do not claim real-DB full-stack or official-source verification from mocked tests. No actual HTTP/DNS, Project customer data, database operations, migration, AI provider, AWS, production route or release are authorized. Successful offline M3-005 acceptance can support **M3 OFFLINE ACCEPTED_WITH_LIMITATIONS** only; professional/admissions/privacy, real-source and live release gates remain independent and closed.
+<!-- END DECISION_PHASE13_M3_004_ACCEPTANCE_2026_10_27 -->
+
 <!-- BEGIN DECISION_PHASE13_M3_003_ACCEPTANCE_2026_10_27 -->
 ## D-P13-011 — M3-003 offline acquisition accepted; M3-004 contract prepared
 
