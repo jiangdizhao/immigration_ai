@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M3_003_R1_IMPLEMENTED_PENDING_REVIEW_2026_10_27 -->
+## Canonical latest Phase 13 M3 checkpoint — M3-003-R1 implemented, pending independent review (2026-10-27)
+
+- **Repository:** branch `phase13-study-journey-project-centric`, base HEAD `832922512f235695445c58ccb3c3c14367fdb4a7`; cumulative M3-003/R1 changes are uncommitted and unpushed. M3-001 remains OFFLINE ACCEPTED; M3-002 remains ACCEPTED following independent source review and guarded PostgreSQL acceptance.
+- **R1 corrections:** acquisition now permits only exact immutable snapshot/observation replay. A changed snapshot, changed observation contents, or changed observation set under an existing snapshot ID returns `BLOCKED / IMMUTABLE_ID_CONFLICT` without a proposed snapshot. Distinct attempt/snapshot IDs retain A-B-A history. Ordinary requested/final URL and redirect diagnostics retain the HTTPS origin and path depth only; credentials and path, query, and fragment values are redacted. Exact source URLs remain in snapshot provenance under its review contract.
+- **Offline validation:** dedicated manifest/acquisition tests **24 passed / 0 failed / 0 skipped**; existing focused M3 suite **8 files passed / 0 failed / 0 skipped**. Changed-file Biome and `git diff --check` passed. TypeScript remains at the exact **44-diagnostic** baseline, with no new diagnostics. Full `pnpm test:unit`: **113 passed / 3 failed / 0 skipped**. Failures: `s3-preflight-cli.test.ts:53` expected required-configuration text on stderr but received empty stderr; `stage3-hardening.test.ts:135` expected exit code 2 but got 1; three loopback cases in `server-http-timeouts.test.ts` failed at listener setup with `listen EPERM` on `127.0.0.1`. Host rerun: `cd /home/rico/immigration_ai/chatbot && pnpm test:unit`.
+- **Operation boundary:** no official-source HTTP request, live DNS lookup, PostgreSQL connection/write, migration, or schema edit occurred. Accepted migration 0040 and the M3-002 repository remain unchanged. M3-003-R1 is **IMPLEMENTED / PENDING INDEPENDENT REVIEW**; production/live remains **NO_GO**. Stop before M3-004.
+<!-- END PHASE13_M3_003_R1_IMPLEMENTED_PENDING_REVIEW_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_002_ACCEPTED_M3_003_READY_2026_10_27 -->
 ## Canonical latest Phase 13 M3 checkpoint — M3-002 ACCEPTED, M3-003 OFFLINE DISPATCH READY (2026-10-27)
 
