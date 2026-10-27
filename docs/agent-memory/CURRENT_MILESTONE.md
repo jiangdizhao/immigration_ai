@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M4_001_ACCEPTED_M4_002_DRAFT_2026_10_27 -->
+## Phase 13 M4 checkpoint — M4-001 ACCEPTED; M4-002 DRAFT NOT DISPATCHED (2026-10-27)
+
+- GitHub independently verified owner-pushed M4-001 R1 commit **5ac4c85f8066d16b5561f14728d8f3a1c418dc58**, one fast-forward from 77c053a, adding exactly two Markdown documents / 344 lines and no code, test, schema or deployment changes. Read-only audit and R1 architecture corrections are **M4-001 ACCEPTED**. See [final acceptance](./tasks/PHASE13_M4_001_R1_FINAL_ACCEPTANCE_2026_10_27.md).
+- Accepted R1 corrections: identified authorized lawyer exact-version review for every managed school and Student 500 package; M4-003 named-thread message consent separate from M4-004 protected resource disclosure; M4-002 typed ProjectOperation/Event, SQL CHECK, actor and unique-Project-revision constraints.
+- **M4 technical direction is reviewable, not fully policy-frozen.** Companion architecture retains PROPOSED — NOT ACCEPTED ARCHITECTURE for unresolved business/legal/professional policies. Only the M4-001 audit deliverable has been accepted.
+- [M4-002 candidate contract](./tasks/PHASE13_M4_002_STAFF_ASSIGNMENT_AUTHORIZATION_DRAFT_2026_10_27.md) is **DRAFT / NOT DISPATCHED**. Owner must decide who initiates staff assignment, customer-owner authorization/acceptance, eligible staff roles, principal/admin visibility, and the allowed shell DTO before implementation approval. M4-003–007 also not dispatched.
+- Later Codex implementation must provide a complete tracked + untracked review patch in /home/rico/, without git add/commit/push; user uploads patch plus report for independent review.
+- M2/M3 remain OFFLINE ACCEPTED_WITH_LIMITATIONS. M4 and Phase 13 production **NO_GO**. No current authorization for coding M4-002, DB migrations/connection, real customer data, paid provider, AWS or deployment.
+<!-- END PHASE13_M4_001_ACCEPTED_M4_002_DRAFT_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
 ## Current Phase 13 checkpoint — M4 plan recorded; M4-001 documentation-only audit dispatched (2026-10-27)
 

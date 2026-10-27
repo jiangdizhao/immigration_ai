@@ -1,3 +1,7 @@
+<!-- BEGIN PHASE13_M4_001_ACCEPTED_M4_002_DRAFT_2026_10_27 -->
+**Latest status (2026-10-27): M4-001 ACCEPTED** at 5ac4c85f8066d16b5561f14728d8f3a1c418dc58; [final acceptance](./tasks/PHASE13_M4_001_R1_FINAL_ACCEPTANCE_2026_10_27.md). A corrected proposed architecture is a basis for subsequent owner decisions, **not fully accepted binding business policy**. [M4-002 draft](./tasks/PHASE13_M4_002_STAFF_ASSIGNMENT_AUTHORIZATION_DRAFT_2026_10_27.md) is **NOT DISPATCHED / NO CODING AUTHORIZATION**. Later M4-003–007 remain planned. Earlier statements below saying M4-001 is still active are historical. Phase 13 production NO_GO.
+<!-- END PHASE13_M4_001_ACCEPTED_M4_002_DRAFT_2026_10_27 -->
+
 # Phase 13 M4 — Staff Collaboration and Professional Engagement: bounded work breakdown
 
 **Date:** 2026-10-27 (Australia/Sydney)  

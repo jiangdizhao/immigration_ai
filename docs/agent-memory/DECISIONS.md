@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_015_M4_001_ACCEPTED_2026_10_27 -->
+## D-P13-015 — M4-001 accepted; M4-002 candidate prepared without implementation authorization
+
+Date: 2026-10-27. **ACCEPT M4-001 as a read-only source audit and R1-corrected design deliverable.** GitHub independently verified owner commit 5ac4c85f8066d16b5561f14728d8f3a1c418dc58 adds two Markdown files, 344 lines, without modifying business code, tests or migrations. [Acceptance evidence](./tasks/PHASE13_M4_001_R1_FINAL_ACCEPTANCE_2026_10_27.md) distinguishes Codex reported checks, independent source spot-checks, and nonexecuted tests.
+
+The proposal remains explicitly PROPOSED for pending professional/owner choices, not a final frozen M4 business policy. R1 preserves the existing authorized-lawyer exact-version review requirement for both managed school and Student 500 packages, M4-003 thread-only consent versus M4-004 protected-data consent, and M4-002 ProjectOperation/Event/SQL CHECK/unique revision constraints. Global staff role never grants customer Project content.
+
+[M4-002 bounded task draft](./tasks/PHASE13_M4_002_STAFF_ASSIGNMENT_AUTHORIZATION_DRAFT_2026_10_27.md) is **NOT DISPATCHED**. Owner must explicitly choose assignment initiation and owner-authorization flow, eligible staff identity, admin role limits and shell DTO, then separately authorize code and any exact-target isolated PostgreSQL test/migration. M4-003–007 remain planned. Production NO_GO.
+
+Future Codex reports must include a full uncommitted patch of **tracked and untracked** modifications placed under /home/rico/, e.g. /home/rico/phase13_m4_002_review.patch, SHA-256, HEAD, tests/skips and changed files. No Codex git add/commit/push; user uploads patch to project folder and ChatGPT independently reviews.
+<!-- END D_P13_015_M4_001_ACCEPTED_2026_10_27 -->
+
 <!-- BEGIN D_P13_014_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
 ## D-P13-014 — M4 bounded planning adopted; M4-001 read-only audit only
 
