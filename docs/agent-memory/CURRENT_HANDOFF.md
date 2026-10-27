@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
+## Current Phase 13 checkpoint — M4 plan recorded; M4-001 documentation-only audit dispatched (2026-10-27)
+
+- **Prior accepted stage:** M3-001–005 = **OFFLINE ACCEPTED_WITH_LIMITATIONS** at `d1490a849045c50ef3ff8babf65109d1a1ff2664`; M2 offline accepted with limitations. **No Phase 13 live/production go-ahead.**
+- **M4 scope:** staff Project assignment/ABAC, durable human messages, real engagement/consent/contract signature evidence, staff-confirmed off-platform payment separate from Stripe VIP, scoped immutable professional review/approval/audit. M4 is **not** M5 admissions or submission.
+- **Milestone plan:** [M4-001–M4-007 work breakdown](./PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md); **only [M4-001](./tasks/PHASE13_M4_001_READ_ONLY_ARCHITECTURE_AUDIT_2026_10_27.md) is DISPATCHED**. M4-002–007 are planning only, not approved implementation contracts.
+- **Current permitted action:** Codex read-only repository audit, authoring precisely two new uncommitted/unpushed M4 audit/proposed-architecture Markdown files. No application code, DB access/migration, real customer data, live HTTP/DNS, AWS, paid models, billing, signing or deployment.
+- **Workflow:** owner fast-forwards local branch, Codex reports exact uncommitted docs and hashes, ChatGPT independently reviews grounded source claims, owner approves architecture/next bounded code task separately. All older `M0 current`, `M3 still open`, `M4 unrecorded` headings below are historical where inconsistent.
+<!-- END PHASE13_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
+
 <!-- BEGIN PHASE13_M3_005_FINAL_OFFLINE_ACCEPTED_WITH_LIMITATIONS_2026_10_27 -->
 ## Latest canonical checkpoint — Phase 13 M3 OFFLINE ACCEPTED_WITH_LIMITATIONS (2026-10-27)
 

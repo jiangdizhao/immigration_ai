@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_014_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
+## D-P13-014 — M4 bounded planning adopted; M4-001 read-only audit only
+
+**Date:** 2026-10-27. **Owner instruction:** record M4 submilestones in canonical GitHub project docs, then prepare local sync and M4-001 Codex prompt. **Authorization:** documents/planning + M4-001 read-only architecture audit, no other implementation.
+
+Preserve parent roadmap M0–M10, with M4 as **Staff Collaboration and Professional Engagement Foundation**. Record [M4-001–007 bounded plan](./PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md) and dispatch only [M4-001 audit contract](./tasks/PHASE13_M4_001_READ_ONLY_ARCHITECTURE_AUDIT_2026_10_27.md). M4-002–M4-007 are proposed sequential implementation tasks **NOT AUTHORIZED**; entity names/state machines remain candidates pending code-grounded audit and owner/professional review.
+
+M4 identity/data boundaries: `Project != Chat != LegalMatter != VIP`; staff role or Project membership alone does not confer staff disclosure or private Chat access; customer-to-AI Facts grants are not staff-consent grants. Human Project messages ≠ AI Chat ≠ lawyer clarification ≠ professional approval. Contract/signature, staff-confirmed off-platform payment, consent, scoped exact-version review, actor authority and immutable audit need genuine evidence; never infer from AI or customer free text. Stripe/VIP and existing lawyer/consultation/audit contracts must remain unchanged. M5 managed submission is a future fail-closed handoff, not M4 executable submission.
+
+**Checkpoint:** prior M3 offline accepted with limitations; live/production **NO_GO**. No code modifications, migration/database access, real customers/schools, AWS, paid provider or deployment approved. Standard process: Codex uncommitted/unpushed docs → independent patch/source review → owner approval before M4-002.
+<!-- END D_P13_014_M4_PLAN_AND_M4_001_DISPATCH_2026_10_27 -->
+
 <!-- BEGIN D_P13_013_M3_FINAL_OFFLINE_ACCEPTANCE_2026_10_27 -->
 ## D-P13-013 — Phase 13 M3 offline milestone accepted with explicit limitations
 

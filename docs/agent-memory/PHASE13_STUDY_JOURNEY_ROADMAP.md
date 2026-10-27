@@ -1,5 +1,10 @@
 # Phase 13 - Study Journey Project-Centric Roadmap (PROVISIONAL)
 
+<!-- BEGIN PHASE13_M4_WORKBREAKDOWN_POINTER_2026_10_27 -->
+**Latest active Phase 13 work (2026-10-27):** M3 was formally closed `OFFLINE ACCEPTED_WITH_LIMITATIONS` at `d1490a849045c50ef3ff8babf65109d1a1ff2664` (not real-world/production acceptance). [M4-001–M4-007 work breakdown](./PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md) expands the **existing M4 row without changing M0–M10 numbering**. Only [M4-001 read-only audit](./tasks/PHASE13_M4_001_READ_ONLY_ARCHITECTURE_AUDIT_2026_10_27.md) is dispatched; M4-002–007 are proposed and not authorized for coding. Historic statements below about M0 being current and M3 not yet implemented are time-local history.
+<!-- END PHASE13_M4_WORKBREAKDOWN_POINTER_2026_10_27 -->
+
+
 <!-- BEGIN PHASE13_M3_ARCHITECTURE_POINTER_2026_10_27 -->
 **2026-10-27 M3 architecture freeze:** Owner requested immediate M3 design and task dispatch without another design-review round. [Education Intelligence architecture](./PHASE13_M3_EDUCATION_INTELLIGENCE_ARCHITECTURE_2026_10_27.md) freezes source/identity/evidence/freshness/matching boundaries; [M3-001 offline task](./tasks/PHASE13_M3_001_OFFLINE_SOURCE_CONTRACT_AND_FIXTURES_2026_10_27.md) is first dispatch. M3 is NOT already implemented. M2 offline acceptance and Phase 13 production NO_GO remain intact; existing M0–M10 milestone numbering and professional approval requirements are unchanged.
 <!-- END PHASE13_M3_ARCHITECTURE_POINTER_2026_10_27 -->
@@ -58,6 +63,10 @@
 | **M10** | **End-to-end reliability + lawyer/agent pilot**: policy/version regression, de-identified/synthetic scenarios, real-format extraction tests, multi-school to CoE to 500, staff handoff and self-service; scoped release/security review and staged deployment approvals. | Acceptance matrix against reviewed requirements; zero known unauthorized access or invalid hard-gate passage in tested paths; source/rule coverage and extraction metrics reported honestly; lawyer/agent signoff obtained for externally managed real-case launch. |
 
 **Dependencies:** M0 -> M1 -> M2. M3 can be investigated alongside M2; M4 must precede the managed school submission portion of M5. M6 may begin research in parallel but its gating interfaces depend on M2. M8 completes/strengthens the generic review contract from M4 for both workflows. M9 UI may be developed in thin slices alongside each milestone; M10 is the final overall gate. A milestone may be sub-divided into small reviewable tasks, but owners accept each milestone independently. Do not equate an implemented feature with passed acceptance.
+
+## 2a. M4 bounded work packages (2026-10-27)
+
+M4 is the existing Roadmap milestone **Staff Collaboration and Professional Engagement Foundation**. Its accepted *planning decomposition* is [M4-001 through M4-007](./PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md): **001** grounded read-only architecture/permissions/reuse audit; **002** staff assignment/authorization; **003** durable human Project messaging; **004** engagement, agreement/version/signature/customer disclosure; **005** evidenced staff-attested off-platform payment distinct from Stripe VIP; **006** immutable scoped professional review/approval/audit; **007** cross-module offline integration and fail-closed M5 handoff interface. Only **M4-001** has a [dispatched contract](./tasks/PHASE13_M4_001_READ_ONLY_ARCHITECTURE_AUDIT_2026_10_27.md). M4-002–007 remain **PLANNED / NOT AUTHORIZED TO IMPLEMENT**, and M4 schema/state-machines are not frozen until evidence-backed audit and owner/professional decisions. Live/production remain **NO_GO**.
 
 ## 3. M0 work breakdown (the current active milestone)
 
