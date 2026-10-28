@@ -4,7 +4,7 @@
 **Branch:** phase13-study-journey-project-centric
 **Planning baseline:** 8af7848e435c52c86540846c24e7a50382d35d46 (M4-003 26-path implementation already pushed)
 **Disposition:** DETAILED IMPLEMENTATION PLAN RECORDED / NOT DISPATCHED. This record approves documentation of a consolidated future work package, **not** Codex coding, database access/migration, customer data handling, third-party integration, production enablement or deployment.
-**Parent authority:** ../PHASE13_STUDY_JOURNEY_ROADMAP.md (existing M4, without renumbering M0–M10); ../PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md; ../PHASE13_M4_ARCHITECTURE_PROPOSAL_2026_10_27.md (parts still proposed); ../../AGENTS.md; ../DECISIONS.md (D-P13-016 through D-P13-019).
+**Parent authority:** ../PHASE13_STUDY_JOURNEY_ROADMAP.md (existing M4, without renumbering M0–M10); ../PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md; ../PHASE13_M4_ARCHITECTURE_PROPOSAL_2026_10_27.md (parts still proposed); ../../../AGENTS.md; ../DECISIONS.md (D-P13-016 through D-P13-019).
 **Reviewer boundary:** Owner decides policy and scope; ChatGPT reviews source/tests; Codex implements a single bounded integrated patch only after separate dispatch. Legal/professional/privacy/signature-provider policies are not certified by this plan.
 
 ## 1. Why one integrated development round
