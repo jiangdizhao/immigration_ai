@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+## Phase 13 M4 next work — unified M4-004–007 plan recorded (2026-10-29)
+
+- **Latest verified remote code baseline:** `8af7848e435c52c86540846c24e7a50382d35d46` on `phase13-study-journey-project-centric` already includes pushed 26-path M4-003 source, migration 0042 and M4-002 concurrency correction. Older 2026-10-28 “local-only / uncommitted M4-003” entries are historical and superseded for current Git status.
+- **M4 stage:** M4-001 accepted; M4-002 isolated PostgreSQL 23/23; M4-003 isolated PostgreSQL 27/27; both DB results are ACCEPTED_WITH_LIMITATIONS, **not** real-world acceptance. M4-004–007 are **DETAILED PLAN RECORDED / NOT IMPLEMENTED / NOT DISPATCHED**.
+- **One future cohesive round:** [M4-004–007 unified implementation plan](./tasks/PHASE13_M4_004_007_UNIFIED_IMPLEMENTATION_PLAN_2026_10_29.md). M4-004 covers engagement + immutable agreement/signature evidence + customer-to-staff resource disclosure, separate from M4-003 thread consent and M2 AI grants; M4-005 staff-attested contractual off-platform payment conditions independent of Stripe VIP; M4-006 verified-authority exact-package professional review and invalidation; M4-007 integrated deterministic fail-closed M5 handoff with version/revision checks, negative/race tests and scoped acceptance matrix.
+- **Next authorization boundary:** this docs-only GitHub update **does not dispatch Codex** or approve migration/SQL, test/live customer data, provider, AWS/Stripe or production operations. Before implementation, owner separately resolves necessary legal/professional/signature/payment policy, authorizes one bounded integrated patch and later grants exact disposable DB test access. Feature flags OFF, protected-resource sharing DENY, Phase 13 LIVE/PRODUCTION NO_GO.
+<!-- END PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+
 <!-- BEGIN PHASE13_M4_003_DB_ACCEPTANCE_2026_10_28 -->
 ## Latest Phase 13 checkpoint — M4-003 Human Messaging DATABASE VALIDATED (2026-10-28)
 

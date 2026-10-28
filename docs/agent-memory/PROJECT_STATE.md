@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+## Phase 13 status, 2026-10-29: M4-004–007 unified work planned
+
+- Pushed M4-003 code checkpoint `8af7848e435c52c86540846c24e7a50382d35d46`; earlier local-only wording is history. M4-002 and M4-003 are only isolated-DB ACCEPTED_WITH_LIMITATIONS. M4-004–007 are planned together, not dispatched or implemented.
+- [M4-004–007 unified implementation plan](./tasks/PHASE13_M4_004_007_UNIFIED_IMPLEMENTATION_PLAN_2026_10_29.md). Engagement/versioned contract/signature/resource disclosure → independent off-platform payment attestation → exact-version lawyer review → deterministic fail-closed M5 handoff. Separate message participation from client data disclosure, and Stripe VIP from managed-service payments.
+- No new Phase 13 live/prod approval; no customer data, actual signing/payment, lawyer-credential certification, SQL/migration authorization or deploy. Default OFF, protected resource DENY.
+<!-- END PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+
 <!-- BEGIN PHASE13_M4_003_DB_ACCEPTANCE_2026_10_28 -->
 ## Latest Phase 13 checkpoint — M4-003 Human Messaging DATABASE VALIDATED (2026-10-28)
 

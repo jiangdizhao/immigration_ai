@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+## D-P13-020 — Record consolidated planning for M4-004–007, without implementation authorization
+
+**Date:** 2026-10-29 (Australia/Sydney). **Verified source baseline:** `8af7848e435c52c86540846c24e7a50382d35d46` (M4-003 implementation pushed). **Decision scope: planning and repository documentation only.**
+
+Instead of separate M4-004/005/006/007 micro-development cycles, maintain a single [M4-004–007 unified implementation plan](./tasks/PHASE13_M4_004_007_UNIFIED_IMPLEMENTATION_PLAN_2026_10_29.md) and prefer one future bounded cohesive Codex implementation patch with one independent review and separately authorized isolated PostgreSQL integration/acceptance. The M4-004 disclosure grant must be separate from M4-003 thread consent, and M4-005 off-platform service payment must be separate from Stripe VIP. M4-006 demands actual verified professional authority and exact immutable managed school/Student 500 package binding, consistent with the accepted lawyer review baseline; unknown authority fails closed. M4-007 only computes a deterministic M5 handoff readiness decision, never performs external submission.
+
+**Non-decision:** No implementation is dispatched; candidate schemas/transition names are not frozen; no migration number or DB execution is approved; no lawyer/signature/payment legal attestation, customer-data access, provider or production release is authorized. Open policies must be resolved before any real ACTIVE/PAID/APPROVED/READY claim. M4-002/M4-003 isolated DB acceptance and Phase 13 LIVE/PRODUCTION NO_GO remain unchanged.
+<!-- END PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+
 <!-- BEGIN D_P13_019_M4_003_DB_VALIDATED_2026_10_28 -->
 ## D-P13-019 — M4-003 isolated human messaging PostgreSQL verification accepted (bounded)
 
