@@ -1,0 +1,7 @@
+# M4-003-001 Project human messaging
+
+The feature is independently gated by `PHASE13_PROJECT_HUMAN_MESSAGING_ENABLED` and defaults off. It supports one customer owner and the specifically assigned, currently eligible lawyer in an explicitly consented, one-to-one plain-text thread. It does not grant access to Project Facts, Documents, private AI Chats, membership Chats, or other protected Project resources. It does not create an engagement, professional approval, payment, or submission state, and it performs no AI processing.
+
+Consent is bound to the exact Project, owner, active M4-002 lawyer assignment, purpose, notice version, and accepted notice hash. Consent creation and withdrawal advance Project revision with a typed operation and exactly one Project event. Message sends use immutable message rows and thread-local sequence numbers; they do not advance Project revision. Lawyer reads and sends require the current active assignment, verified lawyer account, active consent, open thread, and active Project on every request. Withdrawal and later assignment/account/Project state changes deny lawyer access, including history; the owner retains audit history while the Project remains active.
+
+**Retention duration, legal-hold policy, and authority to place or release a hold remain unresolved pending owner approval.** Consent, message, operation, and event evidence is append-only in this slice. No deletion, purge, or retention job is included. Deployment must remain gated until the retention and legal-hold policy is approved.

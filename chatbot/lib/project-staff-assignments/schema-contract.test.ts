@@ -10,6 +10,10 @@ const migration = readFileSync(
   resolve(root, "lib/db/migrations/0041_phase13_m4_002_staff_assignments.sql"),
   "utf8"
 );
+const repository = readFileSync(
+  resolve(root, "lib/db/project-staff-assignment-repository.ts"),
+  "utf8"
+);
 const journal = JSON.parse(
   readFileSync(resolve(root, "lib/db/migrations/meta/_journal.json"), "utf8")
 ) as { entries: Array<{ idx: number; tag: string }> };
@@ -99,6 +103,18 @@ test("assignment table migration names lifecycle, identity, transition, and uniq
   assert.match(migration, /ProjectStaffAssignmentOperation_event_required/u);
 });
 
+test("M4-002 actor locks remain compatible with ProjectOperation actor foreign keys", () => {
+  const start = repository.indexOf("async function lockUsers(");
+  const end = repository.indexOf("\n}\n", start);
+  assert.ok(start >= 0 && end > start);
+  const lockUsers = repository.slice(start, end);
+  assert.match(
+    lockUsers,
+    /\.orderBy\(asc\(user\.id\)\)\s*\.for\("no key update"\)/u
+  );
+  assert.doesNotMatch(lockUsers, /\.for\("update"\)/u);
+});
+
 test("assignment revisions may skip unrelated Project revisions but stay strictly increasing", () => {
   const triggerStart = migration.indexOf(
     'CREATE FUNCTION "phase13_m4_staff_assignment_immutable_guard"()'
@@ -131,9 +147,9 @@ test("assignment revisions may skip unrelated Project revisions but stay strictl
 });
 
 test("generated migration is the additive journal successor with a matching snapshot", () => {
-  const entry = journal.entries.at(-1);
-  assert.equal(entry?.idx, 41);
-  assert.equal(entry?.tag, "0041_phase13_m4_002_staff_assignments");
+  const entries = journal.entries.filter((entry) => entry.idx === 41);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]?.tag, "0041_phase13_m4_002_staff_assignments");
   const snapshot = JSON.parse(
     readFileSync(
       resolve(root, "lib/db/migrations/meta/0041_snapshot.json"),

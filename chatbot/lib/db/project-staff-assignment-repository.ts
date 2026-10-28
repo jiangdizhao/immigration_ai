@@ -188,7 +188,7 @@ async function lockUsers(tx: Transaction, ids: readonly string[]) {
     .from(user)
     .where(inArray(user.id, uniqueIds))
     .orderBy(asc(user.id))
-    .for("update");
+    .for("no key update");
   return new Map(rows.map((row) => [row.id, row as StaffActor]));
 }
 

@@ -48,6 +48,9 @@
     "test:phase13:m1.2:integration": "node --conditions=react-server --import tsx lib/db/project-membership.integration.test.ts",
     "test:phase13:m1.3:integration": "node --conditions=react-server --import tsx --test lib/projects/project-chat.integration.test.ts",
     "test:phase13:m4-002:guard": "node --import tsx --test scripts/phase13-m4-002-db-test-guard.test.ts lib/project-staff-assignments/schema-contract.test.ts",
+    "test:phase13:m4-003:offline": "node --import tsx --test lib/project-human-messaging/policy.test.ts lib/project-human-messaging/http.test.ts lib/project-human-messaging/schema-contract.test.ts",
+    "test:phase13:m4-003:guard": "node --import tsx --test scripts/phase13-m4-003-db-test-guard.test.ts",
+    "test:phase13:m4-003:integration": "tsx scripts/phase13-m4-003-db-test.ts",
     "test:phase13:m4-002:integration": "tsx scripts/phase13-m4-002-db-test.ts",
     "phase13:m1.1:test-db": "node --conditions=react-server --import tsx scripts/phase13-m1-1-test-db.ts",
     "test:project-documents:aws": "node --conditions=react-server --import tsx --test-reporter spec lib/project-documents/aws/adapters.test.ts"

@@ -653,6 +653,10 @@ export const studyJourneyProject = pgTable(
     closedAt: timestamp("closedAt"),
   },
   (table) => ({
+    ownerIdentityUnique: uniqueIndex("StudyJourneyProject_id_owner_unique").on(
+      table.id,
+      table.ownerUserId
+    ),
     revisionPositive: check(
       "StudyJourneyProject_revision_positive_check",
       sql`${table.revision} > 0`
@@ -780,6 +784,9 @@ export const PROJECT_OPERATION_TYPES = [
   "project_staff_assignment_lawyer_resign",
   "project_staff_assignment_admin_withdraw",
   "project_staff_assignment_admin_revoke",
+  "project_thread_participation_consent_create",
+  "project_thread_participation_consent_withdraw",
+  "project_human_message_send",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -794,6 +801,8 @@ export const PROJECT_OPERATION_RESULT_KINDS = [
   "document_extraction_run",
   "project_fact_assertion",
   "project_staff_assignment",
+  "project_thread_participation_consent",
+  "project_human_message",
 ] as const;
 
 export const PROJECT_EVENT_TYPES = [
@@ -818,6 +827,8 @@ export const PROJECT_EVENT_TYPES = [
   "project_staff_assignment_lawyer_resigned",
   "project_staff_assignment_admin_withdrawn",
   "project_staff_assignment_admin_revoked",
+  "project_thread_participation_consent_created",
+  "project_thread_participation_consent_withdrawn",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -832,6 +843,7 @@ export const PROJECT_EVENT_SUBJECT_KINDS = [
   "document_extraction_run",
   "project_fact_assertion",
   "project_staff_assignment",
+  "project_thread_participation_consent",
 ] as const;
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
 export type ProjectOperationResultKind =
@@ -884,11 +896,11 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'project_human_message')`
     ),
     actorShapeValid: check(
       "ProjectOperation_actor_shape_check",
@@ -896,7 +908,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -944,11 +956,11 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment') and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent') and ${table.subjectId} is not null)`
     ),
     actorShapeValid: check(
       "ProjectEvent_actor_shape_check",
@@ -957,6 +969,10 @@ export const projectEvent = pgTable(
     documentEventSubjectValid: check(
       "ProjectEvent_document_subject_check",
       sql`(${table.eventType} not in ('project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn')) or (${table.eventType} = 'project_document_intent_created' and ${table.subjectKind} = 'document_asset') or (${table.eventType} = 'project_document_storage_changed' and ${table.subjectKind} = 'document_version') or (${table.eventType} = 'project_document_security_changed' and ${table.subjectKind} = 'document_scan_run') or (${table.eventType} = 'project_document_grant_changed' and ${table.subjectKind} = 'document_grant') or (${table.eventType} = 'project_document_withdrawn' and ${table.subjectKind} = 'document_asset')`
+    ),
+    humanConsentEventSubjectValid: check(
+      "ProjectEvent_human_consent_subject_check",
+      sql`${table.eventType} not in ('project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn') or ${table.subjectKind} = 'project_thread_participation_consent'`
     ),
   })
 );
@@ -1038,6 +1054,9 @@ export const projectStaffAssignment = pgTable(
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
   },
   (table) => ({
+    identityUnique: uniqueIndex(
+      "ProjectStaffAssignment_id_project_staff_unique"
+    ).on(table.id, table.projectId, table.staffUserId),
     projectStaffPurposeLiveUnique: uniqueIndex(
       "ProjectStaffAssignment_project_staff_purpose_live_unique"
     )
@@ -1099,6 +1118,223 @@ export const projectStaffAssignment = pgTable(
 export type ProjectStaffAssignment = InferSelectModel<
   typeof projectStaffAssignment
 >;
+
+export const PROJECT_HUMAN_THREAD_PURPOSES = [
+  "one_to_one_plain_text_project_collaboration",
+] as const;
+export const PROJECT_HUMAN_THREAD_STATUSES = ["active", "closed"] as const;
+export const PROJECT_THREAD_CONSENT_STATUSES = ["active", "withdrawn"] as const;
+
+export const projectHumanThread = pgTable(
+  "ProjectHumanThread",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    ownerUserId: uuid("ownerUserId").notNull(),
+    assignmentId: uuid("assignmentId").notNull(),
+    lawyerUserId: uuid("lawyerUserId").notNull(),
+    purpose: varchar("purpose", { length: 64 }).notNull(),
+    noticeVersion: varchar("noticeVersion", { length: 128 }).notNull(),
+    noticeSha256: varchar("noticeSha256", { length: 64 }).notNull(),
+    status: varchar("status", { enum: PROJECT_HUMAN_THREAD_STATUSES })
+      .notNull()
+      .default("active"),
+    lastMessageSequence: integer("lastMessageSequence").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    identityUnique: uniqueIndex("ProjectHumanThread_identity_unique").on(
+      table.id,
+      table.projectId,
+      table.ownerUserId,
+      table.assignmentId,
+      table.lawyerUserId
+    ),
+    projectIdentityUnique: uniqueIndex(
+      "ProjectHumanThread_project_identity_unique"
+    ).on(table.id, table.projectId),
+    projectOwnerForeignKey: foreignKey({
+      columns: [table.projectId, table.ownerUserId],
+      foreignColumns: [studyJourneyProject.id, studyJourneyProject.ownerUserId],
+      name: "ProjectHumanThread_project_owner_fk",
+    }).onDelete("restrict"),
+    assignmentForeignKey: foreignKey({
+      columns: [table.assignmentId, table.projectId, table.lawyerUserId],
+      foreignColumns: [
+        projectStaffAssignment.id,
+        projectStaffAssignment.projectId,
+        projectStaffAssignment.staffUserId,
+      ],
+      name: "ProjectHumanThread_assignment_identity_fk",
+    }).onDelete("restrict"),
+    projectCreatedIndex: index("ProjectHumanThread_project_created_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id
+    ),
+    purposeAllowed: check(
+      "ProjectHumanThread_purpose_check",
+      sql`${table.purpose} = 'one_to_one_plain_text_project_collaboration'`
+    ),
+    noticeShape: check(
+      "ProjectHumanThread_notice_check",
+      sql`length(trim(${table.noticeVersion})) between 1 and 128 and ${table.noticeSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    statusAllowed: check(
+      "ProjectHumanThread_status_check",
+      sql`${table.status} in ('active', 'closed')`
+    ),
+    sequenceNonnegative: check(
+      "ProjectHumanThread_sequence_check",
+      sql`${table.lastMessageSequence} >= 0`
+    ),
+  })
+);
+
+export type ProjectHumanThread = InferSelectModel<typeof projectHumanThread>;
+
+export const projectThreadParticipationConsent = pgTable(
+  "ProjectThreadParticipationConsent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    threadId: uuid("threadId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    ownerUserId: uuid("ownerUserId").notNull(),
+    assignmentId: uuid("assignmentId").notNull(),
+    lawyerUserId: uuid("lawyerUserId").notNull(),
+    purpose: varchar("purpose", { length: 64 }).notNull(),
+    noticeVersion: varchar("noticeVersion", { length: 128 }).notNull(),
+    noticeSha256: varchar("noticeSha256", { length: 64 }).notNull(),
+    status: varchar("status", { enum: PROJECT_THREAD_CONSENT_STATUSES })
+      .notNull()
+      .default("active"),
+    acceptedByUserId: uuid("acceptedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    acceptedAt: timestamp("acceptedAt").notNull().defaultNow(),
+    createdOperationRecordId: uuid("createdOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    createdProjectRevision: integer("createdProjectRevision").notNull(),
+    withdrawnByUserId: uuid("withdrawnByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    withdrawnAt: timestamp("withdrawnAt"),
+    withdrawnOperationRecordId: uuid("withdrawnOperationRecordId").references(
+      () => projectOperation.id,
+      { onDelete: "restrict" }
+    ),
+    withdrawnProjectRevision: integer("withdrawnProjectRevision"),
+  },
+  (table) => ({
+    identityUnique: uniqueIndex(
+      "ProjectThreadParticipationConsent_identity_unique"
+    ).on(
+      table.id,
+      table.threadId,
+      table.projectId,
+      table.ownerUserId,
+      table.assignmentId,
+      table.lawyerUserId
+    ),
+    threadIdentityForeignKey: foreignKey({
+      columns: [
+        table.threadId,
+        table.projectId,
+        table.ownerUserId,
+        table.assignmentId,
+        table.lawyerUserId,
+      ],
+      foreignColumns: [
+        projectHumanThread.id,
+        projectHumanThread.projectId,
+        projectHumanThread.ownerUserId,
+        projectHumanThread.assignmentId,
+        projectHumanThread.lawyerUserId,
+      ],
+      name: "ProjectThreadParticipationConsent_thread_identity_fk",
+    }).onDelete("restrict"),
+    createdOperationUnique: uniqueIndex(
+      "ProjectThreadParticipationConsent_created_operation_unique"
+    ).on(table.createdOperationRecordId),
+    threadUnique: uniqueIndex(
+      "ProjectThreadParticipationConsent_thread_unique"
+    ).on(table.threadId),
+    withdrawnOperationUnique: uniqueIndex(
+      "ProjectThreadParticipationConsent_withdrawn_operation_unique"
+    ).on(table.withdrawnOperationRecordId),
+    statusIndex: index("ProjectThreadParticipationConsent_status_idx").on(
+      table.projectId,
+      table.status,
+      table.id
+    ),
+    purposeAllowed: check(
+      "ProjectThreadParticipationConsent_purpose_check",
+      sql`${table.purpose} = 'one_to_one_plain_text_project_collaboration'`
+    ),
+    noticeShape: check(
+      "ProjectThreadParticipationConsent_notice_check",
+      sql`length(trim(${table.noticeVersion})) between 1 and 128 and ${table.noticeSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    statusAllowed: check(
+      "ProjectThreadParticipationConsent_status_check",
+      sql`${table.status} in ('active', 'withdrawn')`
+    ),
+    lifecycleConsistent: check(
+      "ProjectThreadParticipationConsent_lifecycle_check",
+      sql`(${table.status} = 'active' and ${table.withdrawnByUserId} is null and ${table.withdrawnAt} is null and ${table.withdrawnOperationRecordId} is null and ${table.withdrawnProjectRevision} is null) or (${table.status} = 'withdrawn' and ${table.withdrawnByUserId} is not null and ${table.withdrawnAt} is not null and ${table.withdrawnOperationRecordId} is not null and ${table.withdrawnProjectRevision} > ${table.createdProjectRevision})`
+    ),
+    revisionPositive: check(
+      "ProjectThreadParticipationConsent_revision_check",
+      sql`${table.createdProjectRevision} > 0 and (${table.withdrawnProjectRevision} is null or ${table.withdrawnProjectRevision} > 0)`
+    ),
+  })
+);
+
+export type ProjectThreadParticipationConsent = InferSelectModel<
+  typeof projectThreadParticipationConsent
+>;
+
+export const projectHumanMessage = pgTable(
+  "ProjectHumanMessage",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    threadId: uuid("threadId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    sequence: integer("sequence").notNull(),
+    authorUserId: uuid("authorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    threadSequenceUnique: uniqueIndex(
+      "ProjectHumanMessage_thread_sequence_unique"
+    ).on(table.threadId, table.sequence),
+    operationUnique: uniqueIndex("ProjectHumanMessage_operation_unique").on(
+      table.operationRecordId
+    ),
+    threadProjectForeignKey: foreignKey({
+      columns: [table.threadId, table.projectId],
+      foreignColumns: [projectHumanThread.id, projectHumanThread.projectId],
+      name: "ProjectHumanMessage_thread_project_fk",
+    }).onDelete("restrict"),
+    sequencePositive: check(
+      "ProjectHumanMessage_sequence_check",
+      sql`${table.sequence} > 0`
+    ),
+    bodyBounded: check(
+      "ProjectHumanMessage_body_check",
+      sql`${table.body} ~ '[^[:space:]]' and octet_length(${table.body}) <= 8192`
+    ),
+  })
+);
+
+export type ProjectHumanMessage = InferSelectModel<typeof projectHumanMessage>;
 
 export const PROJECT_DOCUMENT_ASSET_LIFECYCLES = [
   "active",
