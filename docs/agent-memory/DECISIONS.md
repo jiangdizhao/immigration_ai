@@ -1,3 +1,14 @@
+<!-- BEGIN D_P13_019_M4_003_DB_VALIDATED_2026_10_28 -->
+## D-P13-019 — M4-003 isolated human messaging PostgreSQL verification accepted (bounded)
+
+**Date:** 2026-10-28 (Sydney). **Prior pushed source HEAD:** `c4e34b2ae5adc20a128b4fbbb60829efd2d793cc`. **DB-R3 implementation:** 26 local uncommitted/unpushed paths, complete Patch SHA-256 `65a24b1b3f2267668ea51c055ce0fc677e2dbe61d565e776b716067f5216f550`. Documentation commit is not implementation acceptance on remote.
+
+**Decision:** Accept **M4-003 DATABASE VALIDATED / ACCEPTED_WITH_LIMITATIONS** based on owner-authorized PostgreSQL 17 instance `127.0.0.1:55433` (test DB `immigration_ai_phase13_m4_003_test`) with 43/43 migrations through 0042, and owner-run guarded A–H **27 PASS / 0 FAIL / 0 SKIP / exit 0**. Reviewer read the complete project-uploaded DB-R3 log; did not independently run SQL/Docker. [Detailed acceptance](./tasks/PHASE13_M4_003_ISOLATED_POSTGRES_ACCEPTANCE_2026_10_28.md).
+
+**Concurrency correction:** initial DB test exposed actual SQLSTATE `40P01` deadlock. Account locks in both M4-002 assignment and M4-003 messaging repositories were changed to `FOR NO KEY UPDATE`, preserving Project/assignment/consent locking, current role/email checks, idempotency and revocation authorization. Final four Group G leaf tests passed; no claim of exhaustive concurrent correctness.
+
+**No broader authority:** no real customer use, professional credential/licensing attestation, legal approval, document/Fact/private AI Chat disclosure, production/staging migrations, deployment, feature activation, contract/payment/review milestone, or M4-004–007 implementation authorization. Thread participation consent remains distinct from M4-004 disclosure. Distinguish the migration already applied to **test DB** from uncommitted repository files. Preserve M4-002 earlier acceptance, known TypeScript/full-unit limits and Phase 13 **LIVE/PRODUCTION NO_GO**.
+<!-- END D_P13_019_M4_003_DB_VALIDATED_2026_10_28 -->
 <!-- BEGIN D_P13_018_M4_002_DB_VALIDATED_2026_10_28 -->
 ## D-P13-018 — M4-002 isolated PostgreSQL verification accepted, not a production gate
 

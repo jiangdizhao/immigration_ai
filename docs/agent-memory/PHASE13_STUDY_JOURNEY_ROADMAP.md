@@ -71,6 +71,9 @@
 
 ## 2a. M4 bounded work packages (2026-10-27)
 
+<!-- BEGIN PHASE13_M4_003_DB_STATUS_2026_10_28 -->
+**Current status (2026-10-28):** M4-001 accepted, M4-002 and M4-003 **DATABASE VALIDATED / ACCEPTED_WITH_LIMITATIONS** under different isolated PostgreSQL authorizations. M4-003 DB-R3 A–H **27 PASS / 0 FAIL / 0 SKIP / exit 0**; [scoped acceptance](./tasks/PHASE13_M4_003_ISOLATED_POSTGRES_ACCEPTANCE_2026_10_28.md). Reviewed 26-path M4-003 implementation is **still local uncommitted/unpushed**; only documentation is being committed on GitHub. M4-004–007 remain not dispatched and Phase 13 **LIVE/PRODUCTION NO_GO**. The dated 2026-10-27 dispatch wording below is historical, not the latest state.
+<!-- END PHASE13_M4_003_DB_STATUS_2026_10_28 -->
 M4 is the existing Roadmap milestone **Staff Collaboration and Professional Engagement Foundation**. Its accepted *planning decomposition* is [M4-001 through M4-007](./PHASE13_M4_STAFF_COLLABORATION_WORKBREAKDOWN_2026_10_27.md): **001** grounded read-only architecture/permissions/reuse audit; **002** staff assignment/authorization; **003** durable human Project messaging; **004** engagement, agreement/version/signature/customer disclosure; **005** evidenced staff-attested off-platform payment distinct from Stripe VIP; **006** immutable scoped professional review/approval/audit; **007** cross-module offline integration and fail-closed M5 handoff interface. Only **M4-001** has a [dispatched contract](./tasks/PHASE13_M4_001_READ_ONLY_ARCHITECTURE_AUDIT_2026_10_27.md). M4-002–007 remain **PLANNED / NOT AUTHORIZED TO IMPLEMENT**, and M4 schema/state-machines are not frozen until evidence-backed audit and owner/professional decisions. Live/production remain **NO_GO**.
 
 ## 3. M0 work breakdown (the current active milestone)
