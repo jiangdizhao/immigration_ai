@@ -231,8 +231,9 @@ test("M4-003 actor locks do not deadlock with ProjectOperation actor foreign key
   assert.doesNotMatch(lockAccounts, /\.for\("update"\)/u);
 });
 
-test("Migration 0042 is the journal successor with a generated snapshot", () => {
-  const entry = journal.entries.at(-1);
+test("Migration 0042 is a journaled successor with a generated snapshot", () => {
+  // M4-004 appends 0043, so this pins the 0042 entry rather than the tail.
+  const entry = journal.entries.find((candidate) => candidate.idx === 42);
   assert.deepEqual(entry, {
     idx: 42,
     version: "7",

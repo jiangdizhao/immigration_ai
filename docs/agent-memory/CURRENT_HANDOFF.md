@@ -1,4 +1,136 @@
-<!-- BEGIN PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
+<!-- BEGIN PHASE13_M4_004_STAGE3B_R3_F4_2026_10_29 -->
+## Phase 13 M4-004 Stage 3B R3 — F4 corrected, Stage 3B **15/15 PASS** (2026-10-29)
+
+- Branch `phase13-study-journey-project-centric`, HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` (unchanged), nothing staged/committed/pushed.
+- **Only source change:** `chatbot/lib/db/service-engagement.integration.test.ts` — the customer signatory's `loadSignatureVerificationTarget()` assertion now expects **`not_found`** (was `forbidden`), because `runLoadSignatureVerificationTarget` resolves M4-002 operator eligibility first and fails closed with `not_found` before any self-verification branch. Comment updated to describe the operator-eligibility gate. No production code, migration, schema, authority or guard touched (repository `a64e1c8f…` and Migration 0043 `4cc2861c…3c06dfe` byte-identical).
+- **Offline:** M4-004 offline 61/61, guard 7/7, Biome clean, `git diff --check` clean.
+- **Stage 3B (single authorized run):** guard preflight PASSED (image `sha256:82903352…cb00afa2`, migration hash `4cc2861c…3c06dfe`, approval token + runner flag present); `tests 15 / pass 15 / fail 0 / skipped 0 / cancelled 0`, duration 1,172 ms, **`STAGE3B_R3_EXIT_CODE=0`**. Scenario 6 now runs to completion (pending-evidence `authority_denied`, operator-gate `not_found`, verification, final managed activation). Log `/home/rico/phase13_m4_004_stage3b_r3_authorized_run.log` — `6fe6bd7da2018113cd45a56b0b483591f0ca3c29f57ee954748adcd5567949e7` (no credentials/URL).
+- **Integrity:** ledger 44 rows / head id 44 / hash + `created_at 1793233341879` unchanged; tester SELECT-only; container unchanged (`127.0.0.1:55444`, label `m4-004-isolated-test`, tmpfs 1g, `mounts=0`); no migration re-applied; M4-004 rows 49→74, engagements 24→36 (append-only); flags OFF; no other database/external service.
+- **Status: `STAGE3B EXECUTED / 15 PASS / 0 FAIL / PENDING INDEPENDENT REVIEW`.** M4-004 database validation is complete; acceptance and any M4-005 work remain outside this authorization.
+<!-- END PHASE13_M4_004_STAGE3B_R3_F4_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_STAGE3A_R2_ACL_CORRECTION_2026_10_29 -->
+
+## Phase 13 M4-004 Stage 2/3A R2 — privilege corrected, Stage 3A verified, Stage 3B failed (14/15) (2026-10-29)
+
+- Branch `phase13-study-journey-project-centric`, HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` (unchanged), `git diff --check` clean, nothing staged/committed.
+- **Ledger ACL corrected** as owner `phase13_m4_004_migrator` in one guarded transaction: `REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE drizzle.__drizzle_migrations FROM phase13_m4_004_tester;` → ACL `{migrator=arwdDxtm/migrator, tester=r/migrator}`; effective tester ledger privileges now **SELECT only** (INSERT/UPDATE/DELETE/TRUNCATE false, no memberships, no PUBLIC grant); test-table DML preserved. First attempt rolled back on a verifier-assertion defect (`aclexplode` row granularity + PG17 `MAINTAIN`) with the database proven unchanged; the same single REVOKE was then applied once (exit 0). No other privilege/ownership/record touched; no migration re-applied.
+- **Stage 3A: VERIFIED** — `STAGE3A_READ_ONLY_CHECKS total=25 passed=25 failed=none` → `STAGE3A_READ_ONLY_VERIFIED`, exit **0**, 25/25, no SQL errors. Log `…_stage3a_readonly_r2.log` `d95450cf…4e3020d8`.
+- **Stage 3B: FAILED 14/15** — guard preflight PASSED (image `sha256:82903352…cb00afa2`, migration hash `4cc2861c…3c06dfe`, approval token present); `tests 15 / pass 14 / fail 1 / skip 0 / cancel 0`, exit **1**. Log `…_stage3b_r2_authorized_run.log` `2e668563…71d653b1`.
+- **Only remaining failure (F4, test-expectation):** scenario 6 at `integration.test.ts:939` expects `forbidden` when the *customer signatory* calls `loadSignatureVerificationTarget`, but `runLoadSignatureVerificationTarget` denies non-operators with `not_found` **first** (`service-engagement-repository.ts:1868-1876`). That is the intended existence-hiding contract; the corrected F1 assertion now passes. **No code changed.**
+- Post-run integrity: ledger 44 rows / head id 44 / hash + `created_at 1793233341879` unchanged; tester SELECT-only; container `phase13-m4-004-pg` unchanged (`127.0.0.1:55444`, label `m4-004-isolated-test`); Migration 0043 `4cc2861c…3c06dfe` unchanged; M4-004 rows 24→49 append-only; no other database contacted; feature flags OFF.
+- **Status: `PRIVILEGE CORRECTED / STAGE3A VERIFIED / STAGE3B FAILED`.** Next action requires separate owner authorization for a test-only F4 correction, then one further single Stage 3B run. M4-004 is **not** accepted.
+<!-- END PHASE13_M4_004_STAGE3A_R2_ACL_CORRECTION_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_STAGE3A_R1_AUTHORIZED_RUN_2026_10_29 -->
+
+## Phase 13 M4-004 Stage 3A R1 authorized read-only verification — **FAILED / Stage 3B NOT RUN** (2026-10-29)
+
+- Branch `phase13-study-journey-project-centric`, HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` (unchanged), 47 uncommitted entries, `git diff --check` clean. Nothing staged/committed/pushed.
+- **One source change this round:** `chatbot/scripts/phase13-m4-004-stage3a-verify.sql` — the ledger check became least-privilege (`ledger_select_only` semantics: `SELECT` granted AND `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` absent). Still 25 checks, `ON_ERROR_STOP`, `READ ONLY` transaction, one verdict, non-zero exit on failure.
+- **Actual result:** `STAGE3A_READ_ONLY_CHECKS total=25 passed=24 failed=dml_grant_on_ledger` → `STAGE3A_READ_ONLY_FAILED`, **exit code 3** (failure path verified: it does not report PASS).
+- **Root cause (read-only diagnostic, no writes):** `phase13_m4_004_tester` holds **INSERT/UPDATE/DELETE = true**, `TRUNCATE = false`, `SELECT = true` on `drizzle.__drizzle_migrations`; ledger owner is `phase13_m4_004_migrator`; no role inheritance. This is a genuine over-grant in the isolated-DB provisioning — the test role can rewrite migration history — not a test defect. No GRANT/REVOKE was performed and the check was not relaxed.
+- **Not run:** Stage 3B guarded integration re-run (authorization was conditional on Stage 3A passing); no migration repeated; container `phase13-m4-004-pg` (image `sha256:82903352…cb00afa2`, `127.0.0.1:55444`, label `m4-004-isolated-test`) and the database (ledger 44 rows, head hash `4cc2861c…3c06dfe`, 24 preserved fixture rows) left intact.
+- **Logs:** `…_stage3a_readonly_r1.log` `4e16176a…c6319d09`; `…_stage3a_readonly_r1.exit` `55aa31ab…384010d4`; `…_stage3a_readonly_r1_diagnostic.log` `45b504f3…22b282cb`.
+- **Required owner decision before any further DB validation:** (a) re-provision the tester to be `SELECT`-only on `drizzle.__drizzle_migrations` (separately authorized DB change), or (b) explicitly accept and ledger the over-grant as a time-bounded test-environment risk. The single Stage 3B re-run can only follow that decision.
+- **Status:** `STAGE3A READ-ONLY FAILED / STAGE3B NOT RUN`. M4-004 is **not** accepted and not production-ready.
+<!-- END PHASE13_M4_004_STAGE3A_R1_AUTHORIZED_RUN_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_STAGE3B_R1_CORRECTIONS_2026_10_29 -->
+
+## Phase 13 M4-004 Stage 3B R1 — evidence-based test-only corrections (2026-10-29)
+
+- **Status: `STAGE3A VERIFIED / STAGE3B FAILED (not re-run)` / UNCOMMITTED / NOT ACCEPTED.** Branch `phase13-study-journey-project-centric`, HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3`. Record: `docs/agent-memory/tasks/PHASE13_M4_004_POSTGRES_STAGE3A_3B_2026_10_29.md`.
+- **F1:** scenario "signature … verified managed activation" now expects `authority_denied` for pending-evidence activation (was `state_conflict`); the earlier structural-precondition expectation stays `state_conflict`. No production rule changed.
+- **F2:** scenario 9 no longer asserts the deparsed `BETWEEN 1 AND 2` text (PostgreSQL 17 prints `>= 1 AND <= 2`); identity/relation/`cardinality`/`IS NOT NULL`/allowlist/`array_length` checks kept, and the 1–2 element semantics now proven executably in the FIX-DB probe (`{}` rejected, 1 and 2 codes accepted, 3 codes rejected, unknown code rejected — `23514`).
+- **F3:** `expectServiceError()` accepts a lazy callback so **synchronous** repository throws are captured; all five canonical-terms negatives now execute (reordered keys, wrong hash, wrong scope, wrong mode, invalid JSON) plus the positive control and verbatim stored-bytes assertion.
+- **Stage 3A auxiliary SQL:** `invalid escape string` (22025) traced to statement 11 of `/tmp/verify3a.sql` (`ESCAPE '\\'` plus mixed `AND`/`OR`), which ran without `ON_ERROR_STOP` so the log still said PASS; `read_ok=0` was an ambiguous empty-table sum. Replaced by read-only `chatbot/scripts/phase13-m4-004-stage3a-verify.sql` (READ ONLY transaction, `ON_ERROR_STOP`, one 25-check verdict, explicit `STAGE3A_READ_ONLY_VERIFIED`/`_FAILED`). **Prepared, not executed.**
+- **Validation:** M4-004 offline 61/61, guard 7/7, M4-003 offline 27/27 and guard 13/13, M4-002 guard 13/13, integration module load 15 skipped (no DB contact), Biome clean, `tsc` 0 M4-004 errors (44 pre-existing). Stage 3B **not** re-run; no migration repeated; container `phase13-m4-004-pg` and database left intact.
+- **Next action:** separate owner authorization for "M4-004 Stage 3B single re-run and Stage 3A read-only verification".
+<!-- END PHASE13_M4_004_STAGE3B_R1_CORRECTIONS_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_STAGE3A_3B_AUTHORIZED_RUN_2026_10_29 -->
+
+## Phase 13 M4-004 authorized PostgreSQL Stage 3A/3B — EXECUTED (2026-10-29)
+
+- **Status: `STAGE3A VERIFIED / STAGE3B FAILED` / UNCOMMITTED / NOT ACCEPTED.** Branch `phase13-study-journey-project-centric`, HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3`. Record: `docs/agent-memory/tasks/PHASE13_M4_004_POSTGRES_STAGE3A_3B_2026_10_29.md`.
+- **Authorized launcher correction applied:** `scripts/phase13-m4-004-db-test.ts` now reads `process.env.PHASE13_M4_004_TEST_APPROVAL` (it previously used the token *value* as the variable name, so an approved run always failed closed). New focused regression test in `scripts/phase13-m4-004-db-test-guard.test.ts`; guard suite 7/7.
+- **Stage 3A VERIFIED:** isolated container `phase13-m4-004-pg` (image `postgres:17`, id `sha256:82903352…afa2`, label `m4-004-isolated-test`, `127.0.0.1:55444`, tmpfs `rw,nosuid,nodev,size=1g`, no mounts); DB `immigration_ai_phase13_m4_004_test` owned by `phase13_m4_004_migrator`; migrations applied once (`db-migration-operator`, exit 0); ledger **44 rows**, head id 44, hash `4cc2861c…3c06dfe`, `created_at 1793233341879`; restricted `phase13_m4_004_tester` verified (no superuser/createdb/createrole, no `public` CREATE, TEMP allowed) — all invariants queried as that restricted role. Log SHA-256 `6a0d1517…5405`.
+- **Stage 3B FAILED (single authorized run, no retry):** guard preflight PASSED; suite **12 pass / 3 fail / 0 skipped**, exit 1. Failing: scenario 6, 9, 13. Log SHA-256 `5eabb963…4f48`.
+- **Root causes (all test-side; no production change indicated):** **F1** scenario 6 expected `state_conflict` but the managed-activation verified-evidence branch correctly returns `authority_denied`; **F2** scenario 9 asserted the deparsed `BETWEEN 1 AND 2`, which PostgreSQL prints as `cardinality(...) >= 1 AND <= 2`; **F3** `expectServiceError(promise)` cannot capture the *synchronous* FIX-03 gate throw from `createAgreementVersion`, aborting scenario 13 at its first negative (cases b–e and the positive control were not exercised — canonical acceptance is still evidenced by passing scenarios 3/5/6).
+- **Preserved:** container and database left intact for diagnosis; no reset, no further migrations, no corrective writes, no cleanup, no Git operations.
+- **Next action:** separate authorization for a **test-only** correction round (F1/F2/F3) followed by one authorized Stage 3B re-run against the same isolated target.
+<!-- END PHASE13_M4_004_STAGE3A_3B_AUTHORIZED_RUN_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_DBREADY_AUDIT_PENDING_REVIEW_2026_10_29 -->
+
+## Phase 13 M4-004 final offline DB-readiness audit applied — PENDING RE-REVIEW (2026-10-29)
+
+- **Status: IMPLEMENTED / UNCOMMITTED / NOT ACCEPTED.** Base HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` on `phase13-study-journey-project-centric`; reviewed R3 patch `ffaad15e…0ae5b`. Record: `docs/agent-memory/tasks/PHASE13_M4_004_DBREADY_AUDIT_2026_10_29.md`.
+- **Only the guarded integration suite + docs changed.** No production business code, migration, launcher, guard, flag or authority was modified; every defect was in test fixtures/assertions.
+- **Composite-FK probe:** positive control now uses `id = engagementA` for `versionA` (previously a random id that violated the FK itself); the unused probe `engagementId` column is gone; the probe FK is constructed explicitly against the temporary relation and verified via `confrelid`/`pg_my_temp_schema()`/permanent-OID inequality instead of pasting deparsed text.
+- **Session handling:** temporary tables now run on a single `sql.reserve()` connection (the pooled client could split `CREATE TEMP TABLE` and later statements across backends), released in `finally`.
+- **A4:** all FK assertions use `pg_constraint`/`pg_attribute` identity and ordered columns, never deparsed SQL text (which prints `id` unquoted).
+- **15-scenario audit fixes:** idempotency-conflict case now reuses the same action (operation key includes operation type); memberships use `inviteProjectMember` → `acceptProjectMembership` and `revokeProjectMembership` with exact revision assertions; grant revisions follow those mutations; guard-trigger scenario proves the row survived; scope-CHECK metadata vs behaviour split; explicit resource snapshot/observation helpers; probe scenario proves permanent row counts are untouched.
+- **Migration 0043 and the guard/launcher are unchanged** (pin `4cc2861c…3c06dfe`); no database contacted, no container created, no migration applied.
+- **Validation:** M4-004 offline 61/61, guard 6/6, M4-002 guard 13/13, M4-003 offline 27/27 and guard 13/13, `pnpm test:unit` 991/991 (0 fail/skip), `drizzle-kit check` clean, Biome clean, `git diff --check` clean. `tsc --noEmit`: 44 pre-existing errors in 9 untouched files, none in M4-004. Guarded PostgreSQL suite: **15 SKIPPED (never executed, not a pass)**.
+- **Next action:** independent review of `/home/rico/phase13_m4_004_DBREADY_review.patch`, then separate owner authorization for the exact isolated PostgreSQL target and migration execution. This is not a readiness claim.
+<!-- END PHASE13_M4_004_DBREADY_AUDIT_PENDING_REVIEW_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_R3_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+## Phase 13 M4-004 R3 final review corrections applied — PENDING RE-REVIEW (2026-10-29)
+
+- **Status: IMPLEMENTED / UNCOMMITTED / NOT ACCEPTED.** Base HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` on `phase13-study-journey-project-centric`; reviewed R2 patch `5bf4fb00…ff5f37`. Record: `docs/agent-memory/tasks/PHASE13_M4_004_R3_CORRECTIONS_HANDOFF_2026_10_29.md`.
+- **FIX-01:** guarded fixtures now use a separate synthetic **admin** → owner approve → lawyer accept M4-002 Option A sequence, and assert an owner-actor proposal is refused. No production authorization relaxed.
+- **FIX-02:** resource-owner membership revocation now asserts recipient `not_found` (no grant metadata), empty recipient list with `hasMore:false`, and the owner's independent audit view.
+- **FIX-03:** agreement fixtures/authority requests use canonical `parseServiceAgreementTerms` payload + hash; the repository write boundary (`serviceAgreementTermsWriteMatches`) rejects non-canonical bytes, mismatched hash, scope or mode with `invalid_request`.
+- **FIX-04:** recipient Grant list eligibility is a SQL predicate, so `LIMIT limit+1` selects authorized rows and interleaved ineligible grants cannot shorten pages or corrupt `hasMore`.
+- **FIX-DB:** the empty-scope CHECK and composite current-agreement FK are now exercised executably (`23514` / `23503`) using the deployed definitions on `pg_temp` probe tables; production tables remain append-only guarded.
+- **Migration 0043** unchanged (guard pin `4cc2861c…3c06dfe`), still **not executed**; no database contacted, no container created.
+- **Validation:** M4-004 offline 61/61, guard 6/6, M4-002 guard 13/13, M4-003 offline 27/27 and guard 13/13, `pnpm test:unit` 991/991 (0 fail/skip), `drizzle-kit check` clean, Biome clean on changed paths, `git diff --check` clean. `tsc --noEmit`: 44 pre-existing errors in 9 untouched files, none in M4-004. Guarded PostgreSQL suite: **15 SKIPPED (never executed)**.
+- **Still unverified:** real PostgreSQL integration, signature/legal effect, professional authority, protected content, staging, production. R1-05 TOCTOU remains **reduced, not eliminated**; no real adapter/transaction contract exists and no content endpoint is connected.
+- **Next action:** independent re-review of `/home/rico/phase13_m4_004_R3_review.patch`; then owner authorization for the exact isolated target and migration execution.
+<!-- END PHASE13_M4_004_R3_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_R2_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+## Phase 13 M4-004 R2 review corrections applied — PENDING RE-REVIEW (2026-10-29)
+
+- **Status: IMPLEMENTED / UNCOMMITTED / NOT ACCEPTED.** Base HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` on `phase13-study-journey-project-centric`; reviewed R1 patch `be236dee…91cb997`. Proposed continuation record only. Record: `docs/agent-memory/tasks/PHASE13_M4_004_R2_CORRECTIONS_HANDOFF_2026_10_29.md`.
+- **Corrections:** R2-01 shared recipient predicate for Grant list **and** detail (owner eligibility, expiry, assignment failure) with filtering before pagination so nothing leaks via items/`hasMore`; R2-02 `author_draft` authority request now binds the pre-generated draft `agreementVersionId`; R2-03 staff Engagement detail denied outright (owner-only, indistinguishable `notFound`); R2-04 launcher/guard repaired — `POSTGRES_URL` is now set to the approved isolated URL (not cleared) while every alternative target is cleared and re-verified, plus Docker/database/privilege/ledger/pinned-migration preflight; R2-05 integration suite made genuinely executable with real authority bindings and PostgreSQL behaviour assertions.
+- **Migration 0043** unchanged in this round (bytes pinned in the guard: `4cc2861c…3c06dfe`), still **not executed**; no database contacted.
+- **Validation:** M4-004 offline 59/59, guard 6/6, M4-002 guard 13/13, M4-003 offline 27/27 and guard 13/13, `pnpm test:unit` 991/991 (0 fail/skip), `drizzle-kit check` clean, Biome clean on changed paths, `git diff --check` clean. `tsc --noEmit`: 44 pre-existing errors in 9 untouched files, none in M4-004.
+- **Still unverified:** real PostgreSQL integration (12 guarded scenarios remain SKIPPED), signature/legal effect, professional authority, protected content, staging, production. R1-05 TOCTOU is **reduced, not eliminated**: no real adapter/transaction contract exists, and no content endpoint is connected.
+- **Next action:** independent re-review of `/home/rico/phase13_m4_004_R2_review.patch`; owner decisions on signature/operator authority, a reviewed resource adapter with locked/serializable revalidation, post-departure revocation procedure, and whether staff Engagement disclosure should ever be authorized.
+<!-- END PHASE13_M4_004_R2_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_R1_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+## Phase 13 M4-004 R1 review corrections applied — PENDING RE-REVIEW (2026-10-29)
+
+- **Status: IMPLEMENTED / UNCOMMITTED / NOT ACCEPTED.** Base HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` on `phase13-study-journey-project-centric`. Proposed continuation record only; acceptance belongs to the independent reviewer and project owner. Record: `docs/agent-memory/tasks/PHASE13_M4_004_R1_CORRECTIONS_HANDOFF_2026_10_29.md`.
+- **Six required corrections implemented:** R1-01 deny-by-default staff Engagement metadata policy (assignment alone discloses nothing); R1-02 disclosure metadata authorization separated from the access decision (former recipient gets 404, owner gets audit-only with `decision: null`); R1-03 server-derived resource-owner eligibility denies `resource_owner_ineligible` and post-departure revocation returns 403 without restoring Project access; R1-04 scope-specific `ServiceOperatorAuthority` bound to the persisted target + canonical `requestSha256` and current M4-002 assignment (no role-only path, no null terms hash, no empty scope for issuance); R1-05 observation fingerprint + in-transaction revalidator (production composes none, so grants fail closed); R1-06 `cardinality()` scope CHECKs, composite current-agreement FK, and one shared declared-time skew.
+- **Migration 0043** regenerated from the updated schema (snapshot verified by a follow-up `drizzle-kit generate`: "No schema changes"), still **not executed**; no database contacted.
+- **Validation:** M4-004 offline 57/57 pass (incl. `r1-corrections.test.ts`), guard 3/3, M4-002 guard 13/13, M4-003 offline 27/27 and guard 13/13, `pnpm test:unit` 991/991 (0 fail/skip), `drizzle-kit check` clean, Biome clean on changed paths, `git diff --check` clean. `tsc --noEmit`: 44 pre-existing errors in 9 untouched files, none in M4-004.
+- **Still unverified:** real PostgreSQL migration/integration (10 guarded scenarios remain SKIPPED), signature authenticity/enforceability, professional authority, protected content access, staging and production.
+- **Next action:** independent re-review of `/home/rico/phase13_m4_004_R1_review.patch`; owner decisions on signature/legal, contract-operator and verification-operator authority, reviewed resource adapters with in-transaction revalidation, post-departure revocation procedure, and sharing granularity.
+<!-- END PHASE13_M4_004_R1_CORRECTIONS_PENDING_REVIEW_2026_10_29 -->
+
+<!-- BEGIN PHASE13_M4_004_IMPLEMENTATION_PENDING_REVIEW_2026_10_29 -->
+
+## Phase 13 M4-004 implemented offline — PENDING INDEPENDENT REVIEW (2026-10-29)
+
+- **Status: IMPLEMENTED / UNCOMMITTED / NOT ACCEPTED.** Base HEAD `b64b201536e23e79cd8e9e7be6909328237c40e3` on `phase13-study-journey-project-centric`. This block is a proposed continuation record only; acceptance belongs to the independent reviewer and project owner.
+- **Scope:** M4-004 only — `ServiceEngagement`, immutable `ServiceAgreementVersion` + `ServiceAgreementAcceptance` + `ServiceSignatureEvidence`, and `ProjectResourceDisclosureGrant` with a deterministic disclosure evaluator. M4-005/006/007 remain **NOT IMPLEMENTED**; live/production **NO_GO**; flag `PHASE13_SERVICE_ENGAGEMENT_ENABLED` default OFF.
+- **Additive migration 0043** authored and statically validated only — **not executed**, no database contacted. Real PostgreSQL integration is prepared as a guarded harness (10 SKIPPED scenarios) awaiting separate owner authorization at the exact proposed isolated target.
+- **Deny-by-default ports:** agreement issuance authority, signature evidence verifier and protected-resource source resolver all deny in production; no verified signature, legal effect or content access is claimed.
+- **Validation:** M4-004 offline 39/39 pass, guard 3/3 pass, M4-002 guard 13/13, M4-003 offline 27/27 and guard 13/13 pass, `pnpm test:unit` 991/991 pass (0 fail/skip), `drizzle-kit check` clean, `git diff --check` clean. `tsc --noEmit` reports 44 pre-existing errors in 9 untouched test files and none in M4-004 files.
+- **Intentional edits outside the new module:** two "journal tail is 0042" assertions now pin the 0042 entry by index (M4-003 schema contract + M4-003 DB guard). `lib/education-intelligence/schema-contract.test.ts` remains a pre-existing out-of-suite failure and was not modified.
+- **Next action:** independent patch review; owner decisions on signature/legal, contract-operator, resource-source and sharing-granularity policy before any flag, migration or content-access integration.
+<!-- END PHASE13_M4_004_IMPLEMENTATION_PENDING_REVIEW_2026_10_29 -->
+
+
 ## Phase 13 M4 next work — unified M4-004–007 plan recorded (2026-10-29)
 
 - **Latest verified remote code baseline:** `8af7848e435c52c86540846c24e7a50382d35d46` on `phase13-study-journey-project-centric` already includes pushed 26-path M4-003 source, migration 0042 and M4-002 concurrency correction. Older 2026-10-28 “local-only / uncommitted M4-003” entries are historical and superseded for current Git status.
@@ -6034,3 +6166,24 @@ Detailed implementation, all-format p50/p95 measurements, the baseline compariso
 - This is a historical implementation checkpoint, not an acceptance record.
 
 <!-- END PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->
+
+<!-- BEGIN PHASE13_M4_004_FINAL_ACCEPTANCE_2026_10_29 -->
+
+## Phase 13 M4-004 — Final Database Acceptance (2026-10-29)
+
+**Decision: DATABASE VALIDATED / ACCEPTED_WITH_LIMITATIONS.**
+
+- Isolated PostgreSQL 17 database validated through Migration 0043.
+- Migration ledger: 44/44; Migration 0043 SHA-256: 4cc2861c545ecc0d7dce1c06899b78172aa8466b0969c10b4af785aa23c06dfe.
+- Stage 3A: 25/25 read-only checks passed. Tester has SELECT-only migration-ledger access.
+- Stage 3B R3: 15 passed, 0 failed, 0 skipped, exit code 0.
+- M4-004 service engagement, versioned agreement, acceptance, signature evidence and disclosure-grant database contracts accepted with limitations.
+- Production agreement issuance, signature verification and protected-resource access remain deny-by-default.
+- No real signature provider, professional-authority certification or protected-content adapter has been approved.
+- No staging/production migration or release was performed.
+- Feature flags remain default OFF; overall production status remains NO_GO.
+- M4-005, M4-006 and M4-007 remain outside this acceptance.
+
+Earlier pending-review and failed-test records are historical evidence, superseded by this final acceptance decision.
+
+<!-- END PHASE13_M4_004_FINAL_ACCEPTANCE_2026_10_29 -->

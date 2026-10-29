@@ -375,11 +375,16 @@ export function expectedM4_003_Migration(
   ) {
     throw new Error("M4-003 migration verification metadata is malformed");
   }
-  const entry = journal.entries.at(-1);
+  // The M4-003 harness pins its own migration (0042), not the journal tail:
+  // later additive migrations such as M4-004's 0043 must not invalidate the
+  // historical M4-003 identity check. Dense 0..n-1 ordering is still enforced.
+  const entry = journal.entries.find(
+    (candidate) => candidate.idx === M4_003_TEST_TARGET.migrationIndex
+  );
   if (
     journal.version !== "7" ||
     journal.dialect !== "postgresql" ||
-    journal.entries.length !== M4_003_TEST_TARGET.migrationCount ||
+    journal.entries.length < M4_003_TEST_TARGET.migrationCount ||
     journal.entries.some(
       (candidate, index) =>
         candidate.idx !== index ||

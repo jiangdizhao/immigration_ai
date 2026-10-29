@@ -787,6 +787,18 @@ export const PROJECT_OPERATION_TYPES = [
   "project_thread_participation_consent_create",
   "project_thread_participation_consent_withdraw",
   "project_human_message_send",
+  "service_engagement_create",
+  "service_engagement_agreement_draft",
+  "service_engagement_agreement_issue",
+  "service_engagement_agreement_accept",
+  "service_engagement_signature_submit",
+  "service_engagement_signature_verify",
+  "service_engagement_activate",
+  "service_engagement_suspend",
+  "service_engagement_resume",
+  "service_engagement_terminate",
+  "project_resource_disclosure_grant_create",
+  "project_resource_disclosure_grant_revoke",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -803,6 +815,11 @@ export const PROJECT_OPERATION_RESULT_KINDS = [
   "project_staff_assignment",
   "project_thread_participation_consent",
   "project_human_message",
+  "service_engagement",
+  "service_agreement_version",
+  "service_agreement_acceptance",
+  "service_signature_evidence",
+  "project_resource_disclosure_grant",
 ] as const;
 
 export const PROJECT_EVENT_TYPES = [
@@ -829,6 +846,19 @@ export const PROJECT_EVENT_TYPES = [
   "project_staff_assignment_admin_revoked",
   "project_thread_participation_consent_created",
   "project_thread_participation_consent_withdrawn",
+  "service_engagement_created",
+  "service_engagement_agreement_version_drafted",
+  "service_engagement_agreement_version_issued",
+  "service_engagement_agreement_accepted",
+  "service_engagement_signature_evidence_recorded",
+  "service_engagement_signature_evidence_verified",
+  "service_engagement_signature_evidence_rejected",
+  "service_engagement_activated",
+  "service_engagement_suspended",
+  "service_engagement_resumed",
+  "service_engagement_terminated",
+  "project_resource_disclosure_granted",
+  "project_resource_disclosure_revoked",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -844,6 +874,11 @@ export const PROJECT_EVENT_SUBJECT_KINDS = [
   "project_fact_assertion",
   "project_staff_assignment",
   "project_thread_participation_consent",
+  "service_engagement",
+  "service_agreement_version",
+  "service_agreement_acceptance",
+  "service_signature_evidence",
+  "project_resource_disclosure_grant",
 ] as const;
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
 export type ProjectOperationResultKind =
@@ -896,11 +931,11 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'project_human_message')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'project_human_message', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant')`
     ),
     actorShapeValid: check(
       "ProjectOperation_actor_shape_check",
@@ -908,7 +943,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -956,11 +991,11 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn', 'service_engagement_created', 'service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued', 'service_engagement_agreement_accepted', 'service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated', 'project_resource_disclosure_granted', 'project_resource_disclosure_revoked')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent') and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant') and ${table.subjectId} is not null)`
     ),
     actorShapeValid: check(
       "ProjectEvent_actor_shape_check",
@@ -973,6 +1008,10 @@ export const projectEvent = pgTable(
     humanConsentEventSubjectValid: check(
       "ProjectEvent_human_consent_subject_check",
       sql`${table.eventType} not in ('project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn') or ${table.subjectKind} = 'project_thread_participation_consent'`
+    ),
+    serviceEngagementEventSubjectValid: check(
+      "ProjectEvent_service_engagement_subject_check",
+      sql`${table.eventType} not in ('service_engagement_created', 'service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued', 'service_engagement_agreement_accepted', 'service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated', 'project_resource_disclosure_granted', 'project_resource_disclosure_revoked') or (${table.eventType} in ('service_engagement_created', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated') and ${table.subjectKind} = 'service_engagement') or (${table.eventType} in ('service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued') and ${table.subjectKind} = 'service_agreement_version') or (${table.eventType} = 'service_engagement_agreement_accepted' and ${table.subjectKind} = 'service_agreement_acceptance') or (${table.eventType} in ('service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected') and ${table.subjectKind} = 'service_signature_evidence') or (${table.eventType} in ('project_resource_disclosure_granted', 'project_resource_disclosure_revoked') and ${table.subjectKind} = 'project_resource_disclosure_grant')`
     ),
   })
 );
@@ -4049,4 +4088,597 @@ export const educationFieldObservation = pgTable(
 );
 export type EducationFieldObservationRow = InferSelectModel<
   typeof educationFieldObservation
+>;
+
+// ---------------------------------------------------------------------------
+// Phase 13 M4-004 service engagement, versioned agreements, signature evidence
+// and customer-to-staff protected resource disclosure.
+//
+// These tables are additive and independent of M4-002 staff assignment consent
+// and M4-003 thread participation consent. Drizzle Kit does not serialize
+// check() constraints, so Migration 0043 appends the matching named CHECK
+// statements, append-only guard triggers and M4-004 operation/event binding
+// triggers explicitly.
+// ---------------------------------------------------------------------------
+export const SERVICE_ENGAGEMENT_SCOPE_CODES = [
+  "school_admissions",
+  "student_500_visa",
+] as const;
+export const SERVICE_ENGAGEMENT_MODES = ["self_service", "managed"] as const;
+export const SERVICE_ENGAGEMENT_STATUSES = [
+  "draft",
+  "awaiting_customer_action",
+  "active",
+  "suspended",
+  "terminated",
+] as const;
+export const SERVICE_ENGAGEMENT_TERMINAL_REASON_CODES = [
+  "owner_terminated",
+  "owner_requested",
+] as const;
+export const SERVICE_AGREEMENT_VERSION_STATUSES = [
+  "draft",
+  "issued",
+  "superseded",
+] as const;
+export const SERVICE_SIGNATURE_EVIDENCE_STATUSES = [
+  "pending",
+  "verified",
+  "rejected",
+] as const;
+export const SERVICE_SIGNATURE_SIGNER_ROLES = ["customer_owner"] as const;
+export const DISCLOSURE_RESOURCE_CATEGORIES = [
+  "project_fact",
+  "project_document",
+  "private_chat",
+  "financial_record",
+  "engagement_record",
+] as const;
+export const DISCLOSURE_PURPOSE_CODES = [
+  "professional_review",
+  "service_delivery",
+] as const;
+export const DISCLOSURE_GRANT_STATUSES = [
+  "granted",
+  "revoked",
+  "expired",
+] as const;
+
+export type ServiceEngagementScopeCode =
+  (typeof SERVICE_ENGAGEMENT_SCOPE_CODES)[number];
+export type ServiceEngagementMode = (typeof SERVICE_ENGAGEMENT_MODES)[number];
+export type ServiceEngagementStatus =
+  (typeof SERVICE_ENGAGEMENT_STATUSES)[number];
+
+export const serviceEngagement = pgTable(
+  "ServiceEngagement",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    customerOwnerUserId: uuid("customerOwnerUserId").notNull(),
+    serviceMode: varchar("serviceMode", { length: 32 }).notNull(),
+    scopeCodes: text("scopeCodes").array().notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("draft"),
+    // The current-version FK is declared in Migration 0043 rather than here to
+    // avoid a circular TypeScript inference between this table and
+    // `serviceAgreementVersion`. It is a composite
+    // (`currentAgreementVersionId`, `id`) -> (`id`, `engagementId`) foreign key,
+    // so the current version can only ever belong to this same engagement.
+    currentAgreementVersionId: uuid("currentAgreementVersionId"),
+
+    revision: integer("revision").notNull().default(1),
+    createdProjectRevision: integer("createdProjectRevision").notNull(),
+    lastProjectRevision: integer("lastProjectRevision").notNull(),
+    createdOperationRecordId: uuid("createdOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    lastOperationRecordId: uuid("lastOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    activatedProjectRevision: integer("activatedProjectRevision"),
+    activatedAt: timestamp("activatedAt"),
+    suspendedAt: timestamp("suspendedAt"),
+    terminatedAt: timestamp("terminatedAt"),
+    terminalReasonCode: varchar("terminalReasonCode", { length: 32 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ServiceEngagement_id_project_unique"
+    ).on(table.id, table.projectId),
+    ownerIdentityUnique: uniqueIndex(
+      "ServiceEngagement_id_project_owner_unique"
+    ).on(table.id, table.projectId, table.customerOwnerUserId),
+    projectLiveUnique: uniqueIndex("ServiceEngagement_project_live_unique")
+      .on(table.projectId)
+      .where(sql`${table.status} <> 'terminated'`),
+    projectStatusIndex: index("ServiceEngagement_project_status_idx").on(
+      table.projectId,
+      table.status,
+      table.id
+    ),
+    projectOwnerForeignKey: foreignKey({
+      columns: [table.projectId, table.customerOwnerUserId],
+      foreignColumns: [studyJourneyProject.id, studyJourneyProject.ownerUserId],
+      name: "ServiceEngagement_project_owner_fk",
+    }).onDelete("restrict"),
+    modeAllowed: check(
+      "ServiceEngagement_mode_check",
+      sql`${table.serviceMode} in ('self_service', 'managed')`
+    ),
+    scopeAllowed: check(
+      "ServiceEngagement_scope_check",
+      // `array_length('{}', 1)` is NULL, so a BETWEEN test alone would accept an
+      // empty array (CHECK passes when the expression is NULL). `cardinality`
+      // returns 0 for `{}` and keeps the empty-array case rejected.
+      sql`${table.scopeCodes} is not null and cardinality(${table.scopeCodes}) between 1 and 2 and ${table.scopeCodes} <@ array['school_admissions', 'student_500_visa']::text[]`
+    ),
+    statusAllowed: check(
+      "ServiceEngagement_status_check",
+      sql`${table.status} in ('draft', 'awaiting_customer_action', 'active', 'suspended', 'terminated')`
+    ),
+    revisionPositive: check(
+      "ServiceEngagement_revision_check",
+      sql`${table.revision} > 0 and ${table.createdProjectRevision} > 0 and ${table.lastProjectRevision} >= ${table.createdProjectRevision}`
+    ),
+    timestampsConsistent: check(
+      "ServiceEngagement_timestamps_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+    lifecycleConsistent: check(
+      "ServiceEngagement_lifecycle_check",
+      sql`(
+        (${table.status} = 'draft' and ${table.currentAgreementVersionId} is null and ${table.activatedAt} is null and ${table.activatedProjectRevision} is null and ${table.suspendedAt} is null and ${table.terminatedAt} is null and ${table.terminalReasonCode} is null)
+        or (${table.status} = 'awaiting_customer_action' and ${table.currentAgreementVersionId} is not null and ${table.activatedAt} is null and ${table.activatedProjectRevision} is null and ${table.suspendedAt} is null and ${table.terminatedAt} is null and ${table.terminalReasonCode} is null)
+        or (${table.status} = 'active' and ${table.currentAgreementVersionId} is not null and ${table.activatedAt} is not null and ${table.activatedProjectRevision} is not null and ${table.terminatedAt} is null and ${table.terminalReasonCode} is null)
+        or (${table.status} = 'suspended' and ${table.currentAgreementVersionId} is not null and ${table.activatedAt} is not null and ${table.activatedProjectRevision} is not null and ${table.suspendedAt} is not null and ${table.terminatedAt} is null and ${table.terminalReasonCode} is null)
+        or (${table.status} = 'terminated' and ${table.terminatedAt} is not null and ${table.terminalReasonCode} in ('owner_terminated', 'owner_requested'))
+      )`
+    ),
+  })
+);
+
+export type ServiceEngagement = InferSelectModel<typeof serviceEngagement>;
+
+// `serviceEngagement` and `serviceAgreementVersion` reference each other; the
+// forward declaration above is resolved by hoisting at module evaluation.
+export const serviceAgreementVersion = pgTable(
+  "ServiceAgreementVersion",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    engagementId: uuid("engagementId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    versionNumber: integer("versionNumber").notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
+    termsSchemaVersion: varchar("termsSchemaVersion", { length: 64 }).notNull(),
+    termsPayload: text("termsPayload").notNull(),
+    termsSha256: varchar("termsSha256", { length: 64 }).notNull(),
+    scopeCodes: text("scopeCodes").array().notNull(),
+    customerNoticeVersion: varchar("customerNoticeVersion", {
+      length: 128,
+    }).notNull(),
+    customerNoticeSha256: varchar("customerNoticeSha256", {
+      length: 64,
+    }).notNull(),
+    authoredByUserId: uuid("authoredByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    authorityCode: varchar("authorityCode", { length: 64 }).notNull(),
+    createdProjectRevision: integer("createdProjectRevision").notNull(),
+    createdOperationRecordId: uuid("createdOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    issuedAt: timestamp("issuedAt"),
+    issuedProjectRevision: integer("issuedProjectRevision"),
+    issuedOperationRecordId: uuid("issuedOperationRecordId").references(
+      () => projectOperation.id,
+      { onDelete: "restrict" }
+    ),
+    supersedesAgreementVersionId: uuid(
+      "supersedesAgreementVersionId"
+    ).references((): AnyPgColumn => serviceAgreementVersion.id, {
+      onDelete: "restrict",
+    }),
+    supersededByAgreementVersionId: uuid(
+      "supersededByAgreementVersionId"
+    ).references((): AnyPgColumn => serviceAgreementVersion.id, {
+      onDelete: "restrict",
+    }),
+    supersededAt: timestamp("supersededAt"),
+    supersededOperationRecordId: uuid("supersededOperationRecordId").references(
+      () => projectOperation.id,
+      { onDelete: "restrict" }
+    ),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    numberUnique: uniqueIndex("ServiceAgreementVersion_number_unique").on(
+      table.engagementId,
+      table.versionNumber
+    ),
+    engagementIdentityUnique: uniqueIndex(
+      "ServiceAgreementVersion_engagement_identity_unique"
+    ).on(table.id, table.engagementId, table.projectId),
+    // Referenced by the composite `ServiceEngagement_current_agreement_fk`
+    // declared in Migration 0043 (R1-06): an engagement may only point at an
+    // agreement version of that same engagement.
+    currentAgreementIdentityUnique: uniqueIndex(
+      "ServiceAgreementVersion_id_engagement_unique"
+    ).on(table.id, table.engagementId),
+    hashIdentityUnique: uniqueIndex(
+      "ServiceAgreementVersion_hash_identity_unique"
+    ).on(table.id, table.engagementId, table.termsSha256),
+    issuedUnique: uniqueIndex("ServiceAgreementVersion_issued_unique")
+      .on(table.engagementId)
+      .where(sql`${table.status} = 'issued'`),
+    engagementStatusIndex: index(
+      "ServiceAgreementVersion_engagement_status_idx"
+    ).on(table.engagementId, table.status, table.versionNumber),
+    engagementForeignKey: foreignKey({
+      columns: [table.engagementId, table.projectId],
+      foreignColumns: [serviceEngagement.id, serviceEngagement.projectId],
+      name: "ServiceAgreementVersion_engagement_fk",
+    }).onDelete("restrict"),
+    statusAllowed: check(
+      "ServiceAgreementVersion_status_check",
+      sql`${table.status} in ('draft', 'issued', 'superseded')`
+    ),
+    versionPositive: check(
+      "ServiceAgreementVersion_version_check",
+      sql`${table.versionNumber} > 0`
+    ),
+    hashShape: check(
+      "ServiceAgreementVersion_hash_check",
+      sql`${table.termsSha256} ~ '^[0-9a-f]{64}$' and ${table.customerNoticeSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    termsBounded: check(
+      "ServiceAgreementVersion_terms_check",
+      sql`length(trim(${table.termsSchemaVersion})) between 1 and 64 and octet_length(${table.termsPayload}) between 2 and 65536`
+    ),
+    scopeAllowed: check(
+      "ServiceAgreementVersion_scope_check",
+      // Same empty-array correction as `ServiceEngagement_scope_check`.
+      sql`${table.scopeCodes} is not null and cardinality(${table.scopeCodes}) between 1 and 2 and ${table.scopeCodes} <@ array['school_admissions', 'student_500_visa']::text[]`
+    ),
+    noticeShape: check(
+      "ServiceAgreementVersion_notice_check",
+      sql`length(trim(${table.customerNoticeVersion})) between 1 and 128`
+    ),
+    authorityShape: check(
+      "ServiceAgreementVersion_authority_check",
+      sql`length(trim(${table.authorityCode})) between 1 and 64`
+    ),
+    lifecycleConsistent: check(
+      "ServiceAgreementVersion_lifecycle_check",
+      sql`(
+        (${table.status} = 'draft' and ${table.issuedAt} is null and ${table.issuedProjectRevision} is null and ${table.issuedOperationRecordId} is null and ${table.supersededAt} is null and ${table.supersededByAgreementVersionId} is null and ${table.supersededOperationRecordId} is null)
+        or (${table.status} = 'issued' and ${table.issuedAt} is not null and ${table.issuedProjectRevision} is not null and ${table.issuedOperationRecordId} is not null and ${table.supersededAt} is null and ${table.supersededByAgreementVersionId} is null and ${table.supersededOperationRecordId} is null)
+        or (${table.status} = 'superseded' and ${table.issuedAt} is not null and ${table.issuedProjectRevision} is not null and ${table.issuedOperationRecordId} is not null and ${table.supersededAt} is not null and ${table.supersededByAgreementVersionId} is not null and ${table.supersededOperationRecordId} is not null)
+      )`
+    ),
+  })
+);
+
+export const serviceAgreementAcceptance = pgTable(
+  "ServiceAgreementAcceptance",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    engagementId: uuid("engagementId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    agreementVersionId: uuid("agreementVersionId").notNull(),
+    termsSha256: varchar("termsSha256", { length: 64 }).notNull(),
+    acceptedByUserId: uuid("acceptedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    customerNoticeVersion: varchar("customerNoticeVersion", {
+      length: 128,
+    }).notNull(),
+    customerNoticeSha256: varchar("customerNoticeSha256", {
+      length: 64,
+    }).notNull(),
+    acceptedProjectRevision: integer("acceptedProjectRevision").notNull(),
+    acceptedAt: timestamp("acceptedAt").notNull(),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+  },
+  (table) => ({
+    versionUnique: uniqueIndex("ServiceAgreementAcceptance_version_unique").on(
+      table.agreementVersionId
+    ),
+    operationUnique: uniqueIndex(
+      "ServiceAgreementAcceptance_operation_unique"
+    ).on(table.operationRecordId),
+    versionHashForeignKey: foreignKey({
+      columns: [
+        table.agreementVersionId,
+        table.engagementId,
+        table.termsSha256,
+      ],
+      foreignColumns: [
+        serviceAgreementVersion.id,
+        serviceAgreementVersion.engagementId,
+        serviceAgreementVersion.termsSha256,
+      ],
+      name: "ServiceAgreementAcceptance_version_hash_fk",
+    }).onDelete("restrict"),
+    engagementForeignKey: foreignKey({
+      columns: [table.engagementId, table.projectId],
+      foreignColumns: [serviceEngagement.id, serviceEngagement.projectId],
+      name: "ServiceAgreementAcceptance_engagement_fk",
+    }).onDelete("restrict"),
+    hashShape: check(
+      "ServiceAgreementAcceptance_hash_check",
+      sql`${table.termsSha256} ~ '^[0-9a-f]{64}$' and ${table.customerNoticeSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    noticeShape: check(
+      "ServiceAgreementAcceptance_notice_check",
+      sql`length(trim(${table.customerNoticeVersion})) between 1 and 128`
+    ),
+    revisionPositive: check(
+      "ServiceAgreementAcceptance_revision_check",
+      sql`${table.acceptedProjectRevision} > 0`
+    ),
+  })
+);
+
+export const serviceSignatureEvidence = pgTable(
+  "ServiceSignatureEvidence",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    engagementId: uuid("engagementId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    agreementVersionId: uuid("agreementVersionId").notNull(),
+    termsSha256: varchar("termsSha256", { length: 64 }).notNull(),
+    signerUserId: uuid("signerUserId").notNull(),
+    signerRole: varchar("signerRole", { length: 32 })
+      .notNull()
+      .default("customer_owner"),
+    evidenceRef: varchar("evidenceRef", { length: 256 }).notNull(),
+    evidenceSha256: varchar("evidenceSha256", { length: 64 }).notNull(),
+    signaturePayloadSha256: varchar("signaturePayloadSha256", {
+      length: 64,
+    }).notNull(),
+    declaredSignedAt: timestamp("declaredSignedAt").notNull(),
+    verificationStatus: varchar("verificationStatus", { length: 16 })
+      .notNull()
+      .default("pending"),
+    verificationMethod: varchar("verificationMethod", { length: 64 })
+      .notNull()
+      .default("unverified"),
+    verificationProviderCode: varchar("verificationProviderCode", {
+      length: 64,
+    }),
+    verificationProvenance: varchar("verificationProvenance", { length: 256 }),
+    submittedByUserId: uuid("submittedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    submittedAt: timestamp("submittedAt").notNull(),
+    submittedProjectRevision: integer("submittedProjectRevision").notNull(),
+    submittedOperationRecordId: uuid("submittedOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    verifiedAt: timestamp("verifiedAt"),
+    verificationProjectRevision: integer("verificationProjectRevision"),
+    verificationOperationRecordId: uuid(
+      "verificationOperationRecordId"
+    ).references(() => projectOperation.id, { onDelete: "restrict" }),
+    rejectionReasonCode: varchar("rejectionReasonCode", { length: 64 }),
+  },
+  (table) => ({
+    evidenceUnique: uniqueIndex("ServiceSignatureEvidence_evidence_unique").on(
+      table.agreementVersionId,
+      table.signerUserId,
+      table.evidenceSha256
+    ),
+    verifiedVersionUnique: uniqueIndex(
+      "ServiceSignatureEvidence_verified_version_unique"
+    )
+      .on(table.agreementVersionId)
+      .where(sql`${table.verificationStatus} = 'verified'`),
+    submittedOperationUnique: uniqueIndex(
+      "ServiceSignatureEvidence_submitted_operation_unique"
+    ).on(table.submittedOperationRecordId),
+    verificationOperationUnique: uniqueIndex(
+      "ServiceSignatureEvidence_verification_operation_unique"
+    ).on(table.verificationOperationRecordId),
+    engagementStatusIndex: index(
+      "ServiceSignatureEvidence_engagement_status_idx"
+    ).on(table.engagementId, table.verificationStatus, table.id),
+    versionHashForeignKey: foreignKey({
+      columns: [
+        table.agreementVersionId,
+        table.engagementId,
+        table.termsSha256,
+      ],
+      foreignColumns: [
+        serviceAgreementVersion.id,
+        serviceAgreementVersion.engagementId,
+        serviceAgreementVersion.termsSha256,
+      ],
+      name: "ServiceSignatureEvidence_version_hash_fk",
+    }).onDelete("restrict"),
+    engagementOwnerForeignKey: foreignKey({
+      columns: [table.engagementId, table.projectId, table.signerUserId],
+      foreignColumns: [
+        serviceEngagement.id,
+        serviceEngagement.projectId,
+        serviceEngagement.customerOwnerUserId,
+      ],
+      name: "ServiceSignatureEvidence_engagement_owner_fk",
+    }).onDelete("restrict"),
+    statusAllowed: check(
+      "ServiceSignatureEvidence_status_check",
+      sql`${table.verificationStatus} in ('pending', 'verified', 'rejected')`
+    ),
+    signerRoleAllowed: check(
+      "ServiceSignatureEvidence_signer_role_check",
+      sql`${table.signerRole} = 'customer_owner'`
+    ),
+    hashShape: check(
+      "ServiceSignatureEvidence_hash_check",
+      sql`${table.termsSha256} ~ '^[0-9a-f]{64}$' and ${table.evidenceSha256} ~ '^[0-9a-f]{64}$' and ${table.signaturePayloadSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    evidenceRefShape: check(
+      "ServiceSignatureEvidence_evidence_ref_check",
+      sql`length(trim(${table.evidenceRef})) between 1 and 256 and ${table.evidenceRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'`
+    ),
+    verificationMethodShape: check(
+      "ServiceSignatureEvidence_method_check",
+      sql`length(trim(${table.verificationMethod})) between 1 and 64`
+    ),
+    lifecycleConsistent: check(
+      "ServiceSignatureEvidence_lifecycle_check",
+      sql`(
+        (${table.verificationStatus} = 'pending' and ${table.verificationMethod} = 'unverified' and ${table.verificationProviderCode} is null and ${table.verificationProvenance} is null and ${table.verifiedAt} is null and ${table.verificationProjectRevision} is null and ${table.verificationOperationRecordId} is null and ${table.rejectionReasonCode} is null)
+        or (${table.verificationStatus} in ('verified', 'rejected') and ${table.verificationMethod} <> 'unverified' and ${table.verificationProviderCode} is not null and ${table.verificationProvenance} is not null and ${table.verifiedAt} is not null and ${table.verificationProjectRevision} is not null and ${table.verificationOperationRecordId} is not null and ((${table.verificationStatus} = 'verified' and ${table.rejectionReasonCode} is null) or (${table.verificationStatus} = 'rejected' and ${table.rejectionReasonCode} is not null)))
+      )`
+    ),
+    revisionPositive: check(
+      "ServiceSignatureEvidence_revision_check",
+      sql`${table.submittedProjectRevision} > 0 and (${table.verificationProjectRevision} is null or ${table.verificationProjectRevision} > 0)`
+    ),
+  })
+);
+
+export const projectResourceDisclosureGrant = pgTable(
+  "ProjectResourceDisclosureGrant",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    resourceOwnerUserId: uuid("resourceOwnerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    recipientAssignmentId: uuid("recipientAssignmentId").notNull(),
+    recipientUserId: uuid("recipientUserId").notNull(),
+    resourceCategory: varchar("resourceCategory", { length: 32 }).notNull(),
+    resourceId: uuid("resourceId").notNull(),
+    resourceVersion: integer("resourceVersion").notNull(),
+    /**
+     * Opaque adapter fingerprint of the exact bytes/metadata observed when the
+     * grant was created (R1-05). A disclosure is valid only while the adapter
+     * still observes the same fingerprint for the same version.
+     */
+    resourceFingerprint: varchar("resourceFingerprint", {
+      length: 128,
+    }).notNull(),
+    purposeCode: varchar("purposeCode", { length: 64 }).notNull(),
+    noticeVersion: varchar("noticeVersion", { length: 128 }).notNull(),
+    noticeSha256: varchar("noticeSha256", { length: 64 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("granted"),
+    grantedByUserId: uuid("grantedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    grantedAt: timestamp("grantedAt").notNull(),
+    grantedProjectRevision: integer("grantedProjectRevision").notNull(),
+    createdOperationRecordId: uuid("createdOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    expiresAt: timestamp("expiresAt"),
+    revokedByUserId: uuid("revokedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    revokedAt: timestamp("revokedAt"),
+    revokedProjectRevision: integer("revokedProjectRevision"),
+    revokedOperationRecordId: uuid("revokedOperationRecordId").references(
+      () => projectOperation.id,
+      { onDelete: "restrict" }
+    ),
+    revocationReasonCode: varchar("revocationReasonCode", { length: 32 }),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ProjectResourceDisclosureGrant_id_project_unique"
+    ).on(table.id, table.projectId),
+    liveUnique: uniqueIndex("ProjectResourceDisclosureGrant_live_unique")
+      .on(
+        table.projectId,
+        table.resourceCategory,
+        table.resourceId,
+        table.resourceVersion,
+        table.recipientAssignmentId,
+        table.purposeCode
+      )
+      .where(sql`${table.status} = 'granted'`),
+    createdOperationUnique: uniqueIndex(
+      "ProjectResourceDisclosureGrant_created_operation_unique"
+    ).on(table.createdOperationRecordId),
+    revokedOperationUnique: uniqueIndex(
+      "ProjectResourceDisclosureGrant_revoked_operation_unique"
+    ).on(table.revokedOperationRecordId),
+    recipientStatusIndex: index(
+      "ProjectResourceDisclosureGrant_recipient_status_idx"
+    ).on(table.projectId, table.recipientUserId, table.status, table.id),
+    ownerStatusIndex: index(
+      "ProjectResourceDisclosureGrant_owner_status_idx"
+    ).on(table.projectId, table.resourceOwnerUserId, table.status, table.id),
+    assignmentForeignKey: foreignKey({
+      columns: [
+        table.recipientAssignmentId,
+        table.projectId,
+        table.recipientUserId,
+      ],
+      foreignColumns: [
+        projectStaffAssignment.id,
+        projectStaffAssignment.projectId,
+        projectStaffAssignment.staffUserId,
+      ],
+      name: "ProjectResourceDisclosureGrant_assignment_fk",
+    }).onDelete("restrict"),
+    categoryAllowed: check(
+      "ProjectResourceDisclosureGrant_category_check",
+      sql`${table.resourceCategory} in ('project_fact', 'project_document', 'private_chat', 'financial_record', 'engagement_record')`
+    ),
+    purposeAllowed: check(
+      "ProjectResourceDisclosureGrant_purpose_check",
+      sql`${table.purposeCode} in ('professional_review', 'service_delivery')`
+    ),
+    statusAllowed: check(
+      "ProjectResourceDisclosureGrant_status_check",
+      sql`${table.status} in ('granted', 'revoked', 'expired')`
+    ),
+    hashShape: check(
+      "ProjectResourceDisclosureGrant_hash_check",
+      sql`${table.noticeSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    noticeShape: check(
+      "ProjectResourceDisclosureGrant_notice_check",
+      sql`length(trim(${table.noticeVersion})) between 1 and 128`
+    ),
+    versionPositive: check(
+      "ProjectResourceDisclosureGrant_version_check",
+      sql`${table.resourceVersion} > 0 and ${table.grantedProjectRevision} > 0 and (${table.revokedProjectRevision} is null or ${table.revokedProjectRevision} > ${table.grantedProjectRevision})`
+    ),
+    resourceFingerprintShape: check(
+      "ProjectResourceDisclosureGrant_fingerprint_check",
+      sql`${table.resourceFingerprint} ~ '^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$'`
+    ),
+    ownerGrantedByCheck: check(
+      "ProjectResourceDisclosureGrant_owner_granted_by_check",
+      sql`${table.grantedByUserId} = ${table.resourceOwnerUserId}`
+    ),
+    lifecycleConsistent: check(
+      "ProjectResourceDisclosureGrant_lifecycle_check",
+      sql`(
+        (${table.status} = 'granted' and ${table.revokedByUserId} is null and ${table.revokedAt} is null and ${table.revokedProjectRevision} is null and ${table.revokedOperationRecordId} is null and ${table.revocationReasonCode} is null)
+        or (${table.status} in ('revoked', 'expired') and ${table.revokedByUserId} is not null and ${table.revokedAt} is not null and ${table.revokedProjectRevision} is not null and ${table.revokedOperationRecordId} is not null and ${table.revocationReasonCode} in ('owner_revoked', 'owner_expired'))
+      )`
+    ),
+  })
+);
+
+export type ServiceAgreementVersionRow = InferSelectModel<
+  typeof serviceAgreementVersion
+>;
+export type ServiceAgreementAcceptanceRow = InferSelectModel<
+  typeof serviceAgreementAcceptance
+>;
+export type ServiceSignatureEvidenceRow = InferSelectModel<
+  typeof serviceSignatureEvidence
+>;
+export type ProjectResourceDisclosureGrantRow = InferSelectModel<
+  typeof projectResourceDisclosureGrant
 >;
