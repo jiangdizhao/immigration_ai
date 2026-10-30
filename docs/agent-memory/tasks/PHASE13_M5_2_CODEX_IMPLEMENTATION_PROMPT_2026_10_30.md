@@ -1,0 +1,15 @@
+# Code Model task — Phase 13 M5.2 complete School Admissions Workflow
+
+**Task type:** one cohesive, cross-layer implementation. Do NOT break it into schema/API/UI micro-milestones.
+**Repository/branch:** `~/immigration_ai` / `phase13-m5-school-admissions`.
+**Code baseline:** owner-pushed M5.1 `e0b4be5df1eccb2b131af10b3f8c55ae580c5b56` plus a later documentation-only closeout commit (verify actual current HEAD, do not hardcode equality to the old code commit).
+
+Before edits: verify branch/status/HEAD; read `AGENTS.md`, all current shared-state docs, `docs/agent-memory/PHASE13_M5_SCHOOL_ADMISSIONS_INTEGRATED_PLAN_2026_10_30.md`, `docs/agent-memory/tasks/PHASE13_M5_1_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_30.md`, and **the entire** `docs/agent-memory/tasks/PHASE13_M5_2_COMPLETE_SCHOOL_ADMISSIONS_WORKFLOW_IMPLEMENTATION_CONTRACT_2026_10_30.md`. Read existing actual M1/M2/M3/M4/M5.1 source and adapt to source truth, not stale design text.
+
+**Implement the complete M5.2 contract in one connected delivery:** per-school AI-assisted evidence-limited preparation/drafts/checklists and source/permission-safe requirements, customer Self-Service vs actual independently gated Managed Service, conditional no-Offer/existing-Offer/new-Offer/CoE/exception routes, provenance-typed school outcomes, immutable exact-version binding/invalidation, customer-specific API, transaction+audit/idempotency and usable responsive zh-CN/en Project UI, one coherent additive **unapplied** migration if needed, plus offline regression/security/concurrency tests and a separate disposable-only DB test harness prepared but **NOT EXECUTED**.
+
+**Safety invariants:** no real school submission/receipt or synthetic-as-real Offer/CoE; unknown external provider/credential/payment/signature/customer confirmation must fail closed, never return production READY; no VIP-to-managed entitlement; no blanket staff access; no unauthorized M2/3 facts/docs sent to AI; no runtime modification that weakens M4 guards. Respect M5.1 owner privacy, package identity, source freshness and legacy features. Introduce a scoped default-OFF M5.2 feature flag. Avoid M4 deferred test repairs; their separate post-M5 E2E stage remains outstanding.
+
+Run permitted offline unit/static checks with exact PASS/FAIL/SKIP counts; compare to 44 pre-existing TypeScript diagnostics. For any Python validation use `/home/rico/anaconda3/envs/torch/bin/python`; do not create or modify environments. DO NOT apply migration, access any existing PostgreSQL DB, AWS/S3/Stripe, real customer records, school API/providers, deployment or paid model without a separate explicit gate. DO NOT commit/push/merge/rebase/force/reset or begin M5.3.
+
+Finish with a complete source patch, its SHA-256, exact change list, business-flow demonstration in synthetic fixtures, negative tests, persisted-state/authority contracts, remaining blockers and `M5_2_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`. Stop after a single integrated implementation; do not initiate recurring hotfix tasks.

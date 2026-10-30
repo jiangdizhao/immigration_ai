@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_022_M5_1_CLOSEOUT_AND_M5_2_PLAN_2026_10_30 -->
+## D-P13-022 — M5.1 engineering accepted with limits; M5.2 integrated contract prepared
+
+**Date:** 2026-10-30 (Australia/Sydney). **Verified owner-pushed M5.1 remote SHA:** `e0b4be5df1eccb2b131af10b3f8c55ae580c5b56` on `phase13-m5-school-admissions`. **Disposition:** `M5_1_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / LIVE_PRODUCTION_NO_GO`.
+
+Engineering acceptance is bounded to the independently reviewed source and owner-reported isolated PostgreSQL17.11 9/9 real-store integration runs, offline 1125/1125 and unchanged frozen guards. Accept the recorded limitations: no browser E2E, no real M2/M3/provider evidence, no standard database migration/feature activation, historical 44 TypeScript errors and truncated FK catalog name. The pushed code includes generated `tsconfig.tsbuildinfo` as minor repository-hygiene noise; no new M5.1 repair loop is authorized for this alone. [Formal closeout](./tasks/PHASE13_M5_1_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_30.md).
+
+Prepare—not yet dispatch or implement—one [cohesive M5.2 School Admissions Workflow contract](./tasks/PHASE13_M5_2_COMPLETE_SCHOOL_ADMISSIONS_WORKFLOW_IMPLEMENTATION_CONTRACT_2026_10_30.md) with the linked [Code Model prompt](./tasks/PHASE13_M5_2_CODEX_IMPLEMENTATION_PROMPT_2026_10_30.md). Maintain three total M5 development milestones and separate post-M5 E2E acceptance; M4 INT-06/07/12, DB-01/02, M4-005 payment and real external submission remain blocked/pending. No DB, production, customer-data, school provider, credential, payment/signature or API authorization is granted by this documentation.
+<!-- END D_P13_022_M5_1_CLOSEOUT_AND_M5_2_PLAN_2026_10_30 -->
+
 <!-- BEGIN D_P13_021_M5_THREE_MILESTONE_2026_10_30 -->
 ## D-P13-021 — M5 uses three cohesive development milestones; M4 deferrals stay separate
 
