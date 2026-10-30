@@ -22,6 +22,7 @@ export function PremiumAnswerModeWorkspace({
   requestedPolicySlug = null,
   initialChatId = null,
   projectWorkspaceEnabled = false,
+  schoolApplicationsEnabled = false,
 }: {
   policyReference?: PolicyWorkspaceReference | null;
   policyLaunch?: boolean;
@@ -31,6 +32,8 @@ export function PremiumAnswerModeWorkspace({
   initialChatId?: string | null;
   /** Server-derived registered-customer and Project Chat write capability. */
   projectWorkspaceEnabled?: boolean;
+  /** Phase 13 M5.1 capability; default OFF and re-checked by the API. */
+  schoolApplicationsEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const copy = getWorkspaceCopy(locale).mode;
@@ -183,6 +186,7 @@ export function PremiumAnswerModeWorkspace({
         policyReference={policyReference}
         projectWorkspaceEnabled={projectWorkspaceEnabled}
         requestedPolicySlug={requestedPolicySlug}
+        schoolApplicationsEnabled={schoolApplicationsEnabled}
         userType={hydratedAccessPolicy.userType}
       />
     </div>

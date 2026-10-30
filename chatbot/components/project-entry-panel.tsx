@@ -19,6 +19,7 @@ import {
 } from "@/lib/workspace/project-entry";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
+import { SchoolApplicationsPanel } from "./school-applications-panel";
 
 type ProjectEntryCopy = WorkspaceCopy["projectEntry"];
 
@@ -66,6 +67,8 @@ export function ProjectEntryPanel({
   clearSelectionSignal,
   navigationBusy,
   projectDocumentsEnabled = false,
+  schoolApplicationsEnabled = false,
+  schoolApplicationsCopy,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
@@ -77,6 +80,12 @@ export function ProjectEntryPanel({
   navigationBusy: boolean;
   /** This remains false until separate privacy and scan-trust approval. */
   projectDocumentsEnabled?: boolean;
+  /**
+   * Phase 13 M5.1: default OFF. The server page enables the surface only when the
+   * feature capability is on; the API re-checks it server-side anyway.
+   */
+  schoolApplicationsEnabled?: boolean;
+  schoolApplicationsCopy: WorkspaceCopy["schoolApplications"];
 }) {
   const [controller] = useState(() => createProjectEntryController({ copy }));
   const state = useSyncExternalStore(
@@ -293,6 +302,11 @@ export function ProjectEntryPanel({
             enabled={projectDocumentsEnabled}
             projectId={selectedProject.id}
             projectRevision={selectedProject.revision}
+          />
+          <SchoolApplicationsPanel
+            copy={schoolApplicationsCopy}
+            enabled={schoolApplicationsEnabled}
+            projectId={selectedProject.id}
           />
           <h4 className="pt-1 text-xs font-semibold text-slate-800">
             {copy.chatsTitle}

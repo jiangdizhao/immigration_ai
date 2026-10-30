@@ -11,6 +11,7 @@ import {
 } from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
+import { schoolApplicationsEnabled } from "@/lib/school-applications/contracts";
 import { canShowProjectWorkspace } from "@/lib/workspace/project-entry";
 
 export default async function AIWorkspacePage({
@@ -58,6 +59,13 @@ export default async function AIWorkspacePage({
     regularSession: session.user.type === "regular",
     registeredCustomer,
   });
+  /**
+   * Phase 13 M5.1 is a separate, default-OFF capability. It additionally requires
+   * the Project workspace shell, because the surface lives inside it. The API
+   * re-checks the capability and the schema on every request.
+   */
+  const schoolApplicationsAvailable =
+    projectWorkspaceEnabled && schoolApplicationsEnabled();
 
   /**
    * Phase 12 Stage 2: a policy launch either resolves the published topic or
@@ -85,6 +93,7 @@ export default async function AIWorkspacePage({
           policyReference={policyReference}
           projectWorkspaceEnabled={projectWorkspaceEnabled}
           requestedPolicySlug={requestedSlug}
+          schoolApplicationsEnabled={schoolApplicationsAvailable}
         />
       </main>
     </div>

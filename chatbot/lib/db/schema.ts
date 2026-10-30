@@ -5310,3 +5310,410 @@ export type ProfessionalReviewRequestRow = InferSelectModel<
 export type ProfessionalReviewRevisionRow = InferSelectModel<
   typeof professionalReviewRevision
 >;
+
+/**
+ * Phase 13 M5.1 — Multi-School Application foundation.
+ *
+ * Additive only. These entities are independent of the frozen M4 authority,
+ * payment, signature, credential and readiness contracts: nothing here can
+ * create a professional review, a payment condition, a submission receipt, an
+ * admission decision, an offer or a CoE.
+ *
+ * Application content is creator-private. `ownerUserId` is immutable and every
+ * read path filters on it; Project membership alone never discloses it.
+ */
+
+export const SCHOOL_APPLICATION_STATUS_VALUES = [
+  "draft",
+  "preparing",
+  "package_prepared",
+  "stale",
+  "archived",
+] as const;
+export const SCHOOL_APPLICATION_SOURCE_STATUS_VALUES = [
+  "unverified_customer_declared",
+  "unverified_catalog_match",
+  "synthetic_catalog_match",
+] as const;
+export const SCHOOL_APPLICATION_REFERENCE_KIND_VALUES = [
+  "fact",
+  "requirement",
+  "document",
+] as const;
+export const SCHOOL_APPLICATION_PACKAGE_STATUS_VALUES = [
+  "current",
+  "superseded",
+  "stale",
+] as const;
+export const SCHOOL_APPLICATION_OPERATION_TYPE_VALUES = [
+  "school_application_create",
+  "school_application_update",
+  "school_application_archive",
+  "school_application_reference_bind",
+  "school_application_reference_revoke",
+  "school_application_package_build",
+] as const;
+export const SCHOOL_APPLICATION_OPERATION_RESULT_KIND_VALUES = [
+  "school_application",
+  "school_application_reference",
+  "school_application_package",
+] as const;
+export const SCHOOL_APPLICATION_EVENT_TYPE_VALUES = [
+  "school_application_created",
+  "school_application_updated",
+  "school_application_archived",
+  "school_application_reference_bound",
+  "school_application_reference_revoked",
+  "school_application_package_built",
+  "school_application_package_invalidated",
+] as const;
+export const SCHOOL_APPLICATION_EVENT_SUBJECT_KIND_VALUES = [
+  "school_application",
+  "school_application_reference",
+  "school_application_package",
+] as const;
+
+export const schoolApplication = pgTable(
+  "SchoolApplication",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    /** Immutable creator/owner. Mutable ownership is not representable. */
+    ownerUserId: uuid("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    status: varchar("status", {
+      enum: SCHOOL_APPLICATION_STATUS_VALUES,
+    })
+      .notNull()
+      .default("draft"),
+    revision: integer("revision").notNull().default(1),
+    institutionName: varchar("institutionName", { length: 200 }).notNull(),
+    institutionId: varchar("institutionId", { length: 128 }),
+    courseTitle: varchar("courseTitle", { length: 200 }).notNull(),
+    courseId: varchar("courseId", { length: 128 }),
+    deliveryId: varchar("deliveryId", { length: 128 }),
+    intakeId: varchar("intakeId", { length: 128 }),
+    intakeLabel: varchar("intakeLabel", { length: 120 }),
+    sourceStatus: varchar("sourceStatus", {
+      enum: SCHOOL_APPLICATION_SOURCE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("unverified_customer_declared"),
+    catalogRecordClass: varchar("catalogRecordClass", {
+      enum: EDUCATION_RECORD_CLASSES,
+    }),
+    catalogSnapshotToken: varchar("catalogSnapshotToken", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    archivedAt: timestamp("archivedAt"),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex("SchoolApplication_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    projectOwnerCreatedIndex: index(
+      "SchoolApplication_project_owner_created_idx"
+    ).on(table.projectId, table.ownerUserId, table.createdAt),
+    revisionPositive: check(
+      "SchoolApplication_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    statusAllowed: check(
+      "SchoolApplication_status_check",
+      sql`${table.status} in ('draft', 'preparing', 'package_prepared', 'stale', 'archived')`
+    ),
+    sourceStatusAllowed: check(
+      "SchoolApplication_source_status_check",
+      sql`${table.sourceStatus} in ('unverified_customer_declared', 'unverified_catalog_match', 'synthetic_catalog_match')`
+    ),
+    catalogClassAllowed: check(
+      "SchoolApplication_catalog_class_check",
+      sql`${table.catalogRecordClass} is null or ${table.catalogRecordClass} in ('SYNTHETIC', 'UNVERIFIED')`
+    ),
+    sourceClassConsistent: check(
+      "SchoolApplication_source_class_consistency_check",
+      sql`(${table.sourceStatus} = 'unverified_customer_declared' and ${table.catalogRecordClass} is null and ${table.catalogSnapshotToken} is null) or (${table.sourceStatus} = 'unverified_catalog_match' and ${table.catalogRecordClass} = 'UNVERIFIED') or (${table.sourceStatus} = 'synthetic_catalog_match' and ${table.catalogRecordClass} = 'SYNTHETIC')`
+    ),
+    institutionNameBounded: check(
+      "SchoolApplication_institution_name_check",
+      sql`length(trim(${table.institutionName})) between 1 and 200`
+    ),
+    courseTitleBounded: check(
+      "SchoolApplication_course_title_check",
+      sql`length(trim(${table.courseTitle})) between 1 and 200`
+    ),
+    intakeLabelBounded: check(
+      "SchoolApplication_intake_label_check",
+      sql`${table.intakeLabel} is null or length(trim(${table.intakeLabel})) between 1 and 120`
+    ),
+    catalogIdShape: check(
+      "SchoolApplication_catalog_id_shape_check",
+      sql`(${table.institutionId} is null or ${table.institutionId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$') and (${table.courseId} is null or ${table.courseId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$') and (${table.deliveryId} is null or ${table.deliveryId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$') and (${table.intakeId} is null or ${table.intakeId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')`
+    ),
+    archiveLifecycle: check(
+      "SchoolApplication_archive_check",
+      sql`(${table.status} = 'archived' and ${table.archivedAt} is not null) or (${table.status} <> 'archived' and ${table.archivedAt} is null)`
+    ),
+    updatedAfterCreated: check(
+      "SchoolApplication_updated_at_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+  })
+);
+export type SchoolApplicationRow = InferSelectModel<typeof schoolApplication>;
+
+export const schoolApplicationPackage = pgTable(
+  "SchoolApplicationPackage",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    applicationId: uuid("applicationId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    version: integer("version").notNull(),
+    status: varchar("status", {
+      enum: SCHOOL_APPLICATION_PACKAGE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("current"),
+    schemaVersion: varchar("schemaVersion", { length: 64 }).notNull(),
+    contentSha256: varchar("contentSha256", { length: 64 }).notNull(),
+    inputsSha256: varchar("inputsSha256", { length: 64 }).notNull(),
+    targetKind: varchar("targetKind", { length: 64 }).notNull(),
+    targetId: varchar("targetId", { length: 128 }).notNull(),
+    targetVersion: integer("targetVersion").notNull(),
+    targetSha256: varchar("targetSha256", { length: 64 }).notNull(),
+    targetBindingSha256: varchar("targetBindingSha256", {
+      length: 64,
+    }).notNull(),
+    snapshot: jsonb("snapshot").$type<unknown>().notNull(),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [schoolApplication.projectId, schoolApplication.id],
+      name: "SchoolApplicationPackage_application_fk",
+    }).onDelete("restrict"),
+    applicationVersionUnique: uniqueIndex(
+      "SchoolApplicationPackage_application_version_unique"
+    ).on(table.applicationId, table.version),
+    /**
+     * Exactly one current package per application. Historical versions remain
+     * immutable rows with `superseded`/`stale` status.
+     */
+    currentApplicationUnique: uniqueIndex(
+      "SchoolApplicationPackage_current_application_unique"
+    )
+      .on(table.applicationId)
+      .where(sql`${table.status} = 'current'`),
+    applicationCreatedIndex: index(
+      "SchoolApplicationPackage_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    versionPositive: check(
+      "SchoolApplicationPackage_version_check",
+      sql`${table.version} > 0 and ${table.targetVersion} = ${table.version}`
+    ),
+    statusAllowed: check(
+      "SchoolApplicationPackage_status_check",
+      sql`${table.status} in ('current', 'superseded', 'stale')`
+    ),
+    targetKindPinned: check(
+      "SchoolApplicationPackage_target_kind_check",
+      sql`${table.targetKind} = 'managed_school_application'`
+    ),
+    targetIdentityBound: check(
+      "SchoolApplicationPackage_target_identity_check",
+      sql`${table.targetId} = ${table.applicationId}::text and ${table.targetSha256} = ${table.contentSha256}`
+    ),
+    hashShape: check(
+      "SchoolApplicationPackage_hash_check",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$' and ${table.inputsSha256} ~ '^[0-9a-f]{64}$' and ${table.targetSha256} ~ '^[0-9a-f]{64}$' and ${table.targetBindingSha256} ~ '^[0-9a-f]{64}$' and ${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    schemaVersionPinned: check(
+      "SchoolApplicationPackage_schema_version_check",
+      sql`length(trim(${table.schemaVersion})) between 1 and 64`
+    ),
+    operationIdShape: check(
+      "SchoolApplicationPackage_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    snapshotObject: check(
+      "SchoolApplicationPackage_snapshot_check",
+      sql`jsonb_typeof(${table.snapshot}) = 'object'`
+    ),
+  })
+);
+export type SchoolApplicationPackageRow = InferSelectModel<
+  typeof schoolApplicationPackage
+>;
+
+export const schoolApplicationReference = pgTable(
+  "SchoolApplicationReference",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    applicationId: uuid("applicationId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    kind: varchar("kind", {
+      enum: SCHOOL_APPLICATION_REFERENCE_KIND_VALUES,
+    }).notNull(),
+    /**
+     * M2 identity only (fact assertion, requirement state or document asset).
+     * No value, body, excerpt or document bytes are ever stored here.
+     */
+    referenceId: uuid("referenceId").notNull(),
+    referenceVersion: integer("referenceVersion").notNull(),
+    referenceSha256: varchar("referenceSha256", { length: 64 }).notNull(),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [schoolApplication.projectId, schoolApplication.id],
+      name: "SchoolApplicationReference_application_fk",
+    }).onDelete("restrict"),
+    /** One active binding per M2 identity; revoked rows are retained as history. */
+    activeReferenceUnique: uniqueIndex(
+      "SchoolApplicationReference_active_unique"
+    )
+      .on(table.applicationId, table.kind, table.referenceId)
+      .where(sql`${table.revokedAt} is null`),
+    applicationIndex: index("SchoolApplicationReference_application_idx").on(
+      table.applicationId,
+      table.createdAt
+    ),
+    kindAllowed: check(
+      "SchoolApplicationReference_kind_check",
+      sql`${table.kind} in ('fact', 'requirement', 'document')`
+    ),
+    referenceVersionPositive: check(
+      "SchoolApplicationReference_reference_version_check",
+      sql`${table.referenceVersion} > 0`
+    ),
+    referenceHashShape: check(
+      "SchoolApplicationReference_reference_hash_check",
+      sql`${table.referenceSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type SchoolApplicationReferenceRow = InferSelectModel<
+  typeof schoolApplicationReference
+>;
+
+export const schoolApplicationOperation = pgTable(
+  "SchoolApplicationOperation",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    operationType: varchar("operationType", {
+      enum: SCHOOL_APPLICATION_OPERATION_TYPE_VALUES,
+    }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    resultKind: varchar("resultKind", {
+      enum: SCHOOL_APPLICATION_OPERATION_RESULT_KIND_VALUES,
+    }).notNull(),
+    resultId: uuid("resultId").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    actorOperationUnique: uniqueIndex(
+      "SchoolApplicationOperation_actor_operation_unique"
+    ).on(table.actorUserId, table.operationId),
+    actorCreatedIndex: index("SchoolApplicationOperation_actor_created_idx").on(
+      table.actorUserId,
+      table.createdAt
+    ),
+    operationIdShape: check(
+      "SchoolApplicationOperation_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolApplicationOperation_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    operationTypeAllowed: check(
+      "SchoolApplicationOperation_type_check",
+      sql`${table.operationType} in ('school_application_create', 'school_application_update', 'school_application_archive', 'school_application_reference_bind', 'school_application_reference_revoke', 'school_application_package_build')`
+    ),
+    resultKindAllowed: check(
+      "SchoolApplicationOperation_result_kind_check",
+      sql`${table.resultKind} in ('school_application', 'school_application_reference', 'school_application_package')`
+    ),
+  })
+);
+export type SchoolApplicationOperationRow = InferSelectModel<
+  typeof schoolApplicationOperation
+>;
+
+export const schoolApplicationEvent = pgTable(
+  "SchoolApplicationEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    applicationId: uuid("applicationId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    eventType: varchar("eventType", {
+      enum: SCHOOL_APPLICATION_EVENT_TYPE_VALUES,
+    }).notNull(),
+    subjectKind: varchar("subjectKind", {
+      enum: SCHOOL_APPLICATION_EVENT_SUBJECT_KIND_VALUES,
+    }).notNull(),
+    subjectId: uuid("subjectId").notNull(),
+    applicationRevision: integer("applicationRevision").notNull(),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => schoolApplicationOperation.id, {
+        onDelete: "restrict",
+      }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [schoolApplication.projectId, schoolApplication.id],
+      name: "SchoolApplicationEvent_application_fk",
+    }).onDelete("restrict"),
+    /** A revision records at most one event of each type (update + invalidation). */
+    revisionEventUnique: uniqueIndex(
+      "SchoolApplicationEvent_revision_event_unique"
+    ).on(table.applicationId, table.applicationRevision, table.eventType),
+    applicationCreatedIndex: index(
+      "SchoolApplicationEvent_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    revisionPositive: check(
+      "SchoolApplicationEvent_revision_check",
+      sql`${table.applicationRevision} > 0`
+    ),
+    eventTypeAllowed: check(
+      "SchoolApplicationEvent_event_type_check",
+      sql`${table.eventType} in ('school_application_created', 'school_application_updated', 'school_application_archived', 'school_application_reference_bound', 'school_application_reference_revoked', 'school_application_package_built', 'school_application_package_invalidated')`
+    ),
+    subjectKindAllowed: check(
+      "SchoolApplicationEvent_subject_kind_check",
+      sql`${table.subjectKind} in ('school_application', 'school_application_reference', 'school_application_package')`
+    ),
+    subjectShape: check(
+      "SchoolApplicationEvent_subject_shape_check",
+      sql`(${table.eventType} in ('school_application_created', 'school_application_updated', 'school_application_archived') and ${table.subjectKind} = 'school_application' and ${table.subjectId} = ${table.applicationId}) or (${table.eventType} in ('school_application_reference_bound', 'school_application_reference_revoked') and ${table.subjectKind} = 'school_application_reference') or (${table.eventType} in ('school_application_package_built', 'school_application_package_invalidated') and ${table.subjectKind} = 'school_application_package')`
+    ),
+  })
+);
+export type SchoolApplicationEventRow = InferSelectModel<
+  typeof schoolApplicationEvent
+>;

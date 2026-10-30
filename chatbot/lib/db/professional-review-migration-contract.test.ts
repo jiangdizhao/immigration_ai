@@ -42,11 +42,13 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     /\.sql$/u.test(file)
   );
   assert.equal(files.filter((file) => /^0045_/u.test(file)).length, 1);
-  assert.equal(
+  // Phase 13 M5.1 added exactly one further additive migration. Nothing after it
+  // may exist, and 0044/0045 remain byte-for-byte frozen above.
+  assert.deepEqual(
     files.filter((file) =>
       /^(00(4[6-9]|[5-9][0-9])|0[1-9][0-9]{2})_/u.test(file)
-    ).length,
-    0
+    ),
+    ["0046_phase13_m5_1_school_applications.sql"]
   );
 });
 
@@ -54,13 +56,20 @@ test("journal and snapshot agree with the migration file", () => {
   const journal = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/_journal.json"), "utf8")
   ) as { entries: Array<{ idx: number; tag: string; when: number }> };
-  assert.equal(journal.entries.length, 46);
-  const last = journal.entries.at(-1);
+  assert.equal(journal.entries.length, 47);
+  // The M4-006 entry remains exactly as recorded; the additive M5.1 migration is
+  // the new head and does not alter it.
+  const last = journal.entries.at(-2);
   assert.equal(last?.idx, 45);
   assert.equal(last?.tag, "0045_phase13_m4_006_professional_review");
   assert.ok(
     (last?.when ?? 0) > 1_793_258_050_571,
     "journal timestamp must advance"
+  );
+  assert.equal(journal.entries.at(-1)?.idx, 46);
+  assert.equal(
+    journal.entries.at(-1)?.tag,
+    "0046_phase13_m5_1_school_applications"
   );
   const snapshot = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/0045_snapshot.json"), "utf8")

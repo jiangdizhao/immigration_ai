@@ -543,6 +543,7 @@ export function ImmigrationAIWorkspace({
   initialChatId = null,
   userType = "regular",
   projectWorkspaceEnabled = false,
+  schoolApplicationsEnabled = false,
 }: {
   assistantMode?: AssistantMode;
   policyReference?: PolicyWorkspaceReference | null;
@@ -558,6 +559,8 @@ export function ImmigrationAIWorkspace({
   userType?: "guest" | "regular";
   /** Project UI writes are exposed only when authorized by the server page. */
   projectWorkspaceEnabled?: boolean;
+  /** Phase 13 M5.1 school applications are default OFF and server-gated. */
+  schoolApplicationsEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
@@ -1937,6 +1940,8 @@ export function ImmigrationAIWorkspace({
               navigationBusy={projectNavigationBusy}
               onOpenProjectChat={loadConversation}
               onSelectedProjectChange={handleSelectedProjectChange}
+              schoolApplicationsCopy={copy.schoolApplications}
+              schoolApplicationsEnabled={schoolApplicationsEnabled}
             />
           ) : null}
 

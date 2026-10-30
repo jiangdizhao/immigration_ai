@@ -124,6 +124,92 @@ export type WorkspaceCopy = {
       securityFailed: string;
     };
   };
+  /**
+   * Phase 13 M5.1 School Application surface inside a Project workspace.
+   * Every status below is a preparation status: none of them is an admission
+   * decision, an offer, a CoE, a payment confirmation, a lawyer approval or a
+   * submitted application.
+   */
+  schoolApplications: {
+    title: string;
+    subtitle: string;
+    notice: string;
+    loading: string;
+    empty: string;
+    create: string;
+    createTitle: string;
+    createDescription: string;
+    cancel: string;
+    confirm: string;
+    creating: string;
+    institutionLabel: string;
+    institutionIdLabel: string;
+    courseLabel: string;
+    courseIdLabel: string;
+    deliveryIdLabel: string;
+    intakeLabel: string;
+    intakeIdLabel: string;
+    optionalHint: string;
+    statusDraft: string;
+    statusPreparing: string;
+    statusPackagePrepared: string;
+    statusStale: string;
+    statusArchived: string;
+    sourceHeading: string;
+    sourceUnverifiedCustomer: string;
+    sourceUnverifiedCatalog: string;
+    sourceSyntheticCatalog: string;
+    revisionLabel: (revision: number) => string;
+    packageHeading: string;
+    packageVersion: (version: number) => string;
+    noPackage: string;
+    packageStaleNotice: string;
+    /** Shown when the application is archived: no rebuild is possible. */
+    packageArchivedNotice: string;
+    /** Shown only when the server reports the package as currently usable. */
+    packageUsable: string;
+    packageHash: (hash: string) => string;
+    packageIntegrityOk: string;
+    packageIntegrityFailed: string;
+    buildPackage: string;
+    buildingPackage: string;
+    archive: string;
+    archiving: string;
+    edit: string;
+    save: string;
+    saving: string;
+    detailTitle: string;
+    selectPrompt: string;
+    referencesHeading: string;
+    referencesEmpty: string;
+    referenceKindLabel: string;
+    referenceKindFact: string;
+    referenceKindRequirement: string;
+    referenceKindDocument: string;
+    referenceIdLabel: string;
+    bindReference: string;
+    bindingReference: string;
+    revokeReference: string;
+    revokingReference: string;
+    referenceUnavailable: string;
+    referenceChanged: string;
+    referenceRevoked: string;
+    missingDataHeading: string;
+    missingIntake: string;
+    missingVerification: string;
+    missingReferences: string;
+    threeSchoolHint: string;
+    archivedNotice: string;
+    loadFailed: string;
+    saveFailed: string;
+    stateChanged: string;
+    unavailable: string;
+    authenticationRequired: string;
+    limitReached: string;
+    validationFailed: string;
+    notFound: string;
+    retry: string;
+  };
   persistence: {
     notSaved: string;
     retrySave: string;
@@ -424,6 +510,91 @@ const zh: WorkspaceCopy = {
       securityPending: "安全状态：等待扫描",
       securityFailed: "安全状态：扫描失败",
     },
+  },
+  schoolApplications: {
+    title: "我的学校申请",
+    subtitle:
+      "每个学校申请都是独立记录：同一项目下可同时管理多所学校、课程与入学时间。",
+    notice:
+      "这里只保存您的准备资料，不会向任何学校提交申请；不代表录取结果、Offer、CoE、付款确认或律师专业审核。",
+    loading: "正在加载学校申请…",
+    empty: "此项目还没有学校申请。您可以先添加第一所学校。",
+    create: "添加学校申请",
+    createTitle: "新增学校申请",
+    createDescription:
+      "请填写学校与课程资料。未获得可信目录确认的信息会明确标注为“未核实”，不会被视为官方信息。",
+    cancel: "取消",
+    confirm: "保存学校申请",
+    creating: "正在保存…",
+    institutionLabel: "学校名称",
+    institutionIdLabel: "目录学校编号（可选）",
+    courseLabel: "课程名称",
+    courseIdLabel: "目录课程编号（可选）",
+    deliveryIdLabel: "授课地点编号（可选）",
+    intakeLabel: "入学时间（可选）",
+    intakeIdLabel: "目录入学批次编号（可选）",
+    optionalHint: "留空即表示由您自行填写，未经核实。",
+    statusDraft: "草稿",
+    statusPreparing: "准备中",
+    statusPackagePrepared: "准备包已生成",
+    statusStale: "资料已变更，准备包已失效",
+    statusArchived: "已归档",
+    sourceHeading: "资料来源",
+    sourceUnverifiedCustomer: "您自行填写，未核实；不是学校官方信息。",
+    sourceUnverifiedCatalog:
+      "来自教育目录（未核实类记录），不代表学校官方确认。",
+    sourceSyntheticCatalog: "来自合成测试目录，仅用于演示，不是真实学校信息。",
+    revisionLabel: (revision) => `版本 ${revision}`,
+    packageHeading: "准备包版本",
+    packageVersion: (version) => `第 ${version} 版`,
+    noPackage: "尚未生成准备包。",
+    packageStaleNotice:
+      "资料或引用已变更，当前准备包已失效；请重新生成以取得新的版本与哈希。",
+    packageArchivedNotice:
+      "该申请已归档，历史准备包仅作记录保留，不能用于当前准备或后续提交。",
+    packageUsable: "当前准备包可用（资料与引用均已核对）。",
+    packageHash: (hash) => `内容哈希 ${hash.slice(0, 16)}…`,
+    packageIntegrityOk: "哈希校验通过",
+    packageIntegrityFailed: "哈希校验失败，请勿使用此准备包",
+    buildPackage: "生成准备包",
+    buildingPackage: "正在生成…",
+    archive: "归档",
+    archiving: "正在归档…",
+    edit: "修改资料",
+    save: "保存修改",
+    saving: "正在保存…",
+    detailTitle: "申请详情",
+    selectPrompt: "选择左侧的学校申请查看详情。",
+    referencesHeading: "引用的项目资料",
+    referencesEmpty: "尚未引用任何项目资料。",
+    referenceKindLabel: "资料类型",
+    referenceKindFact: "事实",
+    referenceKindRequirement: "材料要求",
+    referenceKindDocument: "文件",
+    referenceIdLabel: "资料编号",
+    bindReference: "引用此资料",
+    bindingReference: "正在引用…",
+    revokeReference: "取消引用",
+    revokingReference: "正在取消…",
+    referenceUnavailable: "您已无权访问此资料，准备包已标记为失效。",
+    referenceChanged: "引用资料的版本已变更，准备包需要重新生成。",
+    referenceRevoked: "已取消引用",
+    missingDataHeading: "仍缺少的资料",
+    missingIntake: "尚未选择入学时间",
+    missingVerification: "学校/课程信息未核实",
+    missingReferences: "尚未引用任何项目资料",
+    threeSchoolHint:
+      "可同时管理多所学校申请；每所学校的版本与失效状态互相独立。",
+    archivedNotice: "此申请已归档，不能继续修改。",
+    loadFailed: "无法加载学校申请，请重试。",
+    saveFailed: "保存失败，请重试。",
+    stateChanged: "资料已在他处更新，请刷新后重试。",
+    unavailable: "学校申请功能暂时不可用。",
+    authenticationRequired: "登录状态已失效，请重新登录。",
+    limitReached: "此项目的学校申请数量已达上限。",
+    validationFailed: "请检查填写内容后重试。",
+    notFound: "找不到此学校申请。",
+    retry: "重试",
   },
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
@@ -764,6 +935,99 @@ const en: WorkspaceCopy = {
       securityPending: "Security: scan pending",
       securityFailed: "Security: scan failed",
     },
+  },
+  schoolApplications: {
+    title: "My school applications",
+    subtitle:
+      "Each school application is a separate record: manage several schools, courses and intakes inside one Project.",
+    notice:
+      "This only stores your preparation data. Nothing is submitted to any school and it is not an admission outcome, an Offer, a CoE, a payment confirmation or a lawyer approval.",
+    loading: "Loading school applications…",
+    empty:
+      "This Project has no school applications yet. Add your first school.",
+    create: "Add school application",
+    createTitle: "New school application",
+    createDescription:
+      "Enter the school and course details. Details that are not confirmed by a trusted catalog are shown as unverified and are never treated as official.",
+    cancel: "Cancel",
+    confirm: "Save application",
+    creating: "Saving…",
+    institutionLabel: "Institution name",
+    institutionIdLabel: "Catalog institution ID (optional)",
+    courseLabel: "Course title",
+    courseIdLabel: "Catalog course ID (optional)",
+    deliveryIdLabel: "Campus/delivery ID (optional)",
+    intakeLabel: "Intake (optional)",
+    intakeIdLabel: "Catalog intake ID (optional)",
+    optionalHint:
+      "Leave the catalog IDs empty to record your own unverified details.",
+    statusDraft: "Draft",
+    statusPreparing: "Preparing",
+    statusPackagePrepared: "Package prepared",
+    statusStale: "Changed — package invalidated",
+    statusArchived: "Archived",
+    sourceHeading: "Source of information",
+    sourceUnverifiedCustomer:
+      "Entered by you and unverified; not official school information.",
+    sourceUnverifiedCatalog:
+      "From the education catalog (unverified record class); not confirmed by the school.",
+    sourceSyntheticCatalog:
+      "From the synthetic test catalog; demonstration data only, not a real school.",
+    revisionLabel: (revision) => `Version ${revision}`,
+    packageHeading: "Preparation package",
+    packageVersion: (version) => `Version ${version}`,
+    noPackage: "No preparation package yet.",
+    packageStaleNotice:
+      "Material data or a reference changed, so the current package is invalidated. Rebuild it to obtain a new version and hash.",
+    packageArchivedNotice:
+      "This application is archived. Its historical packages are retained as records only and cannot be used for current preparation or a future submission.",
+    packageUsable:
+      "The current package is usable: its material data and references were re-checked.",
+    packageHash: (hash) => `Content hash ${hash.slice(0, 16)}…`,
+    packageIntegrityOk: "Hash verified",
+    packageIntegrityFailed: "Hash mismatch — do not use this package",
+    buildPackage: "Build package",
+    buildingPackage: "Building…",
+    archive: "Archive",
+    archiving: "Archiving…",
+    edit: "Edit details",
+    save: "Save changes",
+    saving: "Saving…",
+    detailTitle: "Application detail",
+    selectPrompt: "Select a school application to see its detail.",
+    referencesHeading: "Referenced Project data",
+    referencesEmpty: "No Project data is referenced yet.",
+    referenceKindLabel: "Reference type",
+    referenceKindFact: "Fact",
+    referenceKindRequirement: "Requirement",
+    referenceKindDocument: "Document",
+    referenceIdLabel: "Reference ID",
+    bindReference: "Reference this item",
+    bindingReference: "Referencing…",
+    revokeReference: "Remove reference",
+    revokingReference: "Removing…",
+    referenceUnavailable:
+      "You no longer have access to this item, so the package is marked stale.",
+    referenceChanged:
+      "The referenced item changed version. Rebuild the package to refresh it.",
+    referenceRevoked: "Reference removed",
+    missingDataHeading: "Still missing",
+    missingIntake: "No intake selected",
+    missingVerification: "Institution/course is unverified",
+    missingReferences: "No Project data referenced",
+    threeSchoolHint:
+      "You can manage several school applications at once; each keeps its own version and stale state.",
+    archivedNotice: "This application is archived and cannot be edited.",
+    loadFailed: "Could not load school applications. Please retry.",
+    saveFailed: "Could not save. Please retry.",
+    stateChanged: "This record changed elsewhere. Refresh and try again.",
+    unavailable: "School applications are temporarily unavailable.",
+    authenticationRequired: "Your session expired. Please sign in again.",
+    limitReached:
+      "This Project already has the maximum number of school applications.",
+    validationFailed: "Please check the fields and try again.",
+    notFound: "That school application was not found.",
+    retry: "Retry",
   },
   persistence: {
     notSaved:
