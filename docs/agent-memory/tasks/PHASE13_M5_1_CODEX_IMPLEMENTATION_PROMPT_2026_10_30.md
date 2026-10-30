@@ -1,0 +1,11 @@
+# Codex dispatch prompt — Phase 13 M5.1
+
+Task: Implement M5.1 Multi-School Application Foundation as ONE cohesive cross-layer task. This is not a design-only audit and must not be split into schema/API/UI micro-milestones. Work on phase13-m5-school-admissions only.
+
+First read AGENTS.md; docs/agent-memory/PHASE13_M5_SCHOOL_ADMISSIONS_INTEGRATED_PLAN_2026_10_30.md; docs/agent-memory/tasks/PHASE13_M5_1_MULTI_SCHOOL_FOUNDATION_IMPLEMENTATION_CONTRACT_2026_10_30.md; current shared-state docs; M4 baseline owner deferral and final closeout; then inspect actual M1/M2/M3/M4 source. Confirm current branch, HEAD and git status before edits.
+
+Deliver the COMPLETE M5.1 contract in one integrated implementation: additive School Application persistence with necessary unapplied migration; exact application/Project/customer ownership and safe authorization; idempotent CAS operations; school/course/intake provenance; permission-safe links to M2 Facts/Documents/Requirements and M3 Education Intelligence; immutable per-school package snapshots/version/hash and invalidation; server routes and an actually usable bilingual Project UI for at least three concurrent applications; default-OFF scoped feature gating; negative/security/concurrency/regression tests.
+
+Enforce fail-closed boundaries. Do not infer professional authority from lawyer role, VIP, membership or chat participation. Do not modify M4-deny-only adapters or manufacture real school facts, admissions decisions, external submission receipts, lawyer approval or READY. Do not apply any migrations or contact normal/production/staging databases, AWS, Stripe, school APIs or genuine customer records. Do not deploy, merge/rebase/reset, commit/push, reveal secrets, or start M5.2. Honor documented M4 failures; those belong to a separate post-M5 acceptance stage.
+
+Before finishing, run the permitted offline checks, distinguish actual PASS/FAIL/SKIP from claimed coverage, inspect git diff --check, and provide: files changed; migration/journal details; summary of complete user flow; authorization and package-version invariants; exact commands/results; known blockers and independently reviewable patch/diff. Stop at implementation pending owner review. Do not open a recurring R1/R2/R3 patch cycle yourself.

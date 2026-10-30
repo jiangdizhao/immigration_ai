@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_021_M5_THREE_MILESTONE_2026_10_30 -->
+## D-P13-021 — M5 uses three cohesive development milestones; M4 deferrals stay separate
+
+**Date:** 2026-10-30 (Australia/Sydney). **Branch/baseline:** phase13-m5-school-admissions / be1255589f8b9f55b0393b3a0cc562d1dbbef154. **Decision:** accept the proposed implementation plan of M5.1 (Multi-School Foundation), M5.2 (Complete School Admissions Workflow), M5.3 (Integrated Offline Acceptance); do not split into schema/API/UI micro-milestones. See [canonical integrated plan](./PHASE13_M5_SCHOOL_ADMISSIONS_INTEGRATED_PLAN_2026_10_30.md) and [M5.1 contract](./tasks/PHASE13_M5_1_MULTI_SCHOOL_FOUNDATION_IMPLEMENTATION_CONTRACT_2026_10_30.md).
+
+**Execution rule:** one integrated coding task and consolidated validation per milestone, followed by one independent source review and only bounded evidence-backed critical corrections; recorded non-blockers must not create automatic repeated repair cycles. Preserve M0–M10 numbering and M4 authority boundaries.
+
+**Critical distinction:** the separate, owner-authorized post-M5 School-Application E2E acceptance in the 2026-10-30 M4 owner decision is NOT a fourth M5 coding milestone. M4 INT-06/07/12, DB-01/02 and M4-005 payment verification remain failed/incomplete and must not be reclassified. M5.1 contract and Codex prompt are prepared, not executed. No feature flag, external submission, professional signature/credential/payment claim, real school/provider action, migration execution, DB change or production deployment is approved by recording this decision.
+<!-- END D_P13_021_M5_THREE_MILESTONE_2026_10_30 -->
+
 <!-- BEGIN PHASE13_M4_004_007_UNIFIED_PLAN_2026_10_29 -->
 ## D-P13-020 — Record consolidated planning for M4-004–007, without implementation authorization
 
