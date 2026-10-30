@@ -19,6 +19,7 @@ import {
 } from "@/lib/workspace/project-entry";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
+import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
 import { SchoolApplicationsPanel } from "./school-applications-panel";
 
 type ProjectEntryCopy = WorkspaceCopy["projectEntry"];
@@ -69,6 +70,8 @@ export function ProjectEntryPanel({
   projectDocumentsEnabled = false,
   schoolApplicationsEnabled = false,
   schoolApplicationsCopy,
+  schoolAdmissionsEnabled = false,
+  schoolAdmissionsCopy,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
@@ -86,6 +89,12 @@ export function ProjectEntryPanel({
    */
   schoolApplicationsEnabled?: boolean;
   schoolApplicationsCopy: WorkspaceCopy["schoolApplications"];
+  /**
+   * Phase 13 M5.2: default OFF and independent of M5.1. The API re-checks the
+   * capability, both additive schemas and every authority on each request.
+   */
+  schoolAdmissionsEnabled?: boolean;
+  schoolAdmissionsCopy: WorkspaceCopy["schoolAdmissions"];
 }) {
   const [controller] = useState(() => createProjectEntryController({ copy }));
   const state = useSyncExternalStore(
@@ -306,6 +315,11 @@ export function ProjectEntryPanel({
           <SchoolApplicationsPanel
             copy={schoolApplicationsCopy}
             enabled={schoolApplicationsEnabled}
+            projectId={selectedProject.id}
+          />
+          <SchoolAdmissionsWorkflowPanel
+            copy={schoolAdmissionsCopy}
+            enabled={schoolAdmissionsEnabled}
             projectId={selectedProject.id}
           />
           <h4 className="pt-1 text-xs font-semibold text-slate-800">

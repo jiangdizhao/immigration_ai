@@ -218,28 +218,37 @@ test("SYS-18: frozen M4-005 migration and schema are untouched by this round", (
       "utf8"
     )
   ) as { entries: Array<{ idx: number; tag: string; when: number }> };
-  // Phase 13 M5.1 appended one further additive migration (0046). The M4-005 and
-  // M4-006 entries below are still asserted by index, tag and timestamp, so this
-  // remains a freeze check rather than a head-only check.
-  assert.equal(journal.entries.length, 47);
-  assert.equal(journal.entries.at(-3)?.idx, 44);
+  // Phase 13 M5.1 and M5.2 appended two further additive migrations (0046, 0047).
+  // The M4-005 and M4-006 entries below are still asserted by index, tag and
+  // timestamp, so this remains a freeze check rather than a head-only check.
+  assert.equal(journal.entries.length, 48);
+  // M4-005/M4-006 keep their exact recorded positions even though M5.1/M5.2
+  // appended later additive migrations.
   assert.equal(
-    journal.entries.at(-3)?.tag,
+    journal.entries.find((entry) => entry.idx === 44)?.tag,
     "0044_phase13_m4_005_service_payment"
   );
-  assert.equal(journal.entries.at(-3)?.when, 1_793_258_050_571);
-  // Migration 0045 is the authorized additive M4-006 persistence migration.
-  assert.equal(journal.entries.at(-2)?.idx, 45);
   assert.equal(
-    journal.entries.at(-2)?.tag,
+    journal.entries.find((entry) => entry.idx === 44)?.when,
+    1_793_258_050_571
+  );
+  assert.equal(
+    journal.entries.find((entry) => entry.idx === 45)?.tag,
     "0045_phase13_m4_006_professional_review"
   );
-  assert.equal(journal.entries.at(-2)?.when, 1_793_320_044_169);
-  // The only later migration is the additive Phase 13 M5.1 school application one.
-  assert.equal(journal.entries.at(-1)?.idx, 46);
+  assert.equal(
+    journal.entries.find((entry) => entry.idx === 45)?.when,
+    1_793_320_044_169
+  );
+  // The only later migrations are the additive M5.1 and M5.2 school ones.
+  assert.equal(
+    journal.entries.find((entry) => entry.idx === 46)?.tag,
+    "0046_phase13_m5_1_school_applications"
+  );
+  assert.equal(journal.entries.at(-1)?.idx, 47);
   assert.equal(
     journal.entries.at(-1)?.tag,
-    "0046_phase13_m5_1_school_applications"
+    "0047_phase13_m5_2_school_admissions"
   );
   const migrations = readdirSync(resolve(chatbotRoot, "lib/db/migrations"));
   assert.equal(
@@ -259,10 +268,17 @@ test("SYS-18: frozen M4-005 migration and schema are untouched by this round", (
     ["0046_phase13_m5_1_school_applications"],
     "the later migration is the additive M5.1 one, not an M4 change"
   );
+  assert.deepEqual(
+    migrations
+      .filter((file) => /^0047_/u.test(file))
+      .map((file) => file.replace(/\.sql$/u, "")),
+    ["0047_phase13_m5_2_school_admissions"],
+    "the later migration is the additive M5.2 one, not an M4 change"
+  );
   assert.equal(
-    migrations.filter((file) => /^004[7-9]_|^00[5-9][0-9]_/u.test(file)).length,
+    migrations.filter((file) => /^004[89]_|^00[5-9][0-9]_/u.test(file)).length,
     0,
-    "no migration after M5.1 exists in this round"
+    "no migration after M5.2 exists in this round"
   );
   const schema = readFileSync(resolve(chatbotRoot, "lib/db/schema.ts"), "utf8");
   // Durable M4-006 persistence exists now; no M4-007 table may exist.

@@ -130,6 +130,82 @@ export type WorkspaceCopy = {
    * decision, an offer, a CoE, a payment confirmation, a lawyer approval or a
    * submitted application.
    */
+  /**
+   * Phase 13 M5.2 School Admissions Workflow surface. Every label below describes
+   * a provisional, evidence-limited internal workflow: no admission decision, no
+   * verified Offer/CoE, no Student 500 eligibility and no institutional
+   * submission is ever claimed by this UI.
+   */
+  schoolAdmissions: {
+    title: string;
+    subtitle: string;
+    notice: string;
+    loading: string;
+    empty: string;
+    createFromApplication: string;
+    createStandalone: string;
+    createTitle: string;
+    createDescription: string;
+    selectApplicationLabel: string;
+    selectApplicationPlaceholder: string;
+    noSelectableApplications: string;
+    selectDocumentLabel: string;
+    selectDocumentPlaceholder: string;
+    documentsEmpty: string;
+    documentsUnavailable: string;
+    recordWithDocument: string;
+    institutionLabel: string;
+    courseLabel: string;
+    intakeLabel: string;
+    originLabel: string;
+    origin: Record<string, string>;
+    serviceModeLabel: string;
+    serviceMode: Record<string, string>;
+    selfNotice: string;
+    managedNotice: string;
+    checklistHeading: string;
+    requirement: Record<string, string>;
+    requirementStatus: Record<string, string>;
+    draftHeading: string;
+    provisionalNotice: string;
+    section: Record<string, string>;
+    confirmDraft: string;
+    confirmedNotice: string;
+    staleNotice: string;
+    offerHeading: string;
+    recordOffer: string;
+    transitionOffer: string;
+    offerAction: Record<string, string>;
+    offerState: Record<string, string>;
+    expiryState: Record<string, string>;
+    coeHeading: string;
+    recordCoe: string;
+    coeState: Record<string, string>;
+    evidenceNotice: string;
+    externalActionHeading: string;
+    externalAction: Record<string, string>;
+    externalActionNotice: string;
+    recordExternalAction: string;
+    exceptionHeading: string;
+    exceptionNotice: string;
+    claimException: string;
+    verifyException: string;
+    readinessHeading: string;
+    evaluateReadiness: string;
+    readinessStatus: Record<string, string>;
+    submissionNotice: string;
+    nextStepsHeading: string;
+    nextStep: Record<string, string>;
+    disclosuresHeading: string;
+    disclosure: Record<string, string>;
+    errorNotFound: string;
+    errorStateChanged: string;
+    errorAuthority: string;
+    errorUnavailable: string;
+    errorInvalid: string;
+    actionFailed: string;
+    refresh: string;
+  };
   schoolApplications: {
     title: string;
     subtitle: string;
@@ -137,6 +213,7 @@ export type WorkspaceCopy = {
     loading: string;
     empty: string;
     create: string;
+
     createTitle: string;
     createDescription: string;
     cancel: string;
@@ -511,6 +588,191 @@ const zh: WorkspaceCopy = {
       securityFailed: "安全状态：扫描失败",
     },
   },
+  schoolAdmissions: {
+    title: "入学申请流程",
+    subtitle:
+      "每所学校独立管理：申请准备、自助或代办、录取通知与 CoE 证据，都按来源与确认状态如实显示。",
+    notice:
+      "这里只记录准备过程与客户提供的材料。系统不会向学校提交申请，也不会自动确认录取、CoE 或签证资格。",
+    loading: "正在加载入学申请…",
+    empty:
+      "还没有入学申请。可基于学校申请创建，或直接记录已有的录取通知 / CoE。",
+    createFromApplication: "从学校申请创建",
+    createStandalone: "记录已有录取通知 / CoE",
+    createTitle: "新建入学申请记录",
+    createDescription:
+      "学校申请会自动带入学校与课程；如已收到录取通知或 CoE，可直接记录，无需虚构学校申请。",
+    selectApplicationLabel: "选择已有学校申请",
+    selectApplicationPlaceholder: "请选择要办理的学校申请",
+    noSelectableApplications:
+      "暂无可用的学校申请（已建立入学记录的申请不会重复列出）。",
+    selectDocumentLabel: "选择已上传的文件（可选）",
+    selectDocumentPlaceholder: "不附带文件",
+    documentsEmpty: "暂无已通过安全检查的文件。",
+    documentsUnavailable: "文件列表暂不可用。",
+    recordWithDocument: "附带文件记录（文件未核验）",
+    institutionLabel: "学校名称",
+    courseLabel: "课程名称",
+    intakeLabel: "入学时间",
+    originLabel: "入口类型",
+    origin: {
+      school_application: "基于学校申请",
+      existing_offer: "已有录取通知",
+      existing_coe: "已有 CoE",
+      claimed_exception: "声明的例外情况",
+    },
+    serviceModeLabel: "服务方式",
+    serviceMode: {
+      self_service: "自助服务",
+      managed_service: "代办服务",
+    },
+    selfNotice:
+      "自助服务：您自行准备材料并在系统外提交，系统只记录您报告的操作。",
+    managedNotice:
+      "代办服务：需要正式签约、指派、资料授权、专业审核与付款条件；当前权威接口不可用，结果只会显示 UNKNOWN 或未就绪。会员身份不等于代办资格。",
+    checklistHeading: "材料清单",
+    requirement: {
+      application_target_complete: "学校与课程信息完整",
+      evidence_fact_available: "已确认的项目事实",
+      evidence_document_available: "可用的授权文件",
+      education_source_resolved: "教育目录来源匹配",
+      preparation_package_usable: "可用的不可变准备包",
+      customer_confirmation_recorded: "客户已确认草稿",
+      managed_engagement_current: "有效的代办委托",
+      managed_authority_verified: "已核实的专业权限",
+      outcome_pathway_present: "已记录录取/例外路径",
+      coe_evidence_recorded: "已记录 CoE 证据",
+    },
+    requirementStatus: {
+      satisfied: "已满足",
+      missing: "缺失",
+      unverified: "未核实",
+      conflicting: "存在冲突",
+      unknown: "无法确定",
+      not_applicable: "不适用",
+    },
+    draftHeading: "准备草稿",
+    provisionalNotice:
+      "草稿始终为暂定内容：由系统按已授权来源生成，未经学校、律师或任何官方机构确认。",
+    section: {
+      application_summary: "申请概要",
+      academic_background: "学术背景",
+      english_proficiency: "英语能力",
+      financial_capacity: "资金能力",
+      study_purpose: "学习目的",
+      provider_requirements: "学校要求",
+      next_steps: "下一步",
+    },
+    confirmDraft: "确认此草稿版本",
+    confirmedNotice:
+      "您已确认该草稿版本；如来源或申请内容变化，将自动标记为过期。",
+    staleNotice:
+      "此草稿已过期：相关来源、申请内容或服务方式发生变化，请重新生成。",
+    offerHeading: "录取通知（Offer）",
+    recordOffer: "记录录取通知",
+    transitionOffer: "更新录取状态",
+    offerAction: {
+      start_review: "开始审核",
+      accept: "接受",
+      decline: "拒绝",
+      expire: "标记已过期",
+      defer: "延期决定",
+    },
+    offerState: {
+      none: "尚未收到",
+      received: "已收到（客户报告）",
+      under_review: "审核中",
+      accepted: "已接受",
+      declined: "已拒绝",
+      expired: "已过期",
+      deferred: "已延期",
+    },
+    expiryState: {
+      valid: "仍在有效期",
+      expiring_soon: "即将到期",
+      expired: "已过期",
+      unknown: "有效期未知",
+      not_applicable: "不适用",
+    },
+    coeHeading: "CoE（入学确认）",
+    recordCoe: "记录 CoE",
+    coeState: {
+      none: "尚未获得",
+      claimed: "客户声称已获得（未提供证据）",
+      obtained: "已提供文件（未核验）",
+      superseded: "已被更新记录取代",
+    },
+    evidenceNotice:
+      "附带文件只表示客户提供了文件，不代表文件真实、学校确认或已通过审核。CoE 不会自动产生学生 500 签证资格。",
+    externalActionHeading: "我在系统外的操作",
+    externalAction: {
+      school_portal_submission: "在学校门户提交",
+      email_submission: "通过邮件提交",
+      paper_form_submission: "纸质表格提交",
+      agent_submission: "通过中介提交",
+      phone_follow_up: "电话跟进",
+      other: "其他",
+    },
+    externalActionNotice:
+      "这些记录只代表您自己的报告，系统无法核实，也不等同于学校已收到或已受理。",
+    recordExternalAction: "记录自助操作",
+    exceptionHeading: "学校申请例外",
+    exceptionNotice:
+      "例外声明必须由权威来源核实；在核实之前，系统只会显示为待核实，不会视为可跳过学校申请。",
+    claimException: "声明例外",
+    verifyException: "请求权威核实",
+    readinessHeading: "代办就绪度",
+    evaluateReadiness: "重新评估就绪度",
+    readinessStatus: {
+      NOT_EVALUATED: "尚未评估",
+      READY: "条件齐备（仍需人工确认）",
+      NOT_READY: "未就绪",
+      UNKNOWN: "无法确定",
+    },
+    submissionNotice:
+      "即使就绪度为 READY，系统也没有任何学校提交接口：提交状态永远是“未连接”。",
+    nextStepsHeading: "下一步建议",
+    nextStep: {
+      complete_application_details: "补全学校与课程信息",
+      bind_source_evidence: "绑定项目事实或文件",
+      resolve_conflicting_facts: "处理冲突的项目事实",
+      build_preparation_package: "生成不可变准备包",
+      record_customer_confirmation: "确认草稿版本",
+      select_service_mode: "选择服务方式",
+      record_offer_or_exception: "记录录取通知或例外",
+      record_coe_evidence: "记录 CoE 文件",
+      review_offer_expiry: "检查录取通知有效期",
+      await_institutional_response: "等待学校回复",
+      request_managed_service_support: "联系团队了解代办条件",
+      verify_exception_authoritatively: "等待权威核实例外",
+    },
+    disclosuresHeading: "重要说明",
+    disclosure: {
+      not_a_school_submission: "本页不是学校申请提交。",
+      no_institutional_decision: "没有任何学校录取决定被记录或确认。",
+      no_verified_offer_or_coe: "没有经过核实的录取通知或 CoE。",
+      customer_report_not_verified: "客户报告的信息未被独立核实。",
+      document_not_authenticated: "上传文件未做真实性鉴定。",
+      coe_does_not_establish_student_500_eligibility:
+        "CoE 不代表已具备学生 500 签证资格。",
+      managed_submission_not_connected: "代办提交接口尚未连接。",
+      vip_not_managed_entitlement: "会员身份不包含代办服务。",
+      professional_authority_unavailable: "专业审核与签名授权当前不可用。",
+      ai_assist_unavailable: "AI 辅助撰写当前未启用。",
+      draft_is_provisional: "草稿内容为暂定，需您本人确认。",
+      catalog_not_independently_verified: "教育目录信息未获学校独立确认。",
+      requirements_not_legal_advice: "材料清单不构成法律意见。",
+      payment_not_certified: "付款条件未被确认。",
+    },
+    errorNotFound: "未找到该入学申请记录。",
+    errorStateChanged: "状态已变化，请刷新后重试。",
+    errorAuthority: "该操作需要当前不可用的权威核实。",
+    errorUnavailable: "相关服务暂时不可用，请稍后重试。",
+    errorInvalid: "请求内容无效。",
+    actionFailed: "操作未完成，请重试。",
+    refresh: "刷新",
+  },
+
   schoolApplications: {
     title: "我的学校申请",
     subtitle:
@@ -936,6 +1198,201 @@ const en: WorkspaceCopy = {
       securityFailed: "Security: scan failed",
     },
   },
+  schoolAdmissions: {
+    title: "Admissions workflow",
+    subtitle:
+      "Each school is managed on its own: preparation, self-service or managed service, offers and CoE evidence are shown exactly as sourced and confirmed.",
+    notice:
+      "This records preparation and customer-provided material only. Nothing is submitted to a school, and no admission, CoE or visa outcome is ever confirmed automatically.",
+    loading: "Loading admissions cases…",
+    empty:
+      "No admissions case yet. Start from a school application, or record an existing Offer or CoE.",
+    createFromApplication: "Start from a school application",
+    createStandalone: "Record an existing Offer or CoE",
+    createTitle: "New admissions case",
+    createDescription:
+      "A school application brings its institution and course across. If you already hold an Offer or CoE you can record it without inventing an application.",
+    selectApplicationLabel: "Choose an existing school application",
+    selectApplicationPlaceholder: "Select the school application to work on",
+    noSelectableApplications:
+      "No school application is available (applications that already have an admission case are not listed again).",
+    selectDocumentLabel: "Choose an uploaded document (optional)",
+    selectDocumentPlaceholder: "No document attached",
+    documentsEmpty: "No document has passed the security scan yet.",
+    documentsUnavailable: "The document list is temporarily unavailable.",
+    recordWithDocument: "Record with document (document not authenticated)",
+    institutionLabel: "Institution",
+    courseLabel: "Course",
+    intakeLabel: "Intake",
+    originLabel: "Entry point",
+    origin: {
+      school_application: "From a school application",
+      existing_offer: "Existing offer",
+      existing_coe: "Existing CoE",
+      claimed_exception: "Claimed exception",
+    },
+    serviceModeLabel: "Service mode",
+    serviceMode: {
+      self_service: "Self-service",
+      managed_service: "Managed service",
+    },
+    selfNotice:
+      "Self-service: you prepare and submit outside this system. Only your own reported actions are recorded here.",
+    managedNotice:
+      "Managed service requires a real engagement, assignment, disclosure grant, professional review and payment condition. The authorities are unavailable, so the result can only be UNKNOWN or not ready. Membership is not managed-service entitlement.",
+    checklistHeading: "Requirement checklist",
+    requirement: {
+      application_target_complete: "Institution and course complete",
+      evidence_fact_available: "Confirmed Project facts",
+      evidence_document_available: "Authorised documents",
+      education_source_resolved: "Education catalogue match",
+      preparation_package_usable: "Usable immutable package",
+      customer_confirmation_recorded: "Customer confirmation",
+      managed_engagement_current: "Current managed engagement",
+      managed_authority_verified: "Verified professional authority",
+      outcome_pathway_present: "Offer or exception recorded",
+      coe_evidence_recorded: "CoE evidence recorded",
+    },
+    requirementStatus: {
+      satisfied: "Satisfied",
+      missing: "Missing",
+      unverified: "Unverified",
+      conflicting: "Conflicting",
+      unknown: "Unknown",
+      not_applicable: "Not applicable",
+    },
+    draftHeading: "Preparation draft",
+    provisionalNotice:
+      "This draft is always provisional: it is composed from authorised sources and is not confirmed by any school, lawyer or official body.",
+    section: {
+      application_summary: "Application summary",
+      academic_background: "Academic background",
+      english_proficiency: "English proficiency",
+      financial_capacity: "Financial capacity",
+      study_purpose: "Study purpose",
+      provider_requirements: "Provider requirements",
+      next_steps: "Next steps",
+    },
+    confirmDraft: "Confirm this draft version",
+    confirmedNotice:
+      "You confirmed this draft version. It becomes stale automatically if a source, the application or the service mode changes.",
+    staleNotice:
+      "This draft is stale: a source, the application or the service mode changed. Rebuild it before confirming.",
+    offerHeading: "Offer",
+    recordOffer: "Record an offer",
+    transitionOffer: "Update offer status",
+    offerAction: {
+      start_review: "Start review",
+      accept: "Accept",
+      decline: "Decline",
+      expire: "Mark expired",
+      defer: "Defer",
+    },
+    offerState: {
+      none: "None received",
+      received: "Received (customer reported)",
+      under_review: "Under review",
+      accepted: "Accepted",
+      declined: "Declined",
+      expired: "Expired",
+      deferred: "Deferred",
+    },
+    expiryState: {
+      valid: "Within validity",
+      expiring_soon: "Expiring soon",
+      expired: "Expired",
+      unknown: "Expiry unknown",
+      not_applicable: "Not applicable",
+    },
+    coeHeading: "CoE",
+    recordCoe: "Record a CoE",
+    coeState: {
+      none: "Not obtained",
+      claimed: "Claimed by customer (no evidence)",
+      obtained: "Document attached (not authenticated)",
+      superseded: "Superseded by a later record",
+    },
+    evidenceNotice:
+      "An attached document means the customer supplied a file. It is not authenticated, not school-confirmed and not reviewed. A CoE never establishes Student 500 eligibility.",
+    externalActionHeading: "What I did outside this system",
+    externalAction: {
+      school_portal_submission: "Submitted in a school portal",
+      email_submission: "Submitted by email",
+      paper_form_submission: "Submitted a paper form",
+      agent_submission: "Submitted through an agent",
+      phone_follow_up: "Followed up by phone",
+      other: "Other",
+    },
+    externalActionNotice:
+      "These are your own reports. They cannot be verified here and do not mean a school received or accepted anything.",
+    recordExternalAction: "Record self-service action",
+    exceptionHeading: "School-application exception",
+    exceptionNotice:
+      "An exception claim needs authoritative verification. Until then it stays unverified and never means the school application can be skipped.",
+    claimException: "Claim an exception",
+    verifyException: "Request authoritative verification",
+    readinessHeading: "Managed-service readiness",
+    evaluateReadiness: "Re-evaluate readiness",
+    readinessStatus: {
+      NOT_EVALUATED: "Not evaluated",
+      READY: "Conditions met (human confirmation still required)",
+      NOT_READY: "Not ready",
+      UNKNOWN: "Unknown",
+    },
+    submissionNotice:
+      "Even a READY observation cannot submit anything: there is no institutional submission adapter, so submission state is always not connected.",
+    nextStepsHeading: "Suggested next steps",
+    nextStep: {
+      complete_application_details:
+        "Complete the institution and course details",
+      bind_source_evidence: "Bind Project facts or documents",
+      resolve_conflicting_facts: "Resolve conflicting Project facts",
+      build_preparation_package: "Build the immutable preparation package",
+      record_customer_confirmation: "Confirm the draft version",
+      select_service_mode: "Choose a service mode",
+      record_offer_or_exception: "Record an offer or exception",
+      record_coe_evidence: "Record CoE evidence",
+      review_offer_expiry: "Review the offer expiry",
+      await_institutional_response: "Await the institution's response",
+      request_managed_service_support: "Contact the team about managed service",
+      verify_exception_authoritatively: "Await authoritative exception review",
+    },
+    disclosuresHeading: "Important limits",
+    disclosure: {
+      not_a_school_submission:
+        "This page is not a school application submission.",
+      no_institutional_decision:
+        "No institutional decision has been recorded or confirmed.",
+      no_verified_offer_or_coe: "No verified offer or CoE exists.",
+      customer_report_not_verified:
+        "Customer-reported information is not independently verified.",
+      document_not_authenticated: "Uploaded documents are not authenticated.",
+      coe_does_not_establish_student_500_eligibility:
+        "A CoE does not establish Student 500 visa eligibility.",
+      managed_submission_not_connected:
+        "The managed submission channel is not connected.",
+      vip_not_managed_entitlement:
+        "Membership does not include managed service.",
+      professional_authority_unavailable:
+        "Professional review and signature authority are unavailable.",
+      ai_assist_unavailable: "AI drafting assistance is not enabled.",
+      draft_is_provisional:
+        "The draft is provisional and needs your confirmation.",
+      catalog_not_independently_verified:
+        "Education catalogue data is not independently institution-confirmed.",
+      requirements_not_legal_advice: "The checklist is not legal advice.",
+      payment_not_certified: "No payment condition has been certified.",
+    },
+    errorNotFound: "Admissions case not found.",
+    errorStateChanged: "The state changed. Refresh and try again.",
+    errorAuthority: "This action needs an authority that is not available.",
+    errorUnavailable:
+      "The service is temporarily unavailable. Try again later.",
+    errorInvalid: "The request was not valid.",
+    actionFailed: "The action did not complete. Please retry.",
+    refresh: "Refresh",
+  },
+
   schoolApplications: {
     title: "My school applications",
     subtitle:

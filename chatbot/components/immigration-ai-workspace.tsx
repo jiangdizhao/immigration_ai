@@ -544,6 +544,7 @@ export function ImmigrationAIWorkspace({
   userType = "regular",
   projectWorkspaceEnabled = false,
   schoolApplicationsEnabled = false,
+  schoolAdmissionsEnabled = false,
 }: {
   assistantMode?: AssistantMode;
   policyReference?: PolicyWorkspaceReference | null;
@@ -561,6 +562,8 @@ export function ImmigrationAIWorkspace({
   projectWorkspaceEnabled?: boolean;
   /** Phase 13 M5.1 school applications are default OFF and server-gated. */
   schoolApplicationsEnabled?: boolean;
+  /** Phase 13 M5.2 school admissions are default OFF and server-gated. */
+  schoolAdmissionsEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
@@ -1940,6 +1943,8 @@ export function ImmigrationAIWorkspace({
               navigationBusy={projectNavigationBusy}
               onOpenProjectChat={loadConversation}
               onSelectedProjectChange={handleSelectedProjectChange}
+              schoolAdmissionsCopy={copy.schoolAdmissions}
+              schoolAdmissionsEnabled={schoolAdmissionsEnabled}
               schoolApplicationsCopy={copy.schoolApplications}
               schoolApplicationsEnabled={schoolApplicationsEnabled}
             />

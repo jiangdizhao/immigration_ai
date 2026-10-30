@@ -131,6 +131,7 @@ test("Project entry renders accessible Chinese-default and English responsive co
         onOpenProjectChat: () => undefined,
         onSelectedProjectChange: () => undefined,
         schoolApplicationsCopy: copy.schoolApplications,
+        schoolAdmissionsCopy: copy.schoolAdmissions,
       })
     );
     assert.match(markup, /aria-label=/u);
@@ -217,6 +218,7 @@ test("Project entry controls render disabled state from the parent navigation co
         onOpenProjectChat: () => undefined,
         onSelectedProjectChange: () => undefined,
         schoolApplicationsCopy: copy.schoolApplications,
+        schoolAdmissionsCopy: copy.schoolAdmissions,
       })
     );
 

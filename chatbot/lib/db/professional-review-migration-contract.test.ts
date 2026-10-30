@@ -42,13 +42,16 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     /\.sql$/u.test(file)
   );
   assert.equal(files.filter((file) => /^0045_/u.test(file)).length, 1);
-  // Phase 13 M5.1 added exactly one further additive migration. Nothing after it
-  // may exist, and 0044/0045 remain byte-for-byte frozen above.
+  // Phase 13 M5.1 and M5.2 each added exactly one further additive migration.
+  // Nothing after 0047 may exist, and 0044/0045 remain byte-for-byte frozen above.
   assert.deepEqual(
     files.filter((file) =>
       /^(00(4[6-9]|[5-9][0-9])|0[1-9][0-9]{2})_/u.test(file)
     ),
-    ["0046_phase13_m5_1_school_applications.sql"]
+    [
+      "0046_phase13_m5_1_school_applications.sql",
+      "0047_phase13_m5_2_school_admissions.sql",
+    ]
   );
 });
 
@@ -56,20 +59,23 @@ test("journal and snapshot agree with the migration file", () => {
   const journal = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/_journal.json"), "utf8")
   ) as { entries: Array<{ idx: number; tag: string; when: number }> };
-  assert.equal(journal.entries.length, 47);
+  assert.equal(journal.entries.length, 48);
   // The M4-006 entry remains exactly as recorded; the additive M5.1 migration is
   // the new head and does not alter it.
-  const last = journal.entries.at(-2);
+  const last = journal.entries.find((entry) => entry.idx === 45);
   assert.equal(last?.idx, 45);
   assert.equal(last?.tag, "0045_phase13_m4_006_professional_review");
   assert.ok(
     (last?.when ?? 0) > 1_793_258_050_571,
     "journal timestamp must advance"
   );
-  assert.equal(journal.entries.at(-1)?.idx, 46);
+  // The M5.1 entry is retained verbatim; M5.2 (0047) is the current head.
+  const m51 = journal.entries.find((entry) => entry.idx === 46);
+  assert.equal(m51?.tag, "0046_phase13_m5_1_school_applications");
+  assert.equal(journal.entries.at(-1)?.idx, 47);
   assert.equal(
     journal.entries.at(-1)?.tag,
-    "0046_phase13_m5_1_school_applications"
+    "0047_phase13_m5_2_school_admissions"
   );
   const snapshot = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/0045_snapshot.json"), "utf8")

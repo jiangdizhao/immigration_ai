@@ -11,6 +11,7 @@ import {
 } from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
+import { schoolAdmissionsEnabled } from "@/lib/school-admissions/contracts";
 import { schoolApplicationsEnabled } from "@/lib/school-applications/contracts";
 import { canShowProjectWorkspace } from "@/lib/workspace/project-entry";
 
@@ -68,6 +69,14 @@ export default async function AIWorkspacePage({
     projectWorkspaceEnabled && schoolApplicationsEnabled();
 
   /**
+   * Phase 13 M5.2 is an independent, default-OFF capability layered on the same
+   * Project workspace shell. It additionally requires both additive schemas; the
+   * API re-checks that on every request.
+   */
+  const schoolAdmissionsAvailable =
+    projectWorkspaceEnabled && schoolAdmissionsEnabled();
+
+  /**
    * Phase 12 Stage 2: a policy launch either resolves the published topic or
    * reports an explicit, recoverable launch state. It must never silently
    * downgrade into an unrelated historical conversation or an apparently
@@ -93,6 +102,7 @@ export default async function AIWorkspacePage({
           policyReference={policyReference}
           projectWorkspaceEnabled={projectWorkspaceEnabled}
           requestedPolicySlug={requestedSlug}
+          schoolAdmissionsEnabled={schoolAdmissionsAvailable}
           schoolApplicationsEnabled={schoolApplicationsAvailable}
         />
       </main>

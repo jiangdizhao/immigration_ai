@@ -5717,3 +5717,657 @@ export const schoolApplicationEvent = pgTable(
 export type SchoolApplicationEventRow = InferSelectModel<
   typeof schoolApplicationEvent
 >;
+
+/**
+ * Phase 13 M5.2 — Complete School Admissions Workflow (additive).
+ *
+ * One admission *case* per school application (or per genuine existing
+ * Offer/CoE/exception entry point), versioned preparation snapshots, versioned
+ * Offer/CoE observations with explicit provenance, customer-reported external
+ * actions, claimed exceptions, an idempotency ledger and an append-only audit.
+ *
+ * Supersession protocol (Outcome, Exception): the superseding row is inserted
+ * only AFTER the live row has been superseded, so the immediate partial unique
+ * index on `supersededById IS NULL` is never violated. Both self-referencing
+ * `superseded_fk` constraints are therefore declared `DEFERRABLE INITIALLY
+ * DEFERRED` in migration 0047: the pointer is written before its successor row
+ * exists and is validated at COMMIT. This drizzle version cannot model
+ * deferrability, so the schema declaration carries the name and the migration
+ * carries the deferrability; a structural test pins that pairing.
+ *
+ * Confirmation protocol (Case): `confirmedPreparationVersion` is forward-only.
+ * A confirmed version may advance to a newer prepared version, and an older
+ * confirmed snapshot can never silently become current again; an already
+ * confirmed version therefore keeps its own immutable confirmation record. The
+ * pointer may never move backwards and may never be cleared back to NULL, which
+ * the `phase13_m5_2_case_guard` routine enforces as
+ * `SchoolAdmissionCase_confirmation_forward_only`.
+ *
+ * Migration 0047 is intentionally unapplied in this worktree.
+ */
+
+export const SCHOOL_ADMISSION_ORIGIN_VALUES = [
+  "school_application",
+  "existing_offer",
+  "existing_coe",
+  "claimed_exception",
+] as const;
+export const SCHOOL_ADMISSION_SERVICE_MODE_VALUES = [
+  "self_service",
+  "managed_service",
+] as const;
+export const SCHOOL_ADMISSION_PREPARATION_STATE_VALUES = [
+  "not_started",
+  "in_preparation",
+  "ready_for_customer_review",
+  "customer_confirmed",
+  "stale",
+] as const;
+export const SCHOOL_ADMISSION_READINESS_VALUES = [
+  "NOT_EVALUATED",
+  "READY",
+  "NOT_READY",
+  "UNKNOWN",
+] as const;
+export const SCHOOL_ADMISSION_OUTCOME_KIND_VALUES = ["offer", "coe"] as const;
+export const SCHOOL_ADMISSION_OFFER_STATE_VALUES = [
+  "received",
+  "under_review",
+  "accepted",
+  "declined",
+  "expired",
+  "deferred",
+] as const;
+export const SCHOOL_ADMISSION_COE_STATE_VALUES = [
+  "claimed",
+  "obtained",
+  "superseded",
+] as const;
+export const SCHOOL_ADMISSION_PROVENANCE_VALUES = [
+  "customer_reported",
+  "document_backed_unverified",
+  "source_reviewed",
+  "provider_confirmed",
+] as const;
+export const SCHOOL_ADMISSION_EXTERNAL_ACTION_VALUES = [
+  "school_portal_submission",
+  "email_submission",
+  "paper_form_submission",
+  "agent_submission",
+  "phone_follow_up",
+  "other",
+] as const;
+export const SCHOOL_ADMISSION_EXCEPTION_STATE_VALUES = [
+  "claimed",
+  "needs_verification",
+  "verified",
+  "rejected",
+  "unknown",
+] as const;
+export const SCHOOL_ADMISSION_AUDIT_EVENT_VALUES = [
+  "school_admission_case_created",
+  "school_admission_service_mode_changed",
+  "school_admission_preparation_recorded",
+  "school_admission_preparation_confirmed",
+  "school_admission_offer_recorded",
+  "school_admission_offer_transition",
+  "school_admission_coe_recorded",
+  "school_admission_coe_transition",
+  "school_admission_external_action_recorded",
+  "school_admission_exception_claimed",
+  "school_admission_exception_verified",
+  "school_admission_exception_rejected",
+  "school_admission_readiness_evaluated",
+] as const;
+export const SCHOOL_ADMISSION_AUDIT_SUBJECT_VALUES = [
+  "school_admission_case",
+  "school_admission_preparation",
+  "school_admission_offer",
+  "school_admission_coe",
+  "school_admission_external_action",
+  "school_admission_exception",
+] as const;
+
+export const schoolAdmissionCase = pgTable(
+  "SchoolAdmissionCase",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    ownerUserId: uuid("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    /** Bound M5.1 application; null for a genuine existing Offer/CoE/exception. */
+    applicationId: uuid("applicationId"),
+    originKind: varchar("originKind", {
+      enum: SCHOOL_ADMISSION_ORIGIN_VALUES,
+    }).notNull(),
+    institutionName: varchar("institutionName", { length: 200 }).notNull(),
+    courseTitle: varchar("courseTitle", { length: 200 }),
+    intakeLabel: varchar("intakeLabel", { length: 120 }),
+    serviceMode: varchar("serviceMode", {
+      enum: SCHOOL_ADMISSION_SERVICE_MODE_VALUES,
+    })
+      .notNull()
+      .default("self_service"),
+    preparationState: varchar("preparationState", {
+      enum: SCHOOL_ADMISSION_PREPARATION_STATE_VALUES,
+    })
+      .notNull()
+      .default("not_started"),
+    revision: integer("revision").notNull().default(1),
+    confirmedPreparationVersion: integer("confirmedPreparationVersion"),
+    managedReadinessStatus: varchar("managedReadinessStatus", {
+      enum: SCHOOL_ADMISSION_READINESS_VALUES,
+    })
+      .notNull()
+      .default("NOT_EVALUATED"),
+    managedReadinessReasonCodes: jsonb("managedReadinessReasonCodes")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    managedReadinessCheckedAt: timestamp("managedReadinessCheckedAt"),
+    managedReadinessToken: varchar("managedReadinessToken", { length: 128 }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdUnique: uniqueIndex("SchoolAdmissionCase_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    /** At most one case per bound school application. */
+    projectApplicationUnique: uniqueIndex(
+      "SchoolAdmissionCase_project_application_unique"
+    )
+      .on(table.projectId, table.applicationId)
+      .where(sql`${table.applicationId} is not null`),
+    projectOwnerCreatedIndex: index(
+      "SchoolAdmissionCase_project_owner_created_idx"
+    ).on(table.projectId, table.ownerUserId, table.createdAt),
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [schoolApplication.projectId, schoolApplication.id],
+      name: "SchoolAdmissionCase_application_fk",
+    }).onDelete("restrict"),
+    revisionPositive: check(
+      "SchoolAdmissionCase_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    originAllowed: check(
+      "SchoolAdmissionCase_origin_check",
+      sql`${table.originKind} in ('school_application', 'existing_offer', 'existing_coe', 'claimed_exception')`
+    ),
+    applicationConsistency: check(
+      "SchoolAdmissionCase_application_consistency_check",
+      sql`(${table.originKind} = 'school_application' and ${table.applicationId} is not null) or (${table.originKind} <> 'school_application' and ${table.applicationId} is null)`
+    ),
+    serviceModeAllowed: check(
+      "SchoolAdmissionCase_service_mode_check",
+      sql`${table.serviceMode} in ('self_service', 'managed_service')`
+    ),
+    preparationStateAllowed: check(
+      "SchoolAdmissionCase_preparation_state_check",
+      sql`${table.preparationState} in ('not_started', 'in_preparation', 'ready_for_customer_review', 'customer_confirmed', 'stale')`
+    ),
+    readinessAllowed: check(
+      "SchoolAdmissionCase_readiness_check",
+      sql`${table.managedReadinessStatus} in ('NOT_EVALUATED', 'READY', 'NOT_READY', 'UNKNOWN')`
+    ),
+    readinessObservation: check(
+      "SchoolAdmissionCase_readiness_observation_check",
+      sql`(${table.managedReadinessStatus} = 'NOT_EVALUATED' and ${table.managedReadinessCheckedAt} is null and ${table.managedReadinessToken} is null) or (${table.managedReadinessStatus} <> 'NOT_EVALUATED' and ${table.managedReadinessCheckedAt} is not null)`
+    ),
+    readinessReasonsArray: check(
+      "SchoolAdmissionCase_readiness_reasons_check",
+      sql`jsonb_typeof(${table.managedReadinessReasonCodes}) = 'array'`
+    ),
+    institutionNameBounded: check(
+      "SchoolAdmissionCase_institution_name_check",
+      sql`length(trim(${table.institutionName})) between 1 and 200`
+    ),
+    courseTitleBounded: check(
+      "SchoolAdmissionCase_course_title_check",
+      sql`${table.courseTitle} is null or length(trim(${table.courseTitle})) between 1 and 200`
+    ),
+    intakeLabelBounded: check(
+      "SchoolAdmissionCase_intake_label_check",
+      sql`${table.intakeLabel} is null or length(trim(${table.intakeLabel})) between 1 and 120`
+    ),
+    confirmedVersionPositive: check(
+      "SchoolAdmissionCase_confirmed_version_check",
+      sql`${table.confirmedPreparationVersion} is null or ${table.confirmedPreparationVersion} > 0`
+    ),
+    updatedAfterCreated: check(
+      "SchoolAdmissionCase_updated_at_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+  })
+);
+export type SchoolAdmissionCaseRow = InferSelectModel<
+  typeof schoolAdmissionCase
+>;
+
+export const schoolAdmissionPreparation = pgTable(
+  "SchoolAdmissionPreparation",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    version: integer("version").notNull(),
+    schemaVersion: varchar("schemaVersion", { length: 64 }).notNull(),
+    caseRevision: integer("caseRevision").notNull(),
+    applicationRevision: integer("applicationRevision"),
+    serviceMode: varchar("serviceMode", {
+      enum: SCHOOL_ADMISSION_SERVICE_MODE_VALUES,
+    }).notNull(),
+    packageId: uuid("packageId"),
+    packageContentSha256: varchar("packageContentSha256", { length: 64 }),
+    sourceDigest: varchar("sourceDigest", { length: 64 }).notNull(),
+    inputsSha256: varchar("inputsSha256", { length: 64 }).notNull(),
+    contentSha256: varchar("contentSha256", { length: 64 }).notNull(),
+    requirements: jsonb("requirements").$type<unknown>().notNull(),
+    sections: jsonb("sections").$type<unknown>().notNull(),
+    assistKind: varchar("assistKind", { length: 32 }).notNull(),
+    confirmedAt: timestamp("confirmedAt"),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    caseForeignKey: foreignKey({
+      columns: [table.projectId, table.caseId],
+      foreignColumns: [schoolAdmissionCase.projectId, schoolAdmissionCase.id],
+      name: "SchoolAdmissionPreparation_case_fk",
+    }).onDelete("restrict"),
+    caseVersionUnique: uniqueIndex(
+      "SchoolAdmissionPreparation_case_version_unique"
+    ).on(table.caseId, table.version),
+    caseCreatedIndex: index("SchoolAdmissionPreparation_case_created_idx").on(
+      table.caseId,
+      table.createdAt
+    ),
+    versionPositive: check(
+      "SchoolAdmissionPreparation_version_check",
+      sql`${table.version} > 0 and ${table.caseRevision} > 0`
+    ),
+    hashShape: check(
+      "SchoolAdmissionPreparation_hash_check",
+      sql`${table.sourceDigest} ~ '^[0-9a-f]{64}$' and ${table.inputsSha256} ~ '^[0-9a-f]{64}$' and ${table.contentSha256} ~ '^[0-9a-f]{64}$' and (${table.packageContentSha256} is null or ${table.packageContentSha256} ~ '^[0-9a-f]{64}$')`
+    ),
+    packagePair: check(
+      "SchoolAdmissionPreparation_package_pair_check",
+      sql`(${table.packageId} is null and ${table.packageContentSha256} is null) or (${table.packageId} is not null and ${table.packageContentSha256} is not null)`
+    ),
+    applicationRevisionPositive: check(
+      "SchoolAdmissionPreparation_application_revision_check",
+      sql`${table.applicationRevision} is null or ${table.applicationRevision} > 0`
+    ),
+    serviceModeAllowed: check(
+      "SchoolAdmissionPreparation_service_mode_check",
+      sql`${table.serviceMode} in ('self_service', 'managed_service')`
+    ),
+    assistKindAllowed: check(
+      "SchoolAdmissionPreparation_assist_kind_check",
+      sql`${table.assistKind} in ('deterministic_template', 'stub_suggestion', 'disabled')`
+    ),
+    requirementsArray: check(
+      "SchoolAdmissionPreparation_requirements_check",
+      sql`jsonb_typeof(${table.requirements}) = 'array' and jsonb_array_length(${table.requirements}) between 1 and 32`
+    ),
+    sectionsArray: check(
+      "SchoolAdmissionPreparation_sections_check",
+      sql`jsonb_typeof(${table.sections}) = 'array' and jsonb_array_length(${table.sections}) between 1 and 16`
+    ),
+    operationIdShape: check(
+      "SchoolAdmissionPreparation_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolAdmissionPreparation_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type SchoolAdmissionPreparationRow = InferSelectModel<
+  typeof schoolAdmissionPreparation
+>;
+
+export const schoolAdmissionOutcome = pgTable(
+  "SchoolAdmissionOutcome",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    kind: varchar("kind", {
+      enum: SCHOOL_ADMISSION_OUTCOME_KIND_VALUES,
+    }).notNull(),
+    version: integer("version").notNull(),
+    state: varchar("state", { length: 32 }).notNull(),
+    provenance: varchar("provenance", {
+      enum: SCHOOL_ADMISSION_PROVENANCE_VALUES,
+    }).notNull(),
+    evidenceReferenceId: uuid("evidenceReferenceId"),
+    evidenceReferenceVersion: integer("evidenceReferenceVersion"),
+    evidenceReferenceSha256: varchar("evidenceReferenceSha256", { length: 64 }),
+    receivedOn: varchar("receivedOn", { length: 10 }),
+    expiresOn: varchar("expiresOn", { length: 10 }),
+    validFrom: varchar("validFrom", { length: 10 }),
+    validTo: varchar("validTo", { length: 10 }),
+    decisionOn: varchar("decisionOn", { length: 10 }),
+    reportedByUserId: uuid("reportedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    recordedAt: timestamp("recordedAt").notNull().defaultNow(),
+    supersededById: uuid("supersededById"),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+  },
+  (table) => ({
+    caseForeignKey: foreignKey({
+      columns: [table.projectId, table.caseId],
+      foreignColumns: [schoolAdmissionCase.projectId, schoolAdmissionCase.id],
+      name: "SchoolAdmissionOutcome_case_fk",
+    }).onDelete("restrict"),
+    supersededForeignKey: foreignKey({
+      columns: [table.supersededById],
+      foreignColumns: [table.id],
+      name: "SchoolAdmissionOutcome_superseded_fk",
+    }).onDelete("restrict"),
+    caseKindVersionUnique: uniqueIndex(
+      "SchoolAdmissionOutcome_case_kind_version_unique"
+    ).on(table.caseId, table.kind, table.version),
+    /** Exactly one live Offer and one live CoE per case; history is retained. */
+    currentKindUnique: uniqueIndex("SchoolAdmissionOutcome_current_unique")
+      .on(table.caseId, table.kind)
+      .where(sql`${table.supersededById} is null`),
+    caseRecordedIndex: index("SchoolAdmissionOutcome_case_recorded_idx").on(
+      table.caseId,
+      table.recordedAt
+    ),
+    kindAllowed: check(
+      "SchoolAdmissionOutcome_kind_check",
+      sql`${table.kind} in ('offer', 'coe')`
+    ),
+    versionPositive: check(
+      "SchoolAdmissionOutcome_version_check",
+      sql`${table.version} > 0`
+    ),
+    stateAllowed: check(
+      "SchoolAdmissionOutcome_state_check",
+      sql`(${table.kind} = 'offer' and ${table.state} in ('received', 'under_review', 'accepted', 'declined', 'expired', 'deferred')) or (${table.kind} = 'coe' and ${table.state} in ('claimed', 'obtained', 'superseded'))`
+    ),
+    provenanceAllowed: check(
+      "SchoolAdmissionOutcome_provenance_check",
+      sql`${table.provenance} in ('customer_reported', 'document_backed_unverified', 'source_reviewed', 'provider_confirmed')`
+    ),
+    evidenceConsistency: check(
+      "SchoolAdmissionOutcome_evidence_check",
+      sql`(${table.evidenceReferenceId} is null and ${table.evidenceReferenceVersion} is null and ${table.evidenceReferenceSha256} is null) or (${table.evidenceReferenceId} is not null and ${table.evidenceReferenceVersion} > 0 and ${table.evidenceReferenceSha256} ~ '^[0-9a-f]{64}$')`
+    ),
+    documentBackedEvidence: check(
+      "SchoolAdmissionOutcome_document_backed_check",
+      sql`${table.provenance} <> 'document_backed_unverified' or ${table.evidenceReferenceId} is not null`
+    ),
+    datesShape: check(
+      "SchoolAdmissionOutcome_dates_check",
+      sql`(${table.receivedOn} is null or ${table.receivedOn} ~ '^\\d{4}-\\d{2}-\\d{2}$') and (${table.expiresOn} is null or ${table.expiresOn} ~ '^\\d{4}-\\d{2}-\\d{2}$') and (${table.validFrom} is null or ${table.validFrom} ~ '^\\d{4}-\\d{2}-\\d{2}$') and (${table.validTo} is null or ${table.validTo} ~ '^\\d{4}-\\d{2}-\\d{2}$') and (${table.decisionOn} is null or ${table.decisionOn} ~ '^\\d{4}-\\d{2}-\\d{2}$')`
+    ),
+    operationIdShape: check(
+      "SchoolAdmissionOutcome_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolAdmissionOutcome_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type SchoolAdmissionOutcomeRow = InferSelectModel<
+  typeof schoolAdmissionOutcome
+>;
+
+export const schoolAdmissionExternalAction = pgTable(
+  "SchoolAdmissionExternalAction",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    actionKind: varchar("actionKind", {
+      enum: SCHOOL_ADMISSION_EXTERNAL_ACTION_VALUES,
+    }).notNull(),
+    performedOn: varchar("performedOn", { length: 10 }).notNull(),
+    note: varchar("note", { length: 600 }),
+    /** A customer report is never accepted without explicit acknowledgement. */
+    acknowledged: boolean("acknowledged").notNull(),
+    provenance: varchar("provenance", {
+      enum: SCHOOL_ADMISSION_PROVENANCE_VALUES,
+    })
+      .notNull()
+      .default("customer_reported"),
+    reportedByUserId: uuid("reportedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    recordedAt: timestamp("recordedAt").notNull().defaultNow(),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+  },
+  (table) => ({
+    caseForeignKey: foreignKey({
+      columns: [table.projectId, table.caseId],
+      foreignColumns: [schoolAdmissionCase.projectId, schoolAdmissionCase.id],
+      name: "SchoolAdmissionExternalAction_case_fk",
+    }).onDelete("restrict"),
+    caseRecordedIndex: index(
+      "SchoolAdmissionExternalAction_case_recorded_idx"
+    ).on(table.caseId, table.recordedAt),
+    actionKindAllowed: check(
+      "SchoolAdmissionExternalAction_kind_check",
+      sql`${table.actionKind} in ('school_portal_submission', 'email_submission', 'paper_form_submission', 'agent_submission', 'phone_follow_up', 'other')`
+    ),
+    acknowledgedRequired: check(
+      "SchoolAdmissionExternalAction_acknowledged_check",
+      sql`${table.acknowledged}`
+    ),
+    /** A self-report can never carry a verified or provider provenance. */
+    provenanceCustomerOnly: check(
+      "SchoolAdmissionExternalAction_provenance_check",
+      sql`${table.provenance} = 'customer_reported'`
+    ),
+    performedOnShape: check(
+      "SchoolAdmissionExternalAction_performed_on_check",
+      sql`${table.performedOn} ~ '^\\d{4}-\\d{2}-\\d{2}$'`
+    ),
+    noteBounded: check(
+      "SchoolAdmissionExternalAction_note_check",
+      sql`${table.note} is null or length(trim(${table.note})) between 1 and 600`
+    ),
+    operationIdShape: check(
+      "SchoolAdmissionExternalAction_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolAdmissionExternalAction_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type SchoolAdmissionExternalActionRow = InferSelectModel<
+  typeof schoolAdmissionExternalAction
+>;
+
+export const schoolAdmissionException = pgTable(
+  "SchoolAdmissionException",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    claimKind: varchar("claimKind", { length: 64 }).notNull(),
+    version: integer("version").notNull(),
+    state: varchar("state", {
+      enum: SCHOOL_ADMISSION_EXCEPTION_STATE_VALUES,
+    }).notNull(),
+    description: varchar("description", { length: 300 }).notNull(),
+    authorityReference: varchar("authorityReference", { length: 128 }),
+    decidedByUserId: uuid("decidedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    decidedAt: timestamp("decidedAt"),
+    reportedByUserId: uuid("reportedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    recordedAt: timestamp("recordedAt").notNull().defaultNow(),
+    supersededById: uuid("supersededById"),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+  },
+  (table) => ({
+    caseForeignKey: foreignKey({
+      columns: [table.projectId, table.caseId],
+      foreignColumns: [schoolAdmissionCase.projectId, schoolAdmissionCase.id],
+      name: "SchoolAdmissionException_case_fk",
+    }).onDelete("restrict"),
+    supersededForeignKey: foreignKey({
+      columns: [table.supersededById],
+      foreignColumns: [table.id],
+      name: "SchoolAdmissionException_superseded_fk",
+    }).onDelete("restrict"),
+    caseVersionUnique: uniqueIndex(
+      "SchoolAdmissionException_case_version_unique"
+    ).on(table.caseId, table.version),
+    currentUnique: uniqueIndex("SchoolAdmissionException_current_unique")
+      .on(table.caseId)
+      .where(sql`${table.supersededById} is null`),
+    claimKindAllowed: check(
+      "SchoolAdmissionException_claim_kind_check",
+      sql`${table.claimKind} = 'school_application_exception'`
+    ),
+    stateAllowed: check(
+      "SchoolAdmissionException_state_check",
+      sql`${table.state} in ('claimed', 'needs_verification', 'verified', 'rejected', 'unknown')`
+    ),
+    /** Only an authoritative decision may carry a decision record. */
+    decisionConsistency: check(
+      "SchoolAdmissionException_decision_check",
+      sql`(${table.state} in ('verified', 'rejected') and ${table.authorityReference} is not null and ${table.decidedAt} is not null and ${table.decidedByUserId} is not null) or (${table.state} not in ('verified', 'rejected') and ${table.authorityReference} is null and ${table.decidedAt} is null and ${table.decidedByUserId} is null)`
+    ),
+    descriptionBounded: check(
+      "SchoolAdmissionException_description_check",
+      sql`length(trim(${table.description})) between 1 and 300`
+    ),
+    operationIdShape: check(
+      "SchoolAdmissionException_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolAdmissionException_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type SchoolAdmissionExceptionRow = InferSelectModel<
+  typeof schoolAdmissionException
+>;
+
+export const schoolAdmissionOperation = pgTable(
+  "SchoolAdmissionOperation",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    operationType: varchar("operationType", { length: 64 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    resultKind: varchar("resultKind", { length: 64 }).notNull(),
+    resultId: uuid("resultId").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    actorOperationUnique: uniqueIndex(
+      "SchoolAdmissionOperation_actor_operation_unique"
+    ).on(table.actorUserId, table.operationId),
+    actorCreatedIndex: index("SchoolAdmissionOperation_actor_created_idx").on(
+      table.actorUserId,
+      table.createdAt
+    ),
+    operationIdShape: check(
+      "SchoolAdmissionOperation_operation_id_check",
+      sql`${table.operationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`
+    ),
+    requestHashShape: check(
+      "SchoolAdmissionOperation_request_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    operationTypeAllowed: check(
+      "SchoolAdmissionOperation_type_check",
+      sql`${table.operationType} in ('school_admission_case_create', 'school_admission_service_mode', 'school_admission_prepare', 'school_admission_confirm', 'school_admission_outcome_record', 'school_admission_outcome_transition', 'school_admission_external_action', 'school_admission_exception_claim', 'school_admission_exception_verify', 'school_admission_readiness_evaluate')`
+    ),
+    resultKindAllowed: check(
+      "SchoolAdmissionOperation_result_kind_check",
+      sql`${table.resultKind} in ('school_admission_case', 'school_admission_preparation', 'school_admission_outcome', 'school_admission_external_action', 'school_admission_exception')`
+    ),
+  })
+);
+export type SchoolAdmissionOperationRow = InferSelectModel<
+  typeof schoolAdmissionOperation
+>;
+
+export const schoolAdmissionEvent = pgTable(
+  "SchoolAdmissionEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    caseId: uuid("caseId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    eventType: varchar("eventType", {
+      enum: SCHOOL_ADMISSION_AUDIT_EVENT_VALUES,
+    }).notNull(),
+    subjectKind: varchar("subjectKind", {
+      enum: SCHOOL_ADMISSION_AUDIT_SUBJECT_VALUES,
+    }).notNull(),
+    subjectId: uuid("subjectId").notNull(),
+    caseRevision: integer("caseRevision").notNull(),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => schoolAdmissionOperation.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    caseForeignKey: foreignKey({
+      columns: [table.projectId, table.caseId],
+      foreignColumns: [schoolAdmissionCase.projectId, schoolAdmissionCase.id],
+      name: "SchoolAdmissionEvent_case_fk",
+    }).onDelete("restrict"),
+    caseRevisionEventUnique: uniqueIndex(
+      "SchoolAdmissionEvent_case_revision_event_unique"
+    ).on(table.caseId, table.caseRevision, table.eventType),
+    caseCreatedIndex: index("SchoolAdmissionEvent_case_created_idx").on(
+      table.caseId,
+      table.createdAt
+    ),
+    caseRevisionPositive: check(
+      "SchoolAdmissionEvent_revision_check",
+      sql`${table.caseRevision} > 0`
+    ),
+    eventTypeAllowed: check(
+      "SchoolAdmissionEvent_event_type_check",
+      sql`${table.eventType} in ('school_admission_case_created', 'school_admission_service_mode_changed', 'school_admission_preparation_recorded', 'school_admission_preparation_confirmed', 'school_admission_offer_recorded', 'school_admission_offer_transition', 'school_admission_coe_recorded', 'school_admission_coe_transition', 'school_admission_external_action_recorded', 'school_admission_exception_claimed', 'school_admission_exception_verified', 'school_admission_exception_rejected', 'school_admission_readiness_evaluated')`
+    ),
+    subjectKindAllowed: check(
+      "SchoolAdmissionEvent_subject_kind_check",
+      sql`${table.subjectKind} in ('school_admission_case', 'school_admission_preparation', 'school_admission_offer', 'school_admission_coe', 'school_admission_external_action', 'school_admission_exception')`
+    ),
+  })
+);
+export type SchoolAdmissionEventRow = InferSelectModel<
+  typeof schoolAdmissionEvent
+>;

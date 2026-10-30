@@ -223,14 +223,22 @@ test("integrity indexes and triggers are present and M5.1-only", () => {
   }
 });
 
-test("the journal and snapshot record migration 0046 as the unapplied head", () => {
+test("the journal and snapshot record migration 0046 as an applied additive migration", () => {
   const journal = JSON.parse(readFileSync(JOURNAL, "utf8")) as {
     entries: { idx: number; tag: string; when: number }[];
   };
+  /**
+   * Phase-aware: M5.2 (0047) is now the journal head, so 0046 is no longer the
+   * last entry. Its own presence, tag and snapshot linkage are still asserted,
+   * and the M5.2 migration is required to be strictly additively after it.
+   */
+  const entry = journal.entries.find((candidate) => candidate.idx === 46);
+  assert.equal(entry?.tag, "0046_phase13_m5_1_school_applications");
   const head = journal.entries.at(-1);
-  assert.equal(head?.idx, 46);
-  assert.equal(head?.tag, "0046_phase13_m5_1_school_applications");
-  assert.equal(journal.entries.length, 47);
+  assert.ok((head?.idx ?? 0) >= 46);
+  if ((head?.idx ?? 0) > 46) {
+    assert.equal(head?.tag, "0047_phase13_m5_2_school_admissions");
+  }
 
   const snapshot = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as {
     prevId: string;
