@@ -8,6 +8,19 @@
 - **This checkpoint is docs only:** no source code/migration/data change, DB access, AWS/S3/Stripe, paid AI model, customer data, deployment or feature flag enablement. It supersedes prior 'M5.2 not implemented' assertions solely for current status while retaining history.
 <!-- END PHASE13_M5_2_CLOSED_M5_3_PLANNED_2026_10_31 -->
 
+<!-- BEGIN PHASE13_M5_3_OFFLINE_ACCEPTANCE_IMPLEMENTED_2026_10_31 -->
+## Phase 13 M5.3 — integrated offline engineering acceptance: CORRECTED after independent review
+
+- **Branch / HEAD:** `phase13-m5-school-admissions` at `0eedb8261864037c9abd6f384c0eed075bcbfb22` (unchanged). Accepted baselines confirmed as ancestors: M5.1 `e0b4be5d`, M5.2 `f5120534`.
+- **Disposition:** `M5_3_CORRECTED_PENDING_FINAL_INDEPENDENT_REVIEW`. Offline corrections only — no PostgreSQL, migration, browser, provider/LLM/AWS/Stripe access, no flag enabled, no commit or push.
+- **Review round:** the reviewed patch `2b7f05d0…` was reproduced byte-exactly at preflight, then four P1/P2 evidence gaps were closed: (1) I-09 M5.1 CAS now proves exactly one winner / one `revision_conflict` / one current package / no loser operation or event / revision +1; (2) I-03 adds the full Stage A–D recovery path (v1 confirmed → M2 fact change → both modules stale → reconfirm refused → replacement reference bound → package v2 → preparation v2 → confirmed v2, with v1 immutable and backwards reconfirmation refused); (3) I-06 uses the real `acknowledged: false` contract field with a narrow documented cast and asserts `invalid_request` plus zero rows/operations/events and unchanged revision; (4) I-01–I-12 counts were re-derived from executed tests (I-01 is 2, not 3).
+- **Changed paths (18):** 16 new files under `chatbot/lib/school-admissions-integration/` plus two modified files — `chatbot/package.json` (adds `test:phase13:m5-3:offline` **and** appends the 12 M5.3 suites to `test:unit`) and this handoff. **No production source, schema, migration, contract or component file was modified.**
+- **Executable test counts (actual):** I-01 2, I-02 2, I-03 5, I-04 2, I-05 2, I-06 2, I-07 2, I-08 3, I-09 3, I-10 1, I-11 3, I-12 3 = **30**.
+- **Validation (actual):** `pnpm test:phase13:m5-3:offline` **30 PASS / 0 FAIL / 0 SKIP, exit 0**; M5.1 focused **58 PASS**; M5.2 focused **88 PASS**; frozen M4/M5 migration + schema group **41 PASS**; `pnpm test:unit` **1222 PASS / 0 FAIL / 0 SKIP, exit 0** (= 1192 + 30, no duplication, nothing removed); `pnpm db:check` clean; Biome clean; `git diff --check` clean; `tsc --noEmit` **44** pre-existing diagnostics, **0 new**.
+- **Honest limitations (unchanged):** M5.1 and M5.2 run as real services over **in-memory** stores; the M5.1→M5.2 Application Port is a faithful test implementation mirroring `runtime.ts`, not the executed production instance; M1 Project authority is seeded into two separate in-memory stores, so propagation through a shared production Project repository is **not** proven; M2/M3 are shared test registries, not live systems; HTTP/client are exercised offline and components are rendered markup, not browser automation; PostgreSQL, deployment, real providers, CI and professional/finance authority remain outside verified coverage. Post-M5 E2E obligations (M4 INT-06/07/12, DB-01/02, M4-005 payment cases) remain deferred and are not claimed.
+- **Immediate next action:** final independent review of the cumulative M5.3 patch. Do not start M6, the post-M5 E2E stage, DB access, browser automation or another correction round from this checkpoint.
+<!-- END PHASE13_M5_3_OFFLINE_ACCEPTANCE_IMPLEMENTED_2026_10_31 -->
+
 <!-- BEGIN PHASE13_M5_2_DB_ACCEPTANCE_EXECUTED_2026_10_30 -->
 ## Phase 13 M5.2 — owner-authorized isolated PostgreSQL 17 acceptance: ACCEPTED_WITH_LIMITATIONS
 
