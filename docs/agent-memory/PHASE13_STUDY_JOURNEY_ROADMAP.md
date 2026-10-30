@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M5_2_CLOSED_M5_3_PLANNED_2026_10_31 -->
+## Current Phase 13 M5 checkpoint — 2026-10-31: M5.2 closed with limits; M5.3 prepared
+
+- **GitHub verified owner-pushed M5.2 code HEAD:** `f5120534d3e5df89c8ff3eeadb52607f75f5e54b` on `phase13-m5-school-admissions` (45 changed paths); parent planning checkpoint `af0e411e86ae9f0c92fa93f59c4f2b07ed0ce031`. Formal record: [M5.2 engineering closeout](./tasks/PHASE13_M5_2_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_31.md). Final accepted local cumulative patch hash: `e2f43a4d5244f409ace141d71671d5f009905d4ab5fa6883258972a619d31c86`.
+- **Disposition:** `M5_2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS`, NOT live readiness. Owner/Cline-reported disposable PostgreSQL 17.11 migration 0047 (48 journal rows; 7 new tables; deferred supersession FKs) and 6/6 real Repository acceptance in two repeat runs, first 5/6 attempt corrected for a test-only digest stimulus; offline `pnpm test:unit` **1192 PASS**, M5.2 focused **88 PASS**. Independent reviewer verified patch/commit but did not reproduce owner's Docker. Existing 44 TypeScript diagnostics remain; cosmetic 63-character FK name truncation noted. Only disposable DB migrated; `PHASE13_SCHOOL_ADMISSIONS_ENABLED` remains OFF. No production/professional/provider activation.
+- **Next:** [M5.3 cohesive integrated offline engineering acceptance contract](./tasks/PHASE13_M5_3_INTEGRATED_OFFLINE_ENGINEERING_ACCEPTANCE_CONTRACT_2026_10_31.md) and [Code Model dispatch prompt](./tasks/PHASE13_M5_3_CODEX_EXECUTION_PROMPT_2026_10_31.md) are **prepared, NOT dispatched or implemented**. This third and final M5 internal milestone must exercise real M5.1→M5.2 cross-module interfaces and truthfully classify browser/PostgreSQL/provider coverage; earlier DB approvals are NOT extended to M5.3.
+- **Separate stage remains open:** M4 final INT-06/07/12 and DB-01/02 plus M4-005 payment cases remain in separately authorized **post-M5 School Application E2E Acceptance**; do not call them PASS from M5.3's synthetic integration. M4 `CLOSED_WITH_BLOCKERS`, Phase 13 `LIVE_PRODUCTION_NO_GO` and all lawyer credential, signature, payment, customer approval and external-provider gates unchanged.
+- **This checkpoint is docs only:** no source code/migration/data change, DB access, AWS/S3/Stripe, paid AI model, customer data, deployment or feature flag enablement. It supersedes prior 'M5.2 not implemented' assertions solely for current status while retaining history.
+<!-- END PHASE13_M5_2_CLOSED_M5_3_PLANNED_2026_10_31 -->
+
 <!-- BEGIN PHASE13_M5_1_CLOSED_M5_2_PLANNED_2026_10_30 -->
 ## Current Phase 13 M5 checkpoint — 2026-10-30: M5.1 closed with limits; M5.2 contract prepared
 

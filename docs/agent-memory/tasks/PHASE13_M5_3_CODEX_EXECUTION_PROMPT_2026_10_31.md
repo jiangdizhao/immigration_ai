@@ -1,0 +1,15 @@
+# Code Model dispatch (prepared) — Phase 13 M5.3 Integrated Offline Engineering Acceptance
+
+**Task:** One connected integration acceptance delivery; do NOT implement new product scope or split into many coding mini-milestones.
+
+**Local repository:** `~/immigration_ai`. **Branch:** `phase13-m5-school-admissions`. **Accepted M5.2 code SHA:** `f5120534d3e5df89c8ff3eeadb52607f75f5e54b`; expect a later docs-only checkpoint commit on top of it. Verify current HEAD and clean worktree; do not assume it still equals the code SHA.
+
+**Before work:** read `AGENTS.md`, `docs/agent-memory/CURRENT_HANDOFF.md`, `CURRENT_MILESTONE.md`, `PROJECT_STATE.md`, `DECISIONS.md`, `PHASE13_M5_SCHOOL_ADMISSIONS_INTEGRATED_PLAN_2026_10_30.md`, the M5.1 and M5.2 engineering closeouts, the M4 owner deferral and **all** of `docs/agent-memory/tasks/PHASE13_M5_3_INTEGRATED_OFFLINE_ENGINEERING_ACCEPTANCE_CONTRACT_2026_10_31.md`. Ground the suite in actual M1 Project, M2 references/permissions, M3 catalog, M4 deny-only managed-gates, M5.1 SchoolApplication and M5.2 SchoolAdmission service/API/client code.
+
+**Implement exactly the M5.3 offline acceptance contract:** One deterministic integrated, real-service-composition scenario harness covering I-01…I-12. At least three actual connected M5.1 applications and M5.2 cases; genuine package/revision/hash binding; preparation and reconfirmation; source/document/grant revocation invalidation; Offer/CoE and existing-evidence routes; separate Self and Managed fail-closed safety; owner/cross-Project/staff/guest and closing Project negatives; exact authored replay/CAS/history; bilingual UI/HTTP disabled states. Use stubs only at legitimate external adapter seams; do not mock the M5.1→M5.2 boundary itself.
+
+**Tests:** Add one `test:phase13:m5-3:offline` script and focused executable regression tests. Run M5.1, M5.2, M4 frozen-contract groups and the default broad `pnpm test:unit`, plus migration structural checks, Biome and `git diff --check`. Report actual counts, failures, skips and exact file list; compare TypeScript against 44 known baseline errors, with zero newly introduced expected. Track HTTP/client/DB/browser/provider/CI evidence distinctly. Use `/home/rico/anaconda3/envs/torch/bin/python` if Python is needed; do not change/create environments.
+
+**Hard restrictions:** NO PostgreSQL connections or migrations (the previous M5.1/M5.2 disposable-test approvals do not carry forward). NO provider, AWS/S3/Stripe, live model, real customer data, production/staging writes, flag enablement, deployment, M4 authority relaxations, external school submissions, real Offer/CoE certification, M6 or post-M5 E2E. Do not commit/push/rebase/merge/reset/force-push. Keep frozen M4 failures INT-06/07/12, DB-01/02 and M4-005 payment open, not falsely passing.
+
+**Deliver:** a single reviewable cumulative Patch and SHA-256, I-01…I-12 scenario outcomes, used real module boundaries, integration and regression results, remaining limitations, and final `M5_3_IMPLEMENTED_PENDING_INDEPENDENT_OFFLINE_REVIEW`. Stop; no automatic correction cycle.

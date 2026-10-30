@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_023_M5_2_CLOSEOUT_M5_3_PLAN_2026_10_31 -->
+## D-P13-023 — M5.2 engineering acceptance; M5.3 integrated offline acceptance planned
+
+**Date:** 2026-10-31 (Sydney). **GitHub verified owner-pushed implementation:** `f5120534d3e5df89c8ff3eeadb52607f75f5e54b` (`phase13-m5-school-admissions`, 45 paths). **Status:** `M5_2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / LIVE_PRODUCTION_NO_GO`.
+
+Accepted engineering evidence: independently inspected cumulative code patch, owner-reported offline `1192/1192` broad tests and `88/88` M5.2, approved isolated PostgreSQL 17.11 0047 migration (48 journal entries) and two repeat `6/6` Repository integration runs (initial `5/6` test-stimulus mismatch disclosed and corrected without production code edits). Reviewer did not rerun Docker/SQL; no external DB migrated. Source covers per-school preparation, Self vs Managed fail-closed paths and provenance-aware existing/new Offer/CoE/exception flows. Browser E2E, real providers/AI source fields, professional/payment/signature authority, TypeScript baseline 44 errors and truncated FK naming remain limitations. See [M5.2 formal closeout](./tasks/PHASE13_M5_2_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_31.md).
+
+Prepare the third and final M5 internal milestone as [one cohesive cross-module M5.3 offline acceptance contract](./tasks/PHASE13_M5_3_INTEGRATED_OFFLINE_ENGINEERING_ACCEPTANCE_CONTRACT_2026_10_31.md) with [dispatch prompt](./tasks/PHASE13_M5_3_CODEX_EXECUTION_PROMPT_2026_10_31.md). **Prepared, not dispatched**. Keep M4 INT-06/07/12, DB-01/02 and M4-005 payment failures for separately authorized post-M5 E2E. Prior isolated DB authorization does not transfer; M4 authority, external submissions, customer data, production flags and deployment remain DENY/NO_GO.
+<!-- END D_P13_023_M5_2_CLOSEOUT_M5_3_PLAN_2026_10_31 -->
+
 <!-- BEGIN D_P13_022_M5_1_CLOSEOUT_AND_M5_2_PLAN_2026_10_30 -->
 ## D-P13-022 — M5.1 engineering accepted with limits; M5.2 integrated contract prepared
 
