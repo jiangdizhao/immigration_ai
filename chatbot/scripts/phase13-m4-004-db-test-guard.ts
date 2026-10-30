@@ -538,7 +538,7 @@ export function expectedM4_004_Migration(
   if (
     journal.version !== "7" ||
     journal.dialect !== "postgresql" ||
-    journal.entries.length !== M4_004_TEST_TARGET.migrationCount ||
+    journal.entries.length < M4_004_TEST_TARGET.migrationCount ||
     journal.entries.some(
       (candidate, index) =>
         candidate.idx !== index ||

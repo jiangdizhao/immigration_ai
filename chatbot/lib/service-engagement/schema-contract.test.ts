@@ -328,8 +328,10 @@ test("production runtime never imports test-only synthetic authorities", () => {
   }
 });
 
-test("Migration 0043 is the additive journal successor with a snapshot", () => {
-  const entry = journal.entries.at(-1);
+test("Migration 0043 is a pinned additive journal entry with a snapshot", () => {
+  // M4-005 added the next additive migration (0044), so 0043 is pinned by its own
+  // index rather than by being the last entry. Nothing about 0043 may change.
+  const entry = journal.entries[43];
   assert.deepEqual(entry, {
     idx: 43,
     version: "7",
@@ -337,7 +339,10 @@ test("Migration 0043 is the additive journal successor with a snapshot", () => {
     tag: "0043_phase13_m4_004_service_engagement",
     breakpoints: true,
   });
-  assert.equal(journal.entries.length, 44);
+  assert.ok(journal.entries.length >= 44);
+  for (const [index, candidate] of journal.entries.entries()) {
+    assert.equal(candidate.idx, index);
+  }
   assert.ok(snapshot.id);
   assert.ok(snapshot.prevId);
   for (const table of tableNames) {

@@ -1,6 +1,7 @@
 import { type InferSelectModel, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -799,6 +800,10 @@ export const PROJECT_OPERATION_TYPES = [
   "service_engagement_terminate",
   "project_resource_disclosure_grant_create",
   "project_resource_disclosure_grant_revoke",
+  "service_payment_condition_record",
+  "service_payment_evidence_submit",
+  "service_payment_evidence_verify",
+  "service_payment_resolution_record",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -820,6 +825,9 @@ export const PROJECT_OPERATION_RESULT_KINDS = [
   "service_agreement_acceptance",
   "service_signature_evidence",
   "project_resource_disclosure_grant",
+  "service_payment_condition",
+  "service_payment_evidence",
+  "service_payment_resolution",
 ] as const;
 
 export const PROJECT_EVENT_TYPES = [
@@ -859,6 +867,11 @@ export const PROJECT_EVENT_TYPES = [
   "service_engagement_terminated",
   "project_resource_disclosure_granted",
   "project_resource_disclosure_revoked",
+  "service_payment_condition_recorded",
+  "service_payment_evidence_recorded",
+  "service_payment_evidence_verified",
+  "service_payment_evidence_rejected",
+  "service_payment_resolution_recorded",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -879,6 +892,9 @@ export const PROJECT_EVENT_SUBJECT_KINDS = [
   "service_agreement_acceptance",
   "service_signature_evidence",
   "project_resource_disclosure_grant",
+  "service_payment_condition",
+  "service_payment_evidence",
+  "service_payment_resolution",
 ] as const;
 export type ProjectOperationType = (typeof PROJECT_OPERATION_TYPES)[number];
 export type ProjectOperationResultKind =
@@ -931,11 +947,13 @@ export const projectOperation = pgTable(
     ),
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
-      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke')`
+      sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke',
+      'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
-      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'project_human_message', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant')`
+      sql`${table.resultKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'project_requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'project_human_message', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant',
+      'service_payment_condition', 'service_payment_evidence', 'service_payment_resolution')`
     ),
     actorShapeValid: check(
       "ProjectOperation_actor_shape_check",
@@ -943,7 +961,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke', 'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -991,11 +1009,12 @@ export const projectEvent = pgTable(
     ),
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
-      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn', 'service_engagement_created', 'service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued', 'service_engagement_agreement_accepted', 'service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated', 'project_resource_disclosure_granted', 'project_resource_disclosure_revoked')`
+      sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn', 'service_engagement_created', 'service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued', 'service_engagement_agreement_accepted', 'service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated', 'project_resource_disclosure_granted', 'project_resource_disclosure_revoked',
+      'service_payment_condition_recorded', 'service_payment_evidence_recorded', 'service_payment_evidence_verified', 'service_payment_evidence_rejected', 'service_payment_resolution_recorded')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",
-      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant') and ${table.subjectId} is not null)`
+      sql`(${table.subjectKind} is null and ${table.subjectId} is null) or (${table.subjectKind} is not null and ${table.subjectKind} in ('project', 'membership', 'chat', 'document_asset', 'document_version', 'document_scan_run', 'document_grant', 'requirement_state', 'document_extraction_run', 'project_fact_assertion', 'project_staff_assignment', 'project_thread_participation_consent', 'service_engagement', 'service_agreement_version', 'service_agreement_acceptance', 'service_signature_evidence', 'project_resource_disclosure_grant', 'service_payment_condition', 'service_payment_evidence', 'service_payment_resolution') and ${table.subjectId} is not null)`
     ),
     actorShapeValid: check(
       "ProjectEvent_actor_shape_check",
@@ -4681,4 +4700,613 @@ export type ServiceSignatureEvidenceRow = InferSelectModel<
 >;
 export type ProjectResourceDisclosureGrantRow = InferSelectModel<
   typeof projectResourceDisclosureGrant
+>;
+
+/* ------------------------------------------------------------------------- *
+ * Phase 13 M4-005 — staff-attested off-platform service payment conditions
+ *
+ * Three additive tables, deliberately separate from ServiceEngagement's
+ * service-contract tables, from M4-003 messaging, from M4-004 disclosure
+ * grants and from Stripe/VIP billing. There is no mutable "paid" column
+ * anywhere: the effective status is always derived by
+ * `evaluateServicePaymentState` from immutable rows.
+ * ------------------------------------------------------------------------- */
+
+export const servicePaymentCondition = pgTable(
+  "ServicePaymentCondition",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    engagementId: uuid("engagementId").notNull(),
+    agreementVersionId: uuid("agreementVersionId").notNull(),
+    agreementTermsSha256: varchar("agreementTermsSha256", {
+      length: 64,
+    }).notNull(),
+    requirement: varchar("requirement", { length: 16 }).notNull(),
+    amountMinor: bigint("amountMinor", { mode: "number" }),
+    currency: varchar("currency", { length: 3 }),
+    contractualBasisCode: varchar("contractualBasisCode", {
+      length: 32,
+    }).notNull(),
+    contractualBasisRef: varchar("contractualBasisRef", { length: 256 }),
+    contractObservationSha256: varchar("contractObservationSha256", {
+      length: 64,
+    }).notNull(),
+    contractAuthorityCode: varchar("contractAuthorityCode", {
+      length: 64,
+    }).notNull(),
+    contractAuthorityRequestSha256: varchar("contractAuthorityRequestSha256", {
+      length: 64,
+    }).notNull(),
+    policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdProjectRevision: integer("createdProjectRevision").notNull(),
+    createdOperationRecordId: uuid("createdOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    supersedesConditionId: uuid("supersedesConditionId"),
+    supersededByConditionId: uuid("supersededByConditionId"),
+    supersededAt: timestamp("supersededAt"),
+    supersededProjectRevision: integer("supersededProjectRevision"),
+    supersededOperationRecordId: uuid("supersededOperationRecordId").references(
+      () => projectOperation.id,
+      { onDelete: "restrict" }
+    ),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ServicePaymentCondition_id_project_unique"
+    ).on(table.id, table.projectId),
+    engagementIdentityUnique: uniqueIndex(
+      "ServicePaymentCondition_id_engagement_unique"
+    ).on(table.id, table.engagementId),
+    // Binds the exact contract, amount and currency, so an evidence row for
+    // another amount can never point at this condition.
+    // Composite target for ServicePaymentResolution_condition_fk: PostgreSQL requires
+    // a non-partial unique index on exactly this column set before the FK is added.
+    idProjectEngagementUnique: uniqueIndex(
+      "ServicePaymentCondition_id_project_engagement_unique"
+    ).on(table.id, table.projectId, table.engagementId),
+    scopeIdentityUnique: uniqueIndex(
+      "ServicePaymentCondition_scope_identity_unique"
+    ).on(
+      table.id,
+      table.projectId,
+      table.engagementId,
+      table.agreementVersionId,
+      table.agreementTermsSha256,
+      table.amountMinor,
+      table.currency
+    ),
+    // At most one live condition per engagement: no ambiguous payable/void pair.
+    liveUnique: uniqueIndex("ServicePaymentCondition_live_unique")
+      .on(table.projectId, table.engagementId)
+      .where(sql`${table.supersededAt} is null`),
+    projectCreatedIndex: index(
+      "ServicePaymentCondition_project_created_idx"
+    ).on(table.projectId, table.createdAt, table.id),
+    engagementVersionIndex: index(
+      "ServicePaymentCondition_engagement_version_idx"
+    ).on(table.engagementId, table.agreementVersionId),
+    engagementForeignKey: foreignKey({
+      columns: [table.engagementId, table.projectId],
+      foreignColumns: [serviceEngagement.id, serviceEngagement.projectId],
+      name: "ServicePaymentCondition_engagement_fk",
+    }).onDelete("restrict"),
+    agreementForeignKey: foreignKey({
+      columns: [
+        table.agreementVersionId,
+        table.engagementId,
+        table.agreementTermsSha256,
+      ],
+      foreignColumns: [
+        serviceAgreementVersion.id,
+        serviceAgreementVersion.engagementId,
+        serviceAgreementVersion.termsSha256,
+      ],
+      name: "ServicePaymentCondition_agreement_fk",
+    }).onDelete("restrict"),
+    requirementAllowed: check(
+      "ServicePaymentCondition_requirement_check",
+      sql`${table.requirement} in ('required', 'not_required', 'unknown')`
+    ),
+    basisCodeAllowed: check(
+      "ServicePaymentCondition_basis_code_check",
+      sql`${table.contractualBasisCode} in ('agreement_clause', 'payment_schedule', 'explicit_no_advance_fee')`
+    ),
+    // `required` must carry a real positive amount and currency; `not_required`
+    // and `unknown` must carry none, so a zero-value fiction is impossible.
+    amountShape: check(
+      "ServicePaymentCondition_amount_check",
+      sql`(
+        (${table.requirement} = 'required' and ${table.amountMinor} is not null and ${table.amountMinor} > 0 and ${table.amountMinor} <= 999999999999 and ${table.currency} ~ '^[A-Z]{3}$' and ${table.contractualBasisRef} is not null)
+        or (${table.requirement} = 'not_required' and ${table.amountMinor} is null and ${table.currency} is null and ${table.contractualBasisRef} is not null)
+        or (${table.requirement} = 'unknown' and ${table.amountMinor} is null and ${table.currency} is null)
+      )`
+    ),
+    basisRefShape: check(
+      "ServicePaymentCondition_basis_ref_check",
+      sql`${table.contractualBasisRef} is null or ${table.contractualBasisRef} ~ '^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,255}$'`
+    ),
+    hashShape: check(
+      "ServicePaymentCondition_hash_check",
+      sql`${table.agreementTermsSha256} ~ '^[0-9a-f]{64}$' and ${table.contractObservationSha256} ~ '^[0-9a-f]{64}$' and ${table.contractAuthorityRequestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    authorityShape: check(
+      "ServicePaymentCondition_authority_check",
+      sql`${table.contractAuthorityCode} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$' and length(${table.policyVersion}) > 0 and ${table.createdProjectRevision} > 0`
+    ),
+    supersessionConsistent: check(
+      "ServicePaymentCondition_supersession_check",
+      sql`(
+        (${table.supersededAt} is null and ${table.supersededByConditionId} is null and ${table.supersededProjectRevision} is null and ${table.supersededOperationRecordId} is null)
+        or (${table.supersededAt} is not null and ${table.supersededByConditionId} is not null and ${table.supersededByConditionId} <> ${table.id} and ${table.supersededProjectRevision} is not null and ${table.supersededOperationRecordId} is not null)
+      )`
+    ),
+  })
+);
+
+export type ServicePaymentConditionRow = InferSelectModel<
+  typeof servicePaymentCondition
+>;
+
+export const servicePaymentEvidence = pgTable(
+  "ServicePaymentEvidence",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    engagementId: uuid("engagementId").notNull(),
+    conditionId: uuid("conditionId").notNull(),
+    agreementVersionId: uuid("agreementVersionId").notNull(),
+    agreementTermsSha256: varchar("agreementTermsSha256", {
+      length: 64,
+    }).notNull(),
+    evidenceCategory: varchar("evidenceCategory", { length: 32 }).notNull(),
+    // Only digests are persisted: never raw receipt text, card data or a bank
+    // account number.
+    referenceSha256: varchar("referenceSha256", { length: 64 }).notNull(),
+    observationSha256: varchar("observationSha256", { length: 64 }).notNull(),
+    declaredAmountMinor: bigint("declaredAmountMinor", {
+      mode: "number",
+    }).notNull(),
+    declaredCurrency: varchar("declaredCurrency", { length: 3 }).notNull(),
+    paidAt: timestamp("paidAt").notNull(),
+    submittedByUserId: uuid("submittedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    submittedAt: timestamp("submittedAt").notNull(),
+    submittedProjectRevision: integer("submittedProjectRevision").notNull(),
+    submittedOperationRecordId: uuid("submittedOperationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    verificationStatus: varchar("verificationStatus", { length: 16 })
+      .notNull()
+      .default("pending"),
+    verificationMethod: varchar("verificationMethod", { length: 64 }),
+    verificationProviderCode: varchar("verificationProviderCode", {
+      length: 64,
+    }),
+    verificationProvenance: varchar("verificationProvenance", {
+      length: 256,
+    }),
+    verifiedByUserId: uuid("verifiedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    verifiedAt: timestamp("verifiedAt"),
+    verificationProjectRevision: integer("verificationProjectRevision"),
+    verificationOperationRecordId: uuid(
+      "verificationOperationRecordId"
+    ).references(() => projectOperation.id, { onDelete: "restrict" }),
+    rejectionReasonCode: varchar("rejectionReasonCode", { length: 64 }),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ServicePaymentEvidence_id_project_unique"
+    ).on(table.id, table.projectId),
+    engagementIdentityUnique: uniqueIndex(
+      "ServicePaymentEvidence_id_engagement_unique"
+    ).on(table.id, table.engagementId),
+    conditionIdentityUnique: uniqueIndex(
+      "ServicePaymentEvidence_id_condition_unique"
+    ).on(table.id, table.conditionId),
+    submittedOperationUnique: uniqueIndex(
+      "ServicePaymentEvidence_submitted_operation_unique"
+    ).on(table.submittedOperationRecordId),
+    verificationOperationUnique: uniqueIndex(
+      "ServicePaymentEvidence_verification_operation_unique"
+    ).on(table.verificationOperationRecordId),
+    // A receipt digest is submitted at most once per condition, so a duplicate
+    // replay cannot accumulate two live attestations of the same transfer.
+    conditionReferenceUnique: uniqueIndex(
+      "ServicePaymentEvidence_condition_reference_unique"
+    ).on(table.conditionId, table.referenceSha256),
+    // At most one verified settlement may exist for one condition.
+    verifiedUnique: uniqueIndex("ServicePaymentEvidence_verified_unique")
+      .on(table.conditionId)
+      .where(sql`${table.verificationStatus} = 'verified'`),
+    conditionStatusIndex: index(
+      "ServicePaymentEvidence_condition_status_idx"
+    ).on(table.conditionId, table.verificationStatus, table.submittedAt),
+    engagementStatusIndex: index(
+      "ServicePaymentEvidence_engagement_status_idx"
+    ).on(table.engagementId, table.verificationStatus, table.submittedAt),
+    // The composite target binds project, engagement, exact agreement version,
+    // terms hash, amount and currency, so evidence can only exist for the exact
+    // condition it claims to satisfy.
+    conditionScopeForeignKey: foreignKey({
+      columns: [
+        table.conditionId,
+        table.projectId,
+        table.engagementId,
+        table.agreementVersionId,
+        table.agreementTermsSha256,
+        table.declaredAmountMinor,
+        table.declaredCurrency,
+      ],
+      foreignColumns: [
+        servicePaymentCondition.id,
+        servicePaymentCondition.projectId,
+        servicePaymentCondition.engagementId,
+        servicePaymentCondition.agreementVersionId,
+        servicePaymentCondition.agreementTermsSha256,
+        servicePaymentCondition.amountMinor,
+        servicePaymentCondition.currency,
+      ],
+      name: "ServicePaymentEvidence_condition_scope_fk",
+    }).onDelete("restrict"),
+    categoryAllowed: check(
+      "ServicePaymentEvidence_category_check",
+      sql`${table.evidenceCategory} in ('external_transfer_receipt', 'provider_settlement_observation')`
+    ),
+    statusAllowed: check(
+      "ServicePaymentEvidence_status_check",
+      sql`${table.verificationStatus} in ('pending', 'verified', 'rejected')`
+    ),
+    amountShape: check(
+      "ServicePaymentEvidence_amount_check",
+      sql`${table.declaredAmountMinor} > 0 and ${table.declaredAmountMinor} <= 999999999999 and ${table.declaredCurrency} ~ '^[A-Z]{3}$'`
+    ),
+    hashShape: check(
+      "ServicePaymentEvidence_hash_check",
+      sql`${table.referenceSha256} ~ '^[0-9a-f]{64}$' and ${table.observationSha256} ~ '^[0-9a-f]{64}$' and ${table.agreementTermsSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    revisionShape: check(
+      "ServicePaymentEvidence_revision_check",
+      sql`${table.submittedProjectRevision} > 0 and ${table.paidAt} <= ${table.submittedAt} + interval '5 minutes'`
+    ),
+    // A submission is evidence awaiting evaluation, never settlement by itself.
+    lifecycleConsistent: check(
+      "ServicePaymentEvidence_lifecycle_check",
+      sql`(
+        (${table.verificationStatus} = 'pending' and ${table.verifiedAt} is null and ${table.verifiedByUserId} is null and ${table.verificationMethod} is null and ${table.verificationProjectRevision} is null and ${table.verificationOperationRecordId} is null and ${table.rejectionReasonCode} is null)
+        or (${table.verificationStatus} = 'verified' and ${table.verifiedAt} is not null and ${table.verifiedByUserId} is not null and ${table.verificationMethod} is not null and ${table.verificationProjectRevision} is not null and ${table.verificationOperationRecordId} is not null and ${table.rejectionReasonCode} is null)
+        or (${table.verificationStatus} = 'rejected' and ${table.verifiedAt} is not null and ${table.verifiedByUserId} is not null and ${table.verificationMethod} is not null and ${table.verificationProjectRevision} is not null and ${table.verificationOperationRecordId} is not null and ${table.rejectionReasonCode} is not null)
+      )`
+    ),
+  })
+);
+
+export type ServicePaymentEvidenceRow = InferSelectModel<
+  typeof servicePaymentEvidence
+>;
+
+export const servicePaymentResolution = pgTable(
+  "ServicePaymentResolution",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId").notNull(),
+    engagementId: uuid("engagementId").notNull(),
+    conditionId: uuid("conditionId").notNull(),
+    evidenceId: uuid("evidenceId"),
+    resolutionKind: varchar("resolutionKind", { length: 16 }).notNull(),
+    reasonCode: varchar("reasonCode", { length: 64 }).notNull(),
+    observationSha256: varchar("observationSha256", { length: 64 }).notNull(),
+    observationCode: varchar("observationCode", { length: 64 }),
+    financeAuthorityCode: varchar("financeAuthorityCode", {
+      length: 64,
+    }).notNull(),
+    financeAuthorityRequestSha256: varchar("financeAuthorityRequestSha256", {
+      length: 64,
+    }).notNull(),
+    supersedesResolutionId: uuid("supersedesResolutionId"),
+    recordedByUserId: uuid("recordedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    resolvedProjectRevision: integer("resolvedProjectRevision").notNull(),
+    operationRecordId: uuid("operationRecordId")
+      .notNull()
+      .references(() => projectOperation.id, { onDelete: "restrict" }),
+    resolvedAt: timestamp("resolvedAt").notNull(),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ServicePaymentResolution_id_project_unique"
+    ).on(table.id, table.projectId),
+    conditionIdentityUnique: uniqueIndex(
+      "ServicePaymentResolution_id_condition_unique"
+    ).on(table.id, table.conditionId),
+    operationUnique: uniqueIndex(
+      "ServicePaymentResolution_operation_unique"
+    ).on(table.operationRecordId),
+    // Correction A: a resolution can be corrected at most once. The partial unique
+    // index makes a *concurrent* double correction impossible at the database, not
+    // merely unlikely through repository serialization.
+    supersededTargetUnique: uniqueIndex(
+      "ServicePaymentResolution_superseded_target_unique"
+    )
+      .on(table.supersedesResolutionId)
+      .where(sql`${table.supersedesResolutionId} is not null`),
+    conditionIndex: index("ServicePaymentResolution_condition_idx").on(
+      table.conditionId,
+      table.resolvedAt,
+      table.id
+    ),
+    engagementIndex: index("ServicePaymentResolution_engagement_idx").on(
+      table.engagementId,
+      table.resolvedAt,
+      table.id
+    ),
+    conditionForeignKey: foreignKey({
+      columns: [table.conditionId, table.projectId, table.engagementId],
+      foreignColumns: [
+        servicePaymentCondition.id,
+        servicePaymentCondition.projectId,
+        servicePaymentCondition.engagementId,
+      ],
+      name: "ServicePaymentResolution_condition_fk",
+    }).onDelete("restrict"),
+    evidenceForeignKey: foreignKey({
+      columns: [table.evidenceId, table.conditionId],
+      foreignColumns: [
+        servicePaymentEvidence.id,
+        servicePaymentEvidence.conditionId,
+      ],
+      name: "ServicePaymentResolution_evidence_fk",
+    }).onDelete("restrict"),
+    kindAllowed: check(
+      "ServicePaymentResolution_kind_check",
+      sql`${table.resolutionKind} in ('dispute', 'refund', 'reversal', 'void', 'correction')`
+    ),
+    reasonShape: check(
+      "ServicePaymentResolution_reason_check",
+      sql`${table.reasonCode} ~ '^[a-z0-9][a-z0-9._-]{0,63}$'`
+    ),
+    hashShape: check(
+      "ServicePaymentResolution_hash_check",
+      sql`${table.observationSha256} ~ '^[0-9a-f]{64}$' and ${table.financeAuthorityRequestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    authorityShape: check(
+      "ServicePaymentResolution_authority_check",
+      sql`${table.financeAuthorityCode} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$' and ${table.resolvedProjectRevision} > 0`
+    ),
+    // Only a correction supersedes another resolution; every other kind is a
+    // self-contained observation. A correction must name its target.
+    supersessionShape: check(
+      "ServicePaymentResolution_supersession_check",
+      sql`(
+        (${table.resolutionKind} = 'correction' and ${table.supersedesResolutionId} is not null and ${table.supersedesResolutionId} <> ${table.id})
+        or (${table.resolutionKind} <> 'correction' and ${table.supersedesResolutionId} is null)
+      )`
+    ),
+    // Refund/reversal/dispute must name the exact evidence they invalidate; a
+    // condition-wide void must not pretend to target a payment row.
+    targetShape: check(
+      "ServicePaymentResolution_target_check",
+      sql`(
+        (${table.resolutionKind} in ('refund', 'reversal', 'dispute') and ${table.evidenceId} is not null)
+        or (${table.resolutionKind} = 'void' and ${table.evidenceId} is null)
+        or (${table.resolutionKind} = 'correction' and ${table.evidenceId} is null)
+      )`
+    ),
+  })
+);
+
+export type ServicePaymentResolutionRow = InferSelectModel<
+  typeof servicePaymentResolution
+>;
+
+/* ------------------------------------------------------------------------- *
+ * Phase 13 M4-006 — persistent scoped professional review
+ *
+ * Two purpose-built tables rather than a generic workflow engine:
+ *
+ * - `ProfessionalReviewRequest` holds the immutable target binding plus a
+ *   controlled current projection (`state`, `revision`).
+ * - `ProfessionalReviewRevision` is append-only history; a database trigger
+ *   rejects UPDATE/DELETE, and a request trigger rejects revision skips and any
+ *   attempt to mutate the target binding.
+ *
+ * Every review is bound to the exact Project and the exact immutable target
+ * version/hash, so an approval can never be transferred to another package.
+ * ------------------------------------------------------------------------- */
+
+export const PROFESSIONAL_REVIEW_TARGET_KIND_VALUES = [
+  "managed_school_application",
+  "student_500_visa_application",
+] as const;
+
+export const PROFESSIONAL_REVIEW_STATE_VALUES = [
+  "requested",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "rejected",
+  "invalidated",
+] as const;
+
+export const PROFESSIONAL_REVIEW_ACTION_VALUES = [
+  "create_request",
+  "start_review",
+  "request_changes",
+  "approve",
+  "reject",
+  "invalidate",
+] as const;
+
+export const PROFESSIONAL_REVIEW_SCOPE_VALUES = [
+  "eligibility_review",
+  "document_completeness",
+  "form_accuracy",
+  "legal_advice_alignment",
+] as const;
+
+export const professionalReviewRequest = pgTable(
+  "ProfessionalReviewRequest",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    targetKind: varchar("targetKind", {
+      enum: PROFESSIONAL_REVIEW_TARGET_KIND_VALUES,
+      length: 64,
+    }).notNull(),
+    targetId: varchar("targetId", { length: 128 }).notNull(),
+    targetVersion: integer("targetVersion").notNull(),
+    targetSha256: varchar("targetSha256", { length: 64 }).notNull(),
+    targetBindingSha256: varchar("targetBindingSha256", {
+      length: 64,
+    }).notNull(),
+    reviewPurpose: varchar("reviewPurpose", { length: 64 }).notNull(),
+    reviewScope: text("reviewScope").array().notNull(),
+    state: varchar("state", {
+      enum: PROFESSIONAL_REVIEW_STATE_VALUES,
+      length: 32,
+    })
+      .notNull()
+      .default("requested"),
+    revision: integer("revision").notNull().default(1),
+    requestedByUserId: uuid("requestedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    reviewerUserId: uuid("reviewerUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    authorityCode: varchar("authorityCode", { length: 64 }),
+    credentialCode: varchar("credentialCode", { length: 64 }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    requestedAt: timestamp("requestedAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    invalidatedAt: timestamp("invalidatedAt"),
+    invalidationReasonCode: varchar("invalidationReasonCode", { length: 64 }),
+  },
+  (table) => ({
+    projectIdentityUnique: uniqueIndex(
+      "ProfessionalReviewRequest_id_project_unique"
+    ).on(table.id, table.projectId),
+    // One operation id per Project: an id can never be reused across Projects and
+    // a duplicate insert is a database-level conflict, not an application check.
+    projectOperationUnique: uniqueIndex(
+      "ProfessionalReviewRequest_project_operation_unique"
+    ).on(table.projectId, table.operationId),
+    targetIndex: index("ProfessionalReviewRequest_target_idx").on(
+      table.projectId,
+      table.targetKind,
+      table.targetId,
+      table.revision
+    ),
+    requesterIndex: index("ProfessionalReviewRequest_requester_idx").on(
+      table.requestedByUserId,
+      table.state,
+      table.id
+    ),
+    revisionPositive: check(
+      "ProfessionalReviewRequest_revision_check",
+      sql`${table.revision} > 0 and ${table.targetVersion} > 0`
+    ),
+    hashShape: check(
+      "ProfessionalReviewRequest_hash_check",
+      sql`${table.targetSha256} ~ '^[0-9a-f]{64}$' and ${table.targetBindingSha256} ~ '^[0-9a-f]{64}$' and ${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    scopeAllowed: check(
+      "ProfessionalReviewRequest_scope_check",
+      sql`${table.reviewScope} is not null and cardinality(${table.reviewScope}) between 1 and 4 and ${table.reviewScope} <@ array['eligibility_review', 'document_completeness', 'form_accuracy', 'legal_advice_alignment']::text[]`
+    ),
+    stateAllowed: check(
+      "ProfessionalReviewRequest_state_check",
+      sql`${table.state} in ('requested', 'in_review', 'changes_requested', 'approved', 'rejected', 'invalidated')`
+    ),
+    purposeAllowed: check(
+      "ProfessionalReviewRequest_purpose_check",
+      sql`${table.reviewPurpose} = 'managed_handoff_authorization'`
+    ),
+    invalidationConsistent: check(
+      "ProfessionalReviewRequest_invalidation_check",
+      sql`((${table.state} = 'invalidated' and ${table.invalidatedAt} is not null) or (${table.state} <> 'invalidated' and ${table.invalidatedAt} is null and ${table.invalidationReasonCode} is null))`
+    ),
+    timestampsConsistent: check(
+      "ProfessionalReviewRequest_timestamps_check",
+      sql`${table.updatedAt} >= ${table.requestedAt}`
+    ),
+  })
+);
+
+export const professionalReviewRevision = pgTable(
+  "ProfessionalReviewRevision",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    reviewRequestId: uuid("reviewRequestId")
+      .notNull()
+      .references(() => professionalReviewRequest.id, { onDelete: "restrict" }),
+    revision: integer("revision").notNull(),
+    state: varchar("state", {
+      enum: PROFESSIONAL_REVIEW_STATE_VALUES,
+      length: 32,
+    }).notNull(),
+    action: varchar("action", {
+      enum: PROFESSIONAL_REVIEW_ACTION_VALUES,
+      length: 32,
+    }).notNull(),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    decidedByUserId: uuid("decidedByUserId").references(() => user.id, {
+      onDelete: "restrict",
+    }),
+    decidedAt: timestamp("decidedAt").notNull().defaultNow(),
+    boundTargetVersion: integer("boundTargetVersion").notNull(),
+    boundTargetSha256: varchar("boundTargetSha256", { length: 64 }).notNull(),
+    authorityCode: varchar("authorityCode", { length: 64 }),
+    credentialCode: varchar("credentialCode", { length: 64 }),
+    commentSha256: varchar("commentSha256", { length: 64 }),
+    reasonCode: varchar("reasonCode", { length: 64 }),
+  },
+  (table) => ({
+    requestRevisionUnique: uniqueIndex(
+      "ProfessionalReviewRevision_request_revision_unique"
+    ).on(table.reviewRequestId, table.revision),
+    requestOperationUnique: uniqueIndex(
+      "ProfessionalReviewRevision_request_operation_unique"
+    ).on(table.reviewRequestId, table.operationId),
+    requestIndex: index("ProfessionalReviewRevision_request_idx").on(
+      table.reviewRequestId,
+      table.revision
+    ),
+    revisionPositive: check(
+      "ProfessionalReviewRevision_revision_check",
+      sql`${table.revision} > 0 and ${table.boundTargetVersion} > 0`
+    ),
+    hashShape: check(
+      "ProfessionalReviewRevision_hash_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$' and ${table.boundTargetSha256} ~ '^[0-9a-f]{64}$' and (${table.commentSha256} is null or ${table.commentSha256} ~ '^[0-9a-f]{64}$')`
+    ),
+    stateAllowed: check(
+      "ProfessionalReviewRevision_state_check",
+      sql`${table.state} in ('requested', 'in_review', 'changes_requested', 'approved', 'rejected', 'invalidated')`
+    ),
+    actionAllowed: check(
+      "ProfessionalReviewRevision_action_check",
+      sql`${table.action} in ('create_request', 'start_review', 'request_changes', 'approve', 'reject', 'invalidate')`
+    ),
+  })
+);
+
+export type ProfessionalReviewRequestRow = InferSelectModel<
+  typeof professionalReviewRequest
+>;
+export type ProfessionalReviewRevisionRow = InferSelectModel<
+  typeof professionalReviewRevision
 >;

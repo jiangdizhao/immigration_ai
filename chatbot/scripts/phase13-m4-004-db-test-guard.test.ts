@@ -320,7 +320,9 @@ test("the checked-in journal and Migration 0043 bytes match the pinned identity"
   assert.equal(expected.tag, M4_004_TEST_TARGET.migrationHead);
   assert.equal(expected.when, M4_004_TEST_TARGET.migrationWhen);
   assert.equal(expected.hash, M4_004_TEST_TARGET.migrationSqlSha256);
-  assert.equal(journal.entries.length, M4_004_TEST_TARGET.migrationCount);
+  // Later additive migrations (for example M4-005/0044) are permitted; the
+  // pinned 0043 identity and the target ledger shape are what this guard owns.
+  assert.ok(journal.entries.length >= M4_004_TEST_TARGET.migrationCount);
 
   // Any source drift is refused, so a run can only apply the reviewed bytes.
   assert.throws(() =>
@@ -329,7 +331,12 @@ test("the checked-in journal and Migration 0043 bytes match the pinned identity"
   assert.throws(() => expectedM4_004_Migration({} as never, migrationSql));
   assert.throws(() =>
     expectedM4_004_Migration(
-      { ...journal, entries: journal.entries.slice(0, -1) },
+      {
+        ...journal,
+        entries: journal.entries.filter(
+          (candidate) => candidate.idx !== M4_004_TEST_TARGET.migrationIndex
+        ),
+      },
       migrationSql
     )
   );
