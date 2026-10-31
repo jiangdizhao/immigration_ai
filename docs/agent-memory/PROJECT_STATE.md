@@ -1,3 +1,9 @@
+<!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+## Product integration checkpoint — 2026-11-01
+
+The Phase 13 M1–M5 implementation remains the current engineering foundation. A [compact Project Workspace UX integration contract](./tasks/PHASE13_PROJECT_WORKSPACE_UX_INTEGRATION_CONTRACT_2026_11_01.md) is now recorded to fix the chat-first layout's cramped M5 left-rail forms and empty selected-Project main pane by reusing existing components/controllers. The reference images `doc/Picture1.png`–`Picture3.png` are conceptual only. **No code or release change** is implied; inherited M4/Post-M5 blockers, Project Document trust restrictions, and `LIVE_PRODUCTION_NO_GO` remain. Owner-local uncommitted P1 work must be preserved.
+<!-- END PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+
 <!-- BEGIN PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
 ## Post-M5 E2E final independent G5 closeout — 2026-10-31 (current authoritative checkpoint)
 
