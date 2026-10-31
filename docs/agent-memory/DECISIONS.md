@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_024_M5_COMPLETE_CLOSEOUT_POSTM5_E2E_CONTRACT_2026_10_31 -->
+## D-P13-024 — Complete M5 internal closeout; separately gated post-M5 school-application E2E contract
+
+**Date:** 2026-10-31 (Sydney). **Remote verified code:** `433f0f3bf83ed8505675b2d164e07b138dbc72f4` on `phase13-m5-school-admissions` (18 M5.3 paths). **Decision:** M5.1 and M5.2 `ENGINEERING_ACCEPTED_WITH_LIMITATIONS`, M5.3 `OFFLINE_ACCEPTED_WITH_LIMITATIONS`; all three M5 internal milestones formally `M5_DEVELOPMENT_CLOSED`. This is **not production readiness**; `LIVE_PRODUCTION_NO_GO` remains.
+
+Evidence: owner/Cline-reported M5.1 isolated PG17 9/9 three runs, M5.2 isolated PG17 6/6 two final runs, M5.3 composed real services with in-memory M1/M2/M3 test authority 30/30 and default tests 1222/1222. Reviewer verified source patches/GitHub commits but did not rerun owner tests. Preserve 44 existing TS diagnostics, default-OFF flags, lack of real provider/credential/signature/payment authorization and runtime/browser/combined-production-DB coverage. Formal details: [Complete M5 Closeout](./tasks/PHASE13_M5_COMPLETE_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_31.md).
+
+**Independent decision:** [Post-M5 School Application E2E Acceptance Contract](./tasks/PHASE13_POST_M5_SCHOOL_APPLICATION_E2E_ACCEPTANCE_CONTRACT_2026_10_31.md) is prepared **but not executable without new owner authorization**. The frozen failed M4 ledger remains OPEN: INT-06, INT-07, INT-12, DB-01, DB-02 (M4 final 12/17), M4-005 Stage3B 29/41 with 12 failures/timeout and six old journal-head assertions, plus cross-module authentic-authority absence. E2E is not M5.4 and must not relabel M4 failures or manufacture READY, legal authority, school receipt, signature or payment.
+
+This GitHub commit authorizes docs only; no DB/browser/third-party/production/feature flag action, previous disposable container reuse or cleanup.
+<!-- END D_P13_024_M5_COMPLETE_CLOSEOUT_POSTM5_E2E_CONTRACT_2026_10_31 -->
+
 <!-- BEGIN D_P13_023_M5_2_CLOSEOUT_M5_3_PLAN_2026_10_31 -->
 ## D-P13-023 — M5.2 engineering acceptance; M5.3 integrated offline acceptance planned
 

@@ -1,3 +1,14 @@
+<!-- BEGIN PHASE13_M5_CLOSED_POSTM5_E2E_CONTRACT_PREPARED_2026_10_31 -->
+## Phase 13 M5 official closeout — 2026-10-31 (current authoritative checkpoint)
+
+- **Verified owner-pushed M5.3 code baseline:** `phase13-m5-school-admissions` at `433f0f3bf83ed8505675b2d164e07b138dbc72f4` (18 changed paths: 16 integration harness/test files, package script, CURRENT_HANDOFF; no M5.3 production code/schema/migration changes). M5.1 `e0b4be5d` and M5.2 `f5120534` are antecedent accepted code milestones.
+- **Decision:** `PHASE13_M5_INTERNAL_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / M5_DEVELOPMENT_CLOSED / LIVE_PRODUCTION_NO_GO`. M5.1, M5.2 and M5.3 are **all closed with recorded limitations**. [Formal M5 complete closeout](./tasks/PHASE13_M5_COMPLETE_ENGINEERING_CLOSEOUT_ACCEPTED_WITH_LIMITATIONS_2026_10_31.md). Historic prior 'M5.3 pending/planned' entries below are dated and superseded as current status.
+- **Evidence with provenance:** owner/Cline reported M5.1 disposable PG17.11 9/9 (three runs) through 0046, M5.2 disposable PG17.11 6/6 (two final runs, initial failed test stimulus documented) through 0047, and M5.3 in-memory cross-module real-service 30/30 I-01–I-12, broad `pnpm test:unit` 1222/1222, focused M5.1 58 and M5.2 88. Independent review checked cumulative source patches and owner-pushed Git commits, **not** owner's Docker/Node execution directly. Existing 44 TypeScript diagnostics persist, 0 newly introduced in M5.3.
+- **M4 remains `ENGINEERING_CLOSED_WITH_BLOCKERS`:** final 12/17 (5 actual FAIL: INT-06/07/12, DB-01/02); M4-005 Stage 3B 29/41 (12 FAIL, exit 124), six journal-assertion drifts, and unapproved real credentials/signature/payment/provider authority. None is silently reclassified PASS.
+- **New separate gate:** [Post-M5 School Application E2E Acceptance Contract](./tasks/PHASE13_POST_M5_SCHOOL_APPLICATION_E2E_ACCEPTANCE_CONTRACT_2026_10_31.md) is **PREPARED ONLY, NOT EXECUTED OR AUTHORIZED**. It freezes independent M4 failure replay, fresh disposable PG+real service+HTTP+browser integration, safety/adversarial scenarios and strict evidence/result classification; **NOT** M5.4, M6 or release approval. Earlier M5.1/M5.2 DB authorization does not carry over.
+- **Boundary:** both M5 flags default OFF, M4 professional/contract/payment/credential/review/provider gates deny-only, real school submissions disconnected. No live provider, AWS/S3/Stripe, payment/credential/signing authority, customer data, existing DB migration, staging/production deployment, feature activation or disposable cleanup is authorized by this docs-only checkpoint.
+<!-- END PHASE13_M5_CLOSED_POSTM5_E2E_CONTRACT_PREPARED_2026_10_31 -->
+
 <!-- BEGIN PHASE13_M5_2_CLOSED_M5_3_PLANNED_2026_10_31 -->
 ## Current Phase 13 M5 checkpoint — 2026-10-31: M5.2 closed with limits; M5.3 prepared
 
