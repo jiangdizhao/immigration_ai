@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
+## Post-M5 E2E final independent G5 closeout — 2026-10-31 (current authoritative checkpoint)
+
+- **Final disposition:** `POST_M5_E2E_CLOSED_WITH_BLOCKERS / E2E_BLOCKED / LIVE_PRODUCTION_NO_GO`. The owner-authorized isolated G0–G4 campaign and one bounded completion pass have ended; **no automatic third patch-test loop**. [Full per-E2E/M4 results, provenance and future regression evidence index](./tasks/PHASE13_POST_M5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31.md).
+- **Evidence:** PG17 on isolated `127.0.0.1:55449` through migration 0047 (48 entries), meaningful real HTTP/PG Project→school application/case and exact replay/CAS/archive tests, plus a real Chromium/NextAuth desktop journey. Reviewer did not rerun owner's Docker/HTTP/browser. Frozen Offer E2E-06 failed due to a view-field assertion, canonical browser E2E-13 remains partial/mobile/flag-OFF unverified, and some first-campaign PASS labels exceed proven contract scope.
+- **Inherited M4:** DB-01/02 negative PostgreSQL guards accepted; INT-06 formal replay FAIL (SQLSTATE vs service `state_conflict` harness mismatch); INT-07/12 partly proven but not complete managed cross-module readiness; M4-005 Stage3B twelve functions **NOT RE-EXECUTED/UNVERIFIED**, journal suite **FAIL** (five stale 45 vs 48 assertions), external authority remains UNVERIFIED. None silently promoted to production entitlement.
+- **Provenance:** final completion report SHA-256 `c33b2a17…e9070`, JSON `90922773…a3a0`, test patch `cc6d9650…a0` (exact full digests in closeout). Original run's local report/JSON/patch were reported absent from `~/`; surviving earlier 22-record ledger has SHA `43080da6…d0299`. Local test patch remains uncommitted and is **not** part of this docs-only record.
+- **Operational boundary:** M5.1–M5.3 internal closeout unaffected. No code, tests, DB, Docker, network provider, payment, AWS/S3/Stripe, staging/production or feature flags changed by this GitHub documentation commit. Isolated container cleanup/reuse requires separate approval; no live school submission or professional/finance authority granted.
+<!-- END PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
+
 <!-- BEGIN PHASE13_POSTM5_E2E_EXECUTION_PLAN_2026_10_31 -->
 ## Post-M5 E2E execution planning — 2026-10-31 (documentation-only)
 

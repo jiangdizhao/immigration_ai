@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_025_POSTM5_E2E_CLOSED_WITH_BLOCKERS_2026_10_31 -->
+## D-P13-025 — Close independent Post-M5 E2E with blockers; preserve two campaigns and stop repair loop
+
+**Date:** 2026-10-31 (Australia/Sydney). **Reviewed branch/code baseline:** `phase13-m5-school-admissions` / `b70de184344f454538321170d8ff01dc86e49fd0`; M5.3 production-code ancestor `433f0f3bf83ed8505675b2d164e07b138dbc72f4`.
+
+**Decision:** `POST_M5_E2E_CLOSED_WITH_BLOCKERS / E2E_BLOCKED / LIVE_PRODUCTION_NO_GO`. Following the owner-authorized isolated G1–G4 campaign and one owner-approved bounded completion attempt, **do not** launch a third green-seeking repair loop. Preserve meaningful isolated PG/HTTP, replay/CAS, archive, negative authority and desktop Chromium evidence, but do not claim the mandatory Offer, full browser/mobile/feature-OFF, payment, review-staff-revocation and real external-authority contracts passed. M5 internal development remains `CLOSED_WITH_LIMITATIONS`, not undone.
+
+**Precise blocker summary:** E2E-06 FAIL (wrong test view field), E2E-13 PARTIAL (mobile + feature-OFF incomplete); M4 INT-06 FAIL (service error mapping vs asserted SQLSTATE), INT-07/12 PARTIAL cross-module proof, DB-01/02 accepted; M4-005 Stage3B twelve cases UNVERIFIED/not rerun, M4-005 journal FAIL (five residual 45-vs-48 assertions); external lawyer/payment/signature/school receipt authority UNVERIFIED. No newly demonstrated production business/security defect; this is **not** proof missing positive paths are safe. Owner-approved E2E-10-R keeps authorized owner **read-only** history on closed Project while rejecting writes/others.
+
+**Durable evidence/reference:** [Post-M5 final independent G5 closeout](./tasks/PHASE13_POST_M5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31.md) records per-E2E and M4 status, source file digests, missing first-run home artifacts, local tmpfs/traces limitations and future release-dependent verification conditions. The docs-only decision grants **no** code/test changes, Git commits of the local untracked harness, migration, existing disposable cleanup/reuse, prod credentials/payment/school submission or feature activation.
+<!-- END D_P13_025_POSTM5_E2E_CLOSED_WITH_BLOCKERS_2026_10_31 -->
+
 <!-- BEGIN D_P13_024_M5_COMPLETE_CLOSEOUT_POSTM5_E2E_CONTRACT_2026_10_31 -->
 ## D-P13-024 — Complete M5 internal closeout; separately gated post-M5 school-application E2E contract
 
