@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_POSTM5_E2E_EXECUTION_PLAN_2026_10_31 -->
+## Post-M5 E2E execution planning — 2026-10-31 (documentation-only)
+
+- **Current remote baseline for this planning change:** `75c7e424cd1ab4efad2c73a8b5e1343491d14c5a` on `phase13-m5-school-admissions`; accepted M5.3 runtime code stays at `433f0f3bf83ed8505675b2d164e07b138dbc72f4`.
+- **New bounded operator plan:** [Post-M5 E2E Execution Plan](./tasks/PHASE13_POST_M5_E2E_EXECUTION_PLAN_2026_10_31.md), subordinate to the existing [controlling E2E contract](./tasks/PHASE13_POST_M5_SCHOOL_APPLICATION_E2E_ACCEPTANCE_CONTRACT_2026_10_31.md). One **G0 read-only evidence-freeze/authorization packet**, then only after *separate explicit owner authorization* one G1–G4 isolated integrated execution and G5 independent verdict.
+- **Status unchanged:** `EXECUTION_PLAN_PREPARED_ONLY / G0_NOT_EXECUTED / POST_M5_E2E_NOT_AUTHORIZED / LIVE_PRODUCTION_NO_GO`. All 18 E2E scenarios remain NOT RUN, and inherited M4 five final FAIL + M4-005 12 failures and journal-drift assertions remain open. No new code, database connection, migration, Docker/browser, AWS/Stripe/S3, paid model/provider, feature flag enablement, production deployment or cleanup is authorized by this documentation.
+<!-- END PHASE13_POSTM5_E2E_EXECUTION_PLAN_2026_10_31 -->
+
 <!-- BEGIN PHASE13_M5_CLOSED_POSTM5_E2E_CONTRACT_PREPARED_2026_10_31 -->
 ## Phase 13 M5 official closeout — 2026-10-31 (current authoritative checkpoint)
 
