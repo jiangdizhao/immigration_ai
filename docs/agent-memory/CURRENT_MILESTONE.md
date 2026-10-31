@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+## Active short task — Project Workspace UX integration (2026-11-01)
+
+- **Contract:** [compact UX integration](./tasks/PHASE13_PROJECT_WORKSPACE_UX_INTEGRATION_CONTRACT_2026_11_01.md), `READY_FOR_BOUNDED_IMPLEMENTATION` (docs only). One main-area layout/navigation repair, not a new Phase 13 milestone or M5 E2E campaign.
+- **Exit criterion:** Project home without Chat is useful; school/application/admissions panels occupy main content; Project ↔ Chat ↔ Standalone navigation, narrow layout, zh/en and existing authorization remain correct. No DB/API/provider changes.
+- **Unchanged:** M5 internal engineering closed with limitations; Post-M5 E2E closed with blockers; M4 historical failures and `LIVE_PRODUCTION_NO_GO` remain.
+<!-- END PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+
 <!-- BEGIN PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
 ## Post-M5 E2E final independent G5 closeout — 2026-10-31 (current authoritative checkpoint)
 
