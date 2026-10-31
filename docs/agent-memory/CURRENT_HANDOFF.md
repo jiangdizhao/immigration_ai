@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+## Phase 13 Project Workspace UX integration — compact contract recorded (2026-11-01)
+
+- **Current task:** [Compact UX Integration Contract](./tasks/PHASE13_PROJECT_WORKSPACE_UX_INTEGRATION_CONTRACT_2026_11_01.md). One bounded Project UI batch: move M5 school applications/admissions out of the 250px Project navigation rail into the main area; eliminate the selected-Project/no-Chat blank center; preserve Standalone Chat, server authority and existing M1–M5 behavior.
+- **Status:** `CONTRACT_COMMITTED / IMPLEMENTATION_NOT_YET_REVIEWED`. This is a GitHub **documentation-only** checkpoint; no runtime code, migrations, credentials, feature flags, AWS, database, or deployment are changed.
+- **UX references:** `doc/Picture1.png` (stage/chat/materials), `doc/Picture2.png` (document center), `doc/Picture3.png` (versions/review) are conceptual only; do not fabricate progress, Project Documents, Offer/CoE, professional approval or external submission.
+- **Local safety:** 2026-11-01 handoff reports an **uncommitted P1 personal-project-access patch** in the owner's Ubuntu worktree. It is not represented by this GitHub docs commit; inspect and preserve local changes before any sync or Codex edits.
+- **Inherited verdicts unchanged:** M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`, Post-M5 `E2E_BLOCKED`, Phase 13 `LIVE_PRODUCTION_NO_GO`. No new M6/M9 authority or production approval.
+<!-- END PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
+
 <!-- BEGIN PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
 ## Post-M5 E2E final independent G5 closeout — 2026-10-31 (current authoritative checkpoint)
 
