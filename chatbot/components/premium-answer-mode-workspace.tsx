@@ -11,6 +11,7 @@ import {
 } from "@/lib/assistant-mode";
 import type { PolicyLaunchRequestState } from "@/lib/policy-intelligence/conversation-policy-binding";
 import type { PolicyWorkspaceReference } from "@/lib/policy-intelligence-product";
+import type { ProjectEntryAvailability } from "@/lib/workspace/project-entry";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import { ImmigrationAIWorkspace } from "./immigration-ai-workspace";
 import { useSiteLocale } from "./site-locale-provider";
@@ -21,7 +22,9 @@ export function PremiumAnswerModeWorkspace({
   policyLaunchState = "resolved",
   requestedPolicySlug = null,
   initialChatId = null,
-  projectWorkspaceEnabled = false,
+  projectAvailability = "available",
+  temporaryGuestProject = false,
+  schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
 }: {
@@ -31,11 +34,18 @@ export function PremiumAnswerModeWorkspace({
   policyLaunchState?: PolicyLaunchRequestState;
   requestedPolicySlug?: string | null;
   initialChatId?: string | null;
-  /** Server-derived registered-customer and Project Chat write capability. */
-  projectWorkspaceEnabled?: boolean;
-  /** Phase 13 M5.1 capability; default OFF and re-checked by the API. */
+  /**
+   * Phase 13 P1 server-derived personal Project capability. The Project entry is
+   * always rendered; unavailable states explain themselves safely.
+   */
+  projectAvailability?: ProjectEntryAvailability;
+  /** Guest Projects are tied to the temporary guest session. */
+  temporaryGuestProject?: boolean;
+  /** M5 preparation is enabled but this identity is not eligible for it. */
+  schoolPreparationRestricted?: boolean;
+  /** Phase 13 M5.1 capability; re-checked by the API. */
   schoolApplicationsEnabled?: boolean;
-  /** Phase 13 M5.2 capability; default OFF and re-checked by the API. */
+  /** Phase 13 M5.2 capability; re-checked by the API. */
   schoolAdmissionsEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
@@ -187,10 +197,12 @@ export function PremiumAnswerModeWorkspace({
         policyLaunch={policyLaunch}
         policyLaunchState={policyLaunchState}
         policyReference={policyReference}
-        projectWorkspaceEnabled={projectWorkspaceEnabled}
+        projectAvailability={projectAvailability}
         requestedPolicySlug={requestedPolicySlug}
         schoolAdmissionsEnabled={schoolAdmissionsEnabled}
         schoolApplicationsEnabled={schoolApplicationsEnabled}
+        schoolPreparationRestricted={schoolPreparationRestricted}
+        temporaryGuestProject={temporaryGuestProject}
         userType={hydratedAccessPolicy.userType}
       />
     </div>

@@ -27,7 +27,6 @@ const membershipTransitionBody = z
 
 type Repository = Pick<
   ReturnType<typeof createProjectFoundationRepository>,
-  | "isRegisteredCustomer"
   | "listProjects"
   | "createProject"
   | "getProjectForActor"
@@ -39,14 +38,20 @@ type Repository = Pick<
   | "revokeProjectMembership"
 >;
 type AuthenticatedSession = { userId: string; type: "guest" | "regular" };
-type RateLimitAction = "invite" | "invitation_inbox";
+type RateLimitAction = "invite" | "invitation_inbox" | "project_create";
 
 type HttpDependencies = {
   authenticate: () => Promise<AuthenticatedSession | null>;
-  isRegisteredCustomer: Repository["isRegisteredCustomer"];
   schemaAvailable: () => Promise<boolean>;
+  /**
+   * One shared Project write capability. Phase 13 P1: every authenticated
+   * identity (guest session, Free/VIP customer, lawyer, administrator) may own a
+   * personal Project; the flag is only an explicit emergency disable.
+   */
+  writesEnabled: () => boolean;
   repository: Repository;
   rateLimit?: (input: {
+    actorType: "guest" | "regular";
     actorUserId: string;
     ipAddress: string | null;
     action: RateLimitAction;
@@ -87,6 +92,12 @@ function mapError(error: unknown): Response {
         return errorResponse(
           "Project state changed. Refresh and try again.",
           409
+        );
+      case "project_limit_reached":
+        // Bounded creation: the actor already owns the maximum active Projects.
+        return errorResponse(
+          "You have reached the maximum number of active Projects.",
+          429
         );
       case "outcome_unavailable":
         return errorResponse("Project service is unavailable.", 503);
@@ -179,17 +190,19 @@ function clientIp(request: Request): string | null {
 }
 
 export function createProjectFoundationHandlers(deps: HttpDependencies) {
-  async function customer(
+  async function projectAccess(
     request: Request,
-    action?: RateLimitAction
+    options: { action?: RateLimitAction; write?: boolean } = {}
   ): Promise<{ actorUserId: string } | { response: Response }> {
     const session = await deps.authenticate();
-    if (!session?.userId || session.type !== "regular") {
+    if (!session?.userId) {
       return { response: errorResponse("Authentication required.", 401) };
     }
-    if (!(await deps.isRegisteredCustomer(session.userId))) {
+    // Project ownership is always derived from this server-side session; a
+    // client-supplied identity or role is never trusted.
+    if (options.write && !deps.writesEnabled()) {
       return {
-        response: errorResponse("Customer account access required.", 403),
+        response: errorResponse("Project changes are disabled right now.", 503),
       };
     }
     let schemaReady = false;
@@ -203,11 +216,12 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
         response: errorResponse("Project service is unavailable.", 503),
       };
     }
-    if (action && deps.rateLimit) {
+    if (options.action && deps.rateLimit) {
       const allowed = await deps.rateLimit({
+        actorType: session.type,
         actorUserId: session.userId,
         ipAddress: clientIp(request),
-        action,
+        action: options.action,
       });
       if (!allowed) {
         return {
@@ -223,11 +237,11 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
 
   async function invoke(
     request: Request,
-    action: RateLimitAction | undefined,
+    options: { action?: RateLimitAction; write?: boolean },
     callback: (actorUserId: string) => Promise<Response>
   ): Promise<Response> {
     try {
-      const access = await customer(request, action);
+      const access = await projectAccess(request, options);
       if ("response" in access) {
         return access.response;
       }
@@ -239,7 +253,7 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
 
   return {
     listProjects(request: Request) {
-      return invoke(request, undefined, async (actorUserId) =>
+      return invoke(request, {}, async (actorUserId) =>
         jsonResponse({
           projects: await deps.repository.listProjects(actorUserId),
         })
@@ -247,26 +261,41 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
     },
 
     createProject(request: Request) {
-      return invoke(request, undefined, async (actorUserId) => {
-        const body = await parsedBody(request, createProjectBody);
-        if ("response" in body) {
-          return body.response;
+      // Bounded creation: per-actor/per-IP rate limits plus the authoritative
+      // active-Project cap enforced inside the repository transaction.
+      return invoke(
+        request,
+        { action: "project_create", write: true },
+        async (actorUserId) => {
+          const body = await parsedBody(request, createProjectBody);
+          if ("response" in body) {
+            return body.response;
+          }
+          const outcome = await deps.repository.createProject({
+            actorUserId,
+            operationId: body.value.operationId,
+          });
+          const { id, status, revision, createdAt, updatedAt, closedAt } =
+            outcome.project;
+          return jsonResponse(
+            {
+              project: {
+                id,
+                status,
+                revision,
+                createdAt,
+                updatedAt,
+                closedAt,
+              },
+            },
+            201
+          );
         }
-        const outcome = await deps.repository.createProject({
-          actorUserId,
-          operationId: body.value.operationId,
-        });
-        const { id, status, revision, createdAt, updatedAt, closedAt } =
-          outcome.project;
-        return jsonResponse(
-          { project: { id, status, revision, createdAt, updatedAt, closedAt } },
-          201
-        );
-      });
+      );
     },
 
     getProject(request: Request, projectId: string) {
-      return invoke(request, undefined, async (actorUserId) => {
+      return invoke(request, {}, async (actorUserId) => {
         if (!UUID_PATTERN.test(projectId)) {
           return errorResponse("Invalid project request.", 400);
         }
@@ -279,7 +308,7 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
     },
 
     closeProject(request: Request, projectId: string) {
-      return invoke(request, undefined, async (actorUserId) => {
+      return invoke(request, { write: true }, async (actorUserId) => {
         if (!UUID_PATTERN.test(projectId)) {
           return errorResponse("Invalid project request.", 400);
         }
@@ -297,7 +326,7 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
     },
 
     listMembers(request: Request, projectId: string) {
-      return invoke(request, undefined, async (actorUserId) => {
+      return invoke(request, {}, async (actorUserId) => {
         if (!UUID_PATTERN.test(projectId)) {
           return errorResponse("Invalid project request.", 400);
         }
@@ -310,34 +339,41 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
     },
 
     inviteMember(request: Request, projectId: string) {
-      return invoke(request, "invite", async (actorUserId) => {
-        if (!UUID_PATTERN.test(projectId)) {
-          return errorResponse("Invalid project request.", 400);
+      return invoke(
+        request,
+        { action: "invite", write: true },
+        async (actorUserId) => {
+          if (!UUID_PATTERN.test(projectId)) {
+            return errorResponse("Invalid project request.", 400);
+          }
+          const body = await parsedBody(request, inviteMemberBody);
+          if ("response" in body) {
+            return body.response;
+          }
+          await deps.repository.inviteProjectMember({
+            actorUserId,
+            projectId,
+            ...body.value,
+          });
+          return emptyResponse(202);
         }
-        const body = await parsedBody(request, inviteMemberBody);
-        if ("response" in body) {
-          return body.response;
-        }
-        await deps.repository.inviteProjectMember({
-          actorUserId,
-          projectId,
-          ...body.value,
-        });
-        return emptyResponse(202);
-      });
+      );
     },
 
     invitationInbox(request: Request) {
-      return invoke(request, "invitation_inbox", async (actorUserId) =>
-        jsonResponse({
-          invitations:
-            await deps.repository.listPendingInvitations(actorUserId),
-        })
+      return invoke(
+        request,
+        { action: "invitation_inbox" },
+        async (actorUserId) =>
+          jsonResponse({
+            invitations:
+              await deps.repository.listPendingInvitations(actorUserId),
+          })
       );
     },
 
     acceptMember(request: Request, projectId: string, membershipId: string) {
-      return invoke(request, undefined, async (actorUserId) => {
+      return invoke(request, { write: true }, async (actorUserId) => {
         if (!UUID_PATTERN.test(projectId) || !UUID_PATTERN.test(membershipId)) {
           return errorResponse("Invalid project request.", 400);
         }
@@ -356,7 +392,7 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
     },
 
     revokeMember(request: Request, projectId: string, membershipId: string) {
-      return invoke(request, undefined, async (actorUserId) => {
+      return invoke(request, { write: true }, async (actorUserId) => {
         if (!UUID_PATTERN.test(projectId) || !UUID_PATTERN.test(membershipId)) {
           return errorResponse("Invalid project request.", 400);
         }

@@ -23,7 +23,6 @@ const handlers = createProjectChatsHandlers({
     }
     return { userId: session.user.id, type: session.user.type };
   },
-  isRegisteredCustomer: projectFoundationRepository.isRegisteredCustomer,
   schemaAvailable: projectFoundationSchemaAvailable,
   writesEnabled: projectChatWritesEnabled,
   repository: projectFoundationRepository,
@@ -52,11 +51,11 @@ async function rateLimited(request: Request, actorUserId: string) {
 
 export const projectChatsHandlers = {
   async create(request: Request, projectId: string) {
+    // Phase 13 P1: guest sessions own temporary Projects too, so the per-actor
+    // and per-IP bound applies to every authenticated identity, not just
+    // registered customers.
     const session = await auth();
-    if (!session?.user?.id || session.user.type !== "regular") {
-      return handlers.create(request, projectId);
-    }
-    if (!(await rateLimited(request, session.user.id))) {
+    if (session?.user?.id && !(await rateLimited(request, session.user.id))) {
       return Response.json(
         { error: "Too many project requests. Try again later." },
         { status: 429, headers: { "Cache-Control": "private, no-store" } }
@@ -66,11 +65,7 @@ export const projectChatsHandlers = {
   },
   async list(request: Request, projectId: string) {
     const session = await auth();
-    if (
-      session?.user?.id &&
-      session.user.type === "regular" &&
-      !(await rateLimited(request, session.user.id))
-    ) {
+    if (session?.user?.id && !(await rateLimited(request, session.user.id))) {
       return Response.json(
         { error: "Too many project requests. Try again later." },
         { status: 429, headers: { "Cache-Control": "private, no-store" } }

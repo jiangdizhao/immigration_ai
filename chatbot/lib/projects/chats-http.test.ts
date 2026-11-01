@@ -12,7 +12,6 @@ const at = new Date("2026-10-24T00:00:00.000Z");
 function harness(
   input: {
     session?: { userId: string; type: "guest" | "regular" } | null;
-    registered?: boolean;
     enabled?: boolean;
   } = {}
 ) {
@@ -20,8 +19,9 @@ function harness(
   let listCalls = 0;
   const handlers = createProjectChatsHandlers({
     authenticate: async () =>
-      input.session ?? { userId: actorUserId, type: "regular" },
-    isRegisteredCustomer: async () => input.registered !== false,
+      "session" in input
+        ? (input.session ?? null)
+        : { userId: actorUserId, type: "regular" },
     schemaAvailable: async () => true,
     writesEnabled: () => input.enabled === true,
     repository: {
@@ -124,30 +124,50 @@ test("Project Chat create accepts only the operation payload and returns server 
   assert.equal(h.created.length, 1);
 });
 
-test("Project Chat create rejects guest and unregistered sessions", async () => {
+test("Project Chat accepts a guest session and an unregistered-looking identity, and rejects an anonymous one", async () => {
+  // Phase 13 P1: guest sessions own temporary Projects, so Project Chat creation
+  // is authorized by the server session + repository ownership, not by account
+  // type. The actor is always the session identity.
   const guest = harness({
     enabled: true,
     session: { userId: actorUserId, type: "guest" },
   });
+  const guestResponse = await guest.handlers.create(
+    createRequest({ operationId: "chat-create-guest" }),
+    projectId
+  );
+  assert.equal(guestResponse.status, 201);
+  assert.deepEqual(guest.created[0], {
+    actorUserId,
+    projectId,
+    operationId: "chat-create-guest",
+    title: undefined,
+  });
+
+  const anonymous = harness({ enabled: true, session: null });
   assert.equal(
     (
-      await guest.handlers.create(
-        createRequest({ operationId: "chat-create-1" }),
+      await anonymous.handlers.create(
+        createRequest({ operationId: "chat-create-anon" }),
         projectId
       )
     ).status,
     401
   );
-  const unregistered = harness({ enabled: true, registered: false });
+  assert.deepEqual(anonymous.created, []);
+
+  // The guard rejects everything while the explicit emergency disable is set.
+  const disabled = harness({ enabled: false });
   assert.equal(
     (
-      await unregistered.handlers.create(
-        createRequest({ operationId: "chat-create-1" }),
+      await disabled.handlers.create(
+        createRequest({ operationId: "chat-create-disabled" }),
         projectId
       )
     ).status,
-    403
+    503
   );
+  assert.deepEqual(disabled.created, []);
 });
 
 test("Project Chat list is current-user scoped and marks closed or disabled history read-only", async () => {
@@ -185,7 +205,6 @@ test("Project Chat list cursors use the shared bounded conversation format", asy
 test("Project Chat repository authorization failures remain scoped", async () => {
   const restricted = createProjectChatsHandlers({
     authenticate: async () => ({ userId: actorUserId, type: "regular" }),
-    isRegisteredCustomer: async () => true,
     schemaAvailable: async () => true,
     writesEnabled: () => true,
     repository: {

@@ -29,15 +29,20 @@ const DEFERRED_POST_M5_OBLIGATIONS = [
   "M4-005 payment cases",
 ] as const;
 
-test("I-12 both M5 feature gates remain default OFF", () => {
-  assert.equal(schoolApplicationsEnabled(undefined), false);
-  assert.equal(schoolApplicationsEnabled(""), false);
-  assert.equal(schoolApplicationsEnabled("false"), false);
-  assert.equal(schoolAdmissionsEnabled(undefined), false);
-  assert.equal(schoolAdmissionsEnabled(""), false);
-  assert.equal(schoolAdmissionsEnabled("false"), false);
-  assert.equal(schoolApplicationsEnabled("true"), true);
-  assert.equal(schoolAdmissionsEnabled("true"), true);
+test("I-12 both M5 preparation gates default ON locally and OFF in production", () => {
+  // Local development / test: internal preparation is reachable without flags.
+  assert.equal(schoolApplicationsEnabled(undefined, "development"), true);
+  assert.equal(schoolAdmissionsEnabled(undefined, "development"), true);
+  assert.equal(schoolApplicationsEnabled("", "test"), true);
+  assert.equal(schoolAdmissionsEnabled("", "test"), true);
+  // Production-like environments stay default OFF until the release gate lifts.
+  assert.equal(schoolApplicationsEnabled(undefined, "production"), false);
+  assert.equal(schoolAdmissionsEnabled(undefined, "production"), false);
+  // Explicit values always win; a disable token can never be overridden.
+  assert.equal(schoolApplicationsEnabled("false", "development"), false);
+  assert.equal(schoolAdmissionsEnabled("false", "development"), false);
+  assert.equal(schoolApplicationsEnabled("true", "production"), true);
+  assert.equal(schoolAdmissionsEnabled("true", "production"), true);
 });
 
 test("I-12 the M4 authority surface stays fail-closed under deny-all ports", async () => {

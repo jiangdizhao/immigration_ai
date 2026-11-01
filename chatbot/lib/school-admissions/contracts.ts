@@ -6,6 +6,11 @@ import {
 } from "@/lib/db/project-foundation-utils";
 import { canonicalJson } from "@/lib/managed-target/policy";
 import {
+  type CapabilityEnvironment,
+  localPreparationCapability,
+  resolveCapabilityEnvironment,
+} from "@/lib/platform/capability-environment";
+import {
   SCHOOL_APPLICATION_MAX_ID,
   SCHOOL_APPLICATION_MAX_LABEL,
   SCHOOL_APPLICATION_MAX_REFERENCES,
@@ -667,10 +672,17 @@ export function schoolAdmissionsRequestMatches(
 }
 
 /** Feature gate. Default OFF: M5.2 stays dark until an explicit owner decision. */
+/**
+ * Phase 13 P1: internal school-admission preparation follows the same
+ * environment-aware default as M5.1 — ON locally, OFF in production-like
+ * environments until the existing release decision changes. An explicit value
+ * always wins and any disable token always wins.
+ */
 export function schoolAdmissionsEnabled(
-  value: string | undefined = process.env.PHASE13_SCHOOL_ADMISSIONS_ENABLED
+  value: string | undefined = process.env.PHASE13_SCHOOL_ADMISSIONS_ENABLED,
+  environment: CapabilityEnvironment = resolveCapabilityEnvironment()
 ): boolean {
-  return value?.trim().toLowerCase() === "true";
+  return localPreparationCapability(value, environment);
 }
 
 /** Re-exported so callers never re-derive M5.1 vocabulary. */

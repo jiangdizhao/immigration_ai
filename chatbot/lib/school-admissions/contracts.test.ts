@@ -31,11 +31,12 @@ import {
   sourceDigest,
 } from "./workflow";
 
-test("the feature gate is default OFF and opt-in only", () => {
-  assert.equal(schoolAdmissionsEnabled(undefined), false);
-  assert.equal(schoolAdmissionsEnabled(""), false);
-  assert.equal(schoolAdmissionsEnabled("false"), false);
-  assert.equal(schoolAdmissionsEnabled("TRUE"), true);
+test("the feature gate is available locally, gated in production, and explicitly disableable", () => {
+  assert.equal(schoolAdmissionsEnabled(undefined, "development"), true);
+  assert.equal(schoolAdmissionsEnabled("", "test"), true);
+  assert.equal(schoolAdmissionsEnabled(undefined, "production"), false);
+  assert.equal(schoolAdmissionsEnabled("false", "development"), false);
+  assert.equal(schoolAdmissionsEnabled("TRUE", "production"), true);
   assert.equal(
     SCHOOL_ADMISSIONS_POLICY_VERSION,
     "phase13-m5-2-school-admissions-v1"

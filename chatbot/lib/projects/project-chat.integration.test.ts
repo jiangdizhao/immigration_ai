@@ -326,21 +326,24 @@ test(
         "an active customer can read their own Project Chat messages"
       );
 
-      stage = "current customer eligibility on Project history";
+      stage = "personal Project ownership survives account-type changes";
       const [ownerAccount] = await sql<{ email: string }[]>`
         select "email" from "User" where "id" = ${ownerId}
       `;
       assert.ok(ownerAccount?.email);
+      // Phase 13 P1: a lawyer/admin account may own a *personal* Project. This is
+      // ordinary ownership only; it never becomes staff-assignment or
+      // customer-data authority.
       await sql`update "User" set "role" = 'lawyer' where "id" = ${ownerId}`;
-      assert.equal(
-        await queries.getOwnedProjectChatHistorySummary({
+      const staffOwnerHistory = await queries.getOwnedProjectChatHistorySummary(
+        {
           chatId: ownerChat.chatId,
           userId: ownerId,
-        }),
-        null,
-        "a staff account cannot read a Project Chat it canonically owns"
+        }
       );
-      assert.deepEqual(
+      assert.equal(staffOwnerHistory?.origin, "project");
+      assert.equal(staffOwnerHistory?.readOnly, false);
+      assert.equal(
         (
           await queries.listMessagesForChatPage({
             chatId: ownerChat.chatId,
@@ -349,9 +352,9 @@ test(
             olderThan: null,
             projectSchemaAvailable: true,
           })
-        ).messages,
-        [],
-        "staff role change removes Project Chat message history access"
+        ).messages.length,
+        1,
+        "a staff-owned personal Project Chat keeps its owner history"
       );
       const staffHistoryPage = await queries.listImmigrationConversationsPage({
         userId: ownerId,
@@ -360,30 +363,17 @@ test(
         projectSchemaAvailable: true,
       });
       assert.deepEqual(
-        staffHistoryPage.conversations.map((row) => row.chatId),
-        [standaloneChatId],
-        "staff role change hides Project history but preserves Standalone history"
+        staffHistoryPage.conversations.map((row) => row.chatId).sort(),
+        [ownerChat.chatId, standaloneChatId].sort(),
+        "personal Project history is preserved for the owning account"
       );
       assert.equal(
         await queries.countImmigrationConversations({
           userId: ownerId,
           projectSchemaAvailable: true,
         }),
-        1,
-        "history count retains only the eligible Standalone row"
-      );
-      assert.equal(
-        (
-          await queries.listMessagesForChatPage({
-            chatId: standaloneChatId,
-            userId: ownerId,
-            limit: 20,
-            olderThan: null,
-            projectSchemaAvailable: true,
-          })
-        ).messages.length,
-        1,
-        "Standalone message history does not gain the Project eligibility guard"
+        2,
+        "history count includes the owner's personal Project row"
       );
       assert.equal(
         (
@@ -394,34 +384,37 @@ test(
             cursor: null,
           })
         ).conversations.length,
-        0,
-        "Project-specific listing also checks current customer eligibility"
+        1,
+        "Project-specific listing is owner-scoped, not account-type scoped"
       );
-      await assert.rejects(
-        repository.withProjectChatTurnAdmission({
+      assert.equal(
+        await repository.withProjectChatTurnAdmission({
           actorUserId: ownerId,
           chatId: ownerChat.chatId,
           claim: async () => true,
         }),
-        (error: unknown) =>
-          error instanceof foundation.ProjectFoundationError &&
-          error.code === "project_forbidden"
+        true,
+        "personal ownership authorizes the owner's Project Chat turn"
       );
 
+      // A server-issued guest identity keeps access to its own temporary
+      // Project, and gains nothing beyond that isolated ownership.
       const guestClassifiedEmail = `guest-${Date.now()}`;
       await sql`
         update "User" set "role" = 'user', "email" = ${guestClassifiedEmail}
         where "id" = ${ownerId}
       `;
       assert.equal(
-        await queries.getOwnedProjectChatHistorySummary({
-          chatId: ownerChat.chatId,
-          userId: ownerId,
-        }),
-        null,
-        "guest-classified identity cannot read Project history"
+        (
+          await queries.getOwnedProjectChatHistorySummary({
+            chatId: ownerChat.chatId,
+            userId: ownerId,
+          })
+        )?.origin,
+        "project",
+        "a guest identity keeps its own Project history"
       );
-      assert.deepEqual(
+      assert.equal(
         (
           await queries.listMessagesForChatPage({
             chatId: ownerChat.chatId,
@@ -430,21 +423,9 @@ test(
             olderThan: null,
             projectSchemaAvailable: true,
           })
-        ).messages,
-        [],
-        "guest-classified identity cannot page Project messages"
-      );
-      assert.deepEqual(
-        (
-          await queries.listImmigrationConversationsPage({
-            userId: ownerId,
-            limit: 20,
-            cursor: null,
-            projectSchemaAvailable: true,
-          })
-        ).conversations.map((row) => row.chatId),
-        [standaloneChatId],
-        "guest-classified identity retains only its Standalone history"
+        ).messages.length,
+        1,
+        "a guest identity can page its own Project messages"
       );
       assert.equal(
         (
@@ -455,18 +436,20 @@ test(
             cursor: null,
           })
         ).conversations.length,
-        0,
-        "guest-classified identity cannot list Project Chats"
+        1,
+        "a guest identity only lists its own Project Chats"
       );
-      await assert.rejects(
-        repository.withProjectChatTurnAdmission({
-          actorUserId: ownerId,
-          chatId: ownerChat.chatId,
-          claim: async () => true,
-        }),
-        (error: unknown) =>
-          error instanceof foundation.ProjectFoundationError &&
-          error.code === "project_forbidden"
+      assert.equal(
+        (
+          await queries.listImmigrationConversationsPage({
+            userId: ownerId,
+            limit: 20,
+            cursor: null,
+            projectSchemaAvailable: true,
+          })
+        ).conversations.length,
+        2,
+        "a guest identity retains both its Project and Standalone history"
       );
       await sql`
         update "User" set "role" = 'user', "email" = ${ownerAccount.email}

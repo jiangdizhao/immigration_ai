@@ -58,11 +58,15 @@ const inputs: SchoolApplicationPackageInputs = {
   },
 };
 
-test("the M5.1 capability is default OFF and the package target is an M4 target kind", () => {
-  assert.equal(schoolApplicationsEnabled(undefined), false);
-  assert.equal(schoolApplicationsEnabled(""), false);
-  assert.equal(schoolApplicationsEnabled("false"), false);
-  assert.equal(schoolApplicationsEnabled(" true "), true);
+test("the M5.1 capability is available locally, disabled in production, and an explicit value wins", () => {
+  // Local development/test: internal preparation is available by default.
+  assert.equal(schoolApplicationsEnabled(undefined, "development"), true);
+  assert.equal(schoolApplicationsEnabled("", "test"), true);
+  // Production-like: release NO-GO still governs exposure.
+  assert.equal(schoolApplicationsEnabled(undefined, "production"), false);
+  // An explicit value always wins, and any disable token always wins.
+  assert.equal(schoolApplicationsEnabled("false", "development"), false);
+  assert.equal(schoolApplicationsEnabled(" true ", "production"), true);
   assert.ok(
     (MANAGED_TARGET_KINDS as readonly string[]).includes(
       SCHOOL_APPLICATION_TARGET_KIND

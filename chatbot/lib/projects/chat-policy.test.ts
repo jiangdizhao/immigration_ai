@@ -5,10 +5,15 @@ import {
   projectChatWritesEnabled,
 } from "./chat-policy";
 
-test("Project Chat writes are disabled unless explicitly enabled", () => {
-  assert.equal(projectChatWritesEnabled(undefined), false);
-  assert.equal(projectChatWritesEnabled("false"), false);
+test("Project Chat writes are enabled by default and only an explicit disable wins", () => {
+  // Phase 13 P1: an unset flag must not hide Project creation or Project Chat.
+  assert.equal(projectChatWritesEnabled(undefined), true);
+  assert.equal(projectChatWritesEnabled(""), true);
   assert.equal(projectChatWritesEnabled(" true "), true);
+  assert.equal(projectChatWritesEnabled("TRUE"), true);
+  for (const disabled of ["false", "FALSE", "0", "off", "no", "disabled"]) {
+    assert.equal(projectChatWritesEnabled(disabled), false);
+  }
 });
 
 test("Project Chat identifiers cannot be submitted through unscoped ingress", () => {

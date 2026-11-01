@@ -1,3 +1,7 @@
+import type { ProjectEntryAvailability } from "@/lib/projects/personal-project-capability";
+
+export type { ProjectEntryAvailability } from "@/lib/projects/personal-project-capability";
+
 export type ProjectEntryProject = {
   id: string;
   status: "active";
@@ -25,6 +29,8 @@ export type ProjectEntryCopy = {
   accessDenied: string;
   notFound: string;
   stateChanged: string;
+  /** Bounded creation: the actor owns the maximum active Projects. */
+  limitReached: string;
   unavailable: string;
   requestFailed: string;
   networkFailed: string;
@@ -104,6 +110,8 @@ export function projectEntryErrorMessage(
     case 409:
       return copy.stateChanged;
     case 429:
+      // Bounded creation: an explicit quota message, not a false outage claim.
+      return copy.limitReached;
     case 503:
       return copy.unavailable;
     default:
@@ -147,14 +155,16 @@ export function shouldApplyProjectChatResponse(input: {
   );
 }
 
-export function canShowProjectWorkspace(input: {
-  writesEnabled: boolean;
-  regularSession: boolean;
-  registeredCustomer: boolean;
-}): boolean {
-  return (
-    input.writesEnabled && input.regularSession && input.registeredCustomer
-  );
+/**
+ * Phase 13 P1: the Project entry is always rendered. Only the interactive
+ * controls depend on the server-resolved capability, so a disabled or
+ * schema-unavailable installation explains itself instead of silently hiding
+ * Project creation from the customer.
+ */
+export function projectEntryControlsEnabled(
+  availability: ProjectEntryAvailability
+): boolean {
+  return availability === "available";
 }
 
 export function buildStandaloneConversationRequest(input: {

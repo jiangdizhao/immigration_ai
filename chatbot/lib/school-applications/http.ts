@@ -65,6 +65,12 @@ type HandlerDependencies = {
   /** Explicit M5.1 capability; defaults OFF in production. */
   enabled: () => boolean;
   schemaAvailable: () => Promise<boolean>;
+  /**
+   * Correction C: Project-wide emergency disable. When it returns `false`, every
+   * Project-scoped M5.1 mutation is refused (503) while reads stay available.
+   * Defaults to enabled so existing compositions are unchanged.
+   */
+  projectWritesEnabled?: () => boolean;
   service: Pick<
     SchoolApplicationService,
     | "list"
@@ -164,7 +170,8 @@ async function readBoundedJson(
 
 export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
   async function invoke(
-    action: (actorUserId: string) => Promise<Response>
+    action: (actorUserId: string) => Promise<Response>,
+    options: { readonly mode?: "read" | "write" } = {}
   ): Promise<Response> {
     // A disabled capability is indistinguishable from an absent route.
     if (!deps.enabled()) {
@@ -176,6 +183,15 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     }
     if (session.type !== "regular") {
       return errorResponse("School application not found.", 404);
+    }
+    // Correction C: the Project-wide emergency disable (`PHASE13_PROJECT_CHAT_ENABLED`)
+    // also refuses every Project-scoped M5 mutation, for every identity, on the
+    // direct API path. Reads stay available.
+    if (options.mode === "write" && !(deps.projectWritesEnabled?.() ?? true)) {
+      return errorResponse(
+        "School application changes are disabled right now.",
+        503
+      );
     }
     let schemaReady: boolean;
     try {
@@ -192,6 +208,13 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     } catch (error) {
       return mapError(error);
     }
+  }
+
+  /** A Project-scoped M5 mutation: also bound by the Project emergency disable. */
+  function mutate(
+    action: (actorUserId: string) => Promise<Response>
+  ): Promise<Response> {
+    return invoke(action, { mode: "write" });
   }
 
   async function parsedBody<T extends z.ZodTypeAny>(
@@ -247,7 +270,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     },
 
     create(_request: Request, projectId: string) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (!validProjectId(projectId)) {
           return errorResponse("Invalid school application request.", 400);
         }
@@ -268,7 +291,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     },
 
     update(_request: Request, projectId: string, applicationId: string) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (!validApplicationPath(projectId, applicationId)) {
           return errorResponse("Invalid school application request.", 400);
         }
@@ -290,7 +313,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     },
 
     archive(_request: Request, projectId: string, applicationId: string) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (!validApplicationPath(projectId, applicationId)) {
           return errorResponse("Invalid school application request.", 400);
         }
@@ -312,7 +335,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     },
 
     bindReference(_request: Request, projectId: string, applicationId: string) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (!validApplicationPath(projectId, applicationId)) {
           return errorResponse("Invalid school application request.", 400);
         }
@@ -339,7 +362,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
       applicationId: string,
       referenceRecordId: string
     ) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (
           !(
             validApplicationPath(projectId, applicationId) &&
@@ -367,7 +390,7 @@ export function createSchoolApplicationHandlers(deps: HandlerDependencies) {
     },
 
     buildPackage(_request: Request, projectId: string, applicationId: string) {
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         if (!validApplicationPath(projectId, applicationId)) {
           return errorResponse("Invalid school application request.", 400);
         }

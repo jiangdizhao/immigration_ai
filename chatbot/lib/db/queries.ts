@@ -21,7 +21,6 @@ import {
 } from "drizzle-orm";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
-import { guestRegex } from "@/lib/constants";
 import { createOpaqueToken, hashOpaqueToken } from "../auth/tokens";
 import { matchesImmutableMessage } from "../conversations/message-identity";
 import type { PaginationCursor } from "../conversations/pagination";
@@ -4058,15 +4057,12 @@ function cursorWallClockMs(cursor: PaginationCursor): number {
   return cursorDate.getTime() - cursorDate.getTimezoneOffset() * 60_000;
 }
 
-function registeredProjectCustomer(userId: string): SQL {
-  return sql`exists (
-    select 1 from "User" projectHistoryActor
-    where projectHistoryActor."id" = ${userId}
-      and projectHistoryActor."role" = 'user'
-      and projectHistoryActor."email" !~* ${guestRegex.source}
-  )`;
-}
-
+/**
+ * Phase 13 P1: personal Project ownership is session-derived, so Project Chat
+ * history/paging no longer requires a "registered customer" account type. The
+ * predicate still requires creator-scoped identity plus current ownership or an
+ * active Membership, which is what actually prevents cross-user access.
+ */
 function projectChatHistoryVisibility(userId: string, chatId: SQLWrapper): SQL {
   return sql`(
     not exists (
@@ -4081,7 +4077,6 @@ function projectChatHistoryVisibility(userId: string, chatId: SQLWrapper): SQL {
       where pc."chatId" = ${chatId}
         and pc."createdByUserId" = ${userId}
         and projectChat."userId" = ${userId}
-        and ${registeredProjectCustomer(userId)}
         and (
           p."ownerUserId" = ${userId}
           or exists (

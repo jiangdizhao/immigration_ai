@@ -7,6 +7,7 @@ import { schoolApplicationSchemaAvailable } from "@/lib/db/school-application-sc
 import { evaluateManagedHandoffReadiness } from "@/lib/managed-handoff/evaluator";
 import { denyAllManagedHandoffPorts } from "@/lib/managed-handoff/ports";
 import { unavailableManagedTargetProvider } from "@/lib/professional-review/target-provider";
+import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
 import { SCHOOL_APPLICATION_TARGET_KIND } from "@/lib/school-applications/contracts";
 import {
   postgresSchoolApplicationCatalogResolver,
@@ -215,6 +216,7 @@ export const schoolAdmissionsHandlers = createSchoolAdmissionsHandlers({
     return { type: session.user.type, userId: session.user.id };
   },
   enabled: () => schoolAdmissionsEnabled(),
+  projectWritesEnabled: projectChatWritesEnabled,
   async schemaAvailable() {
     // Both additive schemas are required: M5.2 always reads M5.1 identity.
     const [m51, m52] = await Promise.all([

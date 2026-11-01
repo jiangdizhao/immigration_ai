@@ -31,7 +31,6 @@ type AuthenticatedSession = { userId: string; type: "guest" | "regular" };
 
 type Dependencies = {
   authenticate: () => Promise<AuthenticatedSession | null>;
-  isRegisteredCustomer: (userId: string) => Promise<boolean>;
   schemaAvailable: () => Promise<boolean>;
   writesEnabled: () => boolean;
   repository: Repository;
@@ -101,14 +100,13 @@ export function createProjectChatsHandlers(deps: Dependencies) {
     { actorUserId: string } | { response: Response }
   > {
     const session = await deps.authenticate();
-    if (!session?.userId || session.type !== "regular") {
+    if (!session?.userId) {
       return { response: errorResponse("Authentication required.", 401) };
     }
-    if (!(await deps.isRegisteredCustomer(session.userId))) {
-      return {
-        response: errorResponse("Customer account access required.", 403),
-      };
-    }
+    // Phase 13 P1: the actor is always the server-authenticated session, so a
+    // guest session or a staff account may use its own Project Chats. Cross-user
+    // and cross-Project access remains impossible because the repository scopes
+    // every read and write to this actor plus current ownership/membership.
     let schemaReady = false;
     try {
       schemaReady = await deps.schemaAvailable();

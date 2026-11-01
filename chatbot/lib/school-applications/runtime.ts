@@ -2,6 +2,7 @@ import "server-only";
 
 import { auth } from "@/app/(auth)/auth";
 import { schoolApplicationSchemaAvailable } from "@/lib/db/school-application-schema-availability";
+import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
 import { schoolApplicationsEnabled } from "./contracts";
 import { createSchoolApplicationHandlers } from "./http";
 import {
@@ -33,6 +34,7 @@ export const schoolApplicationHandlers = createSchoolApplicationHandlers({
     return { type: session.user.type, userId: session.user.id };
   },
   enabled: () => schoolApplicationsEnabled(),
+  projectWritesEnabled: projectChatWritesEnabled,
   schemaAvailable: schoolApplicationSchemaAvailable,
   service: schoolApplicationService,
 });

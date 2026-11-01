@@ -6671,3 +6671,19 @@ Earlier pending-review and failed-test records are historical evidence, supersed
 - Review patch: `~/phase13_project_workspace_ux_review.patch` (updated).
 
 <!-- END PHASE13_PROJECT_WORKSPACE_UX_R1_2026_11_01 -->
+
+<!-- BEGIN PHASE13_P1_PERSONAL_PROJECT_ACCESS_CLOSEOUT_2026_11_01 -->
+
+## Phase 13 P1 Personal Project Access — consolidated review closeout (2026-11-01)
+
+**Status: P1_READY_FOR_OWNER_COMMIT** (nothing committed or pushed by the agent). Branch `phase13-m5-school-admissions`, HEAD `d16e6b63590a1361ce0c5bb6ad8b5ca26b18a8b3` (UX commit preserved).
+
+- Scope reviewed: personal-Project capability (`lib/projects/personal-project-capability.ts`), strict capability/environment parsing (`lib/platform/capability-environment.ts`), bounded creation (`lib/projects/create-limit.ts`), repository authorization (`lib/db/project-foundation.ts`, `lib/db/queries.ts`), Project/Project-Chat HTTP boundaries (`lib/projects/{http,runtime,chats-http,chats-runtime,chat-policy}.ts`), M5 Project-wide emergency disable (`lib/school-applications/*`, `lib/school-admissions/*`), server page wiring (`app/(chat)/ai-workspace/page.tsx`, `components/premium-answer-mode-workspace.tsx`), rail controller (`lib/workspace/project-entry.ts`) and the P1 test suites.
+- Invariant review: session-derived identity only; guest/Free/VIP/lawyer/admin all own only their own Project; every read/write is scoped to owner or *active* membership; pending/revoked membership and closed Projects stay blocked (and closed Projects are read-only); Project Chat listing/turn admission require creator identity + current authorization; M5 remains registered-account only, schema-gated, and now also honours the Project emergency disable; M4 professional/payment/document/provider gates untouched; committed UX consumes the P1 capability modules (typecheck clean).
+- **One correction applied (bounded):** the active-Project cap counted under READ COMMITTED without serializing same-actor creations, so parallel requests could exceed the cap. `assertProjectCreationWithinLimit` now takes `SELECT … FOR UPDATE` on the actor's `User` row *before* counting, inside the same transaction, so a second concurrent create counts the first request's committed Project. No schema, API, copy or behaviour change beyond the bound itself. Regression test added in `lib/projects/project-default-access-security.test.ts` ("concurrent creation by one actor cannot exceed the active-Project cap").
+- Validation actually run: P1/Project + UX regression suites (http, chats-http, chat-policy, personal-project-access, project-default-access-security, project-foundation, project-entry, project-workspace-view, project-workspace-home, workspace-read-only-wiring, conversation-origin) **108/108**; M5 application/admission contracts+HTTP+UI **81/81**; `lib/projects/context-resolver.test.ts` **14/14** (react-server condition). Total **203 tests, 0 fail, 0 skip**. Biome clean on 17 P1 files; `git diff --check` clean; `tsc --noEmit` 44 pre-existing errors in 9 untouched files (0 new); `pnpm build` exit 0 (compiled 10.2s, 87 static pages).
+- **Not run (needs separate authorization):** `lib/projects/project-chat.integration.test.ts` and any other PostgreSQL-backed integration test (they write to the authoritative local `chatbot` database), and browser tests that create Project rows.
+- Commit scope prepared: 26 modified + 5 new P1 files. Deliberately excluded: `chatbot/e2e/` and `chatbot/playwright.post-m5.config.ts` (Post-M5 E2E artifacts), `chatbot/lib/service-payment/schema-contract.test.ts`, `chatbot/scripts/phase13-m4-005-db-test-guard.{ts,test.ts}` (historical M4-005 journal-pin work; not imported by P1 and not part of `test:unit`).
+- No commit, push, migration, deployment or external-provider call was performed. `LIVE_PRODUCTION_NO_GO` unchanged.
+
+<!-- END PHASE13_P1_PERSONAL_PROJECT_ACCESS_CLOSEOUT_2026_11_01 -->

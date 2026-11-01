@@ -7,6 +7,7 @@ export type ProjectFoundationErrorCode =
   | "project_not_found"
   | "project_forbidden"
   | "project_closed"
+  | "project_limit_reached"
   | "revision_conflict"
   | "state_conflict"
   | "outcome_unavailable"

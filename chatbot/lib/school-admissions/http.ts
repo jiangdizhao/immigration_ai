@@ -227,6 +227,12 @@ export type SchoolAdmissionsHandlerDependencies = {
   } | null>;
   readonly enabled: () => boolean;
   readonly schemaAvailable: () => Promise<boolean>;
+  /**
+   * Correction C: Project-wide emergency disable. When it returns `false`, every
+   * Project-scoped M5.2 mutation is refused (503) while reads stay available.
+   * Defaults to enabled so existing compositions are unchanged.
+   */
+  readonly projectWritesEnabled?: () => boolean;
   readonly service: SchoolAdmissionsService;
 };
 
@@ -234,7 +240,8 @@ export function createSchoolAdmissionsHandlers(
   deps: SchoolAdmissionsHandlerDependencies
 ) {
   async function invoke(
-    action: (actorUserId: string) => Promise<Response>
+    action: (actorUserId: string) => Promise<Response>,
+    options: { readonly mode?: "read" | "write" } = {}
   ): Promise<Response> {
     if (!deps.enabled()) {
       return errorResponse("School admissions case not found.", 404);
@@ -246,6 +253,14 @@ export function createSchoolAdmissionsHandlers(
     if (session.type !== "regular") {
       // Staff and service accounts never receive customer admission data.
       return errorResponse("School admissions case not found.", 404);
+    }
+    // Correction C: the Project-wide emergency disable also refuses every
+    // Project-scoped M5.2 mutation, for every identity, on the direct API path.
+    if (options.mode === "write" && !(deps.projectWritesEnabled?.() ?? true)) {
+      return errorResponse(
+        "School admissions changes are disabled right now.",
+        503
+      );
     }
     let schemaReady: boolean;
     try {
@@ -261,6 +276,13 @@ export function createSchoolAdmissionsHandlers(
     } catch (error) {
       return mapError(error);
     }
+  }
+
+  /** A Project-scoped M5 mutation: also bound by the Project emergency disable. */
+  function mutate(
+    action: (actorUserId: string) => Promise<Response>
+  ): Promise<Response> {
+    return invoke(action, { mode: "write" });
   }
 
   async function parsedBody<T extends z.ZodTypeAny>(
@@ -322,7 +344,7 @@ export function createSchoolAdmissionsHandlers(
       if (!validUuid(projectId)) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, createBody);
         if ("response" in body) {
           return body.response;
@@ -353,7 +375,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, serviceModeBody);
         if ("response" in body) {
           return body.response;
@@ -378,7 +400,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, prepareBody);
         if ("response" in body) {
           return body.response;
@@ -407,7 +429,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, confirmBody);
         if ("response" in body) {
           return body.response;
@@ -432,7 +454,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, outcomeBody);
         if ("response" in body) {
           return body.response;
@@ -474,7 +496,7 @@ export function createSchoolAdmissionsHandlers(
       ) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, transitionBody);
         if ("response" in body) {
           return body.response;
@@ -507,7 +529,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, externalActionBody);
         if ("response" in body) {
           return body.response;
@@ -542,7 +564,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, exceptionBody);
         if ("response" in body) {
           return body.response;
@@ -574,7 +596,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, verifyExceptionBody);
         if ("response" in body) {
           return body.response;
@@ -603,7 +625,7 @@ export function createSchoolAdmissionsHandlers(
       if (!(validUuid(projectId) && validUuid(caseId))) {
         return errorResponse("School admissions case not found.", 404);
       }
-      return invoke(async (actorUserId) => {
+      return mutate(async (actorUserId) => {
         const body = await parsedBody(request, readinessBody);
         if ("response" in body) {
           return body.response;

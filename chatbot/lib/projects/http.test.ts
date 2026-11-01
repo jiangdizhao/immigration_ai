@@ -19,18 +19,18 @@ function jsonRequest(body: unknown, method = "POST") {
 function testHandlers(
   options: {
     session?: { userId: string; type: "guest" | "regular" } | null;
-    registered?: boolean;
+    writesEnabled?: boolean;
     repository?: Record<string, unknown>;
     rateLimit?: (input: {
+      actorType: "guest" | "regular";
       actorUserId: string;
       ipAddress: string | null;
-      action: "invite" | "invitation_inbox";
+      action: "invite" | "invitation_inbox" | "project_create";
     }) => Promise<boolean>;
   } = {}
 ) {
   const calls: Array<{ name: string; input?: unknown }> = [];
   const repository = {
-    isRegisteredCustomer: () => options.registered ?? true,
     listProjects: (userId: string) => {
       calls.push({ name: "listProjects", input: userId });
       return [];
@@ -114,15 +114,15 @@ function testHandlers(
       options.session === undefined
         ? { userId: actorId, type: "regular" }
         : options.session,
-    isRegisteredCustomer: repository.isRegisteredCustomer,
     schemaAvailable: async () => true,
+    writesEnabled: () => options.writesEnabled ?? true,
     repository,
     rateLimit: options.rateLimit,
   });
   return { handlers, calls };
 }
 
-test("project endpoints require an authenticated regular session", async () => {
+test("project endpoints require an authenticated session but accept a guest session", async () => {
   const { handlers, calls } = testHandlers({ session: null });
   const response = await handlers.listProjects(
     new Request("https://example.test")
@@ -131,29 +131,64 @@ test("project endpoints require an authenticated regular session", async () => {
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(calls, []);
 
+  // Phase 13 P1: a server-issued guest identity may own a personal Project.
   const guest = testHandlers({ session: { userId: actorId, type: "guest" } });
   const guestResponse = await guest.handlers.listProjects(
     new Request("https://example.test")
   );
-  assert.equal(guestResponse.status, 401);
-  assert.deepEqual(guest.calls, []);
+  assert.equal(guestResponse.status, 200);
+  assert.deepEqual(guest.calls, [{ name: "listProjects", input: actorId }]);
 });
 
-test("current non-customer database identities cannot use customer APIs", async () => {
-  const { handlers, calls } = testHandlers({ registered: false });
-  const response = await handlers.listProjects(
-    new Request("https://example.test")
+test("personal Project creation is owned by the authenticated session identity", async () => {
+  // A leaked client identity/role can never change the repository actor.
+  for (const session of [
+    { userId: actorId, type: "guest" as const },
+    { userId: actorId, type: "regular" as const },
+  ]) {
+    const { handlers, calls } = testHandlers({ session });
+    const response = await handlers.createProject(
+      jsonRequest({ operationId: "create-personal-project" })
+    );
+    assert.equal(response.status, 201);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], {
+      name: "createProject",
+      input: { actorUserId: actorId, operationId: "create-personal-project" },
+    });
+  }
+});
+
+test("an explicit emergency disable blocks Project writes but keeps reads available", async () => {
+  const { handlers, calls } = testHandlers({ writesEnabled: false });
+  const write = await handlers.createProject(
+    jsonRequest({ operationId: "create-disabled" })
   );
-  assert.equal(response.status, 403);
+  assert.equal(write.status, 503);
+  assert.equal(write.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(calls, []);
+
+  const invite = await handlers.inviteMember(
+    jsonRequest({
+      operationId: "invite-disabled",
+      expectedRevision: 1,
+      targetUserId: targetId,
+    }),
+    projectId
+  );
+  assert.equal(invite.status, 503);
+
+  const read = await handlers.listProjects(new Request("https://example.test"));
+  assert.equal(read.status, 200);
+  assert.deepEqual(calls, [{ name: "listProjects", input: actorId }]);
 });
 
 test("Project schema readiness fails closed with a private unavailable response", async () => {
   const deps = testHandlers();
   const handlers = createProjectFoundationHandlers({
     authenticate: async () => ({ userId: actorId, type: "regular" }),
-    isRegisteredCustomer: async () => true,
     schemaAvailable: async () => false,
+    writesEnabled: () => true,
     repository: {} as unknown as Parameters<
       typeof createProjectFoundationHandlers
     >[0]["repository"],
@@ -294,6 +329,7 @@ test("owner roster and invitation inbox return only their repository projections
   ]);
   assert.deepEqual(rateLimits, [
     {
+      actorType: "regular",
       actorUserId: actorId,
       ipAddress: "203.0.113.9",
       action: "invitation_inbox",

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteHeader } from "@/components/site-header";
-import { projectFoundationRepository } from "@/lib/db/project-foundation";
+import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
 import type { PolicyLaunchRequestState } from "@/lib/policy-intelligence/conversation-policy-binding";
 import {
   POLICY_SLUG_PATTERN,
@@ -11,9 +11,13 @@ import {
 } from "@/lib/policy-intelligence-product";
 import { getPolicyWorkspaceReference } from "@/lib/policy-intelligence-server";
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
+import {
+  type ProjectFoundationSchemaState,
+  resolvePersonalProjectCapability,
+  resolveSchoolPreparationAvailability,
+} from "@/lib/projects/personal-project-capability";
 import { schoolAdmissionsEnabled } from "@/lib/school-admissions/contracts";
 import { schoolApplicationsEnabled } from "@/lib/school-applications/contracts";
-import { canShowProjectWorkspace } from "@/lib/workspace/project-entry";
 
 export default async function AIWorkspacePage({
   searchParams,
@@ -45,36 +49,41 @@ export default async function AIWorkspacePage({
     );
   }
 
-  let registeredCustomer = false;
-  const projectChatWritesAvailable = projectChatWritesEnabled();
-  if (session.user.type === "regular" && projectChatWritesAvailable) {
-    try {
-      registeredCustomer =
-        await projectFoundationRepository.isRegisteredCustomer(session.user.id);
-    } catch {
-      registeredCustomer = false;
-    }
-  }
-  const projectWorkspaceEnabled = canShowProjectWorkspace({
-    writesEnabled: projectChatWritesAvailable,
-    regularSession: session.user.type === "regular",
-    registeredCustomer,
-  });
   /**
-   * Phase 13 M5.1 is a separate, default-OFF capability. It additionally requires
-   * the Project workspace shell, because the surface lives inside it. The API
-   * re-checks the capability and the schema on every request.
+   * Phase 13 P1: personal Project availability is decided from the
+   * server-authenticated session, the Project write capability and the additive
+   * schema probe only. It never depends on VIP entitlement, a registered-customer
+   * lookup or a client-supplied role. A failed probe is reported as an honest
+   * unavailable state instead of silently hiding the whole Project surface.
    */
-  const schoolApplicationsAvailable =
-    projectWorkspaceEnabled && schoolApplicationsEnabled();
+  let schemaStatus: ProjectFoundationSchemaState = "unknown";
+  try {
+    schemaStatus = await projectFoundationSchemaStatus();
+  } catch {
+    schemaStatus = "unknown";
+  }
+  const personalProject = resolvePersonalProjectCapability({
+    role: session.user.role,
+    schemaStatus,
+    sessionType: session.user.type,
+    userId: session.user.id,
+    writesEnabled: projectChatWritesEnabled(),
+  });
 
   /**
-   * Phase 13 M5.2 is an independent, default-OFF capability layered on the same
-   * Project workspace shell. It additionally requires both additive schemas; the
-   * API re-checks that on every request.
+   * M5.1/M5.2 preparation is a separate capability layered on the Project
+   * workspace. It stays registered-account private by the accepted M5 authority
+   * contract, so guests and staff see a truthful restricted notice rather than a
+   * silently missing panel. The API re-checks capability, schema and authority on
+   * every request.
    */
-  const schoolAdmissionsAvailable =
-    projectWorkspaceEnabled && schoolAdmissionsEnabled();
+  const schoolApplicationsFeature = schoolApplicationsEnabled();
+  const schoolAdmissionsFeature = schoolAdmissionsEnabled();
+  const schoolPreparation = resolveSchoolPreparationAvailability({
+    admissionsEnabled: schoolAdmissionsFeature,
+    applicationsEnabled: schoolApplicationsFeature,
+    project: personalProject,
+  });
 
   /**
    * Phase 12 Stage 2: a policy launch either resolves the published topic or
@@ -100,10 +109,12 @@ export default async function AIWorkspacePage({
           policyLaunch={policyLaunchRequested}
           policyLaunchState={policyLaunchState}
           policyReference={policyReference}
-          projectWorkspaceEnabled={projectWorkspaceEnabled}
+          projectAvailability={personalProject.availability}
           requestedPolicySlug={requestedSlug}
-          schoolAdmissionsEnabled={schoolAdmissionsAvailable}
-          schoolApplicationsEnabled={schoolApplicationsAvailable}
+          schoolAdmissionsEnabled={schoolPreparation.admissionsEnabled}
+          schoolApplicationsEnabled={schoolPreparation.applicationsEnabled}
+          schoolPreparationRestricted={schoolPreparation.restricted}
+          temporaryGuestProject={personalProject.temporaryGuestProject}
         />
       </main>
     </div>

@@ -8,6 +8,11 @@ import {
   MANAGED_TARGET_KINDS,
   managedTargetIdentitySha256,
 } from "@/lib/managed-target/policy";
+import {
+  type CapabilityEnvironment,
+  localPreparationCapability,
+  resolveCapabilityEnvironment,
+} from "@/lib/platform/capability-environment";
 
 /**
  * Phase 13 M5.1 — School Application foundation contracts.
@@ -903,8 +908,16 @@ export function planSchoolApplicationPackageBuild(input: {
   return { kind: "create", version: input.highestVersion + 1 };
 }
 
+/**
+ * Phase 13 P1: internal school-application preparation is available by default
+ * in local development and test once the additive schema is present. Production
+ * exposure stays governed by the existing release NO-GO decision, so the default
+ * is OFF in production-like environments. `PHASE13_SCHOOL_APPLICATIONS_ENABLED`
+ * remains an explicit override; any disable token always wins.
+ */
 export function schoolApplicationsEnabled(
-  value: string | undefined = process.env.PHASE13_SCHOOL_APPLICATIONS_ENABLED
+  value: string | undefined = process.env.PHASE13_SCHOOL_APPLICATIONS_ENABLED,
+  environment: CapabilityEnvironment = resolveCapabilityEnvironment()
 ): boolean {
-  return value?.trim().toLowerCase() === "true";
+  return localPreparationCapability(value, environment);
 }

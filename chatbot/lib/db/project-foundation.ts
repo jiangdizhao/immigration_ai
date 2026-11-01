@@ -5,6 +5,7 @@ import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
 import type { PaginationCursor } from "@/lib/conversations/pagination";
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
+import { projectCreateLimitDecision } from "@/lib/projects/create-limit";
 import {
   hashProjectOperationRequest,
   ProjectFoundationError,
@@ -215,14 +216,83 @@ async function lockProject(tx: Transaction, projectId: string) {
   return project;
 }
 
-async function assertCustomerActor(tx: Transaction, actorUserId: string) {
+/**
+ * Phase 13 P1: personal Project ownership is derived from the authenticated
+ * server-side session, so the actor only has to be a real persisted identity.
+ * Guest sessions, Free/VIP customers, lawyers and administrators may all own
+ * their own Project.
+ *
+ * This helper grants nothing else: cross-Project access still requires ownership
+ * or an active Membership, and no professional, payment, or submission authority
+ * is derived from it. Invitation *targets* remain registered-customer-only (see
+ * `inviteProjectMember`) because an outbound invitation is a different grant.
+ */
+async function assertPersonalProjectActor(
+  tx: Transaction,
+  actorUserId: string
+) {
   const [actor] = await tx
-    .select({ email: user.email, role: user.role })
+    .select({ id: user.id })
     .from(user)
     .where(eq(user.id, actorUserId))
     .limit(1);
-  if (!actor || actor.role !== "user" || guestRegex.test(actor.email)) {
+  if (!actor) {
     throw new ProjectFoundationError("project_forbidden");
+  }
+}
+
+/**
+ * One emergency kill switch for every Project write path, shared by the server
+ * page, the HTTP handlers and this repository. Reads (history, roster) stay
+ * available so a disabled capability never destroys access to existing data.
+ */
+function assertProjectWritesEnabled() {
+  if (!projectChatWritesEnabled()) {
+    throw new ProjectFoundationError("project_forbidden");
+  }
+}
+
+/**
+ * Authoritative per-actor creation bound. Enforced inside the same transaction as
+ * the insert so concurrent creation cannot exceed it; exact operation replays
+ * short-circuit before this check.
+ */
+async function assertProjectCreationWithinLimit(
+  tx: Transaction,
+  actorUserId: string
+) {
+  /**
+   * Serialize concurrent creations by the same actor. The count below runs under
+   * READ COMMITTED, so without this row lock two parallel requests could both
+   * observe the same active-Project count and both insert, exceeding the cap.
+   * The lock is acquired before the count and released with the transaction, so
+   * the second request counts the first request's committed Project.
+   */
+  const [lockedActor] = await tx
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.id, actorUserId))
+    .for("update")
+    .limit(1);
+  if (!lockedActor) {
+    throw new ProjectFoundationError("project_forbidden");
+  }
+
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(studyJourneyProject)
+    .where(
+      and(
+        eq(studyJourneyProject.ownerUserId, actorUserId),
+        eq(studyJourneyProject.status, "active")
+      )
+    );
+  const decision = projectCreateLimitDecision({
+    activeProjectCount:
+      typeof row?.count === "number" ? row.count : Number(row?.count ?? 0),
+  });
+  if (!decision.allowed) {
+    throw new ProjectFoundationError("project_limit_reached");
   }
 }
 
@@ -348,7 +418,8 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
         if (operation.replayed) {
           const project = await lockProject(tx, operation.resultId);
           if (project.ownerUserId !== input.actorUserId) {
@@ -359,6 +430,8 @@ export function createProjectFoundationRepository(
           }
           return { replayed: true, project };
         }
+
+        await assertProjectCreationWithinLimit(tx, input.actorUserId);
 
         const [project] = await tx
           .insert(studyJourneyProject)
@@ -425,7 +498,8 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
         const project = await lockProject(tx, operation.resultId);
         if (project.ownerUserId !== input.actorUserId) {
           throw new ProjectFoundationError("project_forbidden");
@@ -476,6 +550,14 @@ export function createProjectFoundationRepository(
       });
     },
 
+    /**
+     * Registered, non-guest `user` account = eligible for outbound Project
+     * invitations and M2 document surfaces.
+     *
+     * Phase 13 P1 no longer uses this as a personal-Project gate: every
+     * authenticated identity may own its own Project. See
+     * `assertPersonalProjectActor` for the personal-ownership rule.
+     */
     async isRegisteredCustomer(userId: string): Promise<boolean> {
       const [account] = await database
         .select({ email: user.email, role: user.role })
@@ -666,7 +748,8 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
         const project = await lockProject(tx, input.projectId);
         if (project.ownerUserId !== input.actorUserId) {
           throw new ProjectFoundationError("project_forbidden");
@@ -837,7 +920,8 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
         const project = await lockProject(tx, input.projectId);
         const [membership] = await tx
           .select()
@@ -966,7 +1050,8 @@ export function createProjectFoundationRepository(
           },
           hooks
         );
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
         const project = await lockProject(tx, input.projectId);
         if (project.ownerUserId !== input.actorUserId) {
           throw new ProjectFoundationError("project_forbidden");
@@ -1080,6 +1165,7 @@ export function createProjectFoundationRepository(
       const newChatId = randomUUID();
 
       return database.transaction(async (tx) => {
+        assertProjectWritesEnabled();
         const operation = await claimOperation(
           tx,
           {
@@ -1260,12 +1346,6 @@ export function createProjectFoundationRepository(
         eq(projectConversation.projectId, input.projectId),
         eq(projectConversation.createdByUserId, input.actorUserId),
         eq(chat.userId, input.actorUserId),
-        sql`exists (
-          select 1 from "User" projectChatActor
-          where projectChatActor."id" = ${input.actorUserId}
-            and projectChatActor."role" = 'user'
-            and projectChatActor."email" !~* ${guestRegex.source}
-        )`,
         or(
           eq(studyJourneyProject.ownerUserId, input.actorUserId),
           sql`exists (
@@ -1344,7 +1424,7 @@ export function createProjectFoundationRepository(
         }
 
         const project = await lockProject(tx, association.projectId);
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
         await assertProjectAuthority(
           tx,
           project,
@@ -1396,7 +1476,7 @@ export function createProjectFoundationRepository(
         }
 
         const project = await lockProject(tx, association.projectId);
-        await assertCustomerActor(tx, input.actorUserId);
+        await assertPersonalProjectActor(tx, input.actorUserId);
         await assertProjectAuthority(
           tx,
           project,
