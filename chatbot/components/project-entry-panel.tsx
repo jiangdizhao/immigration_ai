@@ -12,15 +12,18 @@ import {
 import {
   createProjectEntryController,
   openSelectedProjectChat,
+  type ProjectEntryAvailability,
   type ProjectEntryChat,
   type ProjectEntryProject,
   projectEntryButtonDisabled,
+  projectEntryControlsEnabled,
   runProjectNavigationAction,
 } from "@/lib/workspace/project-entry";
+import {
+  PROJECT_WORKSPACE_VIEWS,
+  type ProjectWorkspaceView,
+} from "@/lib/workspace/project-workspace-view";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
-import { ProjectDocumentsPanel } from "./project-documents-panel";
-import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
-import { SchoolApplicationsPanel } from "./school-applications-panel";
 
 type ProjectEntryCopy = WorkspaceCopy["projectEntry"];
 
@@ -47,6 +50,12 @@ export function BackToConversationsButton({
   );
 }
 
+const NAV_LABEL_KEYS = {
+  home: "projectHomeTab",
+  applications: "projectSchoolApplicationsTab",
+  admissions: "projectSchoolAdmissionsTab",
+} as const satisfies Record<ProjectWorkspaceView, keyof ProjectEntryCopy>;
+
 function projectLabel(
   project: ProjectEntryProject,
   locale: string,
@@ -67,34 +76,41 @@ export function ProjectEntryPanel({
   onSelectedProjectChange,
   clearSelectionSignal,
   navigationBusy,
-  projectDocumentsEnabled = false,
-  schoolApplicationsEnabled = false,
-  schoolApplicationsCopy,
-  schoolAdmissionsEnabled = false,
-  schoolAdmissionsCopy,
+  availability = "available",
+  temporaryGuestProject = false,
+  schoolPreparationRestricted = false,
+  projectView = "home",
+  onSelectProjectView,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
   onOpenProjectChat: (chatId: string) => Promise<void> | void;
-  onSelectedProjectChange: (projectId: string | null) => void;
+  /** The second argument is the selected Project record, when known. */
+  onSelectedProjectChange: (
+    projectId: string | null,
+    project?: ProjectEntryProject | null
+  ) => void;
   /** Changed when global history or the Standalone action takes focus. */
   clearSelectionSignal: number;
   /** Mirrors the Workspace's conversation load and active-turn state. */
   navigationBusy: boolean;
-  /** This remains false until separate privacy and scan-trust approval. */
-  projectDocumentsEnabled?: boolean;
   /**
-   * Phase 13 M5.1: default OFF. The server page enables the surface only when the
-   * feature capability is on; the API re-checks it server-side anyway.
+   * Phase 13 P1: server-resolved personal Project capability. The entry stays
+   * visible in every state so an unavailable installation explains itself
+   * instead of silently disappearing.
    */
-  schoolApplicationsEnabled?: boolean;
-  schoolApplicationsCopy: WorkspaceCopy["schoolApplications"];
+  availability?: ProjectEntryAvailability;
+  /** Guest Projects are session-scoped and cannot be transferred yet. */
+  temporaryGuestProject?: boolean;
+  /** M5 preparation is enabled but this identity is not eligible for it. */
+  schoolPreparationRestricted?: boolean;
   /**
-   * Phase 13 M5.2: default OFF and independent of M5.1. The API re-checks the
-   * capability, both additive schemas and every authority on each request.
+   * Phase 13 UX: this rail is navigation only. The selected Project's sections
+   * (Project home, School applications, Admissions workflow) render in the main
+   * content area, so no business form is mounted at navigation width.
    */
-  schoolAdmissionsEnabled?: boolean;
-  schoolAdmissionsCopy: WorkspaceCopy["schoolAdmissions"];
+  projectView?: ProjectWorkspaceView;
+  onSelectProjectView?: (view: ProjectWorkspaceView) => void;
 }) {
   const [controller] = useState(() => createProjectEntryController({ copy }));
   const state = useSyncExternalStore(
@@ -108,6 +124,12 @@ export function ProjectEntryPanel({
   const openingChatRef = useRef(false);
   const navigationBusyRef = useRef(navigationBusy);
   navigationBusyRef.current = navigationBusy;
+  const controlsEnabled = projectEntryControlsEnabled(availability);
+  const availabilityMessage = controlsEnabled
+    ? null
+    : availability === "disabled"
+      ? copy.projectDisabled
+      : copy.projectServiceUnavailable;
 
   function runWhenIdle<T>(action: () => T) {
     return runProjectNavigationAction({
@@ -123,6 +145,9 @@ export function ProjectEntryPanel({
   }
 
   function openCreateProjectDialog() {
+    if (!controlsEnabled) {
+      return;
+    }
     runWhenIdle(() => controller.openCreateDialog());
   }
 
@@ -131,12 +156,21 @@ export function ProjectEntryPanel({
   }, [controller, copy]);
 
   useEffect(() => {
+    // A disabled or schema-unavailable installation must not call the API just
+    // to render "unavailable": the server already resolved the reason.
+    if (!controlsEnabled) {
+      return;
+    }
     controller.refreshProjects().catch(() => undefined);
-  }, [controller]);
+  }, [controller, controlsEnabled]);
+
+  const selectedProject = state.projects.find(
+    (project) => project.id === state.selectedProjectId
+  );
 
   useEffect(() => {
-    onSelectedProjectChange(state.selectedProjectId);
-  }, [onSelectedProjectChange, state.selectedProjectId]);
+    onSelectedProjectChange(state.selectedProjectId, selectedProject ?? null);
+  }, [onSelectedProjectChange, selectedProject, state.selectedProjectId]);
 
   useEffect(() => {
     if (appliedClearSignal.current === clearSelectionSignal) {
@@ -145,10 +179,6 @@ export function ProjectEntryPanel({
     appliedClearSignal.current = clearSelectionSignal;
     controller.selectProject(null).catch(() => undefined);
   }, [clearSelectionSignal, controller]);
-
-  const selectedProject = state.projects.find(
-    (project) => project.id === state.selectedProjectId
-  );
 
   async function openChat(chat: ProjectEntryChat) {
     await openProjectChat(chat.chatId, chat.projectId);
@@ -206,13 +236,44 @@ export function ProjectEntryPanel({
         <button
           className="w-full rounded-xl bg-[#001736] px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
           data-testid="create-project-open"
-          disabled={projectEntryButtonDisabled(navigationBusy)}
+          disabled={
+            !controlsEnabled || projectEntryButtonDisabled(navigationBusy)
+          }
           onClick={openCreateProjectDialog}
           type="button"
         >
           + {copy.createProject}
         </button>
       </div>
+
+      {availabilityMessage ? (
+        <output
+          className="block rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900"
+          data-testid="project-availability-notice"
+        >
+          {availabilityMessage}
+        </output>
+      ) : null}
+
+      {temporaryGuestProject ? (
+        <p
+          className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+          data-testid="guest-project-notice"
+          role="note"
+        >
+          {copy.guestTemporaryProject}
+        </p>
+      ) : null}
+
+      {schoolPreparationRestricted ? (
+        <p
+          className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+          data-testid="school-preparation-restricted"
+          role="note"
+        >
+          {copy.schoolPreparationRestricted}
+        </p>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <button
@@ -306,22 +367,31 @@ export function ProjectEntryPanel({
           <p className="text-[11px] leading-4 text-slate-600">
             {copy.projectChatHistoryScope}
           </p>
-          <ProjectDocumentsPanel
-            copy={copy.documents}
-            enabled={projectDocumentsEnabled}
-            projectId={selectedProject.id}
-            projectRevision={selectedProject.revision}
-          />
-          <SchoolApplicationsPanel
-            copy={schoolApplicationsCopy}
-            enabled={schoolApplicationsEnabled}
-            projectId={selectedProject.id}
-          />
-          <SchoolAdmissionsWorkflowPanel
-            copy={schoolAdmissionsCopy}
-            enabled={schoolAdmissionsEnabled}
-            projectId={selectedProject.id}
-          />
+          {onSelectProjectView ? (
+            <nav
+              aria-label={copy.projectHomeTitle}
+              className="grid gap-1"
+              data-testid="project-view-nav"
+            >
+              {PROJECT_WORKSPACE_VIEWS.map((view) => (
+                <button
+                  aria-current={projectView === view ? "page" : undefined}
+                  className={
+                    projectView === view
+                      ? "w-full rounded-lg bg-white px-2.5 py-2 text-left text-xs font-semibold text-blue-950 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      : "w-full rounded-lg bg-white/60 px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                  }
+                  data-testid={`project-view-${view}`}
+                  disabled={projectEntryButtonDisabled(navigationBusy)}
+                  key={view}
+                  onClick={() => onSelectProjectView(view)}
+                  type="button"
+                >
+                  {copy[NAV_LABEL_KEYS[view]]}
+                </button>
+              ))}
+            </nav>
+          ) : null}
           <h4 className="pt-1 text-xs font-semibold text-slate-800">
             {copy.chatsTitle}
           </h4>

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Bot,
   CalendarDays,
   Loader2,
@@ -58,8 +59,17 @@ import {
 import {
   buildStandaloneConversationRequest,
   isProjectNavigationBusy,
+  type ProjectEntryAvailability,
+  type ProjectEntryProject,
+  runProjectNavigationAction,
   shouldShowNeutralProjectSelection,
 } from "@/lib/workspace/project-entry";
+import {
+  nextProjectWorkspaceView,
+  type ProjectWorkspaceView,
+  projectSwitchClearsConversation,
+  workspaceUrlWithoutChat,
+} from "@/lib/workspace/project-workspace-view";
 import {
   buildWorkspaceCaseSummary,
   shouldClearWorkspaceCaseSummary,
@@ -86,6 +96,7 @@ import {
 } from "./legacy-conversation-notice";
 import { MatterDocumentsPanel } from "./matter-documents-panel";
 import { ProjectEntryPanel } from "./project-entry-panel";
+import { ProjectWorkspaceHome } from "./project-workspace-home";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -445,6 +456,17 @@ function setWorkspaceChatParam(
   window.history.replaceState(null, "", url.toString());
 }
 
+function clearWorkspaceChatParam() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.history.replaceState(
+    null,
+    "",
+    workspaceUrlWithoutChat(window.location.href)
+  );
+}
+
 /**
  * Conversation requests in the workspace carry a typed reason when they fail, so
  * a refused policy launch can be explained and retried instead of being shown as
@@ -542,7 +564,9 @@ export function ImmigrationAIWorkspace({
   requestedPolicySlug = null,
   initialChatId = null,
   userType = "regular",
-  projectWorkspaceEnabled = false,
+  projectAvailability = "available",
+  temporaryGuestProject = false,
+  schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
 }: {
@@ -558,11 +582,19 @@ export function ImmigrationAIWorkspace({
    * documents, so the workspace states that instead of surfacing an API error.
    */
   userType?: "guest" | "regular";
-  /** Project UI writes are exposed only when authorized by the server page. */
-  projectWorkspaceEnabled?: boolean;
-  /** Phase 13 M5.1 school applications are default OFF and server-gated. */
+  /**
+   * Phase 13 P1: server-resolved personal Project capability. The Project entry
+   * is always rendered; a disabled or schema-unavailable installation shows an
+   * explicit, safe unavailable state instead of hiding the surface.
+   */
+  projectAvailability?: ProjectEntryAvailability;
+  /** Guest Projects are tied to the temporary guest session. */
+  temporaryGuestProject?: boolean;
+  /** M5 preparation is enabled but this identity is not eligible for it. */
+  schoolPreparationRestricted?: boolean;
+  /** Phase 13 M5.1 school applications: enabled by capability + eligibility. */
   schoolApplicationsEnabled?: boolean;
-  /** Phase 13 M5.2 school admissions are default OFF and server-gated. */
+  /** Phase 13 M5.2 school admissions: enabled by capability + eligibility. */
   schoolAdmissionsEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
@@ -577,6 +609,21 @@ export function ImmigrationAIWorkspace({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null
   );
+  /**
+   * Phase 13 UX: the selected Project record and the main-area section. The
+   * section is presentation only; every panel behind it re-checks server
+   * authorization, so it can never widen access.
+   */
+  const [selectedProject, setSelectedProject] =
+    useState<ProjectEntryProject | null>(null);
+  const [projectView, setProjectView] = useState<ProjectWorkspaceView>("home");
+  /** Mirrors the selection so a Project switch can reset the section safely. */
+  const selectedProjectIdRef = useRef<string | null>(null);
+  /**
+   * Mirrors the navigation-busy contract for stable callbacks, so a Project
+   * section change cannot run while a turn or a conversation load is active.
+   */
+  const projectNavigationBusyRef = useRef(false);
   const [projectSelectionReset, setProjectSelectionReset] = useState(0);
   const conversationIdRef = useRef<string | null>(null);
   const [conversationOrigin, setConversationOrigin] =
@@ -652,15 +699,109 @@ export function ImmigrationAIWorkspace({
   const shouldAutoScrollRef = useRef(true);
 
   const clearProjectSelection = useCallback(() => {
+    selectedProjectIdRef.current = null;
     setSelectedProjectId(null);
+    setSelectedProject(null);
+    setProjectView("home");
     setProjectSelectionReset((current) => current + 1);
   }, []);
 
+  /**
+   * Drop every trace of the active conversation. The load sequence is bumped
+   * first, so a delayed `/api/immigration-conversations/{id}` response for the
+   * previous Chat is discarded instead of repainting the new Project context.
+   * No Chat is created, closed or deleted by this reset.
+   */
+  const resetProjectConversation = useCallback(() => {
+    conversationLoadSeqRef.current += 1;
+    conversationIdRef.current = null;
+    setConversationId(null);
+    setConversationProjectId(null);
+    conversationOriginRef.current = "immigration";
+    setConversationOrigin("immigration");
+    projectChatReadOnlyRef.current = false;
+    setProjectChatReadOnly(false);
+    setConversationReady(false);
+    setConversationLoading(false);
+    setMessages([]);
+    setHasOlderMessages(false);
+    setOlderMessagesCursor(null);
+    setPolicyBinding(null);
+    setPolicyLaunchFailure(null);
+    setMatterId(null);
+    setPersistenceNotice(null);
+    setCaseSummarySnapshot(null);
+    setProjectView("home");
+    clearWorkspaceChatParam();
+  }, []);
+
+  /**
+   * Return to the selected Project's home without creating a Chat. The existing
+   * navigation-busy contract blocks this while a turn or a conversation load is
+   * in progress, so an in-flight Chat can never be abandoned mid-request.
+   */
+  const returnToProjectHome = useCallback(() => {
+    const navigation = runProjectNavigationAction({
+      isBusy: () => projectNavigationBusyRef.current,
+      action: resetProjectConversation,
+    });
+    if (!navigation.allowed) {
+      return;
+    }
+  }, [resetProjectConversation]);
+
+  /**
+   * Phase 13 UX: a Project change resets the main-area section, so Project B can
+   * never open on a form whose data was loaded for Project A, and drops any
+   * Project Chat that belonged to the previous Project.
+   */
   const handleSelectedProjectChange = useCallback(
-    (projectId: string | null) => {
+    (projectId: string | null, project: ProjectEntryProject | null = null) => {
+      const previousProjectId = selectedProjectIdRef.current;
+      setProjectView((current) =>
+        nextProjectWorkspaceView({
+          current,
+          previousProjectId,
+          nextProjectId: projectId,
+        })
+      );
+      selectedProjectIdRef.current = projectId;
       setSelectedProjectId(projectId);
+      setSelectedProject(project);
+      if (
+        projectSwitchClearsConversation({
+          previousProjectId,
+          nextProjectId: projectId,
+          conversationOrigin: conversationOriginRef.current,
+        })
+      ) {
+        // Project B must not inherit Project A's Chat identity or its `chatId`.
+        resetProjectConversation();
+      }
     },
-    []
+    [resetProjectConversation]
+  );
+
+  /**
+   * Section navigation follows the same busy contract as Project Chat navigation:
+   * while a turn or a conversation load is in progress the section is unchanged.
+   */
+  const handleSelectProjectView = useCallback(
+    (view: ProjectWorkspaceView) => {
+      const navigation = runProjectNavigationAction({
+        isBusy: () => projectNavigationBusyRef.current,
+        action: () => {
+          if (conversationOriginRef.current === "project") {
+            resetProjectConversation();
+          }
+          setProjectView(view);
+        },
+      });
+      if (!navigation.allowed) {
+        return;
+      }
+    },
+    [resetProjectConversation]
   );
 
   const latestAssistant = useMemo(
@@ -729,6 +870,7 @@ export function ImmigrationAIWorkspace({
     status,
     conversationLoading
   );
+  projectNavigationBusyRef.current = projectNavigationBusy;
   const isNeutralProjectSelection = shouldShowNeutralProjectSelection({
     selectedProjectId,
     conversationOrigin,
@@ -1935,20 +2077,19 @@ export function ImmigrationAIWorkspace({
             </button>
           </div>
 
-          {projectWorkspaceEnabled ? (
-            <ProjectEntryPanel
-              clearSelectionSignal={projectSelectionReset}
-              copy={copy.projectEntry}
-              locale={locale}
-              navigationBusy={projectNavigationBusy}
-              onOpenProjectChat={loadConversation}
-              onSelectedProjectChange={handleSelectedProjectChange}
-              schoolAdmissionsCopy={copy.schoolAdmissions}
-              schoolAdmissionsEnabled={schoolAdmissionsEnabled}
-              schoolApplicationsCopy={copy.schoolApplications}
-              schoolApplicationsEnabled={schoolApplicationsEnabled}
-            />
-          ) : null}
+          <ProjectEntryPanel
+            availability={projectAvailability}
+            clearSelectionSignal={projectSelectionReset}
+            copy={copy.projectEntry}
+            locale={locale}
+            navigationBusy={projectNavigationBusy}
+            onOpenProjectChat={loadConversation}
+            onSelectedProjectChange={handleSelectedProjectChange}
+            onSelectProjectView={handleSelectProjectView}
+            projectView={projectView}
+            schoolPreparationRestricted={schoolPreparationRestricted}
+            temporaryGuestProject={temporaryGuestProject}
+          />
 
           {selectedProjectId ? null : (
             <>
@@ -2105,6 +2246,23 @@ export function ImmigrationAIWorkspace({
                     ? `${copy.projectEntry.selectedProject} · #${selectedProjectId.slice(0, 8)}`
                     : copy.consultation.title}
                 </h2>
+                {conversationOrigin === "project" && selectedProjectId ? (
+                  <button
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-900 underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                    data-testid="return-to-project-home"
+                    disabled={projectNavigationBusy}
+                    onClick={returnToProjectHome}
+                    title={
+                      projectNavigationBusy
+                        ? copy.projectEntry.openingChat
+                        : copy.projectEntry.returnToProjectHome
+                    }
+                    type="button"
+                  >
+                    <ArrowLeft aria-hidden="true" className="size-3.5" />
+                    {copy.projectEntry.returnToProjectHome}
+                  </button>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {isNeutralProjectSelection && selectedProjectId ? (
@@ -2157,22 +2315,40 @@ export function ImmigrationAIWorkspace({
           </div>
 
           {isNeutralProjectSelection ? (
-            <div
-              className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto px-5 py-8"
-              data-testid="project-selection-empty-state"
-            >
-              <div className="max-w-xl text-center">
-                <h3 className="text-lg font-semibold text-slate-950">
-                  {copy.projectEntry.selectedProject}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {copy.projectEntry.projectChatHistoryScope}
-                </p>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  {copy.projectEntry.projectContextUnavailable}
-                </p>
+            selectedProject ? (
+              <ProjectWorkspaceHome
+                copy={copy.projectEntry}
+                locale={locale}
+                navigationBusy={projectNavigationBusy}
+                onSelectView={handleSelectProjectView}
+                project={selectedProject}
+                projectDocumentsEnabled={false}
+                schoolAdmissionsCopy={copy.schoolAdmissions}
+                schoolAdmissionsEnabled={schoolAdmissionsEnabled}
+                schoolApplicationsCopy={copy.schoolApplications}
+                schoolApplicationsEnabled={schoolApplicationsEnabled}
+                schoolPreparationRestricted={schoolPreparationRestricted}
+                temporaryGuestProject={temporaryGuestProject}
+                view={projectView}
+              />
+            ) : (
+              <div
+                className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto px-5 py-8"
+                data-testid="project-selection-empty-state"
+              >
+                <div className="max-w-xl text-center">
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    {copy.projectEntry.selectedProject}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    {copy.projectEntry.projectChatHistoryScope}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {copy.projectEntry.projectContextUnavailable}
+                  </p>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <>
               <div

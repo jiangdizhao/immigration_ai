@@ -8,14 +8,15 @@ import {
   ProjectEntryPanel,
 } from "@/components/project-entry-panel";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
+import { shouldApplyConversationDetail } from "./conversation-origin";
 import {
   buildStandaloneConversationRequest,
-  canShowProjectWorkspace,
   createProjectEntryController,
   isProjectNavigationBusy,
   openSelectedProjectChat,
   type ProjectEntryCopy,
   projectEntryButtonDisabled,
+  projectEntryControlsEnabled,
   projectEntryErrorMessage,
   runProjectNavigationAction,
   shouldApplyProjectChatResponse,
@@ -84,39 +85,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-test("Project workspace controls require the server-derived customer and flag", () => {
-  assert.equal(
-    canShowProjectWorkspace({
-      writesEnabled: false,
-      regularSession: true,
-      registeredCustomer: true,
-    }),
-    false
-  );
-  assert.equal(
-    canShowProjectWorkspace({
-      writesEnabled: true,
-      regularSession: false,
-      registeredCustomer: true,
-    }),
-    false
-  );
-  assert.equal(
-    canShowProjectWorkspace({
-      writesEnabled: true,
-      regularSession: true,
-      registeredCustomer: false,
-    }),
-    false
-  );
-  assert.equal(
-    canShowProjectWorkspace({
-      writesEnabled: true,
-      regularSession: true,
-      registeredCustomer: true,
-    }),
-    true
-  );
+test("Project entry controls stay interactive only for the server-resolved available state", () => {
+  assert.equal(projectEntryControlsEnabled("available"), true);
+  assert.equal(projectEntryControlsEnabled("disabled"), false);
+  assert.equal(projectEntryControlsEnabled("unavailable"), false);
 });
 
 test("Project entry renders accessible Chinese-default and English responsive controls", () => {
@@ -130,8 +102,6 @@ test("Project entry renders accessible Chinese-default and English responsive co
         navigationBusy: false,
         onOpenProjectChat: () => undefined,
         onSelectedProjectChange: () => undefined,
-        schoolApplicationsCopy: copy.schoolApplications,
-        schoolAdmissionsCopy: copy.schoolAdmissions,
       })
     );
     assert.match(markup, /aria-label=/u);
@@ -217,8 +187,6 @@ test("Project entry controls render disabled state from the parent navigation co
         navigationBusy,
         onOpenProjectChat: () => undefined,
         onSelectedProjectChange: () => undefined,
-        schoolApplicationsCopy: copy.schoolApplications,
-        schoolAdmissionsCopy: copy.schoolAdmissions,
       })
     );
 
@@ -908,4 +876,165 @@ test("HTTP access and transient failures use localized, non-success messages", (
   assert.equal(projectEntryErrorMessage(404, copy), copy.notFound);
   assert.equal(projectEntryErrorMessage(503, copy), copy.unavailable);
   assert.match(copy.networkFailed, /could not confirm/u);
+});
+
+test("the Project rail is navigation-only and the M5 panels live in the main area", () => {
+  // The rail must not mount business forms at navigation width any more.
+  assert.doesNotMatch(projectPanelSource, /<SchoolApplicationsPanel/u);
+  assert.doesNotMatch(projectPanelSource, /<SchoolAdmissionsWorkflowPanel/u);
+  assert.doesNotMatch(projectPanelSource, /<ProjectDocumentsPanel/u);
+  assert.match(projectPanelSource, /data-testid="project-view-nav"/u);
+  assert.match(projectPanelSource, /project-view-\$\{view\}/u);
+});
+
+test("the workspace renders the Project home in the main pane and can return to it", () => {
+  // A selected Project without a Chat shows the home, not the neutral placeholder.
+  assert.match(workspaceSource, /<ProjectWorkspaceHome/u);
+  assert.match(
+    workspaceSource,
+    /isNeutralProjectSelection \? \(\s*selectedProject \?/u
+  );
+  // A Project Chat still offers an explicit, non-creating return to the home.
+  assert.match(workspaceSource, /data-testid="return-to-project-home"/u);
+  assert.match(workspaceSource, /const returnToProjectHome = useCallback/u);
+  // Returning home invalidates in-flight conversation loads through the shared
+  // reset, and the navigation itself obeys the busy contract.
+  assert.match(
+    workspaceSource,
+    /const resetProjectConversation = useCallback\(\(\) => \{\s*conversationLoadSeqRef\.current \+= 1;/u
+  );
+  assert.match(workspaceSource, /action: resetProjectConversation,/u);
+  // The home is a presentation layer only: it reuses the existing panels.
+  assert.match(
+    workspaceSource,
+    /schoolApplicationsCopy=\{copy\.schoolApplications\}/u
+  );
+  assert.match(
+    workspaceSource,
+    /schoolAdmissionsCopy=\{copy\.schoolAdmissions\}/u
+  );
+});
+
+/* ------------------------------------------------------------------------- *
+ * R1 navigation-state correction (2026-11-01)
+ *
+ * A Project Chat may only stay active for the Project it belongs to, and the
+ * Project home/section controls may not run while a turn or a conversation load
+ * is in progress. These tests pin the wiring, not the visual layout.
+ * ------------------------------------------------------------------------- */
+
+const resetSource = workspaceSource.slice(
+  workspaceSource.indexOf("const resetProjectConversation = useCallback"),
+  workspaceSource.indexOf("const returnToProjectHome = useCallback")
+);
+const projectNavSource = workspaceSource.slice(
+  workspaceSource.indexOf("const returnToProjectHome = useCallback"),
+  workspaceSource.indexOf("const latestAssistant = useMemo")
+);
+const railNavSource = projectPanelSource.slice(
+  projectPanelSource.indexOf('data-testid="project-view-nav"'),
+  projectPanelSource.indexOf("</nav>")
+);
+
+test("Project home and section navigation reuse the navigation-busy contract", () => {
+  assert.ok(projectNavSource.length > 0);
+  // Both actions are guarded by the same shared busy gate.
+  const guards =
+    projectNavSource.match(
+      /runProjectNavigationAction\(\{\s*isBusy: \(\) => projectNavigationBusyRef\.current,/gu
+    ) ?? [];
+  assert.equal(guards.length, 2);
+  assert.match(
+    workspaceSource,
+    /projectNavigationBusyRef\.current = projectNavigationBusy;/u
+  );
+  // The rail links are visually disabled by the existing button contract.
+  assert.match(
+    railNavSource,
+    /disabled=\{projectEntryButtonDisabled\(navigationBusy\)\}/u
+  );
+  // The chat header control is disabled too.
+  const buttonIndex = workspaceSource.indexOf(
+    'data-testid="return-to-project-home"'
+  );
+  assert.ok(buttonIndex > 0);
+  const buttonWindow = workspaceSource.slice(
+    buttonIndex - 400,
+    buttonIndex + 400
+  );
+  assert.match(buttonWindow, /disabled=\{projectNavigationBusy\}/u);
+});
+
+test("a busy workspace refuses Project section navigation and leaves the section unchanged", () => {
+  let busy = true;
+  let sectionChanges = 0;
+  let resets = 0;
+  const navigateToSection = () =>
+    runProjectNavigationAction({
+      isBusy: () => busy,
+      action: () => {
+        resets += 1;
+        sectionChanges += 1;
+        return "applications";
+      },
+    });
+
+  // A turn in progress or a conversation still loading blocks the change.
+  assert.deepEqual(navigateToSection(), { allowed: false });
+  assert.equal(sectionChanges, 0);
+  assert.equal(resets, 0);
+
+  busy = false;
+  assert.deepEqual(navigateToSection(), {
+    allowed: true,
+    result: "applications",
+  });
+  assert.equal(sectionChanges, 1);
+});
+
+test("switching Projects drops the previous Project Chat identity and chatId", () => {
+  // The switch decision keeps a Project Chat from following the selection.
+  assert.match(workspaceSource, /projectSwitchClearsConversation\(\{/u);
+  assert.match(
+    workspaceSource,
+    /nextProjectId: projectId,\s*conversationOrigin: conversationOriginRef\.current,/u
+  );
+  // The reset is the shared one, so the URL cannot keep the old chatId.
+  assert.match(resetSource, /clearWorkspaceChatParam\(\);/u);
+  assert.match(
+    workspaceSource,
+    /window\.history\.replaceState\(\s*null,\s*"",\s*workspaceUrlWithoutChat\(window\.location\.href\)\s*\);/u
+  );
+  // The reset only touches client state: no Chat is created, closed or deleted.
+  assert.doesNotMatch(
+    resetSource,
+    /fetch\(|createProjectChat|method: "POST"|method: "DELETE"|\/api\/projects/gu
+  );
+});
+
+test("a delayed conversation response cannot repaint after a Project reset", () => {
+  // The reset bumps the load sequence before clearing state, so the sequence the
+  // in-flight request captured is no longer the newest one.
+  assert.match(resetSource, /conversationLoadSeqRef\.current \+= 1;/u);
+  const inFlightSequence = 1;
+  const sequenceAfterReset = inFlightSequence + 1;
+  assert.equal(
+    shouldApplyConversationDetail({
+      requestSeq: inFlightSequence,
+      latestRequestSeq: sequenceAfterReset,
+      requestedChatId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      loadedChatId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    }),
+    false
+  );
+  // The same response is applied only while it is still the newest request.
+  assert.equal(
+    shouldApplyConversationDetail({
+      requestSeq: sequenceAfterReset,
+      latestRequestSeq: sequenceAfterReset,
+      requestedChatId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      loadedChatId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    }),
+    true
+  );
 });

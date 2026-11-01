@@ -95,6 +95,42 @@ export type WorkspaceCopy = {
     requestFailed: string;
     networkFailed: string;
     loadMoreChats: string;
+    /**
+     * Phase 13 P1 truthful availability copy. A guest Project is tied to the
+     * temporary guest session and has no account-transfer path yet.
+     */
+    guestTemporaryProject: string;
+    /** Explicit administrator disable; ordinary conversations still work. */
+    projectDisabled: string;
+    /** Missing/incomplete schema or an unavailable Project service. */
+    projectServiceUnavailable: string;
+    /** M5 preparation is not open to this identity yet. */
+    schoolPreparationRestricted: string;
+    /** Bounded creation: the actor owns the maximum number of active Projects. */
+    limitReached: string;
+    /**
+     * Phase 13 Project Workspace UX: the selected Project's main-content home
+     * and its section navigation. Presentation only — no stage or progress copy.
+     */
+    projectHomeTitle: string;
+    projectHomeSubtitle: string;
+    projectHomeTab: string;
+    projectSchoolApplicationsTab: string;
+    projectSchoolAdmissionsTab: string;
+    projectHomeNextSteps: string;
+    projectHomeOpenApplications: string;
+    projectHomeOpenAdmissions: string;
+    projectHomeApplicationsUnavailable: string;
+    projectHomeAdmissionsUnavailable: string;
+    /** Concise restriction wording for the home cards (registered-accounts-only). */
+    projectHomeApplicationsRestricted: string;
+    projectHomeAdmissionsRestricted: string;
+    projectHomeLimits: string;
+    projectHomeChatsHint: string;
+    returnToProjectHome: string;
+    projectStatusActive: string;
+    projectStatusClosed: string;
+    projectCreatedOn: string;
     documents: {
       title: string;
       unavailable: string;
@@ -556,6 +592,36 @@ const zh: WorkspaceCopy = {
     requestFailed: "项目请求失败，请重试。",
     networkFailed: "网络请求未能确认结果。请重试；安全重试会沿用原操作编号。",
     loadMoreChats: "加载更多项目对话",
+    guestTemporaryProject:
+      "访客项目仅属于本次访客会话：其他访客无法访问，目前也无法转移到注册账户。",
+    projectDisabled: "项目创建已被管理员临时停用。普通对话不受影响。",
+    projectServiceUnavailable:
+      "项目服务暂时不可用。普通对话不受影响，请稍后重试。",
+    schoolPreparationRestricted:
+      "学校申请与入学准备目前仅向已注册个人账户开放。访客与工作人员账户可以创建自己的项目，但暂时不能使用该准备功能。",
+    limitReached:
+      "您已达到可同时拥有的项目数量上限。请先关闭不再使用的项目，然后再新建。",
+    projectHomeTitle: "项目主页",
+    projectHomeSubtitle:
+      "在这里查看项目信息，或进入学校申请与入学准备。所有状态均来自服务器的真实数据。",
+    projectHomeTab: "项目主页",
+    projectSchoolApplicationsTab: "学校申请",
+    projectSchoolAdmissionsTab: "入学流程",
+    projectHomeNextSteps: "下一步",
+    projectHomeOpenApplications: "查看或新建学校申请草稿。",
+    projectHomeOpenAdmissions: "查看入学准备流程及其真实状态。",
+    projectHomeApplicationsUnavailable: "当前环境尚未开放学校申请功能。",
+    projectHomeAdmissionsUnavailable: "当前环境尚未开放入学流程功能。",
+    projectHomeApplicationsRestricted: "学校申请目前仅向已注册个人账户开放。",
+    projectHomeAdmissionsRestricted: "入学流程目前仅向已注册个人账户开放。",
+    projectHomeLimits:
+      "项目文件、共享事实与分阶段进度尚未开放；此处不会显示模拟进度、Offer、CoE 或律师批准。",
+    projectHomeChatsHint:
+      "您的项目对话列在左侧导航中。选择一条即可继续，或新建项目对话。",
+    returnToProjectHome: "返回项目主页",
+    projectStatusActive: "进行中",
+    projectStatusClosed: "已关闭",
+    projectCreatedOn: "创建于",
     documents: {
       title: "项目文件",
       unavailable: "项目文件功能尚未开放。此处不会显示模拟文件。",
@@ -1165,6 +1231,42 @@ const en: WorkspaceCopy = {
     networkFailed:
       "The network could not confirm the result. Retry safely; the same operation ID will be reused.",
     loadMoreChats: "Load more Project Chats",
+    guestTemporaryProject:
+      "Guest Projects belong to this temporary guest session only. Other guests cannot access them, and they cannot be transferred to a registered account yet.",
+    projectDisabled:
+      "Project creation is temporarily disabled by an administrator. Standard conversations are unaffected.",
+    projectServiceUnavailable:
+      "The Project service is temporarily unavailable. Your standard conversations are unaffected; please try again later.",
+    schoolPreparationRestricted:
+      "School application and admission preparation is currently open to registered personal accounts only. Guest and staff accounts can create their own Project but cannot use this preparation surface yet.",
+    limitReached:
+      "You have reached the maximum number of active Projects. Close a Project you no longer use, then create a new one.",
+    projectHomeTitle: "Project home",
+    projectHomeSubtitle:
+      "Review this Project here, or open its school applications and admission preparation. Every state comes from the server.",
+    projectHomeTab: "Project home",
+    projectSchoolApplicationsTab: "School applications",
+    projectSchoolAdmissionsTab: "Admissions workflow",
+    projectHomeNextSteps: "Next steps",
+    projectHomeOpenApplications: "Review or create a school application draft.",
+    projectHomeOpenAdmissions:
+      "Review the admission workflow and its real state.",
+    projectHomeApplicationsUnavailable:
+      "School applications are not enabled in this environment.",
+    projectHomeAdmissionsUnavailable:
+      "The admissions workflow is not enabled in this environment.",
+    projectHomeApplicationsRestricted:
+      "School applications are currently open to registered personal accounts only.",
+    projectHomeAdmissionsRestricted:
+      "The admissions workflow is currently open to registered personal accounts only.",
+    projectHomeLimits:
+      "Project documents, shared facts and staged progress are not available yet. No simulated progress, Offer, CoE or lawyer approval is shown here.",
+    projectHomeChatsHint:
+      "Your Project Chats are listed in the left navigation. Open one to continue, or create a new Project Chat.",
+    returnToProjectHome: "Back to Project home",
+    projectStatusActive: "Active",
+    projectStatusClosed: "Closed",
+    projectCreatedOn: "Created",
     documents: {
       title: "Project documents",
       unavailable:

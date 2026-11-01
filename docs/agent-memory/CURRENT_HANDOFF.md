@@ -8,6 +8,28 @@
 - **Inherited verdicts unchanged:** M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`, Post-M5 `E2E_BLOCKED`, Phase 13 `LIVE_PRODUCTION_NO_GO`. No new M6/M9 authority or production approval.
 <!-- END PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
 
+<!-- BEGIN PHASE13_P1_PROJECT_DEFAULT_ACCESS_2026_10_31 -->
+## P1 product correction — Project and school preparation default availability: `P1_FINAL_SECURITY_CORRECTION_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`
+
+- **Branch / HEAD:** `phase13-m5-school-admissions` at `eced55e0c75ff1c68b60c0f143e9cf884f8cb854` (unchanged). Nothing committed, pushed, migrated, deployed or provider-called. This block is the current operational checkpoint; the Post-M5 E2E closeout below is unmodified history.
+- **Status:** `P1_FINAL_SECURITY_CORRECTION_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`. Not database-validated, not browser-validated, not a release approval.
+- **Problem fixed:** the AI Workspace only showed Project creation when `PHASE13_PROJECT_CHAT_ENABLED=true` plus a regular, registered-customer session. Guests, lawyers and admins could not own a personal Project, and Project APIs/repository/history SQL rejected non-customer identities.
+- **New capability model:** one flag semantic in `lib/platform/capability-environment.ts`. Personal Project + Project Chat default **ON** in every environment with an explicit disable token (`false`/`0`/`off`/`no`/`disabled`) as the emergency lever. M5.1/M5.2 preparation default **ON** locally/test and **OFF** in production-like environments; explicit values still win, so production release NO-GO is unchanged.
+- **Final security correction A (strict flags):** parsing accepts only `true|1|on|yes|enabled` / `false|0|off|no|disabled`; any unrecognised non-empty value is `invalid` and **fails closed**, so `PHASE13_SCHOOL_*=flase` can never enable M5. Environment detection is conservative: any non-local `NODE_ENV`, `APP_ENV`, `VERCEL_ENV` (staging/preview) or hosted-runtime marker (Lambda/Cloud Run/Heroku/Fly/Render/Railway/Kubernetes/ECS) is production-like.
+- **Final security correction B (bounded creation):** new `lib/projects/create-limit.ts` with a per-actor active-Project cap (`PROJECT_ACTIVE_PROJECT_LIMIT = 10`) enforced **inside** the `createProject` transaction after replay handling (exact `operationId` retries always succeed and never add Projects), plus `project_create` HTTP rate limits through the existing rate-limit infrastructure with a stricter guest tier (3/hour actor, 6/hour IP vs 10/30 for customers). IP attribution uses the existing proxy-header model and is documented as best-effort, never a security boundary. Cap rejection maps to an explicit 429 (`project_limit_reached`) with dedicated zh-CN/en copy.
+- **Final security correction C (emergency-disable consistency):** `resolveSchoolPreparationAvailability()` composes the Project capability with the M5 flags, and both M5 HTTP handler factories accept `projectWritesEnabled` and route every mutation through a `mutate()` gate that returns 503 while `PHASE13_PROJECT_CHAT_ENABLED=false` (reads stay available). No identity — guest, customer, lawyer, admin — can bypass it with a direct HTTP call.
+- **Identity model:** `lib/projects/personal-project-capability.ts` derives personal ownership from the server session only (guest, Free, VIP, lawyer, admin) and always reports `professionalAuthority: false`. `assertCustomerActor` was replaced by `assertPersonalProjectActor` (existence only) and `assertProjectWritesEnabled()` guards every repository write path. `registeredProjectCustomer` was removed from Project Chat history/listing SQL while creator + ownership/active-membership predicates were retained.
+- **UI:** the Project entry is always rendered with `available` / `disabled` / `unavailable` states, a guest temporary-Project notice, and a truthful "registered personal accounts only" notice for M5 preparation. No API call is made when the server already resolved an unavailable state; no credentials/SQL/schema details are exposed. M5 panels are not offered while the Project foundation is disabled.
+- **Changed files:** see `~/project_default_access_p1_final_security_report.md`; cumulative patch `~/project_default_access_p1_final_security_review.patch` (P1 implementation + Corrections A/B/C).
+- **Validation (offline only, this correction):** focused suites **82 / 131 / 101 pass, 0 fail, 0 skip** (includes the new 18-test `lib/projects/project-default-access-security.test.ts`); Biome clean on all 16 changed files; `tsc --noEmit` **44 errors, identical to the pre-existing baseline in the same 9 untouched files, 0 new**. The earlier full-suite run (1237 pass) belongs to the previous P1 pass and was not rerun.
+- **Not executed, therefore not claimed:** `lib/projects/project-chat.integration.test.ts` and the other PostgreSQL-gated suites, Playwright/browser E2E, real migration/schema state, any external provider. Database/browser execution needs separate authorization.
+- **Risks / unresolved:** `project-chat.integration.test.ts` expectations were realigned to the new ownership policy but could not be executed here. Guest → registered-account Project transfer is **BLOCKED** pending an approved transfer protocol/migration decision. M5 preparation stays registered-account private until a consent/document-scope decision exists. Request-header IP attribution is not verified identity.
+- **Pre-existing dirty paths preserved untouched and excluded from the patch:** `chatbot/lib/service-payment/schema-contract.test.ts`, `chatbot/scripts/phase13-m4-005-db-test-guard{,.test}.ts`, untracked `chatbot/e2e/`, `chatbot/playwright.post-m5.config.ts`.
+- **Explicit non-goals:** no migration, no database reset/probe, no AWS/S3/Stripe/provider call, no deployment, no production M5 enablement, no change to VIP entitlement, M2 documents/facts, M3, M4 payment/professional-review/signature authority, managed submission, membership semantics, Guest transfer or standalone Chat.
+- **Immediate next action:** independent review of `~/project_default_access_p1_final_security_review.patch` and `~/project_default_access_p1_final_security_report.md`. Do not start another P1 correction cycle from this checkpoint.
+<!-- END PHASE13_P1_PROJECT_DEFAULT_ACCESS_2026_10_31 -->
+
+
 <!-- BEGIN PHASE13_POSTM5_E2E_FINAL_INDEPENDENT_REVIEW_CLOSEOUT_2026_10_31 -->
 ## Post-M5 E2E final independent G5 closeout — 2026-10-31 (current authoritative checkpoint)
 
@@ -6614,3 +6636,38 @@ Detailed implementation, all-format p50/p95 measurements, the baseline compariso
 Earlier pending-review and failed-test records are historical evidence, superseded by this final acceptance decision.
 
 <!-- END PHASE13_M4_004_FINAL_ACCEPTANCE_2026_10_29 -->
+
+<!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_2026_11_01 -->
+
+## Phase 13 Project Workspace UX Integration — implementation complete (2026-11-01)
+
+**Status: IMPLEMENTED_PENDING_INDEPENDENT_REVIEW** (uncommitted, no push, no deployment).
+
+- Branch `phase13-m5-school-admissions`, HEAD `c2ab3ee06470755101b6f5da4c955b32f1deb2d4`. The pre-existing P1 personal-Project-access patch (40 status entries) is preserved unchanged; this task only adds the UX slice below.
+- Contract: `docs/agent-memory/tasks/PHASE13_PROJECT_WORKSPACE_UX_INTEGRATION_CONTRACT_2026_11_01.md`.
+- New: `components/project-workspace-home.tsx` (main-content Project home with Project home / School applications / Admissions workflow tabs), `lib/workspace/project-workspace-view.ts` (presentation-only view state), plus `lib/workspace/project-workspace-home.test.ts` and `lib/workspace/project-workspace-view.test.ts`.
+- Changed: `components/project-entry-panel.tsx` (rail is navigation-only; the M5 panels and the documents disclosure moved out), `components/immigration-ai-workspace.tsx` (renders the home in the neutral Project selection, `return-to-project-home` control, per-Project section reset), `lib/workspace-copy.ts` (zh-CN/en Project-home copy), and the two existing tests that constructed the rail.
+- The M5 panels are reused unchanged (`SchoolApplicationsPanel`, `SchoolAdmissionsWorkflowPanel`, `ProjectDocumentsPanel`); no schema, migration, API, authorization, feature-flag or business-rule change.
+- Validation: 166 focused tests pass (0 fail, 0 skip); Biome clean on 9 changed files; `git diff --check` clean; `tsc --noEmit` = 44 pre-existing errors in 9 untouched files (0 new); `pnpm build` exit 0.
+- Browser smoke (headless Chromium, normal `pnpm dev`): Project created 201 → Project home renders with identity + 3 tabs; rail contains 0 business panels and 3 nav links; M5 tabs show the truthful registered-accounts-only restriction for a guest; Project Chat create 201 → "Back to Project home" returns home with `chatId` cleared and the rail chat count unchanged (1 → 1); mobile 390×844 keeps the home and tabs usable; zh-CN and English both render. Screenshots/JSON: `/tmp/ux-smoke/`.
+- Limitations: M5 panels with real data were not exercised in the browser because no registered development account credential is available (the guest session is correctly restricted); the panel-in-main-area rendering is covered by server-render component tests instead. Project Documents remain unavailable (`enabled=false`) exactly as before.
+- The historical post-M5 Playwright specs (`chatbot/e2e/browser/*`, untracked, not run) assert M5 panels directly after Project selection; they would need to select the new School applications tab first. No historical E2E verdict was re-run or changed.
+- Review patch: `~/phase13_project_workspace_ux_review.patch`.
+
+<!-- END PHASE13_PROJECT_WORKSPACE_UX_2026_11_01 -->
+
+<!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_R1_2026_11_01 -->
+
+### Phase 13 Project Workspace UX — R1 navigation-state correction (2026-11-01)
+
+**Status: R1_CORRECTION_IMPLEMENTED_PENDING_REVIEW.** Layout unchanged; no schema, API, flag, authorization, M5 business-rule or localization change.
+
+- `components/immigration-ai-workspace.tsx`: the conversation reset is now one shared `resetProjectConversation()` (bumps `conversationLoadSeqRef` first, then clears conversation identity, policy/matter/persistence state and the `chatId`/`launch` URL parameters). `returnToProjectHome()` and `handleSelectProjectView()` both run through the existing `runProjectNavigationAction` busy gate, so a Project-home return or section change cannot run while a turn or a conversation load is active. `handleSelectedProjectChange()` now calls `projectSwitchClearsConversation(...)` and resets the previous Project Chat when the selection moves to another Project (or is cleared), so Project A's Chat identity and `chatId` cannot stay active or reappear in Project B. No Chat is created, closed or deleted.
+- `components/project-entry-panel.tsx`: the three rail section links follow `projectEntryButtonDisabled(navigationBusy)` and show a disabled state.
+- `components/project-workspace-home.tsx`: new optional `navigationBusy` prop disables the section tabs and the two next-step cards while navigation is busy (presentation only; the handler still guards).
+- `lib/workspace/project-workspace-view.ts`: added `projectSwitchClearsConversation()` and `workspaceUrlWithoutChat()`; `clearWorkspaceChatParam()` now uses the latter.
+- Regression tests added: `lib/workspace/project-workspace-view.test.ts` (switch clearing rules incl. Standalone preservation and URL parameter handling), `lib/workspace/project-entry.test.ts` (busy-guard wiring for both actions, disabled header/rail controls, switch reset, no Chat mutation in the reset, delayed-response rejection after the sequence bump), `lib/workspace/project-workspace-home.test.ts` (tabs/cards disabled while busy).
+- Validation: 178 focused tests pass (0 fail, 0 skip) including **7 new navigation-state regression tests** (2 view rules, 1 home busy state, 4 workspace wiring); Biome clean on 7 changed files; `git diff --check` clean; `tsc --noEmit` = 44 pre-existing errors in 9 untouched files (0 new). No production build re-run (client-only prop/state change; the previous build on this structure passed). No browser test was run because it would require creating Project rows and database-writing browser tests need separate approval.
+- Review patch: `~/phase13_project_workspace_ux_review.patch` (updated).
+
+<!-- END PHASE13_PROJECT_WORKSPACE_UX_R1_2026_11_01 -->
