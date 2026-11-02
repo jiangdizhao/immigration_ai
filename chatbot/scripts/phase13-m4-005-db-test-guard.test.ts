@@ -284,7 +284,13 @@ test("the migration journal and pinned Migration 0044 bytes are enforced", async
     createHash("sha256").update(sqlText, "utf8").digest("hex")
   );
   assert.equal(expected.hash, M4_005_TEST_TARGET.migrationSqlSha256);
-  assert.equal(journal.entries.at(-1)?.tag, M4_005_TEST_TARGET.migrationHead);
+  // Migration 0044 is pinned as an ENTRY; later additive migrations extend the head.
+  assert.equal(
+    journal.entries.find(
+      (entry) => entry.idx === M4_005_TEST_TARGET.migrationIndex
+    )?.tag,
+    M4_005_TEST_TARGET.migrationHead
+  );
 
   // A single-byte edit to the migration must be detected.
   assert.throws(() => expectedM4_005_Migration(journal, `${sqlText} `));
@@ -514,9 +520,10 @@ test("the guard module never performs I/O", () => {
 });
 
 test("the isolated target constants stay internally consistent", () => {
-  // Journal indexes are zero-based: 45 applied rows end at index 44.
+  // Journal indexes are zero-based: the historical M4-005 entry sits at index 44
+  // inside a journal that later additive migrations may extend.
   assert.equal(
-    M4_005_TEST_TARGET.migrationCount,
+    M4_005_TEST_TARGET.migrationEntryCount,
     M4_005_TEST_TARGET.migrationIndex + 1
   );
   assert.notEqual(M4_005_TEST_TARGET.port, "5432".padEnd(4, "0"));

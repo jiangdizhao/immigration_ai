@@ -17,7 +17,10 @@ export const M4_005_TEST_TARGET = {
   port: "55445",
   database: "immigration_ai_phase13_m4_005_test",
   role: "phase13_m4_005_tester",
-  migrationCount: 45,
+  // Migration 0044 is an immutable historical entry: it must keep its index,
+  // tag and journal timestamp. Later additive migrations (0045+) legitimately
+  // extend the journal, so 0044 is pinned as an ENTRY, never as the head.
+  migrationEntryCount: 45,
   migrationIndex: 44,
   migrationHead: "0044_phase13_m4_005_service_payment",
   migrationWhen: 1_793_258_050_571,
@@ -216,13 +219,18 @@ export function expectedM4_005_Migration(
   if (!head) {
     throw new Error("M4-005 migration journal is empty");
   }
+  const pinned = journal.entries.find(
+    (entry) => entry.idx === M4_005_TEST_TARGET.migrationIndex
+  );
   if (
-    journal.entries.length !== M4_005_TEST_TARGET.migrationCount ||
-    head.idx !== M4_005_TEST_TARGET.migrationIndex ||
-    head.tag !== M4_005_TEST_TARGET.migrationHead ||
-    head.when !== M4_005_TEST_TARGET.migrationWhen
+    journal.entries.length < M4_005_TEST_TARGET.migrationEntryCount ||
+    !pinned ||
+    pinned.tag !== M4_005_TEST_TARGET.migrationHead ||
+    pinned.when !== M4_005_TEST_TARGET.migrationWhen
   ) {
-    throw new Error("M4-005 migration journal does not match the pinned head");
+    throw new Error(
+      "M4-005 Migration 0044 journal entry does not match the pin"
+    );
   }
   const hash = createHash("sha256").update(sqlText, "utf8").digest("hex");
   if (hash !== M4_005_TEST_TARGET.migrationSqlSha256) {
@@ -230,10 +238,10 @@ export function expectedM4_005_Migration(
   }
   return {
     hash,
-    idx: head.idx,
+    idx: pinned.idx,
     journalWhens: journal.entries.map((entry) => entry.when),
     rowCount: journal.entries.length,
-    when: head.when,
+    when: pinned.when,
   };
 }
 

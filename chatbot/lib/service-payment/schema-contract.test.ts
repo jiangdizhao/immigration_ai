@@ -32,13 +32,19 @@ function _quoted(values: readonly string[]) {
   return values.map((value) => `'${value}'`);
 }
 
-test("the migration is the next journal entry after M4-004", () => {
+test("Migration 0044 keeps its position immediately after M4-004", () => {
   const indexes = journal.entries.map((entry) => entry.idx);
   assert.equal(new Set(indexes).size, indexes.length);
-  assert.equal(Math.max(...indexes), 44);
-  const last = journal.entries.at(-1);
-  assert.equal(last?.idx, 44);
-  assert.equal(last?.tag, "0044_phase13_m4_005_service_payment");
+  assert.deepEqual(
+    indexes,
+    [...indexes].sort((a, b) => a - b)
+  );
+  const entry = journal.entries.find((candidate) => candidate.idx === 44);
+  assert.ok(entry, "journal entry idx 44 must exist");
+  assert.equal(entry?.tag, "0044_phase13_m4_005_service_payment");
+  // Later additive migrations (0045-0047) may extend the journal; only 0044's own
+  // identity and position are M4-005 invariants.
+  assert.ok(journal.entries.length >= 45);
 });
 
 test("earlier migrations are untouched by M4-005", () => {
