@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M6_INTEGRATED_PROJECT_STATE_2026_11_03 -->
+## Phase 13 — M6 Student 500 next development scope (2026-11-03)
+
+The existing Project-centric stack through M5, plus the 2026-11-01 Project Workspace UX and P1 personal Project source commits, is the reuse foundation. The owner approved a **two integrated implementation deliveries + one engineering acceptance** M6 plan to make Student 500 application preparation usable while retaining M6 official-law/version obligations. Basic M7-like preparation/GS drafting moves forward without marking M7/M8 complete. Branch: `phase13-m6-student500-application`, created from `ed39eefa9f963a546da9a366d820073d19a00556`.
+
+**No source implementation yet**; no new migrations/feature flags/prod or AWS changes. M4 remains closed with blockers, Post-M5 E2E is blocked, and live government submission/professional approval remains NO_GO. The latest owner AWS handoff reports Web ECS :48 and chatbot DB through 0047 with functional browser acceptance deferred.
+
+**Canonical plan:** [M6 integrated plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md). Current implementation status and next action: [CURRENT_MILESTONE](./CURRENT_MILESTONE.md) and [CURRENT_HANDOFF](./CURRENT_HANDOFF.md).
+<!-- END PHASE13_M6_INTEGRATED_PROJECT_STATE_2026_11_03 -->
+
 <!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
 ## Product integration checkpoint — 2026-11-01
 

@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE13_M6_PLAN_CURRENT_MILESTONE_2026_11_03 -->
+## Active planning milestone — Phase 13 M6 Student 500 MVP
+
+**Status:** `PLAN_APPROVED / CODING_NOT_DISPATCHED`; branch `phase13-m6-student500-application`; baseline `ed39eefa9f963a546da9a366d820073d19a00556`.
+
+**Deliveries:** M6.1 legal applicability + persistent Project visa application entry + usable UI; M6.2 evidence/fact/conditional requirement reconciliation + provisional GS draft + versioned preparation state; M6.3 one integrated offline engineering acceptance. Each implementation is a whole customer-facing workflow, not a sequence of schema/API/UI micro-tasks.
+
+**Exit gates:** authoritative as-of source applicability and versioned checklist; existing CoE without school-application dependency; permissioned Project/document facts and selective change invalidation; honest UNKNOWN/NOT_READY; self-vs-managed preparation distinction; Project isolation; save/reopen/draft journey. Full submission/official approval never claimed.
+
+**Next:** dispatch one M6.1 integrated task only after branch sync/owner instruction. M4, Post-M5 and live production blockers stay unchanged. [M6 integrated plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md).
+<!-- END PHASE13_M6_PLAN_CURRENT_MILESTONE_2026_11_03 -->
+
 <!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
 ## Active short task — Project Workspace UX integration (2026-11-01)
 

@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M6_SCOPE_OWNER_APPROVED_2026_11_03 -->
+## Owner-approved M6 scope adjustment — 2026-11-03 (overrides only the M6/M7 delivery split below)
+
+M6 now delivers **Student 500 Legal Intelligence & Application Preparation MVP** in two integrated customer-visible implementations and one consolidated engineering acceptance; it retains the existing official-source/as-of/Schedule 1+2/checklist/transition/impact-invalidation duties and **brings forward basic applicant intake, evidence gap tracking, provisional GS drafting and persistent preparation summary** from M7. M7 still owns deep branch coverage, comprehensive GS/lawyer review and richer preparation; M8 still owns precise immutable submission package authority, client confirmation, and human government submission. M0–M10 names/order are not renumbered; the original table below is historical scope prior to this bounded overlap. This decision is **not** permission for government API submission, lawyer approval, migration, production deployment, any AWS operation or feature-flag activation.
+
+**Delivery constraint:** M6.1 end-to-end legal/entry; M6.2 end-to-end preparation; M6.3 one consolidated offline acceptance; no atomized schema/API/UI milestone proliferation. M4 blockers, Post-M5 E2E_BLOCKED and LIVE_PRODUCTION_NO_GO carry forward. **Authority:** [M6 integrated plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md) and [D-P13-026](./DECISIONS.md).
+<!-- END PHASE13_M6_SCOPE_OWNER_APPROVED_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M5_CLOSED_POSTM5_E2E_CONTRACT_PREPARED_2026_10_31 -->
 ## Phase 13 M5 official closeout — 2026-10-31 (current authoritative checkpoint)
 

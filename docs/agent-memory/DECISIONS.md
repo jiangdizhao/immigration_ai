@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_026_M6_INTEGRATED_APPLICATION_MVP_2026_11_03 -->
+## D-P13-026 — Approve two-delivery Student 500 M6 MVP and one consolidated acceptance
+
+**Date:** 2026-11-03 (Australia/Sydney). **Source baseline:** `phase13-m6-student500-application` from `ed39eefa9f963a546da9a366d820073d19a00556`. **Disposition:** `M6_INTEGRATED_PLAN_APPROVED / IMPLEMENTATION_NOT_STARTED / LIVE_PRODUCTION_NO_GO`.
+
+**Decision:** M6 covers authoritative, dated Student 500 legal applicability and a **bounded application-preparation MVP**, deliberately bringing forward basic workflow and provisional GS first-draft capability otherwise scheduled for M7. Preserve the original milestone numbering: M7 retains deep GS/complex-case/professional workflow, M8 exact immutable package authorization and human submission, M9–M10 integrated release/pilot. Use exactly **M6.1 integrated law+entry**, **M6.2 integrated application preparation**, **M6.3 one engineering acceptance**, without schema/API/UI sub-milestones or unbounded repair loops.
+
+**Limits:** reuse M1–M5/Phase12 services with explicit source/consent/trust and Project authorization; do not assume CoE authenticity, professional approval or official checklist completeness. M4 and Post-M5 blockers remain recorded; Project Documents untrusted live use denied; all real government submission/professional/payment/credentials remain disconnected. This is a planning-only GitHub change, not permission for code, DB, production, AWS or flag mutations.
+
+**Authoritative implementation boundaries:** [M6 integrated plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md).
+<!-- END D_P13_026_M6_INTEGRATED_APPLICATION_MVP_2026_11_03 -->
+
 <!-- BEGIN D_P13_025_POSTM5_E2E_CLOSED_WITH_BLOCKERS_2026_10_31 -->
 ## D-P13-025 — Close independent Post-M5 E2E with blockers; preserve two campaigns and stop repair loop
 

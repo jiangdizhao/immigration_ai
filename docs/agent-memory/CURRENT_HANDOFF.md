@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M6_INTEGRATED_PLAN_ACTIVATED_2026_11_03 -->
+## Current handoff — M6 Student 500 integrated plan recorded (2026-11-03)
+
+**2026-11-03 OWNER-APPROVED M6 PLAN (docs-only)** — start from source `ed39eefa9f963a546da9a366d820073d19a00556` on new branch `phase13-m6-student500-application`. M6 expands its Student 500 legal intelligence with a bounded, customer-usable application-preparation MVP (a deliberate partial M7 overlap), delivered as **M6.1 complete legal/entry flow + M6.2 complete preparation/draft flow + M6.3 one consolidated acceptance**. M7 deep GS/complex-case/lawyer workflow and M8 exact-version professional/customer authorization and human submission remain separate. No implementation dispatched; no migration, AWS, activation or external submission authorized. M4 closed-with-blockers, Post-M5 E2E_BLOCKED and Phase 13 LIVE_PRODUCTION_NO_GO unchanged.
+
+**Next action:** owner syncs `phase13-m6-student500-application` in a new isolated local worktree; after explicit implementation dispatch, one M6.1 end-to-end code packet, then independent review, authorized host validation and owner commit/push. No M6 implementation/test claims yet. **Source baseline:** UX commit d16e6b6; P1 commit ed39eef. The 2026-11-03 owner handoff reports AWS Web ECS :48 / RDS chatbot migration 0047 but **website business E2E PENDING**; do not infer deployment of any M6 feature. Preserve original worktree's uncommitted M4/Post-M5 tests when syncing.
+
+**Plan:** [M6 integrated plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md).
+<!-- END PHASE13_M6_INTEGRATED_PLAN_ACTIVATED_2026_11_03 -->
+
 <!-- BEGIN PHASE13_PROJECT_WORKSPACE_UX_COMPACT_CONTRACT_2026_11_01 -->
 ## Phase 13 Project Workspace UX integration — compact contract recorded (2026-11-01)
 
