@@ -1,3 +1,17 @@
+<!-- BEGIN PHASE13_M6_2_IMPLEMENTATION_2026_11_03 -->
+## Phase 13 M6.2 - application preparation, evidence reconciliation & provisional GS drafting
+
+**Status:** `M6_2_OFFLINE_VALIDATED_DB_PENDING` / `M6_2_DATABASE_INTEGRATION_PENDING_OWNER_AUTHORIZATION`. Branch `phase13-m6-student500-application` from `d0b1bc14005c8d764b05cf0fac5a200a03f6fe8f`; all work uncommitted and unpushed.
+
+- **Delivered:** M2 fact/evidence selection with live re-authorization, M5.1/M5.2 school-Offer-CoE context binding (customer-reported CoE needs no fabricated school application; offer-only never becomes verified CoE), per-requirement coverage/gap/conflict diagnostics, deterministic provisional GS starter + immutable versioning, versioned preparation summary, selective invalidation, three Project-scoped API routes and an integrated bilingual Project Workspace panel.
+- **Migration 0049** (`0049_phase13_m6_2_student500_preparation.sql`) adds four additive tables plus identity/immutability/insert guards and widens the shared operation/result-kind checks; 0048 is unchanged.
+- **Validation:** M6.2 offline **46/46**, M6.1 **83/83**, M5.1 **58/58**, M5.2 **94/94**, M5.3 **30/30**, `test:unit` **1262/1262**, TypeScript **44 baseline / 0 new**, `db:check` clean, `pnpm build` compiled, Biome clean, `git diff --check` clean.
+- **Not executed:** `test:phase13:m6-2:integration` is guarded and **skipped** (1 skip, not a pass): no M6.2 disposable database is authorized yet. Migration 0049 is unapplied everywhere.
+- **Limitations:** no authoritative legal-source adapter (all requirements stay `declared_pending_verification` + human review); Project Documents trust gate stays closed and is reported unavailable; no model call anywhere (the starter is deterministic); no browser/E2E run.
+
+**Evidence:** `~/phase13_m6_2_implementation_report.md`, `~/phase13_m6_2_review.patch`.
+<!-- END PHASE13_M6_2_IMPLEMENTATION_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M6_1_DB_ACCEPTANCE_2026_11_03 -->
 ## Phase 13 M6.1 — PostgreSQL integration acceptance PASSED (disposable DB, removed)
 
@@ -6757,3 +6771,36 @@ Earlier pending-review and failed-test records are historical evidence, supersed
 - No commit, push, migration, deployment or external-provider call was performed. `LIVE_PRODUCTION_NO_GO` unchanged.
 
 <!-- END PHASE13_P1_PERSONAL_PROJECT_ACCESS_CLOSEOUT_2026_11_01 -->
+
+### M6.2 final completion pass (R1 follow-up, uncommitted)
+
+- Branch `phase13-m6-student500-application`, HEAD `d0b1bc1` (base, unchanged); 36 changed paths, nothing staged, no commit/push.
+- Completed four remaining review gaps: (1) the study-evidence panel now renders a real authorized `<select>` fed by M5.1/M5.2 Project lists and submits the selected id through `schoolContextRequestFromRecord`; (2) live school digests include the selected record identity and admission context revision, so A-to-B selection invalidates dependents; (3) `get()` withholds fact-derived draft text whose underlying fact is no longer visible to the current actor (historical DB rows untouched, customer text preserved, no hidden ids leaked); (4) the 0049 outcome coherence CHECK now requires a fully non-null bundle so SQL UNKNOWN cannot pass.
+- Validation: M6.2 offline 56/56 (0 skipped), M6.1 83/83, M5.1 58/58, M5.2 94/94, M5.3 30/30, `test:unit` 1262/1262, `tsc` 44 baseline diagnostics and 0 new, `db:check` clean, `pnpm build` compiled, `git diff --check` clean. Guarded PostgreSQL suite: 0 passed / 0 failed / 1 skipped - still `M6_2_DATABASE_INTEGRATION_PENDING_OWNER_AUTHORIZATION` (migration 0049 unapplied everywhere).
+- Residual Biome lint findings exist in M6.2 files (JSDoc asterisk style, `useAwait`, `noMisplacedAssertion`); they are style-only, pre-date this pass in part, and were not addressed to keep the change bounded.
+- Deliverables: `~/phase13_m6_2_final_review.patch` (SHA-256 `7d8a4e43ee37e78e9b7715426340e514b4bd825c41fbb650be05c00af0679d10`) and `~/phase13_m6_2_final_report.md`.
+- Next: independent review, then - only with owner database authorization - one disposable loopback PostgreSQL 17 container to apply 0000-0049 and run `pnpm test:phase13:m6-2:integration`. No M6.3 work is authorized.
+
+### M6.2 database acceptance (disposable PostgreSQL 17, executed)
+
+- Branch `phase13-m6-student500-application`, HEAD `d0b1bc1` (unchanged, uncommitted worktree preserved, no commit/push).
+- One disposable container `phase13-m6-2-pg` (postgres:17, tmpfs data dir, loopback 127.0.0.1:55451, `--rm`, no volume, no custom network) was created, migrated 0000-0049 with the controlled operator (`--acknowledge-migrations --expect-database=immigration_ai_phase13_m6_2_test`), tested, and destroyed by a single wrapper with EXIT/INT/TERM traps.
+- PostgreSQL identity: 17.11, database `immigration_ai_phase13_m6_2_test`, role `m6_2_test_owner` (NOSUPERUSER, NOCREATEDB, NOCREATEROLE); ledger 50 entries (indices 0-49); 4/4 M6.2 tables present.
+- `pnpm test:phase13:m6-2:integration`: **6 passed / 0 failed / 0 skipped** (real PostgreSQL, no skips).
+- Cleanup verified: container absent, port 55451 closed, no `phase13-m6-2*` volume, networks/volumes/images unchanged (16 pre-existing containers still present), host PostgreSQL on 5432 accepting connections. Business databases `chatbot` and `immigration_legal` were never targeted.
+- Offline regression after the final corrections: M6.2 59/59, M6.1 83/83, M5.1 58/58, M5.2 94/94, M5.3 30/30, `test:unit` 1262/1262, `tsc` 44 baseline diagnostics (0 new), `db:check` clean, `pnpm build` compiled, `git diff --check` clean.
+- Status: `M6_2_DB_INTEGRATION_PASSED / M6_2_PENDING_INDEPENDENT_FINAL_REVIEW`. Migration 0049 remains unapplied in every business environment; deployment is a separate authorization.
+
+### M6.2 final security closure (mutation-response redaction, uncommitted)
+
+- One remaining disclosure path closed: `createDraft` / `saveDraft` / `createSnapshot` (fresh writes AND exact idempotent replays) previously returned raw persisted artifacts.
+- One shared projection now owns every draft/snapshot response: `projectDraftForResponse()` and `projectSnapshotForResponse()` in `preparation/service.ts`, used by the two GET endpoints, all mutation returns, the replay branches, the preparation view (`drafts`, `latestDraft`, snapshot `content`) and the view's `selectedFacts` list. Stored rows, `contentSha256` and versions are untouched; idempotency, CAS, audit and revisions unchanged.
+- Verification: M6.2 offline **61/61**, M6.1 83/83, M5.1 58/58, M5.2 94/94, M5.3 30/30, `test:unit` 1262/1262, `tsc` 44 baseline (0 new), `db:check` clean, `pnpm build` compiled, `git diff --check` clean. New regressions: service-level two-member revocation across create/save/snapshot replays + new version + GETs, and an HTTP-level test against the real service. No database run was repeated (no SQL change).
+- Status: `M6_2_SECURITY_CLOSURE_COMPLETE / M6_2_PENDING_INDEPENDENT_FINAL_REVIEW`. Migration 0049 still unapplied in every business environment.
+
+### M6.2 release candidate (fact-metadata response closure, uncommitted)
+
+- Two remaining fact-reference metadata paths closed: the preparation view's `reconciliation.requirements[].selectedFactReferenceIds` (referenced-but-invisible facts removed at the response boundary; evaluation logic untouched) and the `selectFact()` / `unselectFact()` responses including exact replays (stable redacted shape with `readable: false`, no `factAssertionId` / `factKey` / `originKind` / `sourceEvidenceRef` / provenance; the underlying fact remains readable so an actor's own unselect still returns metadata).
+- New shared response projections in `preparation/service.ts`: `projectFactReferenceForResponse()` (+ exported `Student500FactReferenceView`) and `projectReconciliationForResponse()`, using a new `currentVisibleFactAssertionIds()` helper.
+- Verification: M6.2 offline **63/63**, M6.1 83/83, M5.1 58/58, M5.2 94/94, M5.3 30/30, `test:unit` 1262/1262, `tsc` 44 baseline (0 new), `db:check` clean, `pnpm build` compiled, `git diff --check` clean. New regressions: service + HTTP tests for the two-member revocation scenario covering view, select replay and unselect replay. No PostgreSQL run repeated (no SQL or persistence change).
+- Status: `M6_2_RELEASE_CANDIDATE / M6_2_PENDING_INDEPENDENT_FINAL_REVIEW`.

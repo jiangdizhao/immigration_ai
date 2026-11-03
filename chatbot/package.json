@@ -69,7 +69,9 @@
     "test:phase13:m5-2:integration": "node --conditions=react-server --import tsx --test lib/school-admissions/postgres-repository.integration.test.ts",
     "test:phase13:m5-3:offline": "node --import tsx --test lib/school-admissions-integration/i01-applications.test.ts lib/school-admissions-integration/i02-packages.test.ts lib/school-admissions-integration/i03-invalidation.test.ts lib/school-admissions-integration/i04-outcomes.test.ts lib/school-admissions-integration/i05-entry-routes.test.ts lib/school-admissions-integration/i06-self-service.test.ts lib/school-admissions-integration/i07-managed.test.ts lib/school-admissions-integration/i08-authorization.test.ts lib/school-admissions-integration/i09-idempotency.test.ts lib/school-admissions-integration/i10-archive.test.ts lib/school-admissions-integration/i11-http-ui.test.tsx lib/school-admissions-integration/i12-regression.test.ts",
     "test:phase13:m6-1:offline": "node --import tsx --test lib/student-500/contracts.test.ts lib/student-500/requirement-resolver.test.ts lib/student-500/store-idempotency.test.ts lib/student-500/service.test.ts lib/student-500/http.test.ts lib/student-500/schema-contract.test.ts lib/db/migration-0048-order.test.ts lib/workspace/student-500.test.ts",
-    "test:phase13:m6-1:integration": "node --conditions=react-server --import tsx --test lib/student-500/postgres-repository.integration.test.ts"
+    "test:phase13:m6-1:integration": "node --conditions=react-server --import tsx --test lib/student-500/postgres-repository.integration.test.ts",
+    "test:phase13:m6-2:offline": "node --import tsx --test lib/student-500/preparation/contracts.test.ts lib/student-500/preparation/service.test.ts lib/student-500/preparation/http.test.ts lib/db/migration-0049-order.test.ts lib/workspace/student-500-preparation.test.ts",
+    "test:phase13:m6-2:integration": "node --conditions=react-server --import tsx --test lib/student-500/preparation/postgres-repository.integration.test.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",

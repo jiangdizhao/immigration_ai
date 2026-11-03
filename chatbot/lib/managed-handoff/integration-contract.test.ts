@@ -299,11 +299,18 @@ test("SYS-18: frozen M4-005 migration and schema are untouched by this round", (
     ["0048_phase13_m6_1_student500_applications"],
     "the later migration is the additive M6.1 one, not an M4 change"
   );
-  // Nothing beyond the additive Phase 13 M6.1 migration may exist.
+  // The additive Phase 13 M6.2 migration follows; nothing beyond it may exist.
+  assert.deepEqual(
+    migrations
+      .filter((file) => /^0049_/u.test(file))
+      .map((file) => file.replace(/\.sql$/u, "")),
+    ["0049_phase13_m6_2_student500_preparation"],
+    "the later migration is the additive M6.2 one, not an M4 change"
+  );
   assert.equal(
-    migrations.filter((file) => /^0049_|^00[5-9][0-9]_/u.test(file)).length,
+    migrations.filter((file) => /^00[5-9][0-9]_/u.test(file)).length,
     0,
-    "no migration after the additive Phase 13 M6.1 one exists in this round"
+    "no migration after the additive Phase 13 M6.2 one exists in this round"
   );
   const schema = readFileSync(resolve(chatbotRoot, "lib/db/schema.ts"), "utf8");
   // Durable M4-006 persistence exists now; no M4-007 table may exist.

@@ -421,6 +421,47 @@ export type WorkspaceCopy = {
     errorUnavailable: string;
     errorRequestFailed: string;
     archivedNotice: string;
+    prepTitle: string;
+    prepSubtitle: string;
+    prepNotice: string;
+    prepSchoolHeading: string;
+    prepSchoolNone: string;
+    prepSchoolSelectRecord: string;
+    prepSchoolEmpty: string;
+    prepSchoolUnavailable: string;
+    prepSchoolNoLongerCurrent: string;
+    prepSchoolKind: Record<string, string>;
+    prepFactsHeading: string;
+    prepFactsEmpty: string;
+    prepFactsUnavailable: string;
+    prepFactsSelect: string;
+    prepFactsRemove: string;
+    prepFactsAiGrantMissing: string;
+    prepFactsUnconfirmed: string;
+    prepGapsHeading: string;
+    prepGapsEmpty: string;
+    prepConflictVisible: string;
+    prepReviewRequired: string;
+    prepDraftHeading: string;
+    prepDraftEmpty: string;
+    prepDraftCreate: string;
+    prepDraftSave: string;
+    prepDraftVersion: (version: number, origin: string) => string;
+    prepDraftStale: string;
+    prepDraftPlaceholder: string;
+    prepDraftEditHint: string;
+    prepSnapshotHeading: string;
+    prepSnapshotEmpty: string;
+    prepSnapshotCreate: string;
+    prepSnapshotVersion: (version: number, revision: number) => string;
+    prepSnapshotStale: string;
+    prepNextActionsHeading: string;
+    prepLoading: string;
+    prepUnavailable: string;
+    prepCoverage: Record<string, string>;
+    prepGap: Record<string, string>;
+    prepAction: Record<string, string>;
+    prepStaleReason: Record<string, string>;
   };
   persistence: {
     notSaved: string;
@@ -1240,6 +1281,112 @@ const zh: WorkspaceCopy = {
     errorUnavailable: "学生签证 500 准备功能当前不可用。",
     errorRequestFailed: "操作未完成，请稍后重试。",
     archivedNotice: "此记录已归档，仅可查看，不能修改。",
+    prepTitle: "申请准备",
+    prepSubtitle:
+      "把已授权的事实与就学证据整理成可保存的准备记录和初步 GS 草稿。",
+    prepNotice:
+      "本准备记录仅用于整理材料，不是法律意见，未经专业审阅，也不会提交给移民局。",
+    prepSchoolHeading: "就学证据",
+    prepSchoolNone: "尚未关联任何就学证据。",
+    prepSchoolSelectRecord: "选择已授权的记录",
+    prepSchoolEmpty: "本项目中无可选的已授权记录。",
+    prepSchoolUnavailable: "无法加载就学证据列表。",
+    prepSchoolNoLongerCurrent: "关联的就学证据已不再当前，请重新选择。",
+    prepSchoolKind: {
+      admission_case: "入学申请案件（M5.2）",
+      customer_reported_coe: "客户申报的 CoE",
+      none: "未关联",
+      school_application: "学校申请（M5.1）",
+    },
+    prepFactsHeading: "已选用的已授权事实",
+    prepFactsEmpty:
+      "还没有选用任何事实。只有您授权用于 AI 处理的事实才会进入草稿。",
+    prepFactsUnavailable: "当前无法读取事实授权状态，因此不会显示任何事实。",
+    prepFactsSelect: "选用",
+    prepFactsRemove: "移除",
+    prepFactsAiGrantMissing: "未授权 AI 使用",
+    prepFactsUnconfirmed: "尚未由客户确认",
+    prepGapsHeading: "要求与证据缺口",
+    prepGapsEmpty: "暂无已评估的要求。",
+    prepConflictVisible: "存在尚未解决的矛盾事实，草稿不会自动选择任一方。",
+    prepReviewRequired: "需要人工法律审阅",
+    prepDraftHeading: "初步 GS 草稿",
+    prepDraftEmpty: "还没有草稿。可以根据已授权事实生成一份结构化初稿。",
+    prepDraftCreate: "生成初步草稿",
+    prepDraftSave: "保存为新版本",
+    prepDraftVersion: (version: number, origin: string) =>
+      `版本 ${version}（${origin === "customer_edit" ? "客户编辑" : "系统结构化初稿"}）`,
+    prepDraftStale: "此版本已过期，需要复核",
+    prepDraftPlaceholder: "系统未提供该部分内容，也没有编造任何细节。",
+    prepDraftEditHint:
+      "您可以自由编辑文字。保存会创建新版本，旧版本永远不被覆盖。",
+    prepSnapshotHeading: "申请准备摘要",
+    prepSnapshotEmpty: "还没有保存的准备摘要版本。",
+    prepSnapshotCreate: "保存准备摘要",
+    prepSnapshotVersion: (version: number, revision: number) =>
+      `摘要 v${version}（申请表修订 ${revision}）`,
+    prepSnapshotStale: "摘要中有输入已变更",
+    prepNextActionsHeading: "建议的下一步",
+    prepLoading: "正在加载申请准备…",
+    prepUnavailable: "申请准备当前不可用。",
+    prepCoverage: {
+      blocked_fact_conflicting: "事实存在冲突",
+      blocked_fact_not_ai_authorized: "事实未授权 AI 使用",
+      blocked_fact_revoked: "事实授权已撤销",
+      blocked_fact_stale: "事实已过期",
+      covered_by_authorized_fact: "已有已授权事实支持",
+      covered_by_customer_report_only: "仅有客户申报",
+      evidence_channel_unavailable: "证据通道不可用",
+      missing_evidence: "缺少证据",
+      not_applicable: "不适用",
+      not_assessed: "尚未评估",
+    },
+    prepGap: {
+      ai_use_not_authorized: "未授权 AI 使用",
+      coe_not_reported: "未申报 CoE",
+      conflict_unresolved: "矛盾尚未解决",
+      document_trust_gate_closed: "文档可信度未开放",
+      fact_authorization_revoked: "事实授权已撤销",
+      fact_not_customer_confirmed: "事实尚未确认",
+      fact_source_stale: "事实已过期",
+      fact_source_superseded: "事实已被取代",
+      independent_verification_unavailable: "尚无独立核验",
+      legal_source_unverified: "法律依据尚未核验",
+      no_authorized_fact_selected: "未选用已授权事实",
+      project_documents_unavailable: "项目文档当前不可用",
+      school_context_not_linked: "未关联就学证据",
+      school_context_unavailable: "就学证据不可用",
+    },
+    prepAction: {
+      await_authoritative_legal_source: "等待权威法律来源接入",
+      confirm_fact_with_customer: "请客户确认事实",
+      create_gs_draft: "生成初步 GS 草稿",
+      edit_gs_draft: "编辑 GS 草稿",
+      grant_ai_use_for_fact: "为事实授权 AI 使用",
+      link_school_context: "关联就学证据",
+      record_missing_information: "记录缺失信息",
+      refresh_superseded_fact: "更新已被取代的事实",
+      report_coe_or_offer: "申报 CoE 或 Offer",
+      resolve_fact_conflict: "解决事实矛盾",
+      review_evidence_gaps: "查看证据缺口",
+      save_preparation_snapshot: "保存准备摘要",
+      seek_human_review: "申请人工审阅",
+      select_authorized_facts: "选用已授权事实",
+    },
+    prepStaleReason: {
+      application_context_changed: "申请背景已变更",
+      application_revision_advanced: "申请表修订已更新",
+      fact_ai_grant_revoked: "事实的 AI 授权已撤销",
+      fact_confirmation_withdrawn: "事实确认已撤回",
+      fact_key_set_changed: "选用的事实集合已变更",
+      fact_no_longer_visible: "事实已不可见",
+      fact_source_stale: "事实已过期",
+      fact_version_superseded: "事实版本已被取代",
+      legal_source_currentness_unknown: "法律时效未知",
+      school_context_changed: "就学证据已变更",
+      school_context_unavailable: "就学证据不可用",
+      school_outcome_superseded: "录取结果已被取代",
+    },
   },
 
   persistence: {
@@ -2147,6 +2294,118 @@ const en: WorkspaceCopy = {
     errorUnavailable: "Student 500 preparation is unavailable right now.",
     errorRequestFailed: "The action did not complete. Please retry.",
     archivedNotice: "This record is archived: view only, no further edits.",
+    prepTitle: "Application preparation",
+    prepSubtitle:
+      "Organise authorized facts and study evidence into a saved preparation record and a preliminary GS draft.",
+    prepNotice:
+      "This preparation record is for your own organisation only. It is not legal advice, it is not professionally reviewed, and nothing here is submitted to the Department.",
+    prepSchoolHeading: "Study evidence",
+    prepSchoolNone: "No study evidence linked yet.",
+    prepSchoolSelectRecord: "Select an authorized record",
+    prepSchoolEmpty: "This Project has no selectable authorized record.",
+    prepSchoolUnavailable: "Could not load the study evidence list.",
+    prepSchoolNoLongerCurrent:
+      "The linked study evidence is no longer current. Select it again.",
+    prepSchoolKind: {
+      admission_case: "Admission case (M5.2)",
+      customer_reported_coe: "Customer-reported CoE",
+      none: "Not linked",
+      school_application: "School application (M5.1)",
+    },
+    prepFactsHeading: "Selected authorized facts",
+    prepFactsEmpty:
+      "No facts selected yet. Only facts you authorized for AI use can appear in a draft.",
+    prepFactsUnavailable:
+      "Fact authorization cannot be read right now, so no facts are shown.",
+    prepFactsSelect: "Select",
+    prepFactsRemove: "Remove",
+    prepFactsAiGrantMissing: "AI use not authorized",
+    prepFactsUnconfirmed: "Not customer-confirmed",
+    prepGapsHeading: "Requirements and evidence gaps",
+    prepGapsEmpty: "No requirements assessed yet.",
+    prepConflictVisible:
+      "Some facts conflict. The draft will not silently pick either version.",
+    prepReviewRequired: "Human legal review required",
+    prepDraftHeading: "Preliminary GS draft",
+    prepDraftEmpty:
+      "No draft yet. A structured starter can be built from authorized facts.",
+    prepDraftCreate: "Create preliminary draft",
+    prepDraftSave: "Save as new version",
+    prepDraftVersion: (version: number, origin: string) =>
+      `Version ${version} (${origin === "customer_edit" ? "your edit" : "structured starter"})`,
+    prepDraftStale: "This version is stale and needs review",
+    prepDraftPlaceholder:
+      "The system supplied no content here and invented no details.",
+    prepDraftEditHint:
+      "Edit the text freely. Saving creates a new version; earlier versions are never overwritten.",
+    prepSnapshotHeading: "Preparation summary",
+    prepSnapshotEmpty: "No preparation summary saved yet.",
+    prepSnapshotCreate: "Save preparation summary",
+    prepSnapshotVersion: (version: number, revision: number) =>
+      `Summary v${version} (application revision ${revision})`,
+    prepSnapshotStale: "Some inputs changed after this summary",
+    prepNextActionsHeading: "Suggested next steps",
+    prepLoading: "Loading application preparation…",
+    prepUnavailable: "Application preparation is unavailable right now.",
+    prepCoverage: {
+      blocked_fact_conflicting: "Facts conflict",
+      blocked_fact_not_ai_authorized: "Fact not authorized for AI use",
+      blocked_fact_revoked: "Fact authorization revoked",
+      blocked_fact_stale: "Fact is stale",
+      covered_by_authorized_fact: "Supported by authorized fact",
+      covered_by_customer_report_only: "Customer report only",
+      evidence_channel_unavailable: "Evidence channel unavailable",
+      missing_evidence: "Evidence missing",
+      not_applicable: "Not applicable",
+      not_assessed: "Not assessed",
+    },
+    prepGap: {
+      ai_use_not_authorized: "AI use not authorized",
+      coe_not_reported: "CoE not reported",
+      conflict_unresolved: "Conflict unresolved",
+      document_trust_gate_closed: "Document trust gate closed",
+      fact_authorization_revoked: "Fact authorization revoked",
+      fact_not_customer_confirmed: "Fact not customer-confirmed",
+      fact_source_stale: "Fact source stale",
+      fact_source_superseded: "Fact source superseded",
+      independent_verification_unavailable: "No independent verification",
+      legal_source_unverified: "Legal source unverified",
+      no_authorized_fact_selected: "No authorized fact selected",
+      project_documents_unavailable: "Project documents unavailable",
+      school_context_not_linked: "Study evidence not linked",
+      school_context_unavailable: "Study evidence unavailable",
+    },
+    prepAction: {
+      await_authoritative_legal_source:
+        "Wait for an authoritative legal source",
+      confirm_fact_with_customer: "Confirm the fact with the customer",
+      create_gs_draft: "Create the preliminary GS draft",
+      edit_gs_draft: "Edit the GS draft",
+      grant_ai_use_for_fact: "Grant AI use for a fact",
+      link_school_context: "Link study evidence",
+      record_missing_information: "Record missing information",
+      refresh_superseded_fact: "Refresh a superseded fact",
+      report_coe_or_offer: "Report a CoE or Offer",
+      resolve_fact_conflict: "Resolve a fact conflict",
+      review_evidence_gaps: "Review the evidence gaps",
+      save_preparation_snapshot: "Save a preparation summary",
+      seek_human_review: "Request human review",
+      select_authorized_facts: "Select authorized facts",
+    },
+    prepStaleReason: {
+      application_context_changed: "Application context changed",
+      application_revision_advanced: "Application revision advanced",
+      fact_ai_grant_revoked: "Fact AI grant revoked",
+      fact_confirmation_withdrawn: "Fact confirmation withdrawn",
+      fact_key_set_changed: "Selected fact set changed",
+      fact_no_longer_visible: "Fact no longer visible",
+      fact_source_stale: "Fact source stale",
+      fact_version_superseded: "Fact version superseded",
+      legal_source_currentness_unknown: "Legal currentness unknown",
+      school_context_changed: "Study evidence changed",
+      school_context_unavailable: "Study evidence unavailable",
+      school_outcome_superseded: "Admission outcome superseded",
+    },
   },
 
   persistence: {

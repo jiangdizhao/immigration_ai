@@ -6406,7 +6406,11 @@ export const STUDENT_500_APPLICATION_PLACE_VALUES = [
   "offshore",
   "unknown",
 ] as const;
-export const STUDENT_500_AGE_BAND_VALUES = ["adult", "under_18", "unknown"] as const;
+export const STUDENT_500_AGE_BAND_VALUES = [
+  "adult",
+  "under_18",
+  "unknown",
+] as const;
 export const STUDENT_500_DEPENDANT_BAND_VALUES = [
   "none",
   "one_or_more",
@@ -6579,7 +6583,10 @@ export const student500ApplicationOperation = pgTable(
   (table) => ({
     applicationForeignKey: foreignKey({
       columns: [table.projectId, table.applicationId],
-      foreignColumns: [student500Application.projectId, student500Application.id],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
       name: "Student500ApplicationOperation_application_fk",
     }).onDelete("restrict"),
     actorOperationUnique: uniqueIndex(
@@ -6621,7 +6628,10 @@ export const student500ApplicationEvent = pgTable(
   (table) => ({
     applicationForeignKey: foreignKey({
       columns: [table.projectId, table.applicationId],
-      foreignColumns: [student500Application.projectId, student500Application.id],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
       name: "Student500ApplicationEvent_application_fk",
     }).onDelete("restrict"),
     revisionEventUnique: uniqueIndex(
@@ -6638,4 +6648,329 @@ export const student500ApplicationEvent = pgTable(
 );
 export type Student500ApplicationEventRow = InferSelectModel<
   typeof student500ApplicationEvent
+>;
+
+/* ------------------------------------------------------------------------- *
+ * Phase 13 M6.2 - application preparation, evidence reconciliation and
+ * provisional Genuine Student drafting.
+ *
+ * Additive only: migration 0048 (M6.1) is untouched. These tables never copy a
+ * full Project fact projection, never store document bodies or extracted text,
+ * and never record a verification, approval or eligibility claim.
+ * ------------------------------------------------------------------------- */
+
+export const STUDENT_500_FACT_ORIGIN_VALUES = [
+  "customer_stated",
+  "document_extracted",
+  "ai_inferred",
+  "professional_determination",
+] as const;
+export const STUDENT_500_FACT_STATE_VALUES = [
+  "proposed",
+  "customer_confirmed",
+  "rejected",
+  "disputed",
+  "stale",
+  "superseded",
+] as const;
+/** Who the fact use grant was issued for at selection time; `none` = not granted. */
+export const STUDENT_500_FACT_AUTHORIZATION_AUDIENCE_VALUES = [
+  "none",
+  "actor_only",
+  "project",
+] as const;
+
+/** Which existing school/CoE authority (if any) this preparation is bound to. */
+export const STUDENT_500_SCHOOL_CONTEXT_KIND_VALUES = [
+  "none",
+  "school_application",
+  "admission_case",
+  "customer_reported_coe",
+] as const;
+export const STUDENT_500_STUDY_EVIDENCE_KIND_VALUES = [
+  "none",
+  "offer_only",
+  "coe_reported",
+  "coe_independently_verified",
+] as const;
+
+/** A starter is deterministic; an edit is customer-authored content. */
+export const STUDENT_500_GS_DRAFT_ORIGIN_VALUES = [
+  "deterministic_starter",
+  "customer_edit",
+] as const;
+
+export const student500FactReference = pgTable(
+  "Student500FactReference",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    applicationId: uuid("applicationId").notNull(),
+    factAssertionId: uuid("factAssertionId").notNull(),
+    factVersion: integer("factVersion").notNull(),
+    factKey: varchar("factKey", { length: 128 }).notNull(),
+    originKind: varchar("originKind", {
+      enum: STUDENT_500_FACT_ORIGIN_VALUES,
+    }).notNull(),
+    stateAtUse: varchar("stateAtUse", {
+      enum: STUDENT_500_FACT_STATE_VALUES,
+    }).notNull(),
+    aiUseAuthorizedAtSelection: boolean("aiUseAuthorizedAtSelection").notNull(),
+    authorizationAudience: varchar("authorizationAudience", {
+      enum: STUDENT_500_FACT_AUTHORIZATION_AUDIENCE_VALUES,
+    }).notNull(),
+    authorizationActorUserId: uuid("authorizationActorUserId").references(
+      () => user.id,
+      { onDelete: "restrict" }
+    ),
+    sourceEvidenceRef: varchar("sourceEvidenceRef", { length: 256 }),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
+      name: "Student500FactReference_application_fk",
+    }).onDelete("restrict"),
+    applicationFactVersionUnique: uniqueIndex(
+      "Student500FactReference_application_fact_version_unique"
+    )
+      .on(table.applicationId, table.factAssertionId, table.factVersion)
+      // Partial: a revoked reference may be selected again, while revoked rows
+      // stay immutable history (migration 0049 carries the same predicate).
+      .where(sql`${table.revokedAt} is null`),
+    applicationCreatedIndex: index(
+      "Student500FactReference_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    factKeyShape: check(
+      "Student500FactReference_fact_key_check",
+      sql`${table.factKey} ~ '^[a-z][a-z0-9_.-]{0,127}$'`
+    ),
+    factVersionPositive: check(
+      "Student500FactReference_fact_version_check",
+      sql`${table.factVersion} > 0`
+    ),
+    revokedAfterCreated: check(
+      "Student500FactReference_revoked_check",
+      sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`
+    ),
+  })
+);
+export type Student500FactReferenceRow = InferSelectModel<
+  typeof student500FactReference
+>;
+
+export const student500SchoolContext = pgTable(
+  "Student500SchoolContext",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    applicationId: uuid("applicationId").notNull(),
+    kind: varchar("kind", {
+      enum: STUDENT_500_SCHOOL_CONTEXT_KIND_VALUES,
+    }).notNull(),
+    studyEvidenceKind: varchar("studyEvidenceKind", {
+      enum: STUDENT_500_STUDY_EVIDENCE_KIND_VALUES,
+    }).notNull(),
+    schoolApplicationId: uuid("schoolApplicationId"),
+    admissionCaseId: uuid("admissionCaseId"),
+    admissionOutcomeKind: varchar("admissionOutcomeKind", {
+      enum: ["offer", "coe"],
+    }),
+    admissionOutcomeVersion: integer("admissionOutcomeVersion"),
+    admissionOutcomeProvenance: varchar("admissionOutcomeProvenance", {
+      length: 64,
+    }),
+    admissionOutcomeVerified: boolean("admissionOutcomeVerified"),
+    revision: integer("revision").notNull().default(1),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    updatedByUserId: uuid("updatedByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
+      name: "Student500SchoolContext_application_fk",
+    }).onDelete("restrict"),
+    applicationUnique: uniqueIndex(
+      "Student500SchoolContext_application_unique"
+    ).on(table.applicationId),
+    revisionPositive: check(
+      "Student500SchoolContext_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    updatedAfterCreated: check(
+      "Student500SchoolContext_updated_at_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+    // Mirrors migration 0049 exactly, including the fail-closed `is true` form:
+    // a CHECK constraint accepts UNKNOWN, so a partially populated bundle must be
+    // made to evaluate to FALSE.
+    outcomeCoherent: check(
+      "Student500SchoolContext_outcome_coherence_check",
+      sql`((${table.admissionOutcomeKind} is null and ${table.admissionOutcomeVersion} is null and ${table.admissionOutcomeProvenance} is null and ${table.admissionOutcomeVerified} is null)
+        or (${table.admissionOutcomeKind} in ('offer', 'coe') and ${table.admissionOutcomeVersion} is not null and ${table.admissionOutcomeVersion} > 0
+          and ${table.admissionOutcomeProvenance} is not null and ${table.admissionOutcomeVerified} is not null
+          and ${table.admissionOutcomeVerified} = (${table.admissionOutcomeProvenance} in ('source_reviewed', 'provider_confirmed')))) is true
+        and ((${table.kind} in ('none', 'school_application') and ${table.admissionOutcomeKind} is null)
+          or (${table.kind} = 'customer_reported_coe' and ${table.admissionOutcomeKind} = 'coe' and ${table.admissionOutcomeVersion} is not null and ${table.admissionOutcomeVersion} > 0 and ${table.admissionOutcomeProvenance} = 'customer_reported' and ${table.admissionOutcomeVerified} is false)
+          or (${table.kind} = 'admission_case' and ${table.admissionCaseId} is not null)) is true`
+    ),
+    bindingCoherent: check(
+      "Student500SchoolContext_binding_check",
+      sql`(${table.kind} = 'none' and ${table.schoolApplicationId} is null and ${table.admissionCaseId} is null)
+        or (${table.kind} = 'school_application' and ${table.schoolApplicationId} is not null and ${table.admissionCaseId} is null)
+        or (${table.kind} = 'admission_case' and ${table.admissionCaseId} is not null and ${table.schoolApplicationId} is null)
+        or (${table.kind} = 'customer_reported_coe' and ${table.schoolApplicationId} is null and ${table.admissionCaseId} is null)`
+    ),
+  })
+);
+export type Student500SchoolContextRow = InferSelectModel<
+  typeof student500SchoolContext
+>;
+
+export const student500GsDraft = pgTable(
+  "Student500GsDraft",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    applicationId: uuid("applicationId").notNull(),
+    version: integer("version").notNull(),
+    origin: varchar("origin", {
+      enum: STUDENT_500_GS_DRAFT_ORIGIN_VALUES,
+    }).notNull(),
+    sections: jsonb("sections").$type<unknown>().notNull(),
+    sectionCount: integer("sectionCount").notNull(),
+    contentSha256: varchar("contentSha256", { length: 64 }).notNull(),
+    inputDigest: varchar("inputDigest", { length: 64 }).notNull(),
+    sourceFactReferenceIds: jsonb("sourceFactReferenceIds")
+      .$type<unknown>()
+      .notNull()
+      .default([]),
+    supersedesDraftId: uuid("supersedesDraftId"),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex("Student500GsDraft_project_id_unique").on(
+      table.projectId,
+      table.id
+    ),
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
+      name: "Student500GsDraft_application_fk",
+    }).onDelete("restrict"),
+    applicationVersionUnique: uniqueIndex(
+      "Student500GsDraft_application_version_unique"
+    ).on(table.applicationId, table.version),
+    applicationCreatedIndex: index(
+      "Student500GsDraft_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    versionPositive: check(
+      "Student500GsDraft_version_check",
+      sql`${table.version} > 0`
+    ),
+    sectionCountBounded: check(
+      "Student500GsDraft_section_count_check",
+      sql`${table.sectionCount} > 0 and ${table.sectionCount} <= 8`
+    ),
+    contentShaShape: check(
+      "Student500GsDraft_content_sha_check",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    inputDigestShape: check(
+      "Student500GsDraft_input_digest_check",
+      sql`${table.inputDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type Student500GsDraftRow = InferSelectModel<typeof student500GsDraft>;
+
+export const student500PreparationSnapshot = pgTable(
+  "Student500PreparationSnapshot",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    applicationId: uuid("applicationId").notNull(),
+    version: integer("version").notNull(),
+    applicationRevision: integer("applicationRevision").notNull(),
+    content: jsonb("content").$type<unknown>().notNull(),
+    contentSha256: varchar("contentSha256", { length: 64 }).notNull(),
+    inputDigest: varchar("inputDigest", { length: 64 }).notNull(),
+    gsDraftId: uuid("gsDraftId"),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex(
+      "Student500PreparationSnapshot_project_id_unique"
+    ).on(table.projectId, table.id),
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [
+        student500Application.projectId,
+        student500Application.id,
+      ],
+      name: "Student500PreparationSnapshot_application_fk",
+    }).onDelete("restrict"),
+    draftForeignKey: foreignKey({
+      columns: [table.projectId, table.gsDraftId],
+      foreignColumns: [student500GsDraft.projectId, student500GsDraft.id],
+      name: "Student500PreparationSnapshot_draft_fk",
+    }).onDelete("restrict"),
+    applicationVersionUnique: uniqueIndex(
+      "Student500PreparationSnapshot_application_version_unique"
+    ).on(table.applicationId, table.version),
+    applicationCreatedIndex: index(
+      "Student500PreparationSnapshot_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    versionPositive: check(
+      "Student500PreparationSnapshot_version_check",
+      sql`${table.version} > 0`
+    ),
+    applicationRevisionPositive: check(
+      "Student500PreparationSnapshot_application_revision_check",
+      sql`${table.applicationRevision} > 0`
+    ),
+    contentShaShape: check(
+      "Student500PreparationSnapshot_content_sha_check",
+      sql`${table.contentSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    inputDigestShape: check(
+      "Student500PreparationSnapshot_input_digest_check",
+      sql`${table.inputDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type Student500PreparationSnapshotRow = InferSelectModel<
+  typeof student500PreparationSnapshot
 >;

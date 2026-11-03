@@ -1,3 +1,17 @@
+<!-- BEGIN PHASE13_M6_2_IMPLEMENTATION_2026_11_03 -->
+## Phase 13 M6.2 - application preparation, evidence reconciliation & provisional GS drafting
+
+**Status:** `M6_2_OFFLINE_VALIDATED_DB_PENDING` / `M6_2_DATABASE_INTEGRATION_PENDING_OWNER_AUTHORIZATION`. Branch `phase13-m6-student500-application` from `d0b1bc14005c8d764b05cf0fac5a200a03f6fe8f`; all work uncommitted and unpushed.
+
+- **Delivered:** M2 fact/evidence selection with live re-authorization, M5.1/M5.2 school-Offer-CoE context binding (customer-reported CoE needs no fabricated school application; offer-only never becomes verified CoE), per-requirement coverage/gap/conflict diagnostics, deterministic provisional GS starter + immutable versioning, versioned preparation summary, selective invalidation, three Project-scoped API routes and an integrated bilingual Project Workspace panel.
+- **Migration 0049** (`0049_phase13_m6_2_student500_preparation.sql`) adds four additive tables plus identity/immutability/insert guards and widens the shared operation/result-kind checks; 0048 is unchanged.
+- **Validation:** M6.2 offline **46/46**, M6.1 **83/83**, M5.1 **58/58**, M5.2 **94/94**, M5.3 **30/30**, `test:unit` **1262/1262**, TypeScript **44 baseline / 0 new**, `db:check` clean, `pnpm build` compiled, Biome clean, `git diff --check` clean.
+- **Not executed:** `test:phase13:m6-2:integration` is guarded and **skipped** (1 skip, not a pass): no M6.2 disposable database is authorized yet. Migration 0049 is unapplied everywhere.
+- **Limitations:** no authoritative legal-source adapter (all requirements stay `declared_pending_verification` + human review); Project Documents trust gate stays closed and is reported unavailable; no model call anywhere (the starter is deterministic); no browser/E2E run.
+
+**Evidence:** `~/phase13_m6_2_implementation_report.md`, `~/phase13_m6_2_review.patch`.
+<!-- END PHASE13_M6_2_IMPLEMENTATION_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M6_1_DB_ACCEPTANCE_STATE_2026_11_03 -->
 ## Phase 13 — M6.1 database integration verified (disposable PG17, removed)
 

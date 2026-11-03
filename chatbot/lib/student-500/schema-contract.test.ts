@@ -147,10 +147,25 @@ test("no persisted column can express eligibility or verification", () => {
   }
 });
 
-test("migration 0048 is the last journal entry and creates every table", () => {
-  const last = journal.entries.at(-1);
-  assert.equal(last?.idx, 48);
-  assert.equal(last?.tag, "0048_phase13_m6_1_student500_applications");
+test("migration 0048 is journaled and creates every M6.1 table", () => {
+  /**
+   * Phase-aware: later additive migrations (0049 and any later M6.2/M6.3 work)
+   * follow 0048, so it is no longer the journal head. Its presence, tag and
+   * snapshot linkage are still asserted, and the journal order stays monotonic.
+   */
+  const entry = journal.entries.find((candidate) => candidate.idx === 48);
+  assert.equal(entry?.tag, "0048_phase13_m6_1_student500_applications");
+  const indexes = journal.entries.map((candidate) => candidate.idx);
+  assert.deepEqual(
+    [...indexes].sort((left, right) => left - right),
+    indexes,
+    "journal indexes must be monotonic"
+  );
+  for (const later of journal.entries.filter(
+    (candidate) => candidate.idx > 48
+  )) {
+    assert.ok(later.idx > 48);
+  }
   for (const table of TABLES) {
     assert.ok(sql.includes(`CREATE TABLE IF NOT EXISTS "${table}"`), table);
     assert.ok(

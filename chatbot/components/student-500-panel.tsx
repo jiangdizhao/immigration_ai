@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Student500PreparationSection } from "@/components/student-500-preparation-section";
 import {
   createStudent500Controller,
   draftFromStudent500Context,
@@ -950,6 +951,14 @@ function Student500PanelInstance({
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           {copy.loading}
         </p>
+      ) : null}
+
+      {detail && detail.applicationId === snapshot.selectedApplicationId ? (
+        <Student500PreparationSection
+          applicationId={detail.applicationId}
+          copy={copy}
+          projectId={projectId}
+        />
       ) : null}
 
       {detail ? (

@@ -42,8 +42,8 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     /\.sql$/u.test(file)
   );
   assert.equal(files.filter((file) => /^0045_/u.test(file)).length, 1);
-  // Phase 13 M5.1, M5.2 and M6.1 each added exactly one further additive
-  // migration. Nothing beyond the M6.1 one may exist, and 0044/0045 remain
+  // Phase 13 M5.1, M5.2, M6.1 and M6.2 each added exactly one further additive
+  // migration. Nothing beyond the M6.2 one may exist, and 0044/0045 remain
   // byte-for-byte frozen above.
   assert.deepEqual(
     files.filter((file) =>
@@ -53,6 +53,7 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
       "0046_phase13_m5_1_school_applications.sql",
       "0047_phase13_m5_2_school_admissions.sql",
       "0048_phase13_m6_1_student500_applications.sql",
+      "0049_phase13_m6_2_student500_preparation.sql",
     ]
   );
 });

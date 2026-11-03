@@ -344,6 +344,13 @@
       "when": 1793662668740,
       "tag": "0048_phase13_m6_1_student500_applications",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793677489615,
+      "tag": "0049_phase13_m6_2_student500_preparation",
+      "breakpoints": true
     }
   ]
 }
