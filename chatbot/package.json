@@ -71,7 +71,12 @@
     "test:phase13:m6-1:offline": "node --import tsx --test lib/student-500/contracts.test.ts lib/student-500/requirement-resolver.test.ts lib/student-500/store-idempotency.test.ts lib/student-500/service.test.ts lib/student-500/http.test.ts lib/student-500/schema-contract.test.ts lib/db/migration-0048-order.test.ts lib/workspace/student-500.test.ts",
     "test:phase13:m6-1:integration": "node --conditions=react-server --import tsx --test lib/student-500/postgres-repository.integration.test.ts",
     "test:phase13:m6-2:offline": "node --import tsx --test lib/student-500/preparation/contracts.test.ts lib/student-500/preparation/service.test.ts lib/student-500/preparation/http.test.ts lib/db/migration-0049-order.test.ts lib/workspace/student-500-preparation.test.ts",
-    "test:phase13:m6-2:integration": "node --conditions=react-server --import tsx --test lib/student-500/preparation/postgres-repository.integration.test.ts"
+    "test:phase13:m6-2:integration": "node --conditions=react-server --import tsx --test lib/student-500/preparation/postgres-repository.integration.test.ts",
+    "test:phase13:m6-3:offline": "node --import tsx --test lib/student-500/preparation/phase13-m6-3.acceptance.test.ts",
+    "test:phase13:m6-3:db:acceptance": "bash scripts/phase13-m6-3-db-acceptance.sh",
+    "test:phase13:m6-3:browser": "playwright test -c playwright.phase13-m6-3.config.ts",
+    "test:phase13:m6-3:db:integration": "node --conditions=react-server --import tsx --test lib/student-500/preparation/phase13-m6-3.postgres.integration.test.ts",
+    "test:phase13:m6-3:browser:acceptance": "bash scripts/phase13-m6-3-browser-acceptance.sh"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",
