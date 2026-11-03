@@ -569,6 +569,7 @@ export function ImmigrationAIWorkspace({
   schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
+  student500Enabled = false,
 }: {
   assistantMode?: AssistantMode;
   policyReference?: PolicyWorkspaceReference | null;
@@ -596,6 +597,8 @@ export function ImmigrationAIWorkspace({
   schoolApplicationsEnabled?: boolean;
   /** Phase 13 M5.2 school admissions: enabled by capability + eligibility. */
   schoolAdmissionsEnabled?: boolean;
+  /** Phase 13 M6.1 Student 500 preparation: capability + eligibility. */
+  student500Enabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
@@ -2328,6 +2331,8 @@ export function ImmigrationAIWorkspace({
                 schoolApplicationsCopy={copy.schoolApplications}
                 schoolApplicationsEnabled={schoolApplicationsEnabled}
                 schoolPreparationRestricted={schoolPreparationRestricted}
+                student500Copy={copy.student500}
+                student500Enabled={student500Enabled}
                 temporaryGuestProject={temporaryGuestProject}
                 view={projectView}
               />

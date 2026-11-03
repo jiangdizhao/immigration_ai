@@ -337,6 +337,13 @@
       "when": 1793353933505,
       "tag": "0047_phase13_m5_2_school_admissions",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793662668740,
+      "tag": "0048_phase13_m6_1_student500_applications",
+      "breakpoints": true
     }
   ]
 }

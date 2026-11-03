@@ -228,16 +228,24 @@ test("the journal and snapshot record migration 0046 as an applied additive migr
     entries: { idx: number; tag: string; when: number }[];
   };
   /**
-   * Phase-aware: M5.2 (0047) is now the journal head, so 0046 is no longer the
-   * last entry. Its own presence, tag and snapshot linkage are still asserted,
-   * and the M5.2 migration is required to be strictly additively after it.
+   * Phase-aware: 0047 (M5.2) and later additive migrations (for example the
+   * Phase 13 M6.1 0048) follow 0046, so it is not the journal head. Its own
+   * presence, tag and snapshot linkage are still asserted, and every later entry
+   * must keep the monotonic order this test exists to protect.
    */
   const entry = journal.entries.find((candidate) => candidate.idx === 46);
   assert.equal(entry?.tag, "0046_phase13_m5_1_school_applications");
   const head = journal.entries.at(-1);
   assert.ok((head?.idx ?? 0) >= 46);
-  if ((head?.idx ?? 0) > 46) {
-    assert.equal(head?.tag, "0047_phase13_m5_2_school_admissions");
+  const indexes = journal.entries.map((candidate) => candidate.idx);
+  assert.deepEqual(
+    indexes,
+    [...indexes].sort((left, right) => left - right)
+  );
+  for (const later of journal.entries.filter(
+    (candidate) => candidate.idx >= 47
+  )) {
+    assert.match(later.tag, /^00(4[7-9]|5[0-9])_/u, later.tag);
   }
 
   const snapshot = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as {

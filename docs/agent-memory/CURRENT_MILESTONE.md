@@ -1,3 +1,42 @@
+<!-- BEGIN PHASE13_M6_1_DB_ACCEPTANCE_2026_11_03 -->
+## Phase 13 M6.1 — PostgreSQL integration acceptance PASSED (disposable DB, removed)
+
+**Status:** `M6_1_DB_INTEGRATION_PASSED` / `M6_1_ACCEPTANCE_PENDING_REVIEW`. Branch `phase13-m6-student500-application` at `18ff4f62…`; diff uncommitted and unpushed.
+
+- Migration `0048_phase13_m6_1_student500_applications` was applied on **PostgreSQL 17.11** inside a disposable Docker container (`phase13-m6-1-pg`, loopback `127.0.0.1:55450`, tmpfs data, `--rm`, dedicated non-superuser role) via the existing controlled operator with `--acknowledge-migrations --expect-database=immigration_ai_phase13_m6_1_test`. 49 migration-ledger rows (0000–0048), all three Student 500 tables, all three triggers.
+- `pnpm test:phase13:m6-1:integration` on that database: **3 pass / 0 fail / 0 skipped** — schema probe, real store persist/replay/CAS/cross-Project isolation/archive/Project-closed, and create-order + idempotency + zero orphan operations.
+- **Two fixture defects were corrected** (test-only, no production code changed): the create-order test now uses its own `ORDERED_PROJECT` seeded by a `seedProject()` helper instead of reusing a Project that the previous test closes; and the suite gained the M5.1-style `after()` teardown that closes the lazy pool so the runner exits. No production source was modified to satisfy any test.
+- **All disposable infrastructure was removed** by an EXIT/INT/TERM trap: container stopped and deleted, tmpfs gone, no new volumes or networks, credentials/env files/scripts/logs deleted, port 55450 released. The pre-existing `postgres:17` image and all pre-existing containers/volumes/databases (host `immigration_legal`/`chatbot` on 5432) were untouched.
+
+**Evidence:** `~/phase13_m6_1_db_acceptance_report.md`, `~/phase13_m6_1_final_review.patch`. Remaining limitation: the custom legal-source adapter, the three instrument identifiers and the official document checklist are still unestablished; `not_submission_ready` remains the product position.
+<!-- END PHASE13_M6_1_DB_ACCEPTANCE_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_R1_STATUS_2026_11_03 -->
+## Phase 13 M6.1-R1 status — review corrections applied
+
+**Status:** `M6_1_R1_IMPLEMENTED_PENDING_REVIEW` / `M6_1_OFFLINE_VALIDATED_DB_PENDING`; branch `phase13-m6-student500-application` at `18ff4f62…`, diff uncommitted.
+
+**R1 fixed four reviewed blockers:** (1) the PostgreSQL create path now inserts the application before its operation row (immediate composite FK), claims the operation afterwards with rollback-on-lost-race, and resolves retries from the persisted `resultId`; (2) the in-progress route gets an authorized M5.1 School Application selector with no free-text id; (3) the client controller clears stale detail, discards out-of-order responses and refuses mutations against superseded detail; (4) requirements whose sources are only `declared_pending_verification` are no longer individually review-exempt.
+
+**Validation:** M6.1 offline **83/83**, M5.1 **58/58**, M5.2 **94/94**, M5.3 **30/30**, repo unit suite **1262/1262**, TypeScript **44 pre-existing / 0 new**, `db:check` clean, build OK. PostgreSQL integration remains **`M6_1_DATABASE_INTEGRATION_PENDING_OWNER_TEST_DB`** (skipped, never passed).
+
+**Next:** independent review, then an authorized disposable M6.1 database before acceptance; no R2/R3 loop without a new demonstrated critical issue.
+<!-- END PHASE13_M6_1_R1_STATUS_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_IMPLEMENTATION_STATUS_2026_11_03 -->
+## Phase 13 M6.1 implementation status — Student 500 entry + legal intelligence
+
+**Status:** `M6_1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` / `M6_1_OFFLINE_VALIDATED_DB_PENDING`; branch `phase13-m6-student500-application` at `18ff4f621e9979a64f4087bea958e81d81d08505`, entire diff uncommitted.
+
+**Delivered as one integrated slice:** additive migration 0048 + Drizzle schema + PostgreSQL/in-memory stores + bounded legal-applicability/requirement resolver (14 conditional dimensions, declared official sources, explicit source verification and UNKNOWN/NEEDS_VERIFICATION outcomes) + authenticated Project-scoped API + bilingual Project Workspace UI section with one honest next action. No eligibility decision, GS draft, document reconciliation, professional review or government submission exists.
+
+**Legal currentness:** the catalog is a repository *declaration* — no authoritative corpus/legislation/Home Affairs retrieval was performed; every source is `declared_pending_verification` with unverified URLs and unknown commencement, and the resolver can never emit `verified_official_corpus`. Authoritative-source wiring is the main deferred item.
+
+**Validation:** M6.1 offline 63/63; M5.1 58/58; M5.2 94/94; M5.3 30/30; `db:check` clean; TypeScript 44 pre-existing / 0 new. **M6.1 PostgreSQL integration = `M6_1_DATABASE_INTEGRATION_PENDING_OWNER_TEST_DB` (skipped, not passed).**
+
+**Next:** independent review of `~/phase13_m6_1_review.patch`, then an owner-authorized disposable M6.1 database for the guarded integration suite, then M6.2 dispatch when authorized. Inherited verdicts unchanged: M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`, Post-M5 `E2E_BLOCKED`, `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE13_M6_1_IMPLEMENTATION_STATUS_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M6_PLAN_CURRENT_MILESTONE_2026_11_03 -->
 ## Active planning milestone — Phase 13 M6 Student 500 MVP
 

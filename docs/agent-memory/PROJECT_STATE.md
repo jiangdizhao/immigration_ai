@@ -1,3 +1,29 @@
+<!-- BEGIN PHASE13_M6_1_DB_ACCEPTANCE_STATE_2026_11_03 -->
+## Phase 13 — M6.1 database integration verified (disposable PG17, removed)
+
+M6.1's guarded integration suite was executed for real against a disposable PostgreSQL 17.11 container with migrations 0000–0048 applied by the controlled operator: **3 pass / 0 fail / 0 skipped**, including exact operation replay, changed-payload rejection, concurrent-operation convergence, zero orphan operation rows, CAS, cross-Project isolation, terminal archive and Project-closed protection. Two test-fixture defects (shared Project across tests; missing lazy-pool teardown) were corrected without touching production code.
+
+Every disposable resource was deleted afterwards under a shell trap (container, tmpfs, credentials, env files, scripts, logs); no volumes or networks were created, port 55450 is free, and the host PostgreSQL 5432 / `immigration_legal` / `chatbot` databases plus all pre-existing Docker resources remain untouched. Migration 0048 is still unapplied outside that disposable target. M4 closed-with-blockers, Post-M5 E2E blocked and `LIVE_PRODUCTION_NO_GO` are unchanged.
+<!-- END PHASE13_M6_1_DB_ACCEPTANCE_STATE_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_R1_STATE_2026_11_03 -->
+## Phase 13 — M6.1-R1 review corrections applied (offline-validated, DB pending)
+
+Four independently reviewed blockers in the M6.1 Student 500 slice were corrected without changing the milestone shape: create-transaction ordering/idempotency (application before its immediate-FK operation row, persisted-`resultId` replay, rollback on a lost claim race), an authorized M5.1 School Application selector for the in-progress route, client-side stale-detail/race protection, and per-requirement legal-review semantics so no declared-only requirement looks review-exempt. No legal authority, instrument id or effective date was invented, and `not_submission_ready` remains the global position.
+
+Migration 0048 is still unapplied everywhere and the guarded PostgreSQL suite is still skipped pending an owner-authorized disposable target. M4 closed-with-blockers, Post-M5 E2E blocked and `LIVE_PRODUCTION_NO_GO` are unchanged. Details: [CURRENT_HANDOFF](./CURRENT_HANDOFF.md), [CURRENT_MILESTONE](./CURRENT_MILESTONE.md).
+<!-- END PHASE13_M6_1_R1_STATE_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_IMPLEMENTATION_STATE_2026_11_03 -->
+## Phase 13 — M6.1 Student 500 preparation implemented (offline-validated, DB pending)
+
+M6.1 is implemented inside the existing Project stack: an additive **0048** Student 500 schema (application/operation/event, guarded and append-only), a bounded legal-applicability and conditional-requirement resolver over a *declared* official-source catalog, authenticated Project-scoped HTTP endpoints, and a bilingual Project Workspace section that shows persisted facts, sourced preliminary requirements, missing information and exactly one next action. The capability stays default-OFF in production-like environments and fails closed on schema/capability/authority.
+
+**Honesty limits that remain:** no authoritative legal-source retrieval exists in this environment, so every source is declared-pending-verification and every requirement outcome is a screening aid, never law; no CoE verification, eligibility determination, professional review, GS draft or submission capability exists. Migration 0048 has **not** been applied to any database, and the guarded PostgreSQL suite is skipped pending an owner-authorized disposable target (`M6_1_DATABASE_INTEGRATION_PENDING_OWNER_TEST_DB`).
+
+**Unchanged:** M4 closed-with-blockers, Post-M5 E2E blocked, `LIVE_PRODUCTION_NO_GO`, and all Project Document trust/AI-consent gates. Canonical detail: [CURRENT_HANDOFF](./CURRENT_HANDOFF.md), [CURRENT_MILESTONE](./CURRENT_MILESTONE.md), [M6 plan](./PHASE13_M6_STUDENT500_INTEGRATED_PLAN_2026_11_03.md).
+<!-- END PHASE13_M6_1_IMPLEMENTATION_STATE_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M6_INTEGRATED_PROJECT_STATE_2026_11_03 -->
 ## Phase 13 — M6 Student 500 next development scope (2026-11-03)
 

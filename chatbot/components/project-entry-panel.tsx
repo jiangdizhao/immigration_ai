@@ -54,6 +54,7 @@ const NAV_LABEL_KEYS = {
   home: "projectHomeTab",
   applications: "projectSchoolApplicationsTab",
   admissions: "projectSchoolAdmissionsTab",
+  student500: "projectStudent500Tab",
 } as const satisfies Record<ProjectWorkspaceView, keyof ProjectEntryCopy>;
 
 function projectLabel(

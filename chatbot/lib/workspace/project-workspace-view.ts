@@ -11,6 +11,8 @@ export const PROJECT_WORKSPACE_VIEWS = [
   "home",
   "applications",
   "admissions",
+  /** Phase 13 M6.1: Student 500 application preparation. */
+  "student500",
 ] as const;
 
 export type ProjectWorkspaceView = (typeof PROJECT_WORKSPACE_VIEWS)[number];

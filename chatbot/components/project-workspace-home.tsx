@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderLock, GraduationCap, School } from "lucide-react";
+import { BookOpenCheck, FolderLock, GraduationCap, School } from "lucide-react";
 import {
   PROJECT_WORKSPACE_VIEWS,
   type ProjectWorkspaceView,
@@ -9,6 +9,7 @@ import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
 import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
 import { SchoolApplicationsPanel } from "./school-applications-panel";
+import { Student500Panel } from "./student-500-panel";
 
 type ProjectHomeCopy = WorkspaceCopy["projectEntry"];
 
@@ -16,6 +17,7 @@ const TAB_LABEL_KEYS = {
   home: "projectHomeTab",
   applications: "projectSchoolApplicationsTab",
   admissions: "projectSchoolAdmissionsTab",
+  student500: "projectStudent500Tab",
 } as const satisfies Record<ProjectWorkspaceView, keyof ProjectHomeCopy>;
 
 /**
@@ -40,6 +42,8 @@ export function ProjectWorkspaceHome({
   schoolApplicationsCopy,
   schoolAdmissionsEnabled = false,
   schoolAdmissionsCopy,
+  student500Enabled = false,
+  student500Copy,
   projectDocumentsEnabled = false,
 }: {
   copy: ProjectHomeCopy;
@@ -58,6 +62,9 @@ export function ProjectWorkspaceHome({
   schoolApplicationsCopy: WorkspaceCopy["schoolApplications"];
   schoolAdmissionsEnabled?: boolean;
   schoolAdmissionsCopy: WorkspaceCopy["schoolAdmissions"];
+  /** Phase 13 M6.1 Student 500 preparation: capability + eligibility. */
+  student500Enabled?: boolean;
+  student500Copy: WorkspaceCopy["student500"];
   /** Remains false until the separate document privacy/scan gates open. */
   projectDocumentsEnabled?: boolean;
 }) {
@@ -73,6 +80,7 @@ export function ProjectWorkspaceHome({
       : copy.projectStatusActive;
   const applicationsReady = schoolApplicationsEnabled;
   const admissionsReady = schoolAdmissionsEnabled;
+  const student500Ready = student500Enabled;
 
   return (
     <div
@@ -196,6 +204,28 @@ export function ProjectWorkspaceHome({
                         : copy.projectHomeAdmissionsUnavailable}
                   </span>
                 </button>
+                <button
+                  className="rounded-xl border border-slate-200 bg-white p-3 text-left transition enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 disabled:cursor-not-allowed disabled:opacity-70"
+                  data-testid="project-home-open-student500"
+                  disabled={navigationBusy || !student500Ready}
+                  onClick={() => onSelectView("student500")}
+                  type="button"
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <BookOpenCheck
+                      aria-hidden="true"
+                      className="size-4 text-slate-500"
+                    />
+                    {copy.projectStudent500Tab}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-600">
+                    {student500Ready
+                      ? copy.projectHomeOpenStudent500
+                      : schoolPreparationRestricted
+                        ? copy.projectHomeStudent500Restricted
+                        : copy.projectHomeStudent500Unavailable}
+                  </span>
+                </button>
               </div>
             </section>
 
@@ -234,6 +264,28 @@ export function ProjectWorkspaceHome({
                 {schoolPreparationRestricted
                   ? copy.schoolPreparationRestricted
                   : copy.projectHomeApplicationsUnavailable}
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        {view === "student500" ? (
+          <div data-testid="project-home-student500">
+            {student500Ready ? (
+              <Student500Panel
+                copy={student500Copy}
+                enabled={student500Enabled}
+                projectId={project.id}
+              />
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">
+                <FolderLock
+                  aria-hidden="true"
+                  className="mr-1 inline size-3.5 text-slate-500"
+                />
+                {schoolPreparationRestricted
+                  ? copy.projectHomeStudent500Restricted
+                  : copy.projectHomeStudent500Unavailable}
               </p>
             )}
           </div>

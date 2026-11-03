@@ -1,3 +1,63 @@
+<!-- BEGIN PHASE13_M6_1_DB_ACCEPTANCE_2026_11_03 -->
+## Phase 13 M6.1 — PostgreSQL integration acceptance PASSED (disposable DB, removed)
+
+**Status:** `M6_1_DB_INTEGRATION_PASSED` / `M6_1_ACCEPTANCE_PENDING_REVIEW`. Branch `phase13-m6-student500-application` at `18ff4f62…`; diff uncommitted and unpushed.
+
+- Migration `0048_phase13_m6_1_student500_applications` was applied on **PostgreSQL 17.11** inside a disposable Docker container (`phase13-m6-1-pg`, loopback `127.0.0.1:55450`, tmpfs data, `--rm`, dedicated non-superuser role) via the existing controlled operator with `--acknowledge-migrations --expect-database=immigration_ai_phase13_m6_1_test`. 49 migration-ledger rows (0000–0048), all three Student 500 tables, all three triggers.
+- `pnpm test:phase13:m6-1:integration` on that database: **3 pass / 0 fail / 0 skipped** — schema probe, real store persist/replay/CAS/cross-Project isolation/archive/Project-closed, and create-order + idempotency + zero orphan operations.
+- **Two fixture defects were corrected** (test-only, no production code changed): the create-order test now uses its own `ORDERED_PROJECT` seeded by a `seedProject()` helper instead of reusing a Project that the previous test closes; and the suite gained the M5.1-style `after()` teardown that closes the lazy pool so the runner exits. No production source was modified to satisfy any test.
+- **All disposable infrastructure was removed** by an EXIT/INT/TERM trap: container stopped and deleted, tmpfs gone, no new volumes or networks, credentials/env files/scripts/logs deleted, port 55450 released. The pre-existing `postgres:17` image and all pre-existing containers/volumes/databases (host `immigration_legal`/`chatbot` on 5432) were untouched.
+
+**Evidence:** `~/phase13_m6_1_db_acceptance_report.md`, `~/phase13_m6_1_final_review.patch`. Remaining limitation: the custom legal-source adapter, the three instrument identifiers and the official document checklist are still unestablished; `not_submission_ready` remains the product position.
+<!-- END PHASE13_M6_1_DB_ACCEPTANCE_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_R1_CORRECTIONS_2026_11_03 -->
+## Phase 13 M6.1-R1 — four review corrections: `M6_1_R1_IMPLEMENTED_PENDING_REVIEW`
+
+**Branch / HEAD:** `phase13-m6-student500-application` at `18ff4f621e9979a64f4087bea958e81d81d08505` (unchanged). Cumulative M6.1 + R1 diff remains **uncommitted**; nothing staged as content, committed, pushed, migrated, deployed or provider-called.
+
+**Status:** `M6_1_R1_IMPLEMENTED_PENDING_REVIEW` / `M6_1_OFFLINE_VALIDATED_DB_PENDING`. Not accepted, not production-ready, `LIVE_PRODUCTION_NO_GO` unchanged.
+
+### R1 corrections (all four review findings)
+
+1. **PostgreSQL creation order + replay identity (`lib/student-500/postgres-repository.ts`).** `createApplication()` no longer claims the operation before its referenced application exists — the immediate composite FK in migration 0048 required the application first. New order: Project→membership lock → read-only operation lookup → per-Project bound → insert application → claim operation (throws a rollback signal if it loses the race) → append event. A retry now resolves the **persisted** `resultId`; a newly generated UUID is never used to load a prior application. Same-Project concurrency serializes on the Project row lock; a cross-Project duplicate operationId loses the unique-index race, rolls the whole transaction back (no orphan application/operation/event) and resolves the winner (digest mismatch → `idempotency_conflict`).
+2. **School Application linking UI (`components/student-500-panel.tsx`, `lib/workspace/student-500.ts`).** The in-progress route now has a real selector fed by the existing M5.1 Project-scoped list endpoint (`GET /api/projects/{projectId}/school-applications`, parsed with the existing strict M5.1 parser). There is no free-text id field, so a customer cannot type a foreign id; the server re-authorizes the chosen id again on save. Empty/loading/error/stale-selection states are explicit, and CoE-only and Offer-only flows are unchanged (no selector rendered).
+3. **Client race/staleness protection (`lib/workspace/student-500.ts`).** `open()` now clears the previous detail immediately and applies only the newest detail request (monotonic sequence), rejecting a response that describes a different application. `load()` never clobbers or resurrects a current detail. `update`/`archive` refuse to send when the passed detail is not the currently selected, currently-loaded revision (`state_changed`), and a mutation response for a superseded selection updates the list without overwriting the visible record.
+4. **Unverified-source review semantics (`lib/student-500/requirement-resolver.ts`).** A requirement is now `humanReviewRequired` whenever its combined source verification is not `verified_official_corpus` — so no dimension derived only from `declared_pending_verification` sources looks individually exempt from legal review. `verified_official_corpus` became reachable only when *every* contributing source is verified (dormant with the M6.1 declared catalog), so a future authoritative adapter can clear the flag without inventing authority. The global `submissionStatus: not_submission_ready` position is unchanged, and no instrument id, effective date or authority was invented.
+
+### R1 validation (offline; no database, no provider)
+
+- `pnpm test:phase13:m6-1:offline` → **83/83 pass, 0 fail, 0 skip** (was 63; +8 create-order/idempotency tests, +2 review-semantics tests, +10 linking/race tests).
+- `pnpm test:phase13:m5-1:offline` **58/58**, `m5-2:offline` **94/94**, `m5-3:offline` **30/30** — unchanged.
+- `pnpm test:unit` → **1262/1262 pass**. Correction to the earlier note: that script is an explicit allowlist that does **not** include the M6.1 files (they run in `test:phase13:m6-1:offline`), so 1262 is the repo-wide baseline, not 1222+M6.1.
+- `pnpm exec tsc --noEmit` → **44 diagnostics, all pre-existing, 0 new**; `pnpm db:check` clean; `pnpm build` compiles; Biome clean on every changed file.
+- **M6.1 PostgreSQL suite: still `M6_1_DATABASE_INTEGRATION_PENDING_OWNER_TEST_DB`** — authored (now including first-create, exact replay, changed-payload conflict, concurrent same-operation create and an explicit orphan-row scan), statically validated, **skipped, not passed**. The create-order/replay fixes are therefore proven offline (in-memory parity + a structural source contract) but **not yet executed against real PostgreSQL**.
+
+**Next:** independent review of `~/phase13_m6_1_R1_review.patch`; then an owner-authorized disposable M6.1 database to execute `pnpm test:phase13:m6-1:integration` before any acceptance. No R2/R3 loop is planned without a newly demonstrated critical issue.
+<!-- END PHASE13_M6_1_R1_CORRECTIONS_2026_11_03 -->
+
+<!-- BEGIN PHASE13_M6_1_STUDENT500_IMPLEMENTED_2026_11_03 -->
+## Phase 13 M6.1 — Student 500 entry + legal intelligence: `M6_1_OFFLINE_VALIDATED_DB_PENDING`
+
+- **Branch / HEAD:** `phase13-m6-student500-application` at `18ff4f621e9979a64f4087bea958e81d81d08505` (unchanged base). The whole M6.1 diff is **uncommitted in the worktree**; nothing staged, committed, pushed, migrated, deployed or provider-called.
+- **Status:** `M6_1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` / `M6_1_OFFLINE_VALIDATED_DB_PENDING`. Not accepted, not production-ready, `LIVE_PRODUCTION_NO_GO` unchanged.
+- **Delivered (one integrated slice):**
+  1. **Persistent Student 500 preparation record** — additive migration `0048_phase13_m6_1_student500_applications.sql` (3 tables: application/operation/event + guard and append-only routines), Drizzle schema, PostgreSQL store (Project-lock → membership → row-lock write order, `unique(actorUserId, operationId)` replay, CAS, archive terminality, per-Project bound), in-memory store for offline tests, fail-closed schema probe.
+  2. **Bounded legal applicability + checklist service** — `lib/student-500/` contracts, declared official-source catalog, `Student500LegalSourceProvider` port (declared provider only), 14-dimension rule pack/requirement resolver producing `applicable | conditional | not_applicable | unknown` plus per-requirement source verification, missing facts, human-review reasons, disclosures, one deterministic next action, `submissionStatus: "not_submission_ready"`.
+  3. **HTTP API** — `/api/projects/[projectId]/student-500-applications` (GET/POST) and `/[applicationId]` (GET/PATCH) + `/archive`; session-derived actor, strict Zod bodies, capability → session → account type → Project-wide disable → schema → service authority ordering, existence-hiding 404s.
+  4. **Project Workspace UI** — new `student500` Project section/tab + home card, bilingual zh/en panel showing persisted context, screening counts, requirement rows with declared sources, missing information, human-review reasons, disclosures, one next action; disabled/unavailable/restricted states; archived records read-only. Wired through page → premium workspace → workspace → Project home with a server-resolved capability.
+- **Legal-source handling (important):** M6.1 ships a *declared* official-source catalog (Migration Act s 65, Migration Regulations Sch 1/2/4 + Subclass 500 condition set, three declared-but-unidentified legislative instruments (English language, financial capacity, Genuine Student), the Home Affairs student-500 listing page, and an explicitly unavailable document checklist). Every entry is `declared_pending_verification`, `urlVerified: false`, commencement unknown, with a `declaredCoverage` window from 2024-01-01. No authoritative corpus/legislation/Home Affairs retrieval exists in this environment, so **nothing is claimed as verified current law**; the resolver never emits `verified_official_corpus`, demotes to `unknown` outside coverage or without a legislative source, and always discloses source-pending + official-checklist-unavailable. Instrument identifiers for English/financial/GS remain `unavailable` — a genuine currentness gap, not silently filled.
+- **Validation (offline only, authoritative host DB never touched):**
+  - `pnpm test:phase13:m6-1:offline` → **63/63 pass, 0 fail, 0 skip**.
+  - `pnpm test:phase13:m5-1:offline` **58/58**, `pnpm test:phase13:m5-2:offline` **94/94**, `pnpm test:phase13:m5-3:offline` **30/30** (see phase-aware journal assertions below).
+  - `pnpm db:check` clean; `pnpm exec tsc --noEmit` = **44 diagnostics, all pre-existing** (policy-intelligence/vip-ai-document/lawyer-workspace test files), **0 new**.
+  - M6.1 PostgreSQL suite is authored but **skipped — `M6_1_DATABASE_INTEGRATION_PENDING_OWNER_TEST_DB`**; a skipped DB test is *not* a pass.
+- **Phase-aware regression corrections (no behaviour change):** the journal-head assertions in `lib/school-applications/schema-contract.test.ts`, `lib/school-admissions/schema-contract.test.ts`, `lib/db/professional-review-migration-contract.test.ts` and `lib/managed-handoff/integration-contract.test.ts` now assert presence/index/tag/order of 0044–0047 plus *one* additive 0048 instead of pinning 0046/0047 as the head. Migration 0044/0045 bytes stay frozen and no M4 control-plane behaviour changed.
+- **Deferred (non-blocking):** authoritative legal-source adapter (legal-service exact lookup / corpus) behind the existing provider port; M5.1/M5.2 admissions-case CoE linkage as an alternative study-evidence source; browser/E2E coverage; checklist completeness against a real Home Affairs checklist; richer applicant facts (course, provider) via M2 fields.
+- **Explicit non-goals preserved:** no GS drafting/editing, no document reconciliation, no package creation, no lawyer approval, no ImmiAccount/government submission, no eligibility determination, no M6.2/M7/M8 work, no production flag activation, no AWS/Stripe/RDS/S3/paid provider contact, no migrations applied anywhere.
+- **Next action:** owner/ChatGPT review the cumulative patch (`~/phase13_m6_1_review.patch`, digest in `~/phase13_m6_1_implementation_report.md`); then provide an authorized disposable M6.1 PostgreSQL target to run `pnpm test:phase13:m6-1:integration`.
+<!-- END PHASE13_M6_1_STUDENT500_IMPLEMENTED_2026_11_03 -->
+
 <!-- BEGIN PHASE13_M6_INTEGRATED_PLAN_ACTIVATED_2026_11_03 -->
 ## Current handoff — M6 Student 500 integrated plan recorded (2026-11-03)
 

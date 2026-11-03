@@ -26,6 +26,7 @@ export function PremiumAnswerModeWorkspace({
   temporaryGuestProject = false,
   schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
+  student500Enabled = false,
   schoolAdmissionsEnabled = false,
 }: {
   policyReference?: PolicyWorkspaceReference | null;
@@ -45,6 +46,8 @@ export function PremiumAnswerModeWorkspace({
   schoolPreparationRestricted?: boolean;
   /** Phase 13 M5.1 capability; re-checked by the API. */
   schoolApplicationsEnabled?: boolean;
+  /** Phase 13 M6.1 Student 500 preparation capability (server-resolved). */
+  student500Enabled?: boolean;
   /** Phase 13 M5.2 capability; re-checked by the API. */
   schoolAdmissionsEnabled?: boolean;
 }) {
@@ -202,6 +205,7 @@ export function PremiumAnswerModeWorkspace({
         schoolAdmissionsEnabled={schoolAdmissionsEnabled}
         schoolApplicationsEnabled={schoolApplicationsEnabled}
         schoolPreparationRestricted={schoolPreparationRestricted}
+        student500Enabled={student500Enabled}
         temporaryGuestProject={temporaryGuestProject}
         userType={hydratedAccessPolicy.userType}
       />

@@ -95,6 +95,39 @@ export function resolveSchoolPreparationAvailability(input: {
 }
 
 /**
+ * Phase 13 M6.1 Student 500 preparation availability.
+ *
+ * Same authority contract as M5 school preparation: the capability is only
+ * offered when the Project itself is writable AND the identity is a registered
+ * personal account. Guests and staff receive a truthful restricted state, and the
+ * HTTP/service layers re-check capability, schema and authority on every request.
+ */
+export type Student500Availability = {
+  readonly enabled: boolean;
+  /** Configured on, but this identity may not use it yet. */
+  readonly restricted: boolean;
+};
+
+export function resolveStudent500Availability(input: {
+  readonly project: Pick<
+    PersonalProjectCapability,
+    "availability" | "schoolPreparationEligible"
+  >;
+  readonly student500Enabled: boolean;
+}): Student500Availability {
+  const projectWritesAvailable = input.project.availability === "available";
+  const eligible =
+    projectWritesAvailable && input.project.schoolPreparationEligible;
+  return {
+    enabled: eligible && input.student500Enabled,
+    restricted:
+      projectWritesAvailable &&
+      !input.project.schoolPreparationEligible &&
+      input.student500Enabled,
+  };
+}
+
+/**
  * Deterministic capability resolution. No LLM, no client-supplied identity and
  * no database call: callers pass the server session projection plus the schema
  * probe outcome.

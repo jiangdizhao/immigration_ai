@@ -15,9 +15,11 @@ import {
   type ProjectFoundationSchemaState,
   resolvePersonalProjectCapability,
   resolveSchoolPreparationAvailability,
+  resolveStudent500Availability,
 } from "@/lib/projects/personal-project-capability";
 import { schoolAdmissionsEnabled } from "@/lib/school-admissions/contracts";
 import { schoolApplicationsEnabled } from "@/lib/school-applications/contracts";
+import { student500ApplicationsEnabled } from "@/lib/student-500/contracts";
 
 export default async function AIWorkspacePage({
   searchParams,
@@ -84,6 +86,15 @@ export default async function AIWorkspacePage({
     applicationsEnabled: schoolApplicationsFeature,
     project: personalProject,
   });
+  /**
+   * M6.1 Student 500 preparation follows the same accepted authority contract:
+   * registered personal accounts only, and the API re-checks capability, schema
+   * and authority on every request.
+   */
+  const student500Preparation = resolveStudent500Availability({
+    project: personalProject,
+    student500Enabled: student500ApplicationsEnabled(),
+  });
 
   /**
    * Phase 12 Stage 2: a policy launch either resolves the published topic or
@@ -113,7 +124,10 @@ export default async function AIWorkspacePage({
           requestedPolicySlug={requestedSlug}
           schoolAdmissionsEnabled={schoolPreparation.admissionsEnabled}
           schoolApplicationsEnabled={schoolPreparation.applicationsEnabled}
-          schoolPreparationRestricted={schoolPreparation.restricted}
+          schoolPreparationRestricted={
+            schoolPreparation.restricted || student500Preparation.restricted
+          }
+          student500Enabled={student500Preparation.enabled}
           temporaryGuestProject={personalProject.temporaryGuestProject}
         />
       </main>

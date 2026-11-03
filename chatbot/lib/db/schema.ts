@@ -6371,3 +6371,271 @@ export const schoolAdmissionEvent = pgTable(
 export type SchoolAdmissionEventRow = InferSelectModel<
   typeof schoolAdmissionEvent
 >;
+
+/**
+ * Phase 13 M6.1 - Student 500 application preparation.
+ *
+ * A Student 500 application is a distinct business entity from a School
+ * Application and from a Chat/LegalMatter. Content is creator-private:
+ * `ownerUserId`/`applicantUserId` are immutable and every read path filters on
+ * the owner, so Project membership alone never discloses it.
+ *
+ * The persisted columns describe *reported preparation circumstances only*. They
+ * contain no legal conclusion, no eligibility flag, no verification of a CoE and
+ * no submission status: the preliminary screening is derived at read time.
+ */
+
+export const STUDENT_500_APPLICATION_STATUS_VALUES = [
+  "draft",
+  "in_progress",
+  "archived",
+] as const;
+export const STUDENT_500_ENTRY_ROUTE_VALUES = [
+  "existing_coe",
+  "offer_only",
+  "school_application_in_progress",
+  "no_school_application",
+] as const;
+export const STUDENT_500_COE_STATUS_VALUES = [
+  "reported_held",
+  "reported_not_held",
+  "unknown",
+] as const;
+export const STUDENT_500_APPLICATION_PLACE_VALUES = [
+  "onshore",
+  "offshore",
+  "unknown",
+] as const;
+export const STUDENT_500_AGE_BAND_VALUES = ["adult", "under_18", "unknown"] as const;
+export const STUDENT_500_DEPENDANT_BAND_VALUES = [
+  "none",
+  "one_or_more",
+  "unknown",
+] as const;
+export const STUDENT_500_EVIDENCE_STATUS_VALUES = [
+  "reported_held",
+  "reported_not_held",
+  "unknown",
+] as const;
+export const STUDENT_500_HISTORY_DECLARATION_VALUES = [
+  "not_declared",
+  "declared_none",
+  "declared_some",
+] as const;
+export const STUDENT_500_HISTORY_FLAG_VALUES = [
+  "prior_visa_refusal",
+  "prior_visa_cancellation",
+  "prior_visa_condition_breach",
+  "prior_unlawful_period",
+  "prior_immigration_detention",
+] as const;
+export const STUDENT_500_OPERATION_TYPE_VALUES = [
+  "student_500_create",
+  "student_500_update",
+  "student_500_archive",
+] as const;
+export const STUDENT_500_OPERATION_RESULT_KIND_VALUES = [
+  "student_500_application",
+] as const;
+export const STUDENT_500_EVENT_TYPE_VALUES = [
+  "student_500_created",
+  "student_500_updated",
+  "student_500_archived",
+] as const;
+export const STUDENT_500_EVENT_SUBJECT_KIND_VALUES = [
+  "student_500_application",
+] as const;
+
+export const student500Application = pgTable(
+  "Student500Application",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => studyJourneyProject.id, { onDelete: "restrict" }),
+    ownerUserId: uuid("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    applicantUserId: uuid("applicantUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    status: varchar("status", {
+      enum: STUDENT_500_APPLICATION_STATUS_VALUES,
+    })
+      .notNull()
+      .default("draft"),
+    revision: integer("revision").notNull().default(1),
+    entryRoute: varchar("entryRoute", {
+      enum: STUDENT_500_ENTRY_ROUTE_VALUES,
+    }),
+    coeStatus: varchar("coeStatus", {
+      enum: STUDENT_500_COE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    applicationPlace: varchar("applicationPlace", {
+      enum: STUDENT_500_APPLICATION_PLACE_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    asOfDate: varchar("asOfDate", { length: 10 }),
+    currentVisaSubclass: varchar("currentVisaSubclass", { length: 128 }),
+    historyDeclaration: varchar("historyDeclaration", {
+      enum: STUDENT_500_HISTORY_DECLARATION_VALUES,
+    })
+      .notNull()
+      .default("not_declared"),
+    historyFlags: jsonb("historyFlags").$type<unknown>().notNull().default([]),
+    applicantAgeBand: varchar("applicantAgeBand", {
+      enum: STUDENT_500_AGE_BAND_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    dependants: varchar("dependants", {
+      enum: STUDENT_500_DEPENDANT_BAND_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    englishEvidence: varchar("englishEvidence", {
+      enum: STUDENT_500_EVIDENCE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    financialEvidence: varchar("financialEvidence", {
+      enum: STUDENT_500_EVIDENCE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    oshcEvidence: varchar("oshcEvidence", {
+      enum: STUDENT_500_EVIDENCE_STATUS_VALUES,
+    })
+      .notNull()
+      .default("unknown"),
+    schoolApplicationId: uuid("schoolApplicationId").references(
+      () => schoolApplication.id,
+      { onDelete: "restrict" }
+    ),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+    archivedAt: timestamp("archivedAt"),
+  },
+  (table) => ({
+    projectIdIdUnique: uniqueIndex(
+      "Student500Application_project_id_unique"
+    ).on(table.projectId, table.id),
+    projectOwnerCreatedIndex: index(
+      "Student500Application_project_owner_created_idx"
+    ).on(table.projectId, table.ownerUserId, table.createdAt),
+    revisionPositive: check(
+      "Student500Application_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    statusAllowed: check(
+      "Student500Application_status_check",
+      sql`${table.status} in ('draft', 'in_progress', 'archived')`
+    ),
+    archiveLifecycle: check(
+      "Student500Application_archive_check",
+      sql`(${table.status} = 'archived' and ${table.archivedAt} is not null) or (${table.status} <> 'archived' and ${table.archivedAt} is null)`
+    ),
+    applicantIsOwner: check(
+      "Student500Application_applicant_is_owner_check",
+      sql`${table.applicantUserId} = ${table.ownerUserId}`
+    ),
+    asOfDateShape: check(
+      "Student500Application_as_of_date_check",
+      sql`${table.asOfDate} is null or ${table.asOfDate} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`
+    ),
+    updatedAfterCreated: check(
+      "Student500Application_updated_at_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+  })
+);
+export type Student500ApplicationRow = InferSelectModel<
+  typeof student500Application
+>;
+
+export const student500ApplicationOperation = pgTable(
+  "Student500ApplicationOperation",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    operationId: varchar("operationId", { length: 128 }).notNull(),
+    applicationId: uuid("applicationId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    operationType: varchar("operationType", {
+      enum: STUDENT_500_OPERATION_TYPE_VALUES,
+    }).notNull(),
+    requestSha256: varchar("requestSha256", { length: 64 }).notNull(),
+    resultKind: varchar("resultKind", {
+      enum: STUDENT_500_OPERATION_RESULT_KIND_VALUES,
+    }).notNull(),
+    resultId: uuid("resultId").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [student500Application.projectId, student500Application.id],
+      name: "Student500ApplicationOperation_application_fk",
+    }).onDelete("restrict"),
+    actorOperationUnique: uniqueIndex(
+      "Student500ApplicationOperation_actor_operation_unique"
+    ).on(table.actorUserId, table.operationId),
+    applicationCreatedIndex: index(
+      "Student500ApplicationOperation_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    requestShaShape: check(
+      "Student500ApplicationOperation_request_sha_check",
+      sql`${table.requestSha256} ~ '^[0-9a-f]{64}$'`
+    ),
+  })
+);
+export type Student500ApplicationOperationRow = InferSelectModel<
+  typeof student500ApplicationOperation
+>;
+
+export const student500ApplicationEvent = pgTable(
+  "Student500ApplicationEvent",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    applicationId: uuid("applicationId").notNull(),
+    projectId: uuid("projectId").notNull(),
+    actorUserId: uuid("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    eventType: varchar("eventType", {
+      enum: STUDENT_500_EVENT_TYPE_VALUES,
+    }).notNull(),
+    subjectKind: varchar("subjectKind", {
+      enum: STUDENT_500_EVENT_SUBJECT_KIND_VALUES,
+    }).notNull(),
+    subjectId: uuid("subjectId").notNull(),
+    applicationRevision: integer("applicationRevision").notNull(),
+    operationRecordId: uuid("operationRecordId").notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    applicationForeignKey: foreignKey({
+      columns: [table.projectId, table.applicationId],
+      foreignColumns: [student500Application.projectId, student500Application.id],
+      name: "Student500ApplicationEvent_application_fk",
+    }).onDelete("restrict"),
+    revisionEventUnique: uniqueIndex(
+      "Student500ApplicationEvent_revision_event_unique"
+    ).on(table.applicationId, table.applicationRevision, table.eventType),
+    applicationCreatedIndex: index(
+      "Student500ApplicationEvent_application_created_idx"
+    ).on(table.applicationId, table.createdAt),
+    revisionPositive: check(
+      "Student500ApplicationEvent_revision_check",
+      sql`${table.applicationRevision} > 0`
+    ),
+  })
+);
+export type Student500ApplicationEventRow = InferSelectModel<
+  typeof student500ApplicationEvent
+>;

@@ -117,6 +117,7 @@ export type WorkspaceCopy = {
     projectHomeTab: string;
     projectSchoolApplicationsTab: string;
     projectSchoolAdmissionsTab: string;
+    projectStudent500Tab: string;
     projectHomeNextSteps: string;
     projectHomeOpenApplications: string;
     projectHomeOpenAdmissions: string;
@@ -125,6 +126,9 @@ export type WorkspaceCopy = {
     /** Concise restriction wording for the home cards (registered-accounts-only). */
     projectHomeApplicationsRestricted: string;
     projectHomeAdmissionsRestricted: string;
+    projectHomeOpenStudent500: string;
+    projectHomeStudent500Unavailable: string;
+    projectHomeStudent500Restricted: string;
     projectHomeLimits: string;
     projectHomeChatsHint: string;
     returnToProjectHome: string;
@@ -322,6 +326,101 @@ export type WorkspaceCopy = {
     validationFailed: string;
     notFound: string;
     retry: string;
+  };
+  /**
+   * Phase 13 M6.1 Student 500 application preparation surface. Every label below
+   * describes a *preliminary screening*: no eligibility decision, no verified
+   * CoE, no legal verification, no professional review and no submission.
+   */
+  student500: {
+    title: string;
+    subtitle: string;
+    notice: string;
+    submissionNotice: string;
+    sourceNotice: string;
+    loading: string;
+    empty: string;
+    create: string;
+    createTitle: string;
+    createDescription: string;
+    cancel: string;
+    confirm: string;
+    creating: string;
+    edit: string;
+    save: string;
+    saving: string;
+    archive: string;
+    archiving: string;
+    refresh: string;
+    detailTitle: string;
+    selectPrompt: string;
+    revisionLabel: (revision: number) => string;
+    entryRouteLabel: string;
+    entryRoute: Record<string, string>;
+    applicationPlaceLabel: string;
+    applicationPlace: Record<string, string>;
+    coeStatusLabel: string;
+    coeStatus: Record<string, string>;
+    asOfDateLabel: string;
+    asOfDateHint: string;
+    currentVisaLabel: string;
+    currentVisaHint: string;
+    historyDeclarationLabel: string;
+    historyDeclaration: Record<string, string>;
+    historyFlagsLabel: string;
+    historyFlag: Record<string, string>;
+    ageBandLabel: string;
+    ageBand: Record<string, string>;
+    dependantsLabel: string;
+    dependants: Record<string, string>;
+    englishLabel: string;
+    financialLabel: string;
+    oshcLabel: string;
+    evidenceStatus: Record<string, string>;
+    schoolApplicationLabel: string;
+    schoolApplicationHint: string;
+    linkLoad: string;
+    linkLoading: string;
+    linkEmpty: string;
+    linkError: string;
+    linkNoneOption: string;
+    linkRequired: string;
+    optionalHint: string;
+    screeningHeading: string;
+    preparationState: Record<string, string>;
+    countsLabel: string;
+    countApplicable: string;
+    countConditional: string;
+    countNotApplicable: string;
+    countUnknown: string;
+    nextActionHeading: string;
+    nextAction: Record<string, string>;
+    missingHeading: string;
+    missing: Record<string, string>;
+    humanReviewHeading: string;
+    humanReview: Record<string, string>;
+    requirementsHeading: string;
+    requirementLabels: Record<string, string>;
+    requirementStatus: Record<string, string>;
+    sourceVerification: Record<string, string>;
+    evidencePreparation: Record<string, string>;
+    sourcesHeading: string;
+    sourceAuthority: Record<string, string>;
+    sourcePendingNotice: string;
+    sourceOpen: string;
+    linkedSchoolHeading: string;
+    linkedSchoolUnavailable: string;
+    linkedSchoolStatus: (status: string) => string;
+    disclosuresHeading: string;
+    disclosure: Record<string, string>;
+    errorAuthenticationRequired: string;
+    errorNotFound: string;
+    errorStateChanged: string;
+    errorLimit: string;
+    errorInvalid: string;
+    errorUnavailable: string;
+    errorRequestFailed: string;
+    archivedNotice: string;
   };
   persistence: {
     notSaved: string;
@@ -607,12 +706,17 @@ const zh: WorkspaceCopy = {
     projectHomeTab: "项目主页",
     projectSchoolApplicationsTab: "学校申请",
     projectSchoolAdmissionsTab: "入学流程",
+    projectStudent500Tab: "学生签证 500",
     projectHomeNextSteps: "下一步",
     projectHomeOpenApplications: "查看或新建学校申请草稿。",
     projectHomeOpenAdmissions: "查看入学准备流程及其真实状态。",
     projectHomeApplicationsUnavailable: "当前环境尚未开放学校申请功能。",
     projectHomeAdmissionsUnavailable: "当前环境尚未开放入学流程功能。",
     projectHomeApplicationsRestricted: "学校申请目前仅向已注册个人账户开放。",
+    projectHomeOpenStudent500: "记录申请人情况，查看带来源标注的初步要求清单。",
+    projectHomeStudent500Unavailable: "当前环境尚未开放学生签证 500 准备功能。",
+    projectHomeStudent500Restricted:
+      "学生签证 500 准备目前仅向已注册个人账户开放。",
     projectHomeAdmissionsRestricted: "入学流程目前仅向已注册个人账户开放。",
     projectHomeLimits:
       "项目文件、共享事实与分阶段进度尚未开放；此处不会显示模拟进度、Offer、CoE 或律师批准。",
@@ -924,6 +1028,220 @@ const zh: WorkspaceCopy = {
     notFound: "找不到此学校申请。",
     retry: "重试",
   },
+  student500: {
+    title: "学生签证 500 申请准备",
+    subtitle: "在受权项目中记录申请人情况，并查看带来源标注的初步要求清单。",
+    notice:
+      "本页面是初步筛查，不是签证资格判断、法律意见或提交服务。每条法律要求都需人工核实。",
+    submissionNotice:
+      "此记录不代表已可提交的签证申请。系统不会提交任何政府申请，也不会生成官方表格。",
+    sourceNotice:
+      "法源状态为“已声明、待核实”：本环境未获取权威法条原文，也未检索官方材料清单。",
+    loading: "正在加载…",
+    empty: "此项目中还没有学生签证 500 准备记录。",
+    create: "新建准备记录",
+    createTitle: "新建学生签证 500 准备记录",
+    createDescription:
+      "只填写您实际知道的情况。未知项保持“未填写”，不会被当作“否”。",
+    cancel: "取消",
+    confirm: "保存",
+    creating: "正在保存…",
+    edit: "修改情况",
+    save: "保存更改",
+    saving: "正在保存…",
+    archive: "归档",
+    archiving: "正在归档…",
+    refresh: "刷新",
+    detailTitle: "准备记录",
+    selectPrompt: "选择一条准备记录以查看详情。",
+    revisionLabel: (revision: number) => `版本 r${revision}`,
+    entryRouteLabel: "学习证据路径",
+    entryRoute: {
+      existing_coe: "已有 CoE（您自述）",
+      no_school_application: "尚未开始学校申请",
+      offer_only: "仅有 Offer，尚无 CoE",
+      school_application_in_progress: "学校申请进行中",
+    },
+    applicationPlaceLabel: "申请地点",
+    applicationPlace: {
+      offshore: "澳大利亚境外",
+      onshore: "澳大利亚境内",
+      unknown: "未填写",
+    },
+    coeStatusLabel: "CoE 状态（您自述）",
+    coeStatus: {
+      reported_held: "自述已持有",
+      reported_not_held: "自述尚未持有",
+      unknown: "未填写",
+    },
+    asOfDateLabel: "意向申请日期或参照日期",
+    asOfDateHint: "用于确定按哪个日期查看法律要求。",
+    currentVisaLabel: "当前签证类别（可选）",
+    currentVisaHint: "例如 500、485 或 bridging；系统不会据此判断资格。",
+    historyDeclarationLabel: "签证历史声明",
+    historyDeclaration: {
+      not_declared: "未声明",
+      declared_none: "声明不含相关记录",
+      declared_some: "声明存在相关记录",
+    },
+    historyFlagsLabel: "相关记录类型",
+    historyFlag: {
+      prior_immigration_detention: "曾被移民拘留",
+      prior_unlawful_period: "曾有非法居留期间",
+      prior_visa_cancellation: "签证曾被取消",
+      prior_visa_condition_breach: "曾被指违反签证条件",
+      prior_visa_refusal: "签证曾被拒签",
+    },
+    ageBandLabel: "申请人年龄区间",
+    ageBand: {
+      adult: "18 岁及以上",
+      under_18: "未满 18 岁",
+      unknown: "未填写",
+    },
+    dependantsLabel: "随行家庭成员",
+    dependants: { none: "无", one_or_more: "有一位或以上", unknown: "未填写" },
+    englishLabel: "英语能力证明（您自述）",
+    financialLabel: "资金能力证明（您自述）",
+    oshcLabel: "海外学生健康保险（您自述）",
+    evidenceStatus: {
+      reported_held: "自述已具备",
+      reported_not_held: "自述尚未具备",
+      unknown: "未填写",
+    },
+    schoolApplicationLabel: "关联的学校申请",
+    schoolApplicationHint: "只能选择您本人在此项目中已有的学校申请。",
+    linkLoad: "加载学校申请",
+    linkLoading: "正在加载…",
+    linkEmpty: "本项目还没有学校申请。请先在“学校申请”中创建。",
+    linkError: "无法加载学校申请列表。",
+    linkNoneOption: "不关联",
+    linkRequired: "选择“学校申请进行中”时，需要关联一条学校申请记录。",
+    optionalHint: "留空表示未填写，不代表“没有”。",
+    screeningHeading: "初步要求清单",
+    preparationState: {
+      screening_complete_pending_review:
+        "筛查信息已填写，等待法律核实与人工审核",
+      screening_incomplete: "筛查信息未完整",
+    },
+    countsLabel: "要求分布",
+    countApplicable: "适用",
+    countConditional: "视情况适用",
+    countNotApplicable: "不适用",
+    countUnknown: "待确认",
+    nextActionHeading: "建议的下一步",
+    nextAction: {
+      await_authoritative_legal_source: "等待权威法源核实后再作判断。",
+      connect_school_application: "连接本项目中的学校申请记录。",
+      declare_applicant_age_band: "填写申请人年龄区间。",
+      declare_dependants: "填写是否有随行家庭成员。",
+      declare_english_evidence: "填写英语能力证明情况。",
+      declare_financial_evidence: "填写资金能力证明情况。",
+      declare_immigration_history: "声明签证历史（含拒签、取消等）。",
+      declare_oshc_evidence: "填写海外学生健康保险情况。",
+      declare_study_evidence_route:
+        "选择学习证据路径（CoE、Offer 或学校申请）。",
+      review_requirement_checklist: "查看要求清单与来源说明。",
+      seek_human_review: "此情况建议由人工（律师）复核。",
+      set_application_place: "填写申请地点（境内或境外）。",
+      set_as_of_date: "填写意向申请日期或参照日期。",
+      set_current_visa_subclass: "填写当前签证类别。",
+    },
+    missingHeading: "仍缺少的信息",
+    missing: {
+      applicant_age_band: "申请人年龄区间",
+      application_place: "申请地点",
+      as_of_date: "意向申请或参照日期",
+      current_visa_subclass: "当前签证类别",
+      dependants: "随行家庭成员",
+      english_evidence: "英语能力证明",
+      financial_evidence: "资金能力证明",
+      immigration_history: "签证历史声明",
+      linked_school_application: "关联的学校申请",
+      oshc_evidence: "海外学生健康保险",
+      study_evidence_route: "学习证据路径",
+    },
+    humanReviewHeading: "建议人工复核的原因",
+    humanReview: {
+      applicant_under_18: "申请人未满 18 岁",
+      as_of_date_outside_declared_coverage:
+        "该日期超出本环境声明的筛查覆盖范围",
+      dependant_family_member_declared: "声明有随行家庭成员",
+      legal_source_not_verified: "法律来源尚未核实",
+      official_checklist_unavailable: "官方材料清单未能获取",
+      onshore_application_context_incomplete: "境内申请情况不完整",
+      prior_condition_breach_or_unlawful_period_declared:
+        "声明涉及条件违反或非法居留",
+      prior_refusal_or_cancellation_declared: "声明涉及拒签或签证取消",
+      study_evidence_not_independently_verified: "学习证据未经独立核实",
+    },
+    requirementsHeading: "逐项要求",
+    requirementLabels: {
+      character_public_interest: "品格（公共利益标准）",
+      english_language_evidence: "英语能力",
+      family_unit_member_requirements: "家庭成员要求",
+      financial_capacity_evidence: "资金能力",
+      genuine_student: "真实学生要求",
+      health_public_interest: "健康（公共利益标准）",
+      offshore_application_entry: "境外申请入境路径",
+      onshore_application_restrictions: "境内申请限制",
+      overseas_student_health_cover: "海外学生健康保险",
+      prior_immigration_history_disclosure: "签证历史披露",
+      schedule1_valid_application: "有效申请（附表 1）",
+      student_visa_conditions_acknowledgement: "学生签证条件",
+      study_evidence_coe_or_alternative: "学习证据（CoE 或替代材料）",
+      under_18_welfare_arrangements: "未满 18 岁福利安排",
+    },
+    requirementStatus: {
+      applicable: "适用",
+      conditional: "视情况适用",
+      not_applicable: "不适用",
+      unknown: "待确认",
+    },
+    sourceVerification: {
+      declared_pending_verification: "已声明、待核实",
+      insufficient_authority: "缺少权威法源",
+      unavailable: "法源不可用",
+      verified_official_corpus: "已核对权威语料",
+    },
+    evidencePreparation: {
+      not_applicable: "无证据项",
+      not_declared: "未填写",
+      reported_held: "自述已具备",
+      reported_not_held: "自述尚未具备",
+    },
+    sourcesHeading: "来源",
+    sourceAuthority: {
+      legal: "法律",
+      legislation: "立法",
+      legislative_instrument: "立法文书",
+      official_guidance: "官方指南",
+    },
+    sourcePendingNotice: "来源仅为声明，未取得原文。",
+    sourceOpen: "打开官方链接",
+    linkedSchoolHeading: "关联的学校申请",
+    linkedSchoolUnavailable: "关联记录当前不可用（可能已被撤销或无权查看）。",
+    linkedSchoolStatus: (status: string) =>
+      `学校申请状态：${status}（未经核实）`,
+    disclosuresHeading: "重要说明",
+    disclosure: {
+      legal_sources_pending_verification: "法律来源尚未核实。",
+      no_eligibility_determination: "系统未作出任何资格判断。",
+      not_government_submission: "这不是政府申请，也不会被提交。",
+      not_legal_advice: "这不是法律意见。",
+      not_professionally_reviewed: "尚未经过律师或专业人士审核。",
+      preliminary_screening_only: "仅为初步筛查。",
+      study_evidence_not_independently_verified: "学习证据未经独立核实。",
+    },
+    errorAuthenticationRequired: "请先登录。",
+    errorNotFound: "找不到该记录，或您无权查看。",
+    errorStateChanged: "记录已在别处更新，请刷新后重试。",
+    errorLimit: "此项目的准备记录数量已达上限。",
+    errorInvalid: "请求内容无效，请检查填写项。",
+    errorUnavailable: "学生签证 500 准备功能当前不可用。",
+    errorRequestFailed: "操作未完成，请稍后重试。",
+    archivedNotice: "此记录已归档，仅可查看，不能修改。",
+  },
+
   persistence: {
     notSaved: "此回复尚未保存到您的账号，刷新后可能丢失。",
     retrySave: "重新保存",
@@ -1247,6 +1565,7 @@ const en: WorkspaceCopy = {
     projectHomeTab: "Project home",
     projectSchoolApplicationsTab: "School applications",
     projectSchoolAdmissionsTab: "Admissions workflow",
+    projectStudent500Tab: "Student 500 visa",
     projectHomeNextSteps: "Next steps",
     projectHomeOpenApplications: "Review or create a school application draft.",
     projectHomeOpenAdmissions:
@@ -1257,6 +1576,12 @@ const en: WorkspaceCopy = {
       "The admissions workflow is not enabled in this environment.",
     projectHomeApplicationsRestricted:
       "School applications are currently open to registered personal accounts only.",
+    projectHomeOpenStudent500:
+      "Record the applicant circumstances and review a sourced preliminary requirement checklist.",
+    projectHomeStudent500Unavailable:
+      "Student 500 preparation is not enabled in this environment.",
+    projectHomeStudent500Restricted:
+      "Student 500 preparation is currently open to registered personal accounts only.",
     projectHomeAdmissionsRestricted:
       "The admissions workflow is currently open to registered personal accounts only.",
     projectHomeLimits:
@@ -1588,6 +1913,242 @@ const en: WorkspaceCopy = {
     notFound: "That school application was not found.",
     retry: "Retry",
   },
+  student500: {
+    title: "Student 500 application preparation",
+    subtitle:
+      "Record the applicant's circumstances in an authorized Project and review a sourced preliminary requirement checklist.",
+    notice:
+      "This is a preliminary screening, not a visa eligibility decision, legal advice or a submission service. Every legal requirement still needs human verification.",
+    submissionNotice:
+      "This record is not a submittable visa application. The service submits nothing to government and generates no official form.",
+    sourceNotice:
+      "Legal sources are declared, not verified: no authoritative provision text was retrieved and no official document checklist was fetched in this environment.",
+    loading: "Loading…",
+    empty: "This Project has no Student 500 preparation record yet.",
+    create: "New preparation record",
+    createTitle: "New Student 500 preparation record",
+    createDescription:
+      'Only enter what you actually know. Anything left blank stays "not declared" and is never read as a "no".',
+    cancel: "Cancel",
+    confirm: "Save",
+    creating: "Saving…",
+    edit: "Edit circumstances",
+    save: "Save changes",
+    saving: "Saving…",
+    archive: "Archive",
+    archiving: "Archiving…",
+    refresh: "Refresh",
+    detailTitle: "Preparation record",
+    selectPrompt: "Select a preparation record to see its detail.",
+    revisionLabel: (revision: number) => `revision r${revision}`,
+    entryRouteLabel: "Study evidence route",
+    entryRoute: {
+      existing_coe: "CoE reported held (self-reported)",
+      no_school_application: "No school application started",
+      offer_only: "Offer only, no CoE yet",
+      school_application_in_progress: "School application in progress",
+    },
+    applicationPlaceLabel: "Place of application",
+    applicationPlace: {
+      offshore: "Outside Australia",
+      onshore: "In Australia",
+      unknown: "Not declared",
+    },
+    coeStatusLabel: "CoE status (self-reported)",
+    coeStatus: {
+      reported_held: "Reported held",
+      reported_not_held: "Reported not held",
+      unknown: "Not declared",
+    },
+    asOfDateLabel: "Intended application date or reference date",
+    asOfDateHint: "Used to decide which dated legal requirements apply.",
+    currentVisaLabel: "Current visa subclass (optional)",
+    currentVisaHint:
+      "For example 500, 485 or bridging. The service does not infer eligibility from it.",
+    historyDeclarationLabel: "Immigration history declaration",
+    historyDeclaration: {
+      not_declared: "Not declared",
+      declared_none: "Declared none relevant",
+      declared_some: "Declared some relevant",
+    },
+    historyFlagsLabel: "Relevant record types",
+    historyFlag: {
+      prior_immigration_detention: "Previous immigration detention",
+      prior_unlawful_period: "Previous unlawful period",
+      prior_visa_cancellation: "Previous visa cancellation",
+      prior_visa_condition_breach: "Previous visa condition breach",
+      prior_visa_refusal: "Previous visa refusal",
+    },
+    ageBandLabel: "Applicant age band",
+    ageBand: {
+      adult: "18 or over",
+      under_18: "Under 18",
+      unknown: "Not declared",
+    },
+    dependantsLabel: "Accompanying family members",
+    dependants: {
+      none: "None",
+      one_or_more: "One or more",
+      unknown: "Not declared",
+    },
+    englishLabel: "English evidence (self-reported)",
+    financialLabel: "Financial capacity evidence (self-reported)",
+    oshcLabel: "Overseas student health cover (self-reported)",
+    evidenceStatus: {
+      reported_held: "Reported held",
+      reported_not_held: "Reported not held",
+      unknown: "Not declared",
+    },
+    schoolApplicationLabel: "Linked school application",
+    schoolApplicationHint:
+      "You can only select a school application you own in this Project.",
+    linkLoad: "Load school applications",
+    linkLoading: "Loading…",
+    linkEmpty:
+      "This Project has no school applications yet. Create one in School applications first.",
+    linkError: "Could not load the school application list.",
+    linkNoneOption: "Not linked",
+    linkRequired:
+      "The in-progress route needs one linked school application record.",
+    optionalHint: 'Blank means not declared, not "none".',
+    screeningHeading: "Preliminary requirement checklist",
+    preparationState: {
+      screening_complete_pending_review:
+        "Screening information complete, awaiting legal verification and human review",
+      screening_incomplete: "Screening information incomplete",
+    },
+    countsLabel: "Requirement spread",
+    countApplicable: "Applicable",
+    countConditional: "Conditional",
+    countNotApplicable: "Not applicable",
+    countUnknown: "To be confirmed",
+    nextActionHeading: "Suggested next step",
+    nextAction: {
+      await_authoritative_legal_source:
+        "Wait for an authoritative source check before relying on this checklist.",
+      connect_school_application:
+        "Connect the school application record in this Project.",
+      declare_applicant_age_band: "Enter the applicant's age band.",
+      declare_dependants: "Enter whether family members accompany you.",
+      declare_english_evidence: "Enter the English evidence position.",
+      declare_financial_evidence: "Enter the financial evidence position.",
+      declare_immigration_history:
+        "Declare the immigration history, including refusals and cancellations.",
+      declare_oshc_evidence: "Enter the health cover position.",
+      declare_study_evidence_route:
+        "Choose the study evidence route (CoE, offer or school application).",
+      review_requirement_checklist:
+        "Review the requirement checklist and its sources.",
+      seek_human_review:
+        "This situation should be reviewed by a person (lawyer).",
+      set_application_place: "Enter the place of application.",
+      set_as_of_date: "Enter the intended application or reference date.",
+      set_current_visa_subclass: "Enter the current visa subclass.",
+    },
+    missingHeading: "Information still missing",
+    missing: {
+      applicant_age_band: "Applicant age band",
+      application_place: "Place of application",
+      as_of_date: "Intended application or reference date",
+      current_visa_subclass: "Current visa subclass",
+      dependants: "Accompanying family members",
+      english_evidence: "English evidence",
+      financial_evidence: "Financial capacity evidence",
+      immigration_history: "Immigration history declaration",
+      linked_school_application: "Linked school application",
+      oshc_evidence: "Overseas student health cover",
+      study_evidence_route: "Study evidence route",
+    },
+    humanReviewHeading: "Reasons for human review",
+    humanReview: {
+      applicant_under_18: "Applicant is under 18",
+      as_of_date_outside_declared_coverage:
+        "The date is outside the screening coverage declared in this environment",
+      dependant_family_member_declared: "Accompanying family members declared",
+      legal_source_not_verified: "Legal sources are not verified",
+      official_checklist_unavailable:
+        "The official document checklist is unavailable",
+      onshore_application_context_incomplete: "Onshore context is incomplete",
+      prior_condition_breach_or_unlawful_period_declared:
+        "Condition breach or unlawful period declared",
+      prior_refusal_or_cancellation_declared:
+        "Refusal or cancellation declared",
+      study_evidence_not_independently_verified:
+        "Study evidence is not independently verified",
+    },
+    requirementsHeading: "Requirement by requirement",
+    requirementLabels: {
+      character_public_interest: "Character (public interest criteria)",
+      english_language_evidence: "English language evidence",
+      family_unit_member_requirements: "Family member requirements",
+      financial_capacity_evidence: "Financial capacity",
+      genuine_student: "Genuine Student requirement",
+      health_public_interest: "Health (public interest criteria)",
+      offshore_application_entry: "Offshore application entry",
+      onshore_application_restrictions: "Onshore application restrictions",
+      overseas_student_health_cover: "Overseas student health cover",
+      prior_immigration_history_disclosure: "Immigration history disclosure",
+      schedule1_valid_application: "Valid application (Schedule 1)",
+      student_visa_conditions_acknowledgement: "Student visa conditions",
+      study_evidence_coe_or_alternative: "Study evidence (CoE or alternative)",
+      under_18_welfare_arrangements: "Under-18 welfare arrangements",
+    },
+    requirementStatus: {
+      applicable: "Applicable",
+      conditional: "Conditional",
+      not_applicable: "Not applicable",
+      unknown: "To be confirmed",
+    },
+    sourceVerification: {
+      declared_pending_verification: "Declared, pending verification",
+      insufficient_authority: "No legislative source identified",
+      unavailable: "Source unavailable",
+      verified_official_corpus: "Checked against the official corpus",
+    },
+    evidencePreparation: {
+      not_applicable: "No evidence item",
+      not_declared: "Not declared",
+      reported_held: "Reported held",
+      reported_not_held: "Reported not held",
+    },
+    sourcesHeading: "Sources",
+    sourceAuthority: {
+      legislation: "Legislation",
+      legislative_instrument: "Legislative instrument",
+      official_guidance: "Official guidance",
+    },
+    sourcePendingNotice: "Declared identity only; the text was not retrieved.",
+    sourceOpen: "Open official link",
+    linkedSchoolHeading: "Linked school application",
+    linkedSchoolUnavailable:
+      "The linked record is currently unavailable (revoked, removed, or not yours).",
+    linkedSchoolStatus: (status: string) =>
+      `School application status: ${status} (not verified)`,
+    disclosuresHeading: "Important notices",
+    disclosure: {
+      legal_sources_pending_verification: "Legal sources are not verified yet.",
+      no_eligibility_determination:
+        "The service makes no eligibility decision.",
+      not_government_submission:
+        "This is not a government application and is never submitted.",
+      not_legal_advice: "This is not legal advice.",
+      not_professionally_reviewed:
+        "No lawyer or other professional has reviewed it.",
+      preliminary_screening_only: "Preliminary screening only.",
+      study_evidence_not_independently_verified:
+        "Study evidence is not independently verified.",
+    },
+    errorAuthenticationRequired: "Please sign in first.",
+    errorNotFound: "That record was not found, or you may not view it.",
+    errorStateChanged: "The record changed elsewhere. Refresh and try again.",
+    errorLimit:
+      "This Project already has the maximum number of preparation records.",
+    errorInvalid: "The request was invalid. Check the entered values.",
+    errorUnavailable: "Student 500 preparation is unavailable right now.",
+    errorRequestFailed: "The action did not complete. Please retry.",
+    archivedNotice: "This record is archived: view only, no further edits.",
+  },
+
   persistence: {
     notSaved:
       "This answer was not saved to your account and may be lost after a refresh.",

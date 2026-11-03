@@ -116,9 +116,20 @@ test("migration 0047, snapshot and journal agree on the M5.2 schema", () => {
       `${table} missing from snapshot`
     );
   }
+  /**
+   * Phase-aware: later additive migrations (for example the Phase 13 M6.1 0048)
+   * follow 0047, so it is no longer the journal head. Its presence, tag and
+   * snapshot linkage are still asserted, and the journal order stays monotonic.
+   */
+  const entry = journal.entries.find((candidate) => candidate.idx === 47);
+  assert.equal(entry?.tag, "0047_phase13_m5_2_school_admissions");
   const head = journal.entries.at(-1);
-  assert.equal(head?.idx, 47);
-  assert.equal(head?.tag, "0047_phase13_m5_2_school_admissions");
+  assert.ok((head?.idx ?? 0) >= 47);
+  const indexes = journal.entries.map((candidate) => candidate.idx);
+  assert.deepEqual(
+    indexes,
+    [...indexes].sort((left, right) => left - right)
+  );
   assert.doesNotThrow(() => readFileSync(PRESERVED_PREVIOUS_SNAPSHOT, "utf8"));
 });
 

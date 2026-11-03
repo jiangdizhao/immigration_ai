@@ -42,8 +42,9 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     /\.sql$/u.test(file)
   );
   assert.equal(files.filter((file) => /^0045_/u.test(file)).length, 1);
-  // Phase 13 M5.1 and M5.2 each added exactly one further additive migration.
-  // Nothing after 0047 may exist, and 0044/0045 remain byte-for-byte frozen above.
+  // Phase 13 M5.1, M5.2 and M6.1 each added exactly one further additive
+  // migration. Nothing beyond the M6.1 one may exist, and 0044/0045 remain
+  // byte-for-byte frozen above.
   assert.deepEqual(
     files.filter((file) =>
       /^(00(4[6-9]|[5-9][0-9])|0[1-9][0-9]{2})_/u.test(file)
@@ -51,6 +52,7 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     [
       "0046_phase13_m5_1_school_applications.sql",
       "0047_phase13_m5_2_school_admissions.sql",
+      "0048_phase13_m6_1_student500_applications.sql",
     ]
   );
 });
@@ -59,7 +61,14 @@ test("journal and snapshot agree with the migration file", () => {
   const journal = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/_journal.json"), "utf8")
   ) as { entries: Array<{ idx: number; tag: string; when: number }> };
-  assert.equal(journal.entries.length, 48);
+  assert.ok(
+    journal.entries.length >= 48,
+    `journal shrank below the frozen 48 entries: ${journal.entries.length}`
+  );
+  assert.deepEqual(
+    journal.entries.slice(0, 48).map((entry) => entry.idx),
+    Array.from({ length: 48 }, (_unused, index) => index)
+  );
   // The M4-006 entry remains exactly as recorded; the additive M5.1 migration is
   // the new head and does not alter it.
   const last = journal.entries.find((entry) => entry.idx === 45);
@@ -72,11 +81,17 @@ test("journal and snapshot agree with the migration file", () => {
   // The M5.1 entry is retained verbatim; M5.2 (0047) is the current head.
   const m51 = journal.entries.find((entry) => entry.idx === 46);
   assert.equal(m51?.tag, "0046_phase13_m5_1_school_applications");
-  assert.equal(journal.entries.at(-1)?.idx, 47);
+  // M5.2 (0047) is retained verbatim, and the only later additive migration is
+  // the Phase 13 M6.1 Student 500 one, which does not alter M4-006.
   assert.equal(
-    journal.entries.at(-1)?.tag,
+    journal.entries.find((entry) => entry.idx === 47)?.tag,
     "0047_phase13_m5_2_school_admissions"
   );
+  assert.equal(
+    journal.entries.find((entry) => entry.idx === 48)?.tag,
+    "0048_phase13_m6_1_student500_applications"
+  );
+  assert.ok((journal.entries.at(-1)?.idx ?? 0) >= 48);
   const snapshot = JSON.parse(
     readFileSync(resolve(migrationsDir, "meta/0045_snapshot.json"), "utf8")
   ) as { tables: Record<string, unknown> };

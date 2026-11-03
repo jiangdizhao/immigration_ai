@@ -24,6 +24,7 @@ function render(
     schoolPreparationRestricted?: boolean;
     schoolApplicationsEnabled?: boolean;
     schoolAdmissionsEnabled?: boolean;
+    student500Enabled?: boolean;
   } = {}
 ) {
   const copy = getWorkspaceCopy(input.locale ?? "en");
@@ -39,6 +40,8 @@ function render(
       schoolAdmissionsEnabled: input.schoolAdmissionsEnabled ?? true,
       schoolApplicationsCopy: copy.schoolApplications,
       schoolApplicationsEnabled: input.schoolApplicationsEnabled ?? true,
+      student500Copy: copy.student500,
+      student500Enabled: input.student500Enabled ?? true,
       schoolPreparationRestricted: input.schoolPreparationRestricted,
       temporaryGuestProject: input.temporaryGuestProject,
       view: input.view ?? "home",
@@ -61,7 +64,7 @@ test("the Project home replaces the empty pane with real Project identity", () =
 test("the Project home exposes the M5 sections as tabs plus next-step cards", () => {
   const markup = render();
   assert.match(markup, /data-testid="project-home-tabs"/u);
-  for (const tab of ["home", "applications", "admissions"]) {
+  for (const tab of ["home", "applications", "admissions", "student500"]) {
     assert.match(
       markup,
       new RegExp(`data-testid="project-view-tab-${tab}"`, "u")
@@ -69,6 +72,8 @@ test("the Project home exposes the M5 sections as tabs plus next-step cards", ()
   }
   assert.match(markup, /data-testid="project-home-open-applications"/u);
   assert.match(markup, /data-testid="project-home-open-admissions"/u);
+  // Phase 13 M6.1: Student 500 preparation is a first-class Project area.
+  assert.match(markup, /data-testid="project-home-open-student500"/u);
   // The enabled home tab links into both M5 surfaces.
   assert.doesNotMatch(
     markup,
@@ -158,7 +163,7 @@ test("the Project home does not offer section changes while navigation is busy",
   const tabs = busy.match(
     /<button[^>]*data-testid="project-view-tab-[^"]+"[^>]*>/gu
   );
-  assert.ok(tabs && tabs.length === 3);
+  assert.ok(tabs && tabs.length === 4);
   for (const tab of tabs) {
     assert.match(tab, /disabled=""/u);
   }
@@ -170,6 +175,10 @@ test("the Project home does not offer section changes while navigation is busy",
   assert.match(
     busy,
     /<button[^>]*data-testid="project-home-open-admissions"[^>]*disabled=""/u
+  );
+  assert.match(
+    busy,
+    /<button[^>]*data-testid="project-home-open-student500"[^>]*disabled=""/u
   );
 
   // Idle navigation stays available.
