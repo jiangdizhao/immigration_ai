@@ -559,6 +559,51 @@ function ScreeningView({
       </p>
 
       <section
+        aria-label={copy.legalSourceHeading}
+        className="space-y-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700"
+        data-testid="student500-legal-source-status"
+      >
+        <h5 className="text-[11px] font-semibold text-slate-800">
+          {copy.legalSourceHeading}
+        </h5>
+        <p data-testid="student500-legal-source-revision">
+          {copy.legalSourceRevisionLabel}: {screening.legalSourceRevision}
+        </p>
+        <p data-testid="student500-legal-source-versions">
+          {copy.legalSourceVersionsLabel}:{" "}
+          {screening.legalSourceVersions.length === 0
+            ? copy.sourcePendingNotice
+            : screening.legalSourceVersions.join(", ")}
+        </p>
+        <p data-testid="student500-legal-source-as-of">
+          {copy.legalSourceAsOfLabel}: {screening.asOfDate ?? "—"}
+        </p>
+        {screening.legalSourceTransitionNote ? (
+          <p className="text-amber-800">
+            {screening.legalSourceTransitionNote}
+          </p>
+        ) : null}
+        <div
+          className="space-y-1 border-t border-slate-100 pt-1"
+          data-testid="student500-official-checklist"
+        >
+          <h6 className="text-[10px] font-semibold text-slate-800">
+            {copy.checklistHeading}
+          </h6>
+          <p>{copy.checklistNote}</p>
+          <p>{screening.officialChecklist.missingToolInputs.join(", ")}</p>
+          <a
+            className="text-[10px] font-semibold text-blue-800 underline"
+            href={screening.officialChecklist.toolUrl}
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            {copy.checklistOpen}
+          </a>
+        </div>
+      </section>
+
+      <section
         aria-label={copy.missingHeading}
         data-testid="student500-missing"
       >

@@ -1974,3 +1974,34 @@ This entry supersedes any earlier "ACTIVE / implementation pending" instructions
 R1 GuardDuty schema, approval-expiry and CLI-result corrections passed independent review. That review identified the numeric AWS CLI process-exit classification defect recorded and fixed in the current R2 section above. R1 focused validation was B2-1 **27/27**, B2-0 **16/16**, B1 evaluator **16/16**, B1 queue **11/11**, A1.2-A **17/17**. Historical patch: `~/phase13_m2_a1_2_B2_1_R1_review.patch`. No acceptance was claimed at that checkpoint.
 
 <!-- END PHASE13_M2_A1_2_B2_1_R1_HISTORICAL_2026_10_26 -->
+
+#### M6 legal-authority integration (2026-11-04, uncommitted)
+
+- Added a versioned official-source manifest (`chatbot/lib/student-500/official-source-manifest.ts`) with a 4-level verification ladder; `verified_official_corpus` requires retrieved provision text.
+- Added `createManifestStudent500LegalSourceProvider()` (default runtime provider; `STUDENT_500_LEGAL_SOURCE_PROVIDER=declared` rolls back) with per-date compilation selection, coverage honesty and same-series/different-version identity.
+- Verified for real only: Migration Regulations 1994 compilation **F2026C01017 / C289**, window **2026-10-02 to 2026-10-31** (observed on the Federal Register series listing). Provision text could NOT be retrieved (Register text endpoints return the JS shell) and Home Affairs pages return HTTP 403, so **no source is text-verified** and nothing is asserted as current law.
+- Resolver now exposes `legalSourceRevision`, `legalSourceVersions`, `legalSourceTransitionNote`, `officialChecklist`; transition-sensitive dimensions (`onshore_application_restrictions`, `family_unit_member_requirements`) stay `conditional` instead of asserting a pre/post-2-October-2026 rule.
+- Official checklist: identity + link-out + required inputs (passport country, education provider), `unavailable_manual_check` by default, `customer_reported` never upgraded.
+- Panel shows source manifest revision, Register identities, as-of date, transition note and checklist link (bilingual copy added).
+- Tests: new `official-source-manifest.test.ts` (11 cases: no URL-exists verification, 1/2 October boundary, post-window dates unknown, historical dates, same-URL-different-version, unestablished instrument, simulated text-verified fixture, checklist, runtime rollback). M6.1 offline 94/94, M6.2 63/63, M6.3 19/19, unit 1262/1262, tsc 44 baseline, db:check clean, build compiled.
+- Status: `M6_LEGAL_AUTHORITY_PARTIAL_WITH_DOCUMENTED_BLOCKERS` - identity/temporal capability implemented; text verification, Home Affairs guidance and the official checklist result remain blocked. M6.2 saved snapshots are not auto-invalidated (they stay immutable history; reconciliation recomputes live).
+
+#### M6 FINAL CLOSEOUT (2026-11-04) - M6_ENGINEERING_CLOSED_WITH_DOCUMENTED_LEGAL_LIMITATIONS
+
+- Runtime wiring corrected: `runtime.ts` now composes `resolveStudent500LegalSourceProvider()`; manifest is default, `STUDENT_500_LEGAL_SOURCE_PROVIDER=declared` rolls back, unknown values fall back to the stricter manifest adapter, and `legalSourceRevision` is the provider id that actually produced the sources.
+- Verification semantics corrected: no fallback compilation is reported as applicable to an uncovered date (`legalSourceVersionId`/`compilationLabel`/`effectiveFrom`/`effectiveTo` are null outside a covered window) and `urlVerified` now means verified listing/provision identity, never text or applicability.
+- REAL official text retrieved on 2026-11-04: Compilation 289 header (F2026C01017, compilation date 2 October 2026, includes amendments F2026L01347) and the amending instrument F2026L01347 (commencement 2 October 2026; Schedule 1 item 1222 amendments including new 1222(3)(aa)/(da) and (4A)/(4B); Schedule 2 clauses 500.311/500.315/500.411; **Schedule 13 Part 166 item 16601** saving provision). Excerpt digests recorded for the C289 header, commencement table and item 16601. Those three Regulations-dependent source families now verify for 2026-10-02..2026-10-31 only.
+- M6.2 freshness boundary: new snapshots record `legalSourceRevision`; read time classifies `current`/`superseded`/`unestablished` via `student500LegalCurrentness()`, pushes `legal_source_currentness_unknown` when not current, never rewrites stored content or hashes, and keeps legal staleness separate from fact staleness. No migration.
+- Tests: M6.1 offline 99/99, M6.2 offline 65/65, M6.3 offline 19/19, unit 1262/1262, tsc 44 baseline (0 new), db:check clean, build compiled, Biome and `git diff --check` clean.
+- Carry-forward legal coverage gaps: Home Affairs pages (403), official checklist results, English/financial-capacity instruments, Genuine Student instrument identity, Act compilation, post-31-October-2026 compilation, C288 identity, and any post-2-October amendments are unverified and cannot support decisive conclusions.
+- M6.1 `d0b1bc1`, M6.2 `69a2fda`, M6.3 `b48dbcc` preserved; M4/Post-M5 blockers unchanged; `LIVE_PRODUCTION_NO_GO` unchanged.
+
+#### M6 evidence-granularity correction (2026-11-04, final)
+
+- Verification is now provision-specific. The shared C289 record is `register_listing_observed` with `textSha256: null` and verifies the **compilation identity/window only**; it is no longer copied into every Regulations family.
+- Only three families carry retrieved, identified and digested provision evidence (F2026L01347 amendment excerpts): `sch1.student` (item 1222(3)(aa)), `sch2.500.secondary` (clause 500.311) and `sch2.500.onshore` (clause 500.411 read with 1222(3)(aa)). Their digests are `69186e0a...`, `fd41e769...`, `a99d3249...` and their URL is the amending instrument the excerpt came from.
+- `sch2.500.primary`, `sch2.500.conditions`, `sch2.500.under-18` and `sch4.public-interest` keep the genuine C289 identity, the 2026-10-02..2026-10-31 window, the series URL and `declared_pending_verification`; the compilation-header digest `384df2e6...` is never attached to them.
+- F2026L01347 commencement (2 October 2026) and Schedule 13 Part 166 item 16601 saving provision remain recorded with their own digests.
+- `Student500ResolvedLegalSource` now exposes `textSha256` (covered provision-bound excerpt only). Regression tests added for header-digest non-reuse, preserved commencement/transition evidence and uncovered dates staying UNKNOWN.
+- Verified: M6.1 offline 101/101, M6.2 65/65, M6.3 19/19, unit 1262/1262, tsc 44 baseline (0 new), db:check clean, build compiled, Biome + `git diff --check` clean. No Docker or database run (no schema change).
+- Classification unchanged: `M6_ENGINEERING_CLOSED_WITH_DOCUMENTED_LEGAL_LIMITATIONS`; `LIVE_PRODUCTION_NO_GO` unchanged.

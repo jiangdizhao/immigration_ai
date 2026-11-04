@@ -170,9 +170,16 @@ test("onshore and offshore contexts select different applicable checks", async (
     currentVisaSubclass: null,
   });
 
+  // Onshore restrictions are transition-sensitive: the applicable compilation's
+  // commencement is not text-verified in this environment, so the dimension stays
+  // conditional rather than asserting the pre- or post-transition rule.
   assert.equal(
     requirement(onshore, "onshore_application_restrictions").status,
-    "applicable"
+    "conditional"
+  );
+  assert.equal(
+    requirement(onshore, "onshore_application_restrictions").reasonCode,
+    "conditionally_applicable_pending_legal_verification"
   );
   assert.equal(
     requirement(onshore, "offshore_application_entry").status,
@@ -286,9 +293,12 @@ test("under-18 and dependant circumstances add their own dimensions", async () =
     requirement(screening, "under_18_welfare_arrangements").status,
     "applicable"
   );
+  // Family-member requirements are transition-sensitive (the 2 October 2026
+  // package concerns family-member arrangements), so they stay conditional while
+  // commencement is not text-verified.
   assert.equal(
     requirement(screening, "family_unit_member_requirements").status,
-    "applicable"
+    "conditional"
   );
   assert.ok(screening.humanReviewReasons.includes("applicant_under_18"));
   assert.ok(
@@ -329,6 +339,14 @@ test("a requirement with no legislative source can never be asserted", async () 
           sourceId,
           urlVerified: false,
           verification: "declared_pending_verification" as const,
+          applicabilityVerified: false,
+          identityVerified: false,
+          legalSourceVersionId: null,
+          textVerified: false,
+          transitionNote: null,
+          textSha256: null,
+          verificationBasis: "declared_by_repository" as const,
+          verifiedAt: null,
         }))
       );
     },
@@ -468,6 +486,14 @@ test("only a verified official source can clear the per-requirement review flag"
           sourceId,
           urlVerified: true,
           verification: "verified_official_corpus" as const,
+          applicabilityVerified: true,
+          identityVerified: true,
+          legalSourceVersionId: "F2026C01017",
+          textVerified: true,
+          transitionNote: null,
+          textSha256: "0".repeat(64),
+          verificationBasis: "text_and_provision_retrieved" as const,
+          verifiedAt: "2026-11-04",
         }))
       );
     },

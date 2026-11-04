@@ -77,6 +77,14 @@ export type Student500SourceView = {
 
 export type Student500ScreeningView = {
   asOfDate: string | null;
+  legalSourceRevision: string;
+  legalSourceVersions: string[];
+  legalSourceTransitionNote: string | null;
+  officialChecklist: {
+    status: string;
+    toolUrl: string;
+    missingToolInputs: string[];
+  };
   submissionStatus: "not_submission_ready";
   preparationState:
     | "screening_incomplete"
@@ -404,6 +412,7 @@ function parseScreening(value: unknown): Student500ScreeningView | null {
     typeof counts.notApplicable !== "number" ||
     typeof counts.unknown !== "number" ||
     typeof value.nextAction !== "string" ||
+    typeof value.legalSourceRevision !== "string" ||
     value.submissionStatus !== "not_submission_ready" ||
     !isEnum(PREPARATION_STATES, value.preparationState) ||
     !isStringOrNull(value.asOfDate)
@@ -438,8 +447,32 @@ function parseScreening(value: unknown): Student500ScreeningView | null {
       status: entry.status,
     };
   }
+  const legalSourceVersions = parseStringArray(value.legalSourceVersions);
+  const checklist = value.officialChecklist;
+  if (
+    legalSourceVersions === null ||
+    !isRecord(checklist) ||
+    typeof checklist.status !== "string" ||
+    typeof checklist.toolUrl !== "string"
+  ) {
+    return null;
+  }
+  const checklistInputs = parseStringArray(checklist.missingToolInputs);
+  if (checklistInputs === null) {
+    return null;
+  }
   return {
     asOfDate: value.asOfDate,
+    legalSourceRevision: value.legalSourceRevision,
+    legalSourceTransitionNote: isStringOrNull(value.legalSourceTransitionNote)
+      ? value.legalSourceTransitionNote
+      : null,
+    legalSourceVersions,
+    officialChecklist: {
+      missingToolInputs: checklistInputs,
+      status: checklist.status,
+      toolUrl: checklist.toolUrl,
+    },
     counts: {
       applicable: counts.applicable,
       conditional: counts.conditional,

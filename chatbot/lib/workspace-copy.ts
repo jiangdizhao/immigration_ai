@@ -337,6 +337,13 @@ export type WorkspaceCopy = {
     subtitle: string;
     notice: string;
     submissionNotice: string;
+    legalSourceHeading: string;
+    legalSourceRevisionLabel: string;
+    legalSourceVersionsLabel: string;
+    legalSourceAsOfLabel: string;
+    checklistHeading: string;
+    checklistNote: string;
+    checklistOpen: string;
     sourceNotice: string;
     loading: string;
     empty: string;
@@ -1078,6 +1085,14 @@ const zh: WorkspaceCopy = {
       "此记录不代表已可提交的签证申请。系统不会提交任何政府申请，也不会生成官方表格。",
     sourceNotice:
       "法源状态为“已声明、待核实”：本环境未获取权威法条原文，也未检索官方材料清单。",
+    legalSourceHeading: "法律来源状态",
+    legalSourceRevisionLabel: "来源清单版本",
+    legalSourceVersionsLabel: "使用的登记编号",
+    legalSourceAsOfLabel: "适用的参照日期",
+    checklistHeading: "官方材料清单",
+    checklistNote:
+      "官方清单取决于申请人护照国家与就读院校，系统不会自动获取。本页任何内容都不是官方清单结果。",
+    checklistOpen: "打开官方清单工具",
     loading: "正在加载…",
     empty: "此项目中还没有学生签证 500 准备记录。",
     create: "新建准备记录",
@@ -2070,6 +2085,14 @@ const en: WorkspaceCopy = {
       "This record is not a submittable visa application. The service submits nothing to government and generates no official form.",
     sourceNotice:
       "Legal sources are declared, not verified: no authoritative provision text was retrieved and no official document checklist was fetched in this environment.",
+    legalSourceHeading: "Legal source status",
+    legalSourceRevisionLabel: "Source manifest",
+    legalSourceVersionsLabel: "Register identities in use",
+    legalSourceAsOfLabel: "As-of date applied",
+    checklistHeading: "Official document checklist",
+    checklistNote:
+      "The official checklist depends on the applicant's passport country and education provider and is not retrieved automatically. Nothing here is an official checklist result.",
+    checklistOpen: "Open the official checklist tool",
     loading: "Loading…",
     empty: "This Project has no Student 500 preparation record yet.",
     create: "New preparation record",

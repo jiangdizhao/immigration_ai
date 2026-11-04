@@ -5,7 +5,7 @@ import { student500SchemaAvailable } from "@/lib/db/student-500-schema-availabil
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
 import { student500ApplicationsEnabled } from "./contracts";
 import { createStudent500Handlers } from "./http";
-import { createDeclaredStudent500LegalSourceProvider } from "./legal-source-provider";
+import { resolveStudent500LegalSourceProvider } from "./legal-source-provider";
 import {
   createPostgresStudent500Store,
   postgresStudent500SchoolApplicationLinkResolver,
@@ -16,6 +16,10 @@ import { createStudent500Service } from "./service";
 /**
  * Phase 13 M6.1 runtime wiring.
  *
+ * Provider selection is delegated to `resolveStudent500LegalSourceProvider()` so
+ * the manifest adapter is what the customer surface actually uses, and
+ * `STUDENT_500_LEGAL_SOURCE_PROVIDER=declared` restores the conservative catalog.
+ *
  * The capability is default-OFF in production-like environments
  * (`PHASE13_STUDENT500_ENABLED` may override), so the surface is absent from
  * production until an explicit owner decision. The schema probe fails closed
@@ -23,7 +27,7 @@ import { createStudent500Service } from "./service";
  */
 export const student500Service = createStudent500Service({
   resolver: createStudent500RequirementResolver({
-    provider: createDeclaredStudent500LegalSourceProvider(),
+    provider: resolveStudent500LegalSourceProvider(),
   }),
   schoolApplicationLink: postgresStudent500SchoolApplicationLinkResolver,
   store: createPostgresStudent500Store(),

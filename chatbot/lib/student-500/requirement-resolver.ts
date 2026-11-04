@@ -18,6 +18,10 @@ import type {
   Student500LegalSourceProvider,
   Student500ResolvedLegalSource,
 } from "./legal-source-provider";
+import {
+  resolveStudent500OfficialChecklist,
+  type Student500OfficialChecklistView,
+} from "./official-checklist";
 
 /**
  * Phase 13 M6.1 - preliminary Student 500 applicability and requirement resolver.
@@ -101,6 +105,12 @@ export type Student500Screening = {
   readonly nextAction: Student500NextAction;
   readonly disclosures: readonly Student500DisclosureCode[];
   readonly studyEvidence: Student500StudyEvidenceView;
+  /** Bump-on-change identity of the legal-source manifest that produced this view. */
+  readonly legalSourceRevision: string;
+  /** Federal Register identities actually used, newest-applicable first. */
+  readonly legalSourceVersions: readonly string[];
+  readonly legalSourceTransitionNote: string | null;
+  readonly officialChecklist: Student500OfficialChecklistView;
 };
 
 type Applicability = {
@@ -400,6 +410,18 @@ RULES.push(
 
 const RULE_BY_KEY = new Map(RULES.map((rule) => [rule.requirementKey, rule]));
 
+/**
+ * Dimensions whose outcome is known to move with a statutory transition rather
+ * than with the applicant's facts alone. When the applicable source version's
+ * applicability is not text-verified, these stay `conditional` instead of being
+ * asserted from the newest compilation label.
+ */
+const TRANSITION_SENSITIVE_KEYS: ReadonlySet<Student500RequirementKey> =
+  new Set([
+    "onshore_application_restrictions",
+    "family_unit_member_requirements",
+  ]);
+
 // The rule pack and the published requirement-key contract must never drift: a
 // missing rule would silently disappear from the customer checklist.
 if (RULE_BY_KEY.size !== STUDENT_500_REQUIREMENT_KEYS.length) {
@@ -572,6 +594,11 @@ export type Student500ScreeningInput = {
   readonly context: Student500Context;
   readonly provider: Student500LegalSourceProvider;
   readonly linkedSchoolApplication?: Student500LinkedSchoolApplication | null;
+  /**
+   * A customer-supplied checklist result is customer information only; it never
+   * becomes an official checklist retrieval.
+   */
+  readonly customerReportedChecklistResult?: boolean;
 };
 
 /**
@@ -618,7 +645,9 @@ export async function resolveStudent500Screening(
     const applicability = rule.applicability(context);
     const sourceVerification = combineVerification(sources);
     const outsideDeclaredCoverage = sources.some(
-      (source) => source.asOfCoverage === "outside_declared_coverage"
+      (source) =>
+        source.authorityClass === "legislation" &&
+        source.asOfCoverage === "outside_declared_coverage"
     );
 
     let status = applicability.status;
@@ -633,6 +662,20 @@ export async function resolveStudent500Screening(
     } else if (outsideDeclaredCoverage) {
       status = "unknown";
       reasonCode = "not_assessable_as_of_date_outside_declared_coverage";
+    } else if (
+      status === "applicable" &&
+      TRANSITION_SENSITIVE_KEYS.has(key) &&
+      sources.some(
+        (source) =>
+          source.authorityClass === "legislation" &&
+          !source.applicabilityVerified
+      )
+    ) {
+      // The dimension is transition-sensitive and the applicable version's
+      // commencement is not text-verified: report conditional uncertainty rather
+      // than asserting the pre- or post-transition rule.
+      status = "conditional";
+      reasonCode = "conditionally_applicable_pending_legal_verification";
     }
 
     const ruleMissing = applicability.missingFactCodes ?? [];
@@ -718,6 +761,22 @@ export async function resolveStudent500Screening(
       missingFactCodes.length === 0
         ? "screening_complete_pending_review"
         : "screening_incomplete",
+    // The revision names the provider that actually produced these sources, so a
+    // declared-provider run can never masquerade as manifest-verified.
+    legalSourceRevision: input.provider.providerId,
+    legalSourceTransitionNote:
+      resolved.find((source) => source.transitionNote)?.transitionNote ?? null,
+    legalSourceVersions: [
+      ...new Set(
+        resolved
+          .map((source) => source.legalSourceVersionId)
+          .filter((value): value is string => Boolean(value))
+      ),
+    ].sort(),
+    officialChecklist: resolveStudent500OfficialChecklist({
+      context,
+      customerReportedResult: input.customerReportedChecklistResult === true,
+    }),
     requirements,
     schemaVersion: STUDENT_500_SCREENING_SCHEMA,
     studyEvidence: {

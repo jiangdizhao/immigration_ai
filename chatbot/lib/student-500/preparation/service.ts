@@ -96,8 +96,26 @@ export type DraftVersionView = {
   readonly staleReasons: readonly Student500StaleReason[];
 };
 
+/**
+ * Legal currentness classification. `unestablished` is the honest answer for a
+ * snapshot saved before legal-source revisions were recorded - never a guess.
+ */
+export function student500LegalCurrentness(
+  recordedRevision: string | null,
+  currentRevision: string
+): "current" | "superseded" | "unestablished" {
+  if (recordedRevision === null) {
+    return "unestablished";
+  }
+  return recordedRevision === currentRevision ? "current" : "superseded";
+}
+
 export type SnapshotVersionView = {
   readonly snapshotId: string;
+  /** Legal-source revision recorded when the snapshot was saved, if any. */
+  readonly legalSourceRevision: string | null;
+  /** Read-time legal currentness - separate from applicant-fact staleness. */
+  readonly legalCurrentness: "current" | "superseded" | "unestablished";
   readonly version: number;
   readonly applicationRevision: number;
   readonly contentSha256: string;
@@ -116,6 +134,8 @@ export type PreparationView = {
   readonly applicationRevision: number;
   readonly context: Student500Context;
   readonly screeningSubmissionStatus: "not_submission_ready";
+  /** Legal-source revision currently governing this preparation view. */
+  readonly legalSourceRevision: string;
   readonly schoolContext: SchoolContextView | null;
   readonly selectedFacts: readonly SelectedFactReferenceView[];
   /** Bounded, authorized fact candidates the customer may select. */
@@ -717,29 +737,45 @@ export function createStudent500PreparationService(
       const content = snapshot.content as {
         readonly applicationRevision?: number;
         readonly inputDigest?: string;
+        readonly legalSourceRevision?: string;
         readonly schoolContextDigest?: string;
         readonly factDigests?: readonly string[];
         readonly factReferenceIds?: readonly string[];
       };
-      const reasons = staleReasonsForArtifact({
-        applicationRevisionAdvanced:
-          typeof content.applicationRevision === "number" &&
-          content.applicationRevision !== application.revision,
-        artifactFactReferenceIds: Array.isArray(content.factReferenceIds)
-          ? content.factReferenceIds.filter((id) => referenceById.has(id))
-          : [],
-        candidates,
-        currentFactReferenceIds: currentIds,
-        inputDigestMatches: true,
-        references,
-        schoolContextDigestMatches:
-          content.schoolContextDigest === currentSchoolDigest,
-        schoolContextUnavailable: !schoolValidation.current,
-        schoolOutcomeSuperseded:
-          schoolValidation.unavailableReason ===
-            "admission_outcome_superseded" ||
-          schoolValidation.unavailableReason === "admission_outcome_changed",
-      });
+      // Legal currentness is a read-time signal, separate from applicant-fact
+      // staleness. Historical content and hashes are never rewritten.
+      const recordedRevision =
+        typeof content.legalSourceRevision === "string"
+          ? content.legalSourceRevision
+          : null;
+      const legalCurrentness = student500LegalCurrentness(
+        recordedRevision,
+        screening.legalSourceRevision
+      );
+      const reasons: Student500StaleReason[] = [
+        ...staleReasonsForArtifact({
+          applicationRevisionAdvanced:
+            typeof content.applicationRevision === "number" &&
+            content.applicationRevision !== application.revision,
+          artifactFactReferenceIds: Array.isArray(content.factReferenceIds)
+            ? content.factReferenceIds.filter((id) => referenceById.has(id))
+            : [],
+          candidates,
+          currentFactReferenceIds: currentIds,
+          inputDigestMatches: true,
+          references,
+          schoolContextDigestMatches:
+            content.schoolContextDigest === currentSchoolDigest,
+          schoolContextUnavailable: !schoolValidation.current,
+          schoolOutcomeSuperseded:
+            schoolValidation.unavailableReason ===
+              "admission_outcome_superseded" ||
+            schoolValidation.unavailableReason === "admission_outcome_changed",
+        }),
+      ];
+      if (legalCurrentness !== "current") {
+        reasons.push("legal_source_currentness_unknown");
+      }
       return {
         applicationRevision: snapshot.applicationRevision,
         content: projectSnapshotForResponse(snapshot, readableFactReferenceIds)
@@ -747,6 +783,8 @@ export function createStudent500PreparationService(
         contentSha256: snapshot.contentSha256,
         createdAt: iso(snapshot.createdAt),
         gsDraftId: snapshot.gsDraftId,
+        legalCurrentness,
+        legalSourceRevision: recordedRevision,
         snapshotId: snapshot.id,
         stale: reasons.length > 0,
         staleReasons: reasons,
@@ -1016,6 +1054,7 @@ export function createStudent500PreparationService(
         record: state.schoolContext,
         validation: state.schoolValidation,
       }),
+      legalSourceRevision: state.screening.legalSourceRevision,
       screeningSubmissionStatus: "not_submission_ready",
       selectedFacts: state.selected,
       snapshots: state.snapshotViews,
@@ -1674,6 +1713,9 @@ export function createStudent500PreparationService(
             }
           : null,
         inputDigest: state.currentInputDigest,
+        // Legal-source revision this snapshot was prepared against. Older snapshots
+        // simply lack it; they are reported as unestablished rather than guessed.
+        legalSourceRevision: state.screening.legalSourceRevision,
         nextActions: state.reconciliation.nextActions,
         requirementCoverage: state.reconciliation.requirements.map((entry) => ({
           applicability: entry.applicability,
