@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_027_M6_FINAL_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
+## D-P13-027 — Close M6 engineering with source-verification limitations; hand off to M7
+
+**Date:** 2026-11-04 (Australia/Sydney). **Owner-confirmed, GitHub-verified M6 code HEAD:** `dc57dd168a4146dc8540236f177ec1c7ec3efb70` on `phase13-m6-student500-application`. **Decision:** `M6_ENGINEERING_CLOSED_WITH_DOCUMENTED_LEGAL_LIMITATIONS`, `LEGAL_SOURCE_COVERAGE_PARTIAL`, `LIVE_PRODUCTION_NO_GO`.
+
+M6.1 application/legal screening (`d0b1bc1`), M6.2 facts/evidence + provisional GS/versioning (`69a2fda`), M6.3 cross-layer PostgreSQL/Chromium acceptance (`b48dbcc`) and the final provision-specific evidence correction (`dc57dd1`) are complete. Three narrowly delimited F2026L01347 provision families have verified extracted evidence/digests for the C289 observed window; compilation-header hashes no longer certify unrelated provisions. Unknown/unverified material and uncovered dates remain `UNKNOWN` / `HUMAN_CHECK`; no production legal accuracy or submission approval is inferred.
+
+**Next:** Begin owner-approved M7 *planning/implementation-contract work* using the accepted M6 foundations; deeper GS, complex cases, conditional evidence and appropriate lawyer edits belong to M7. M8 exact-package customer/lawyer submission authorization remains separate. Do not create another persistent worktree: `~/immigration_ai` only. New migrations, paid providers, real data, Docker/browser runs, AWS, flags and submission require fresh explicit approvals; temp test infrastructure must be deleted after use. M4/Post-M5 blocked verdicts remain historical and unchanged.
+
+**Durable handoff:** [M6 → M7](./PHASE13_M6_CLOSEOUT_TO_M7_HANDOFF_2026_11_04.md).
+<!-- END D_P13_027_M6_FINAL_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
+
 <!-- BEGIN D_P13_026_M6_INTEGRATED_APPLICATION_MVP_2026_11_03 -->
 ## D-P13-026 — Approve two-delivery Student 500 M6 MVP and one consolidated acceptance
 

@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE13_M6_FINAL_VERIFIED_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
+## Current authoritative checkpoint — M6 engineering closed; M7 is next (2026-11-04)
+
+**GitHub-verified final M6 code:** `phase13-m6-student500-application` @ `dc57dd168a4146dc8540236f177ec1c7ec3efb70`, parent `b48dbcc9259563a7adec6eac3c061c4b6c4ceec7` (17 paths; final provision-specific evidence correction). The owner confirmed local/remote SHA equality and clean worktree at this checkpoint.
+
+**Disposition:** `M6_ENGINEERING_CLOSED_WITH_DOCUMENTED_LEGAL_LIMITATIONS`; legal-source coverage `PARTIAL`, **not** full Student 500 legal accuracy; `LIVE_PRODUCTION_NO_GO` unchanged. M6.1 `d0b1bc1`, M6.2 `69a2fda`, M6.3 `b48dbcc` all engineer-accepted with limits. Final manifest is runtime-wired; only 3 narrow F2026L01347 provision families are bound to retrieved-text digests. Other law, post-2026-10-31 applicability and Home Affairs checklist remain UNKNOWN / HUMAN_CHECK.
+
+**Next:** M7 deep preparation and fact-grounded GS/lawyer workflow — **planning and implementation contract not yet dispatched**, not permission for M8 formal submission. Continue in the **single** `~/immigration_ai` development directory. The owner must separately approve any disposable DB/browser exercise; cleanup of all test-created resources is mandatory. **No real business DB migration, deployment, AWS, paid provider or professional authority is granted here.**
+
+**New-conversation handoff:** [M6 closed → M7 entry handoff](./PHASE13_M6_CLOSEOUT_TO_M7_HANDOFF_2026_11_04.md) (supersedes older dated M6.1/M6.2 "uncommitted/pending" paragraphs below as current status; those remain historical evidence).
+<!-- END PHASE13_M6_FINAL_VERIFIED_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
+
 <!-- BEGIN PHASE13_M6_SCOPE_OWNER_APPROVED_2026_11_03 -->
 ## Owner-approved M6 scope adjustment — 2026-11-03 (overrides only the M6/M7 delivery split below)
 
