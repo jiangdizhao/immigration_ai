@@ -1,3 +1,16 @@
+<!-- BEGIN PHASE13_M7_ENGINEERING_ACCEPTANCE_2026_11_04 -->
+## Phase 13 M7 - consolidated PostgreSQL + Chromium engineering acceptance (2026-11-04)
+
+- **Status:** `M7_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS` (candidate only: independent review and the owner decision remain pending; not M8, not release-ready).
+- **Branch/HEAD:** `phase13-m7-student500-deep-preparation` @ `47e20162a18ae5f36555023bb0dd38a830dfabe9`. All work uncommitted and unpushed; no commit, merge, rebase or deploy was performed.
+- **Authorization:** one bounded owner-authorized local campaign using a disposable PostgreSQL 17 container and Chromium. No production DB, AWS, paid provider, real customer data or professional authority was used or contacted.
+- **Real PostgreSQL (disposable, tmpfs, loopback :55451, db `immigration_ai_phase13_m7_test`, role `m7_test_owner`):** migrations **0000-0050 applied** (ledger **51**, 0049 not skipped); **19/19 passed, 0 failed, 0 skipped** through the real M7 repository/service/M6 preparation service. Covered: schema, uniques, guard triggers, insert-once replay, immutability, illegal transitions and terminal reversal, full proposed->accepting->accepted lifecycle, rejection, claim-then-reject refusal, concurrent accept/reject with no contradictory state, replay without duplicate drafts, interrupted-claim recovery, stale-base refusal, Project/user isolation, M2 revocation redaction without hash mutation, unauthorised fact rejection, denied editorial authority/unverified credentials, fabricated-approval refusal, exact-draft/exact-dependency consent, duplicate-request idempotency.
+- **Chromium (loopback Next.js :3101 on that database, synthetic account):** **3/3 passed, 0 failed, 0 skipped** - proposal -> accept -> saved draft -> reload -> consent-gated review request, consent unchecked/disabled by default with the disclosure scope visible, and the Chinese surface. No hydration failure, no page error, no approval or submission-ready claim. The M6 Student 500 surface still renders.
+- **Offline regression:** M7 offline **34/34**, M7 PostgreSQL repository-contract **5/5**, M6.1 **101/101**, M6.2 **65/65**, M6.3 **19/19**, `test:unit` **1262/1262** (0 skipped), `tsc` **44** baseline (0 new), `db:check` clean, Biome clean, `git diff --check` clean.
+- **Cleanup:** `TEMP_RESOURCE_CLEANUP=PASS` - container removed, tmpfs storage gone, :55451 and :3101 released, Next.js/Chromium stopped, temporary profile/output and run directories removed, no new volumes or networks, every pre-existing Docker resource unchanged, Git HEAD and the uncommitted M7 work preserved.
+- **Limitations (unchanged):** editorial authority denies all, credential verifier and non-owner disclosure access report `unavailable` (fail-closed by design); reviewer-side UI out of scope; an abandoned `accepting` claim has no operator reaper (applicant retry recovers it); the M6 panel does not auto-refresh after an M7 acceptance (observed by reload); the deterministic composer emits no fact-bearing section for the synthetic fact used in the revocation scenario, which is why that scenario seeds its row through the real repository. `UNKNOWN`/`HUMAN_CHECK`/`not_submission_ready`/`M4` authority limits/document-trust `DENY`/`LIVE_PRODUCTION_NO_GO` all unchanged. Migration 0050 is still unapplied in every permanent environment.
+<!-- END PHASE13_M7_ENGINEERING_ACCEPTANCE_2026_11_04 -->
+
 <!-- BEGIN PHASE13_M6_FINAL_VERIFIED_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
 ## Current authoritative checkpoint — M6 engineering closed; M7 is next (2026-11-04)
 
@@ -2591,3 +2604,40 @@ R1 corrected GuardDuty response schema validation, request-boundary approval exp
 - `Student500ResolvedLegalSource` now exposes `textSha256` (covered provision-bound excerpt only). Regression tests added for header-digest non-reuse, preserved commencement/transition evidence and uncovered dates staying UNKNOWN.
 - Verified: M6.1 offline 101/101, M6.2 65/65, M6.3 19/19, unit 1262/1262, tsc 44 baseline (0 new), db:check clean, build compiled, Biome + `git diff --check` clean. No Docker or database run (no schema change).
 - Classification unchanged: `M6_ENGINEERING_CLOSED_WITH_DOCUMENTED_LEGAL_LIMITATIONS`; `LIVE_PRODUCTION_NO_GO` unchanged.
+
+<!-- BEGIN PHASE13_M7_IMPLEMENTED_PENDING_ACCEPTANCE_2026_11_04 -->
+## Phase 13 M7 implemented - pending consolidated acceptance and independent review (2026-11-04)
+
+- **State:** `M7_IMPLEMENTED_PENDING_CONSOLIDATED_ACCEPTANCE_AND_INDEPENDENT_REVIEW`. Not M7 acceptance, not M8.
+- **Branch/HEAD:** `phase13-m6-student500-application` from `47e20162a18ae5f36555023bb0dd38a830dfabe9`; one uncommitted cumulative change set (no commit, push, merge or worktree).
+- **Delivered:** deterministic complex-case scenario/task planner; bounded injectable GS composition proposals with per-assertion attribution (authorized fact / customer authored / needs confirmation); proposal accept-reject through the accepted M6 draft-versioning path; consented editorial review rounds with deny-by-default authority, fail-closed credentials and selective staleness; migration **0050** (2 additive tables + immutability/transition triggers); 9 offline acceptance tests (`test:phase13:m7:offline`).
+- **Invariants preserved:** no eligibility engine, no nationality/visa regexes, `UNKNOWN`/`HUMAN_CHECK` for unresolved law, `not_submission_ready`, `LIVE_PRODUCTION_NO_GO`, no fabricated authority, no M8 vocabulary.
+- **Validation:** M7 offline **9/9**; M6.1 **101/101**, M6.2 **65/65**, M6.3 **19/19**; `test:unit` **1262/1262** (0 skipped); `tsc` **44** baseline (0 new); `db:check` clean; `pnpm build` compiled; Biome clean; `git diff --check` clean.
+- **NOT_RUN:** M7 PostgreSQL integration, browser acceptance, migration application, any paid/live provider call. Migration 0050 is unapplied.
+- **Deferred finding:** M7 HTTP routes and the M7 UI section are not yet implemented; the domain, persistence and tests are complete.
+- **Blockers unchanged:** professional authority/credential verification unavailable; document trust gate closed; M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`; Post-M5 `E2E_BLOCKED`; `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE13_M7_IMPLEMENTED_PENDING_ACCEPTANCE_2026_11_04 -->
+
+<!-- BEGIN PHASE13_M7_R1_IMPLEMENTED_2026_11_04 -->
+## Phase 13 M7-R1 corrections implemented (2026-11-04)
+
+- **Status:** `M7_R1_IMPLEMENTED_PENDING_CONSOLIDATED_ACCEPTANCE`. Not accepted, not M8, not release-ready.
+- **Branch:** `phase13-m7-student500-deep-preparation` created inside `~/immigration_ai` from `47e20162a18ae5f36555023bb0dd38a830dfabe9`, carrying the uncommitted M7 work (no stash/reset/copy).
+- **Corrected defects:** (1) postgres-js `execute()` results are row arrays, never `{ rows }`; (2) migration 0050 journal timestamp is now monotonic after 0049 while 0049 keeps its recorded value; (3) GS per-line attribution no longer borrows the first fact reference - carried text is `customer_authored`, each generated fact line cites exactly its own reference; (4) proposals/reviews are projected through current M2 visibility, so revoked or unreadable references withhold stored text while the stored row and hashes are preserved; (5) editorial feedback now requires exact current draft identity (project-scoped, never the owner's boundary), a scoped authority decision **and** a verified credential, with disclosure authorization re-checked - a positive authority decision alone cannot persist feedback; (6) proposal acceptance uses a deterministic per-proposal draft operation id with exact replay and concurrency recovery; (7) SQL trigger transitions match the TypeScript state machine exactly (per-source-state), enforced by a parity test.
+- **Journey completed:** authenticated `GET`/`POST` handlers (`deep-preparation` route), server-side binding of the consent content hash, a Project main-area deep-preparation section (complex-case flags, tasks, follow-up questions, proposal accept/reject, honest editorial pending state), tri-lingual copy (en/zh-Hans/zh-Hant). No approval or submission control exists.
+- **Validation:** M7 offline **22/22** (11 R1 regressions + 9 acceptance + 2 client), M6.1 **101/101**, M6.2 **65/65**, M6.3 **19/19**, `test:unit` **1262/1262** (0 skipped), `tsc` **44** baseline (0 new), `db:check` clean, `pnpm build` compiled, Biome clean, `git diff --check` clean.
+- **NOT_RUN:** M7 PostgreSQL integration, browser acceptance, any migration application, any provider call. Production editorial authority and credentials remain unavailable by design.
+- **Blockers unchanged:** M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`, Post-M5 `E2E_BLOCKED`, legal coverage `PARTIAL`, `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE13_M7_R1_IMPLEMENTED_2026_11_04 -->
+
+<!-- BEGIN PHASE13_M7_R2_ACCEPTANCE_BLOCKERS_CORRECTED_2026_11_04 -->
+## Phase 13 M7-R2 acceptance-blocker corrections (2026-11-04)
+
+- **Status:** `M7_R2_IMPLEMENTED_PENDING_CONSOLIDATED_ACCEPTANCE` (not accepted, not M8, not release-ready).
+- **Defect 1 - M2 sharing leakage:** `readableFactIds()` now reproduces the accepted M6 disclosure rule exactly (reference active **and** the Fact Assertion still visible in the current M2 projection). Proposal text and editorial feedback are projected through it, so a sharing revocation withdraws derived text while the immutable stored row and its hashes stay untouched.
+- **Defect 2 - consent and draft identity:** the view exposes the server-confirmed `currentDraft` identity and a `disclosureScope`, the UI shows the disclosure scope and requires an explicit consent checkbox before requesting review, sends the server's draft id/version (no hardcoded version, no `acceptedDraftId`), and follows the real site locale via `resolveDeepPreparationLocale`. The server binds the draft content hash, refuses an empty disclosure for a fact-bearing draft and requires full dependency disclosure when fact summaries are requested.
+- **Defect 3 - accept/reject race:** accepting is now claim-first (`proposed -> accepting` atomic conditional claim) so a concurrent reject can never contradict a saved draft; the draft write uses a deterministic per-proposal operation id, an interruption after the claim is recovered by replay rather than duplicated, and the SQL trigger encodes the same per-state transitions.
+- **Defect 4 - review idempotency:** one logical request is identified by applicant + exact draft + exact consent hash, so duplicates and concurrent duplicates resolve the existing round; different consent or a new draft version opens an explicit new round, and a round collision is re-read once instead of colliding.
+- **Validation:** M7 offline **29/29**, M6.1 **101/101**, M6.2 **65/65**, M6.3 **19/19**, `test:unit` **1262/1262** (0 skipped), `tsc` **44** baseline (0 new), `db:check` clean, `pnpm build` compiled, Biome clean on all changed M7 paths, `git diff --check` clean.
+- **NOT_RUN:** real PostgreSQL/Docker/Chromium integration, migration application, any paid provider call. `UNKNOWN`/`HUMAN_CHECK`/`not_submission_ready`/M4 authority limits/document-trust DENY/`LIVE_PRODUCTION_NO_GO` all unchanged.
+<!-- END PHASE13_M7_R2_ACCEPTANCE_BLOCKERS_CORRECTED_2026_11_04 -->

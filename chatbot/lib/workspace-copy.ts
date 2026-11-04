@@ -2661,3 +2661,207 @@ export const WORKSPACE_COPY: Record<SiteLocale, WorkspaceCopy> = {
 export function getWorkspaceCopy(locale: SiteLocale): WorkspaceCopy {
   return WORKSPACE_COPY[locale];
 }
+
+/**
+ * Phase 13 M7 deep-preparation copy. Kept as a separate bilingual map so the M7
+ * surface never implies progress, approval or submission readiness in any locale.
+ */
+export type Student500DeepCopy =
+  (typeof student500DeepCopy)[keyof typeof student500DeepCopy];
+
+const M7_EN = {
+  accept: "Accept these edits",
+  actionFailed: "That action could not be completed.",
+  authorityUnavailable: "Professional editorial authority is not available.",
+  complexity: {
+    complex: "Complex case",
+    standard: "Standard case",
+    unresolved: "Unresolved",
+  },
+  consentCheckbox:
+    "I agree to share this exact draft version and the selected facts with a professional reviewer, and I understand editorial feedback is not a legal sign-off.",
+  consentDraftLabel: "Draft version and content",
+  consentFactsLabel: "Facts the draft depends on",
+  consentHeading: "Before you request review",
+  consentNeedsDraft:
+    "Save a draft version before requesting professional review.",
+  consentNotShared:
+    "Nothing else is shared: no other draft versions, no other facts, and no other Project member's information.",
+  consentScopeIntro: "A reviewer would see only:",
+  consentSharedWithReviewer:
+    "The draft sections of this version, plus a short summary of the selected facts.",
+  disclaimer:
+    "Preparation only. This is not legal advice, not an assessment of eligibility and not a government checklist result.",
+  editorial: "Professional editorial review",
+  editorialAvailable: "A reviewer can be invited for this draft.",
+  editorialUnavailable:
+    "Professional editorial review is not available yet. Your request can be recorded, but no reviewer has verified credentials.",
+  followUps: "Follow-up questions",
+  needsConfirmation: "Statements needing your confirmation",
+  noProposal: "No draft revision proposal yet.",
+  noProposalAction: "This proposal has been decided.",
+  notSignOff: "Editorial feedback is not a lawyer's legal sign-off.",
+  notSubmissionReady:
+    "Not submission ready. Formal submission stays unavailable in this stage.",
+  propose: "Suggest the next draft revision",
+  proposal: "Draft revision proposal",
+  proposalRedacted: "some sections withheld",
+  proposalStale: "built on an earlier draft version",
+  proposalStatus: {
+    accepted: "Accepted",
+    proposed: "Awaiting your decision",
+    rejected: "Rejected",
+    superseded: "Superseded",
+  },
+  questionFallback: "Please provide this information.",
+  questions: {},
+  reject: "Reject",
+  requestReview: "Request professional editorial review",
+  reviewStale: "no longer applies",
+  reviewStatus: {
+    accepted_by_customer: "You accepted the feedback",
+    authority_unavailable: "Review pending - no verified reviewer yet",
+    feedback_provided: "Feedback received",
+    rejected_by_customer: "You rejected the feedback",
+    requested: "Review requested",
+    superseded: "No longer applies",
+  },
+  savedNewVersion: "Saved as a new draft version.",
+  scenario: {
+    applicant_under_18: "Applicant under 18",
+    dependants_or_family_unit: "Dependants or family unit",
+    onshore_with_current_visa: "Applying in Australia",
+    prior_immigration_adverse_history: "Prior immigration history recorded",
+    prior_study_or_employment_change: "Study or employment change",
+    standard_offshore_first_application: "First application from overseas",
+    study_evidence_coe_reported: "CoE reported (unverified)",
+    study_evidence_coe_verified: "CoE verified",
+    study_evidence_offer_only: "Offer only, no CoE",
+    unresolved_requires_human_review: "Needs human review",
+  },
+  taskReasons: {
+    fact_conflict_visible: "Two recorded facts conflict.",
+    gs_section_missing_information: "A draft section is incomplete.",
+    professional_authority_unavailable:
+      "Professional review cannot be completed yet.",
+    requirement_applicability_unknown:
+      "The rule in force for your date is unknown.",
+    requirement_evidence_blocked: "Evidence you selected needs attention.",
+    requirement_evidence_missing: "A preparation item has no evidence yet.",
+    requirement_fact_not_authorized: "A fact is not authorized for AI use.",
+    requirement_legal_source_unverified:
+      "The official source is not fully verified.",
+    school_context_missing: "No school offer or CoE is linked.",
+  },
+  tasks: "What needs attention",
+  title: "Deep preparation",
+  unavailable: "Deep preparation is unavailable right now.",
+} as const;
+
+const M7_ZH_HANS = {
+  ...M7_EN,
+  consentCheckbox:
+    "我同意将这确切的草稿版本和草稿所依赖的事实分享给专业审核人，并了解编辑意见不构成法律签署。",
+  consentDraftLabel: "草稿版本与内容",
+  consentFactsLabel: "草稿所依赖的事实",
+  consentHeading: "申请专业审核前请确认",
+  consentNeedsDraft: "请先保存草稿版本，再申请专业审核。",
+  consentNotShared:
+    "其他内容不会分享：不分享其他草稿版本、其他事实，也不分享其他项目成员的信息。",
+  consentScopeIntro: "审核人只会看到：",
+  consentSharedWithReviewer: "该版本的草稿章节，以及所选事实的简短摘要。",
+  accept: "接受这些修改",
+  actionFailed: "该操作未能完成。",
+  authorityUnavailable: "目前没有可用的专业编辑审核授权。",
+  complexity: { complex: "复杂案件", standard: "标准案件", unresolved: "待定" },
+  disclaimer:
+    "这里只提供准备辅助，不构成法律意见，不是资格评估，也不是官方清单结果。",
+  editorial: "专业编辑审核",
+  editorialAvailable: "可以为这份草稿邀请审核人。",
+  editorialUnavailable:
+    "专业编辑审核暂不可用。可以记录你的请求，但还没有审核人的资格得到核实。",
+  followUps: "后续问题",
+  needsConfirmation: "需要你确认的表述",
+  noProposal: "目前还没有草稿修改建议。",
+  noProposalAction: "该建议已处理。",
+  notSignOff: "编辑意见不是律师的法律签署。",
+  notSubmissionReady: "尚未达到递交条件。本阶段的正式递交仍不可用。",
+  propose: "生成下一版草稿建议",
+  proposal: "草稿修改建议",
+  proposalRedacted: "部分章节已隐藏",
+  proposalStale: "基于较早的草稿版本",
+  proposalStatus: {
+    accepted: "已接受",
+    proposed: "等待你的决定",
+    rejected: "已拒绝",
+    superseded: "已失效",
+  },
+  questionFallback: "请补充这项信息。",
+  reject: "拒绝",
+  requestReview: "申请专业编辑审核",
+  reviewStale: "已不再适用",
+  reviewStatus: {
+    accepted_by_customer: "你已接受意见",
+    authority_unavailable: "审核待处理 - 暂无已核实资格的审核人",
+    feedback_provided: "已收到意见",
+    rejected_by_customer: "你已拒绝意见",
+    requested: "已申请审核",
+    superseded: "已不再适用",
+  },
+  savedNewVersion: "已保存为新的草稿版本。",
+  tasks: "需要注意的事项",
+  title: "深度准备",
+  unavailable: "深度准备暂不可用。",
+} as const;
+
+const M7_ZH_HANT = {
+  ...M7_ZH_HANS,
+  consentCheckbox:
+    "我同意將這確切的草稿版本和草稿所依賴的事實分享給專業審核人，並了解編輯意見不構成法律簽署。",
+  consentDraftLabel: "草稿版本與內容",
+  consentFactsLabel: "草稿所依賴的事實",
+  consentHeading: "申請專業審核前請確認",
+  consentNeedsDraft: "請先儲存草稿版本，再申請專業審核。",
+  consentNotShared:
+    "其他內容不會分享：不分享其他草稿版本、其他事實，也不分享其他專案成員的資訊。",
+  consentScopeIntro: "審核人只會看到：",
+  consentSharedWithReviewer: "該版本的草稿章節，以及所選事實的簡短摘要。",
+  accept: "接受這些修改",
+  authorityUnavailable: "目前沒有可用的專業編輯審核授權。",
+  complexity: { complex: "複雜案件", standard: "標準案件", unresolved: "待定" },
+  disclaimer:
+    "這裡只提供準備輔助，不構成法律意見，不是資格評估，也不是官方清單結果。",
+  editorial: "專業編輯審核",
+  editorialAvailable: "可以為這份草稿邀請審核人。",
+  editorialUnavailable:
+    "專業編輯審核暫不可用。可以記錄你的請求，但還沒有審核人的資格得到核實。",
+  followUps: "後續問題",
+  needsConfirmation: "需要你確認的表述",
+  noProposal: "目前還沒有草稿修改建議。",
+  notSignOff: "編輯意見不是律師的法律簽署。",
+  notSubmissionReady: "尚未達到遞交條件。本階段的正式遞交仍不可用。",
+  propose: "產生下一版草稿建議",
+  proposal: "草稿修改建議",
+  proposalRedacted: "部分章節已隱藏",
+  proposalStale: "基於較早的草稿版本",
+  proposalStatus: {
+    accepted: "已接受",
+    proposed: "等待你的決定",
+    rejected: "已拒絕",
+    superseded: "已失效",
+  },
+  questionFallback: "請補充這項資訊。",
+  reject: "拒絕",
+  requestReview: "申請專業編輯審核",
+  reviewStale: "已不再適用",
+  savedNewVersion: "已儲存為新的草稿版本。",
+  tasks: "需要注意的事項",
+  title: "深度準備",
+  unavailable: "深度準備暫不可用。",
+} as const;
+
+export const student500DeepCopy = {
+  en: M7_EN,
+  "zh-Hans": M7_ZH_HANS,
+  "zh-Hant": M7_ZH_HANT,
+} as const;

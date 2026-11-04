@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Student500DeepPreparationSection } from "@/components/student-500-deep-preparation-section";
 import { Student500PreparationSection } from "@/components/student-500-preparation-section";
 import {
   createStudent500Controller,
@@ -1002,6 +1003,13 @@ function Student500PanelInstance({
         <Student500PreparationSection
           applicationId={detail.applicationId}
           copy={copy}
+          projectId={projectId}
+        />
+      ) : null}
+
+      {detail ? (
+        <Student500DeepPreparationSection
+          applicationId={detail.applicationId}
           projectId={projectId}
         />
       ) : null}

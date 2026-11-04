@@ -296,7 +296,13 @@ export type Student500PreparationErrorCode =
   | "idempotency_conflict"
   | "state_conflict"
   | "limit_exceeded"
-  | "integrity_conflict";
+  | "integrity_conflict"
+  // Phase 13 M7 deep-preparation codes. All of them are fail-closed outcomes.
+  | "composer_unavailable"
+  | "proposal_not_found"
+  | "editorial_review_not_found"
+  | "editorial_authority_unavailable"
+  | "consent_required";
 
 export class Student500PreparationError extends Error {
   readonly code: Student500PreparationErrorCode;
