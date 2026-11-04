@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE13_M7_FINAL_ACCEPTANCE_2026_11_04 -->
+## Current authoritative checkpoint — M7 engineering accepted with limitations (2026-11-04)
+
+**Owner-pushed code and GitHub remote verification:** `phase13-m7-student500-deep-preparation` @ `3862e6a95a89ae113907d8779c3340fec2dc3dfa`; 38 files; owner-local worktree clean. **Disposition:** `M7_ENGINEERING_ACCEPTED_WITH_LIMITATIONS` after independent static review and owner-reported isolated PG17 **19/19** + Chromium **3/3** acceptance. `TEMP_RESOURCE_CLEANUP=PASS` per owner-run report, not reviewer host execution.
+
+**Authority and next stage:** [M7 engineering closeout](./PHASE13_M7_ENGINEERING_CLOSEOUT_2026_11_04.md) is the current single source for evidence, scope and limitations; older M7 candidate/uncommitted statements below are historical. No permanent DB migration 0050, production activation, real professional approval, legal accuracy sign-off or M8 submission authorization. `UNKNOWN`/`HUMAN_CHECK`/`not_submission_ready`/`LIVE_PRODUCTION_NO_GO` unchanged. M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`; Post-M5 `E2E_BLOCKED`. Stop M7 repair loops; M8 needs separate owner-approved contract.
+<!-- END PHASE13_M7_FINAL_ACCEPTANCE_2026_11_04 -->
+
 <!-- BEGIN PHASE13_M6_FINAL_VERIFIED_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
 ## Current authoritative checkpoint — M6 engineering closed; M7 is next (2026-11-04)
 

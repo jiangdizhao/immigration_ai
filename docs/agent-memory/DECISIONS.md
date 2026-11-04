@@ -1,3 +1,11 @@
+<!-- BEGIN D_P13_028_M7_ENGINEERING_CLOSEOUT_2026_11_04 -->
+## D-P13-028 — Accept M7 engineering with documented limitations; preserve M8 and production gates
+
+**Date:** 2026-11-04 (Australia/Sydney). **Owner-pushed, independently GitHub-verified:** `phase13-m7-student500-deep-preparation` @ `3862e6a95a89ae113907d8779c3340fec2dc3dfa` (38 files, clean owner-local worktree). **Decision:** `M7_ENGINEERING_ACCEPTED_WITH_LIMITATIONS`, after independent static review plus owner-run disposable PG17 **19/19** and Chromium **3/3** engineering acceptance with `TEMP_RESOURCE_CLEANUP=PASS`.
+
+M7 extends M6 with complex-case preparation, sourced GS revision proposal/acceptance, revocation-aware disclosure and consent-bound editorial-request scaffolding; it does not certify actual lawyer authority or M8 submission readiness. Reviewer did not rerun owner's Docker/Chromium. M4 professional-authority restrictions, Post-M5 `E2E_BLOCKED`, source coverage `PARTIAL`, document trust DENY, unapplied production migration 0050 and `LIVE_PRODUCTION_NO_GO` are unchanged. See [M7 engineering closeout](./PHASE13_M7_ENGINEERING_CLOSEOUT_2026_11_04.md). No new code/test/deployment authorization by this docs-only decision.
+<!-- END D_P13_028_M7_ENGINEERING_CLOSEOUT_2026_11_04 -->
+
 <!-- BEGIN D_P13_027_M6_FINAL_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
 ## D-P13-027 — Close M6 engineering with source-verification limitations; hand off to M7
 
