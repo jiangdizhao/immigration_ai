@@ -1360,3 +1360,97 @@ test("the store revalidates the customer role inside the write", async () => {
     );
   });
 });
+
+test("an exact package version can be re-read for review, and tampering is refused", async () => {
+  const { service, store } = harness();
+  const created = await service.create(
+    application({ operationId: "op-exact-0" })
+  );
+  const built = await service.buildPackage({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    expectedRevision: created.application.revision,
+    operationId: "op-exact-1",
+    projectId,
+  });
+
+  const exact = await service.readPackageSnapshot({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    contentSha256: built.package.contentSha256,
+    packageId: built.package.packageId,
+    projectId,
+    version: built.package.version,
+  });
+  assert.equal(exact.reasonCode, "ok");
+  assert.equal(exact.snapshot?.packageVersion, built.package.version);
+  assert.equal(exact.snapshot?.submissionStatus, "not_submitted");
+  assert.equal(exact.contentSha256, built.package.contentSha256);
+
+  // A different recorded digest means the caller pinned something else.
+  const wrongHash = await service.readPackageSnapshot({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    contentSha256: "f".repeat(64),
+    packageId: built.package.packageId,
+    projectId,
+    version: built.package.version,
+  });
+  assert.equal(wrongHash.reasonCode, "content_changed");
+  assert.equal(wrongHash.snapshot, null);
+
+  // A different version is refused rather than silently substituted.
+  const wrongVersion = await service.readPackageSnapshot({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    contentSha256: built.package.contentSha256,
+    packageId: built.package.packageId,
+    projectId,
+    version: built.package.version + 1,
+  });
+  assert.equal(wrongVersion.reasonCode, "version_mismatch");
+  assert.equal(wrongVersion.snapshot, null);
+
+  // An unknown package never resolves to some other package of the application.
+  const unknown = await service.readPackageSnapshot({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    contentSha256: built.package.contentSha256,
+    packageId: "55555555-5555-4555-8555-555555555999",
+    projectId,
+    version: 1,
+  });
+  assert.equal(unknown.reasonCode, "package_not_found");
+  assert.equal(unknown.snapshot, null);
+
+  // Tampered stored bytes are rejected by the recorded-hash verification.
+  const state = store.state();
+  const stored = state.packages[0];
+  assert.ok(stored);
+  (stored as { snapshot: unknown }).snapshot = {
+    ...(stored.snapshot as Record<string, unknown>),
+    submissionStatus: "submitted",
+  };
+  const tampered = await service.readPackageSnapshot({
+    actorUserId: owner,
+    applicationId: created.application.applicationId,
+    contentSha256: built.package.contentSha256,
+    packageId: built.package.packageId,
+    projectId,
+    version: built.package.version,
+  });
+  assert.equal(tampered.reasonCode, "content_changed");
+  assert.equal(tampered.snapshot, null);
+
+  // Authorization is unchanged: an outsider can never read this package version.
+  await assert.rejects(() =>
+    service.readPackageSnapshot({
+      actorUserId: outsider,
+      applicationId: created.application.applicationId,
+      contentSha256: built.package.contentSha256,
+      packageId: built.package.packageId,
+      projectId,
+      version: built.package.version,
+    })
+  );
+});

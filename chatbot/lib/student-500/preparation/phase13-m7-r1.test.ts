@@ -240,12 +240,18 @@ test("R1-2: journal 0050 advances past 0049 and no historical entry moved", () =
       "utf8"
     )
   ) as { entries: Array<{ idx: number; tag: string; when: number }> };
+  // 0050 is still exactly one entry with its recorded identity. A later additive
+  // migration (M8.1 0051) may follow it, but it can never move or replace it.
+  const entry0050 = journal.entries.find((entry) =>
+    entry.tag.startsWith("0050")
+  );
+  assert.equal(entry0050?.tag, "0050_phase13_m7_student500_deep_preparation");
   const last = journal.entries.at(-1);
-  assert.equal(last?.tag, "0050_phase13_m7_student500_deep_preparation");
+  assert.ok((last?.when ?? 0) >= (entry0050?.when ?? 0));
   const entries0049 = journal.entries.find((entry) =>
     entry.tag.startsWith("0049")
   );
-  assert.ok((last?.when ?? 0) > (entries0049?.when ?? 0));
+  assert.ok((entry0050?.when ?? 0) > (entries0049?.when ?? 0));
   // 0049 keeps its recorded timestamp: historical entries are never rewritten.
   assert.equal(entries0049?.when, 1_793_677_489_615);
   assert.equal(

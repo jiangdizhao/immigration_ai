@@ -11,6 +11,8 @@ import {
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Student500DeepPreparationSection } from "@/components/student-500-deep-preparation-section";
 import { Student500PreparationSection } from "@/components/student-500-preparation-section";
+import { SubmissionAuthorizationSection } from "@/components/submission-authorization-section";
+import { SubmissionPackageSection } from "@/components/submission-package-section";
 import {
   createStudent500Controller,
   draftFromStudent500Context,
@@ -1011,6 +1013,22 @@ function Student500PanelInstance({
         <Student500DeepPreparationSection
           applicationId={detail.applicationId}
           projectId={projectId}
+        />
+      ) : null}
+
+      {detail ? (
+        <SubmissionPackageSection
+          projectId={projectId}
+          targetId={detail.applicationId}
+          targetKind="student_500_visa_application"
+        />
+      ) : null}
+
+      {detail ? (
+        <SubmissionAuthorizationSection
+          projectId={projectId}
+          targetId={detail.applicationId}
+          targetKind="student_500_visa_application"
         />
       ) : null}
 

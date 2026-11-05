@@ -358,6 +358,20 @@
       "when": 1793677549615,
       "tag": "0050_phase13_m7_student500_deep_preparation",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793677550615,
+      "tag": "0051_phase13_m8_submission_packages",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794182400000,
+      "tag": "0052_phase13_m8_2_submission_authorization",
+      "breakpoints": true
     }
   ]
 }

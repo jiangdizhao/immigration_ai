@@ -2865,3 +2865,583 @@ export const student500DeepCopy = {
   "zh-Hans": M7_ZH_HANS,
   "zh-Hant": M7_ZH_HANT,
 } as const;
+
+/**
+ * Phase 13 M8.1 - submission package copy (en / zh-Hans / zh-Hant).
+ *
+ * Chinese-first, and deliberately plain about what a package is not: it is not
+ * legal advice, not professionally reviewed, and not submitted anywhere.
+ */
+const M8_EN = {
+  build: "Build package version",
+  buildHint:
+    "Freezes the exact content you are reviewing into an immutable version.",
+  confirm: "Confirm this version",
+  confirmHint:
+    "Your confirmation records what you reviewed. It is not a professional or legal approval.",
+  confirmedAt: "Confirmed",
+  confirmDeclarations:
+    "I confirm my own declarations and the facts shown are true and complete to the best of my knowledge.",
+  confirmContent:
+    "I have reviewed this exact package version and the items listed above.",
+  current: "Current",
+  currentPackage: "Current package version",
+  disclosures: "What this package is not",
+  disclosure: {
+    customer_confirmed_package_not_legal_advice:
+      "A customer confirmation is not legal advice.",
+    legal_coverage_partial_and_unverified:
+      "Legal coverage is partial and not independently verified.",
+    not_professionally_reviewed: "No qualified professional has reviewed it.",
+    not_submitted_to_any_authority:
+      "Nothing has been submitted to any school or government agency.",
+    customer_reported_evidence_unverified:
+      "Customer-reported evidence has not been verified.",
+  } as Record<string, string>,
+  empty:
+    "No package version yet. Build one to review and confirm the exact content.",
+  history: "Version history",
+  indicator: "What still needs attention",
+  indicatorKind: {
+    conflicted: "Conflict",
+    missing: "Missing",
+    unknown: "Unknown",
+    unverified: "Unverified",
+  } as Record<string, string>,
+  integrity: "Integrity verified",
+  integrityFailed: "Integrity could not be verified",
+  loading: "Loading submission package...",
+  nextAction: {
+    build_package: "Build the first package version.",
+    confirm_package: "Review and confirm this version.",
+    rebuild_package: "Something changed. Build a new version to review.",
+    review_package:
+      "You have confirmed this version. Nothing else is required here yet.",
+    unavailable: "This application cannot be packaged right now.",
+  } as Record<string, string>,
+  review: "What you are reviewing",
+  reviewPinnedDraft: (version: number) => `Exact GS draft version ${version}`,
+  reviewMissingInfo: "Needs your input",
+  reviewUnavailable:
+    "The exact content of this version cannot be shown to you right now, so it cannot be confirmed.",
+  reason: {
+    access_revoked: "Your access to this Project changed.",
+    confirmation_not_finalized: "This confirmation did not finish validating.",
+    application_revision_changed: "The application changed since this version.",
+    fact_not_visible: "A source fact is no longer shared with you.",
+    fact_reference_changed: "A source fact changed.",
+    gs_draft_changed: "The GS draft changed since this version.",
+    gs_draft_unavailable: "The GS draft is no longer fully visible.",
+    legal_source_revision_changed: "The legal source revision changed.",
+    preparation_snapshot_changed: "The preparation summary changed.",
+    project_closed: "This Project is closed.",
+    school_application_changed: "The school application changed.",
+    school_package_changed: "The prepared school package changed.",
+    source_unavailable: "A source is temporarily unavailable.",
+    target_archived: "This application is archived.",
+  } as Record<string, string>,
+  redacted: "Some source details are hidden because access was withdrawn.",
+  stale: "No longer current",
+  statement: "Customer statements",
+  submission: "Not submission ready",
+  title: "Submission package",
+  unavailable: "Submission packages are not available here.",
+  version: (version: number) => `Version ${version}`,
+};
+
+const M8_ZH_HANS: typeof M8_EN = {
+  build: "生成申请材料版本",
+  buildHint: "将你正在查看的内容固定为一个不可更改的版本。",
+  confirm: "确认此版本",
+  confirmHint: "你的确认只记录你查看过的内容，不代表专业或法律批准。",
+  confirmedAt: "确认时间",
+  confirmDeclarations: "我确认以上由我本人提供的声明与事实真实、完整。",
+  confirmContent: "我已查看此确切版本以及以上列出的内容。",
+  current: "当前有效",
+  currentPackage: "当前材料版本",
+  disclosures: "此版本不代表的含义",
+  disclosure: {
+    customer_confirmed_package_not_legal_advice: "客户确认不构成法律意见。",
+    legal_coverage_partial_and_unverified:
+      "法律依据覆盖不完整，且未经独立核实。",
+    not_professionally_reviewed: "没有任何合资格专业人士审阅过。",
+    not_submitted_to_any_authority: "尚未向任何学校或政府机构提交。",
+    customer_reported_evidence_unverified: "客户申报的证据尚未核实。",
+  } as Record<string, string>,
+  empty: "尚未生成材料版本。请先生成一个版本，以便查看并确认确切内容。",
+  history: "版本记录",
+  indicator: "仍需处理的事项",
+  indicatorKind: {
+    conflicted: "存在冲突",
+    missing: "缺少",
+    unknown: "未知",
+    unverified: "未核实",
+  } as Record<string, string>,
+  integrity: "完整性已校验",
+  integrityFailed: "无法校验完整性",
+  loading: "正在加载申请材料版本...",
+  nextAction: {
+    build_package: "请生成第一个材料版本。",
+    confirm_package: "请查看并确认此版本。",
+    rebuild_package: "相关内容已变更，请重新生成版本后再查看。",
+    review_package: "你已确认此版本，暂时无需其他操作。",
+    unavailable: "此申请目前无法生成材料版本。",
+  } as Record<string, string>,
+  review: "你正在查看的内容",
+  reviewPinnedDraft: (version: number) => `确切的 GS 草稿版本 ${version}`,
+  reviewMissingInfo: "需要你补充",
+  reviewUnavailable: "此版本的确切内容目前无法展示给你，因此不能确认。",
+  reason: {
+    access_revoked: "你对本项目的访问权限已变更。",
+    confirmation_not_finalized: "此确认未完成校验。",
+    application_revision_changed: "申请内容在此版本之后已变更。",
+    fact_not_visible: "某项来源事实已不再共享给你。",
+    fact_reference_changed: "某项来源事实已变更。",
+    gs_draft_changed: "GS 草稿在此版本之后已变更。",
+    gs_draft_unavailable: "GS 草稿已不能完整查看。",
+    legal_source_revision_changed: "法律依据版本已变更。",
+    preparation_snapshot_changed: "准备摘要已变更。",
+    project_closed: "本项目已关闭。",
+    school_application_changed: "学校申请内容已变更。",
+    school_package_changed: "已准备的学校材料包已变更。",
+    source_unavailable: "某项来源暂时不可用。",
+    target_archived: "此申请已归档。",
+  } as Record<string, string>,
+  redacted: "部分来源信息因权限撤回而已隐藏。",
+  stale: "已不再有效",
+  statement: "客户声明",
+  submission: "尚不可提交",
+  title: "申请材料版本",
+  unavailable: "此处暂不可使用申请材料版本功能。",
+  version: (version: number) => `版本 ${version}`,
+};
+
+const M8_ZH_HANT: typeof M8_EN = {
+  build: "產生申請材料版本",
+  buildHint: "將你正在查看的內容固定為一個不可更改的版本。",
+  confirm: "確認此版本",
+  confirmHint: "你的確認只記錄你查看過的內容，不代表專業或法律批准。",
+  confirmedAt: "確認時間",
+  confirmDeclarations: "我確認以上由我本人提供的聲明與事實真實、完整。",
+  confirmContent: "我已查看此確切版本以及以上列出的內容。",
+  current: "目前有效",
+  currentPackage: "目前材料版本",
+  disclosures: "此版本不代表的意思",
+  disclosure: {
+    customer_confirmed_package_not_legal_advice: "客戶確認不構成法律意見。",
+    legal_coverage_partial_and_unverified:
+      "法律依據覆蓋不完整，且未經獨立核實。",
+    not_professionally_reviewed: "沒有任何合資格專業人士審閱過。",
+    not_submitted_to_any_authority: "尚未向任何學校或政府機構提交。",
+    customer_reported_evidence_unverified: "客戶申報的證據尚未核實。",
+  } as Record<string, string>,
+  empty: "尚未產生材料版本。請先產生一個版本，以便查看並確認確切內容。",
+  history: "版本記錄",
+  indicator: "仍需處理的事項",
+  indicatorKind: {
+    conflicted: "存在衝突",
+    missing: "缺少",
+    unknown: "未知",
+    unverified: "未核實",
+  } as Record<string, string>,
+  integrity: "完整性已校驗",
+  integrityFailed: "無法校驗完整性",
+  loading: "正在載入申請材料版本...",
+  nextAction: {
+    build_package: "請產生第一個材料版本。",
+    confirm_package: "請查看並確認此版本。",
+    rebuild_package: "相關內容已變更，請重新產生版本後再查看。",
+    review_package: "你已確認此版本，暫時無需其他操作。",
+    unavailable: "此申請目前無法產生材料版本。",
+  } as Record<string, string>,
+  review: "你正在查看的內容",
+  reviewPinnedDraft: (version: number) => `確切的 GS 草稿版本 ${version}`,
+  reviewMissingInfo: "需要你補充",
+  reviewUnavailable: "此版本的確切內容目前無法展示給你，因此不能確認。",
+  reason: {
+    access_revoked: "你對本專案的存取權限已變更。",
+    confirmation_not_finalized: "此確認未完成校驗。",
+    application_revision_changed: "申請內容在此版本之後已變更。",
+    fact_not_visible: "某項來源事實已不再分享給你。",
+    fact_reference_changed: "某項來源事實已變更。",
+    gs_draft_changed: "GS 草稿在此版本之後已變更。",
+    gs_draft_unavailable: "GS 草稿已不能完整查看。",
+    legal_source_revision_changed: "法律依據版本已變更。",
+    preparation_snapshot_changed: "準備摘要已變更。",
+    project_closed: "本專案已關閉。",
+    school_application_changed: "學校申請內容已變更。",
+    school_package_changed: "已準備的學校材料包已變更。",
+    source_unavailable: "某項來源暫時無法使用。",
+    target_archived: "此申請已歸檔。",
+  } as Record<string, string>,
+  redacted: "部分來源資訊因權限撤回而已隱藏。",
+  stale: "已不再有效",
+  statement: "客戶聲明",
+  submission: "尚不可提交",
+  title: "申請材料版本",
+  unavailable: "此處暫不可使用申請材料版本功能。",
+  version: (version: number) => `版本 ${version}`,
+};
+
+export const submissionPackageCopy = {
+  en: M8_EN,
+  "zh-Hans": M8_ZH_HANS,
+  "zh-Hant": M8_ZH_HANT,
+} as const;
+
+/**
+ * Phase 13 M8.2 - submission authorization, managed handoff and external records.
+ *
+ * The wording is deliberately narrow: nothing here says approved, eligible, verified,
+ * successful or submitted unless the record itself carries the provenance such a claim
+ * requires.
+ */
+const M8_2_EN = {
+  authorizeHint:
+    "This records who may act on the exact version above. It is not a decision on your application.",
+  authorizeManaged: "Authorize managed service",
+  authorizeSelf: "Authorize self-service",
+  authorizedAt: "Authorized",
+  cancelHandoff: "Cancel handoff request",
+  current: "Current",
+  disclosures: "Before you authorize",
+  disclosure: {
+    customer_performs_external_submission_personally:
+      "You will complete and lodge the external application yourself.",
+    customer_responsible_for_accuracy_and_deadlines:
+      "You remain responsible for the accuracy of the content and for every deadline.",
+    engagement_terms_and_payment_apply:
+      "The engagement terms, fees and payment conditions in your service agreement apply.",
+    external_evidence_recorded_with_provenance:
+      "Any external evidence is stored with the source that reported it.",
+    external_outcomes_remain_unverified:
+      "Any outcome you or we record stays unverified unless a trusted external source confirms it.",
+    named_professional_performs_external_submission:
+      "One named, assigned professional acts on this package on your behalf.",
+    no_legal_correctness_asserted:
+      "Nothing here confirms that every legal requirement is met.",
+    no_outcome_guaranteed:
+      "No outcome is guaranteed: no school or government decision is promised.",
+    no_professional_review_included:
+      "No qualified professional reviews this package in self-service.",
+    no_submission_before_handoff_acceptance:
+      "Nothing is submitted until an authorized professional accepts the handoff.",
+    platform_does_not_submit_or_receive_receipts:
+      "This platform does not lodge the application and does not receive official receipts for you.",
+    professional_review_of_this_exact_version_required:
+      "A professional review of this exact version must be current.",
+  } as Record<string, string>,
+  error: "The authorization could not be loaded.",
+  externalRecords: "External action you reported",
+  externalUnverifiedNote:
+    "Customer-reported and staff-recorded entries are unverified. They are not official receipts.",
+  handoff: "Human handoff",
+  handoffEligible: "This package currently meets the handoff conditions.",
+  handoffHint:
+    "A handoff asks an assigned professional to act on this exact version.",
+  handoffNotEligible:
+    "This package does not currently meet the handoff conditions.",
+  handoffStatus: {
+    accepted: "Accepted by a professional",
+    cancelled: "Cancelled",
+    declined: "Declined",
+    requested: "Requested",
+    superseded: "Superseded",
+  } as Record<string, string>,
+  intro:
+    "Choose who acts on this exact package version: you, or a professional acting for you.",
+  loading: "Loading authorization...",
+  modeManaged: "Managed service",
+  modeManagedHelp:
+    "Requires a current engagement, agreement, payment condition, disclosure, professional review and credential.",
+  modeSelf: "Self-service",
+  modeSelfHelp:
+    "You review the package and lodge the external application yourself.",
+  modeUnavailable: "Not available",
+  nextAction: {
+    authorize_managed_service: "Authorize managed service to continue.",
+    authorize_self_service: "Authorize self-service to continue.",
+    await_handoff: "Waiting for the professional to accept the handoff.",
+    await_professional_submission:
+      "A professional has accepted. Submission happens outside this platform.",
+    build_package: "Build a package version first.",
+    confirm_package: "Confirm the current package version first.",
+    none: "Nothing else is required here.",
+    rebuild_package: "Something changed. Build and confirm a new version.",
+    record_external_action:
+      "When you lodge the application yourself, record it here as unverified.",
+    request_handoff: "Request a handoff to an assigned professional.",
+    unavailable: "This package cannot be authorized right now.",
+  } as Record<string, string>,
+  noExternalRecords: "No externally reported action yet.",
+  noPackage: "No package version to authorize yet.",
+  notCurrent: "No longer current",
+  provenance: {
+    customer_reported: "Reported by you",
+    document_backed_unverified: "Document attached, not verified",
+    provider_verified: "Verified by an external source",
+    staff_attested: "Recorded by staff",
+  } as Record<string, string>,
+  reason: {
+    authorization_superseded: "A newer decision replaced this one.",
+    confirmation_missing: "A required confirmation is missing.",
+    confirmation_not_current: "A confirmation is no longer current.",
+    confirmation_not_finalized: "A confirmation did not finish validating.",
+    confirmation_policy_unknown:
+      "The disclosure wording changed. Confirm again.",
+    managed_readiness_not_ready:
+      "Your managed service conditions are not met yet.",
+    managed_readiness_unknown:
+      "Managed service conditions cannot be confirmed.",
+    package_freshness_lost: "The application changed since this version.",
+    package_integrity_unverified: "This version failed its integrity check.",
+    package_not_current: "A newer package version is current.",
+    professional_authority_denied: "Professional authority was withdrawn.",
+    professional_credential_unverified:
+      "The professional's credential is not verified.",
+    professional_review_not_approved:
+      "A current professional review is missing.",
+    source_unavailable: "A source is temporarily unavailable.",
+  } as Record<string, string>,
+  recordExternal: "Record that I lodged it myself",
+  requestHandoff: "Request handoff",
+  state: "Authorization",
+  status: {
+    effective: "Effective for this version",
+    ineffective: "Not effective",
+    unknown: "Cannot be confirmed",
+  } as Record<string, string>,
+  submissionState: {
+    not_submitted: "Nothing recorded as lodged",
+    reported_unverified: "Reported as lodged, unverified",
+    verified: "Verified as lodged",
+  } as Record<string, string>,
+  title: "Who acts on this package",
+  unavailable: "Submission authorization is not available here.",
+};
+
+const M8_2_ZH_HANS: typeof M8_2_EN = {
+  authorizeHint:
+    "此操作记录谁可以处理以上确切版本，并不构成对你申请的审批结果。",
+  authorizeManaged: "授权托管服务",
+  authorizeSelf: "授权自助服务",
+  authorizedAt: "授权时间",
+  cancelHandoff: "取消交接请求",
+  current: "当前有效",
+  disclosures: "授权前请确认",
+  disclosure: {
+    customer_performs_external_submission_personally:
+      "外部申请将由你本人填写并提交。",
+    customer_responsible_for_accuracy_and_deadlines:
+      "你仍需对内容准确性以及所有截止日期负责。",
+    engagement_terms_and_payment_apply:
+      "你的服务协议中的服务条款、费用与付款条件适用。",
+    external_evidence_recorded_with_provenance:
+      "任何外部证据都会连同其上报来源一起保存。",
+    external_outcomes_remain_unverified:
+      "你或我们记录的任何结果，未经可信外部来源确认前都保持未核实状态。",
+    named_professional_performs_external_submission:
+      "由一位具名且已指派给本项目的专业人士代表你处理此材料。",
+    no_legal_correctness_asserted: "此处不确认所有法律要求均已满足。",
+    no_outcome_guaranteed: "不保证任何结果：不承诺学校或政府的决定。",
+    no_professional_review_included: "自助服务不包含合资格专业人士审阅。",
+    no_submission_before_handoff_acceptance:
+      "在获授权的专业人士接受交接之前，不会提交任何内容。",
+    platform_does_not_submit_or_receive_receipts:
+      "本平台不代为提交申请，也不代你接收官方回执。",
+    professional_review_of_this_exact_version_required:
+      "针对此确切版本的专业审阅必须仍然有效。",
+  } as Record<string, string>,
+  error: "无法加载授权信息。",
+  externalRecords: "你上报的外部操作",
+  externalUnverifiedNote:
+    "客户上报与工作人员记录的条目均为未核实状态，不属于官方回执。",
+  handoff: "人工交接",
+  handoffEligible: "此材料当前满足交接条件。",
+  handoffHint: "交接即请已指派的专业人士处理此确切版本。",
+  handoffNotEligible: "此材料当前不满足交接条件。",
+  handoffStatus: {
+    accepted: "专业人士已接受",
+    cancelled: "已取消",
+    declined: "已拒绝",
+    requested: "已请求",
+    superseded: "已被取代",
+  } as Record<string, string>,
+  intro: "请选择由谁处理此确切版本：你本人，或代表你的专业人士。",
+  loading: "正在加载授权信息...",
+  modeManaged: "托管服务",
+  modeManagedHelp:
+    "需要当前有效的服务关系、协议、付款条件、资源披露、专业审阅与专业资格。",
+  modeSelf: "自助服务",
+  modeSelfHelp: "你自行查看材料并提交外部申请。",
+  modeUnavailable: "暂不可用",
+  nextAction: {
+    authorize_managed_service: "请授权托管服务以继续。",
+    authorize_self_service: "请授权自助服务以继续。",
+    await_handoff: "正在等待专业人士接受交接。",
+    await_professional_submission: "专业人士已接受，提交将在此平台之外完成。",
+    build_package: "请先生成材料版本。",
+    confirm_package: "请先确认当前材料版本。",
+    none: "此步骤无需其他操作。",
+    rebuild_package: "内容已变更，请生成并确认新版本。",
+    record_external_action: "当你本人提交后，可在此记录为未核实。",
+    request_handoff: "请向已指派的专业人士请求交接。",
+    unavailable: "此材料目前无法授权。",
+  } as Record<string, string>,
+  noExternalRecords: "尚无外部操作记录。",
+  noPackage: "尚无可授权的材料版本。",
+  notCurrent: "已不再有效",
+  provenance: {
+    customer_reported: "由你上报",
+    document_backed_unverified: "附有文件，尚未核实",
+    provider_verified: "已由外部来源核实",
+    staff_attested: "由工作人员记录",
+  } as Record<string, string>,
+  reason: {
+    authorization_superseded: "已被更新的决定取代。",
+    confirmation_missing: "缺少必需的确认。",
+    confirmation_not_current: "某项确认已不再有效。",
+    confirmation_not_finalized: "某项确认未完成校验。",
+    confirmation_policy_unknown: "披露条款已更新，请重新确认。",
+    managed_readiness_not_ready: "托管服务条件尚未满足。",
+    managed_readiness_unknown: "无法确认托管服务条件。",
+    package_freshness_lost: "此版本之后申请内容已变更。",
+    package_integrity_unverified: "此版本未通过完整性校验。",
+    package_not_current: "已有更新的材料版本。",
+    professional_authority_denied: "专业授权已被撤回。",
+    professional_credential_unverified: "专业人士的资格尚未核实。",
+    professional_review_not_approved: "缺少有效的专业审阅。",
+    source_unavailable: "某来源暂时不可用。",
+  } as Record<string, string>,
+  recordExternal: "记录我本人已提交",
+  requestHandoff: "请求交接",
+  state: "授权状态",
+  status: {
+    effective: "对此版本有效",
+    ineffective: "无效",
+    unknown: "无法确认",
+  } as Record<string, string>,
+  submissionState: {
+    not_submitted: "未记录为已提交",
+    reported_unverified: "已上报为提交，未核实",
+    verified: "已核实为已提交",
+  } as Record<string, string>,
+  title: "由谁处理此材料",
+  unavailable: "此处暂不可使用提交授权功能。",
+};
+
+const M8_2_ZH_HANT: typeof M8_2_EN = {
+  authorizeHint:
+    "此操作記錄誰可以處理以上確切版本，並不構成對你申請的審批結果。",
+  authorizeManaged: "授權託管服務",
+  authorizeSelf: "授權自助服務",
+  authorizedAt: "授權時間",
+  cancelHandoff: "取消交接請求",
+  current: "目前有效",
+  disclosures: "授權前請確認",
+  disclosure: {
+    customer_performs_external_submission_personally:
+      "外部申請將由你本人填寫並提交。",
+    customer_responsible_for_accuracy_and_deadlines:
+      "你仍需對內容準確性以及所有截止日期負責。",
+    engagement_terms_and_payment_apply:
+      "你的服務協議中的服務條款、費用與付款條件適用。",
+    external_evidence_recorded_with_provenance:
+      "任何外部證據都會連同其上報來源一起保存。",
+    external_outcomes_remain_unverified:
+      "你或我們記錄的任何結果，未經可信外部來源確認前都保持未核實狀態。",
+    named_professional_performs_external_submission:
+      "由一位具名且已指派給本專案的專業人士代表你處理此材料。",
+    no_legal_correctness_asserted: "此處不確認所有法律要求均已滿足。",
+    no_outcome_guaranteed: "不保證任何結果：不承諾學校或政府的決定。",
+    no_professional_review_included: "自助服務不包含合資格專業人士審閱。",
+    no_submission_before_handoff_acceptance:
+      "在獲授權的專業人士接受交接之前，不會提交任何內容。",
+    platform_does_not_submit_or_receive_receipts:
+      "本平台不代為提交申請，也不代你接收官方回執。",
+    professional_review_of_this_exact_version_required:
+      "針對此確切版本的專業審閱必須仍然有效。",
+  } as Record<string, string>,
+  error: "無法載入授權資訊。",
+  externalRecords: "你上報的外部操作",
+  externalUnverifiedNote:
+    "客戶上報與工作人員記錄的項目均為未核實狀態，不屬於官方回執。",
+  handoff: "人工交接",
+  handoffEligible: "此材料目前符合交接條件。",
+  handoffHint: "交接即請已指派的專業人士處理此確切版本。",
+  handoffNotEligible: "此材料目前不符合交接條件。",
+  handoffStatus: {
+    accepted: "專業人士已接受",
+    cancelled: "已取消",
+    declined: "已拒絕",
+    requested: "已請求",
+    superseded: "已被取代",
+  } as Record<string, string>,
+  intro: "請選擇由誰處理此確切版本：你本人，或代表你的專業人士。",
+  loading: "正在載入授權資訊...",
+  modeManaged: "託管服務",
+  modeManagedHelp:
+    "需要目前有效的服務關係、協議、付款條件、資源揭露、專業審閱與專業資格。",
+  modeSelf: "自助服務",
+  modeSelfHelp: "你自行檢視材料並提交外部申請。",
+  modeUnavailable: "暫不可用",
+  nextAction: {
+    authorize_managed_service: "請授權託管服務以繼續。",
+    authorize_self_service: "請授權自助服務以繼續。",
+    await_handoff: "正在等待專業人士接受交接。",
+    await_professional_submission: "專業人士已接受，提交將在此平台之外完成。",
+    build_package: "請先產生材料版本。",
+    confirm_package: "請先確認目前材料版本。",
+    none: "此步驟無需其他操作。",
+    rebuild_package: "內容已變更，請產生並確認新版本。",
+    record_external_action: "當你本人提交後，可在此記錄為未核實。",
+    request_handoff: "請向已指派的專業人士請求交接。",
+    unavailable: "此材料目前無法授權。",
+  } as Record<string, string>,
+  noExternalRecords: "尚無外部操作記錄。",
+  noPackage: "尚無可授權的材料版本。",
+  notCurrent: "已不再有效",
+  provenance: {
+    customer_reported: "由你上報",
+    document_backed_unverified: "附有文件，尚未核實",
+    provider_verified: "已由外部來源核實",
+    staff_attested: "由工作人員記錄",
+  } as Record<string, string>,
+  reason: {
+    authorization_superseded: "已被更新的決定取代。",
+    confirmation_missing: "缺少必需的確認。",
+    confirmation_not_current: "某項確認已不再有效。",
+    confirmation_not_finalized: "某項確認未完成校驗。",
+    confirmation_policy_unknown: "揭露條款已更新，請重新確認。",
+    managed_readiness_not_ready: "託管服務條件尚未滿足。",
+    managed_readiness_unknown: "無法確認託管服務條件。",
+    package_freshness_lost: "此版本之後申請內容已變更。",
+    package_integrity_unverified: "此版本未通過完整性校驗。",
+    package_not_current: "已有更新的材料版本。",
+    professional_authority_denied: "專業授權已被撤回。",
+    professional_credential_unverified: "專業人士的資格尚未核實。",
+    professional_review_not_approved: "缺少有效的專業審閱。",
+    source_unavailable: "某來源暫時不可用。",
+  } as Record<string, string>,
+  recordExternal: "記錄我本人已提交",
+  requestHandoff: "請求交接",
+  state: "授權狀態",
+  status: {
+    effective: "對此版本有效",
+    ineffective: "無效",
+    unknown: "無法確認",
+  } as Record<string, string>,
+  submissionState: {
+    not_submitted: "未記錄為已提交",
+    reported_unverified: "已上報為提交，未核實",
+    verified: "已核實為已提交",
+  } as Record<string, string>,
+  title: "由誰處理此材料",
+  unavailable: "此處暫不可使用提交授權功能。",
+};
+
+export const submissionAuthorizationCopy = {
+  en: M8_2_EN,
+  "zh-Hans": M8_2_ZH_HANS,
+  "zh-Hant": M8_2_ZH_HANT,
+} as const;

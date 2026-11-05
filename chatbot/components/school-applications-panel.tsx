@@ -10,6 +10,8 @@ import {
   School,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { SubmissionAuthorizationSection } from "@/components/submission-authorization-section";
+import { SubmissionPackageSection } from "@/components/submission-package-section";
 import {
   createSchoolApplicationsController,
   type SchoolApplicationDetail,
@@ -437,6 +439,22 @@ function SchoolApplicationsPanelInstance({
       ) : null}
 
       {detail ? (
+        <SubmissionPackageSection
+          projectId={projectId}
+          targetId={detail.applicationId}
+          targetKind="managed_school_application"
+        />
+      ) : null}
+
+      {detail ? (
+        <SubmissionAuthorizationSection
+          projectId={projectId}
+          targetId={detail.applicationId}
+          targetKind="managed_school_application"
+        />
+      ) : null}
+
+      {detail ? (
         <div
           className="space-y-3 rounded-lg border border-slate-300 bg-white p-3"
           data-testid="school-application-detail"
@@ -562,6 +580,7 @@ function SchoolApplicationsPanelInstance({
                 </button>
                 <button
                   className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                  data-testid="school-application-edit-open"
                   disabled={busy}
                   onClick={() => {
                     setEditing((current) => !current);

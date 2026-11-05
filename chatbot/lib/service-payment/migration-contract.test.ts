@@ -271,8 +271,18 @@ const m4_005ForeignKeys = audit.foreignKeys.filter(
 );
 
 test("the journal is parsed completely (guards against a vacuous audit)", () => {
-  assert.equal(migrated.length, 45);
-  assert.equal(migrated.at(-1)?.file, M4_005_MIGRATION);
+  // 0000-0044 are the pre-M4-005 migrations; 0045 is the M4-005 migration itself, so it
+  // sits at position 44. Later additive Phase 13 migrations follow it and may not
+  // renumber or displace it.
+  assert.ok(
+    migrated.length >= 45,
+    `the journal must contain at least the 45 migrations up to M4-005, found ${migrated.length}`
+  );
+  assert.equal(migrated[44]?.file, M4_005_MIGRATION);
+  assert.ok(
+    migrated.filter((entry) => entry.file === M4_005_MIGRATION).length === 1,
+    "the M4-005 migration appears exactly once"
+  );
   assert.ok(audit.tables.size > 50, "the whole schema must be parsed");
   assert.equal(m4_005ForeignKeys.length, 15);
   // 16 unique keys + 6 plain indexes = the 22 indexes the availability probe pins.

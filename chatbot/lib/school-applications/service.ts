@@ -14,6 +14,7 @@ import {
   type SchoolApplicationCatalogRecordClass,
   SchoolApplicationError,
   type SchoolApplicationPackageReference,
+  type SchoolApplicationPackageSnapshot,
   type SchoolApplicationPackageStatus,
   type SchoolApplicationPackageUsability,
   type SchoolApplicationPackageVerification,
@@ -1127,6 +1128,87 @@ export function createSchoolApplicationService(
         package: builtView,
         replayed: result.replayed,
         reusedCurrentPackage: plan.kind === "reuse_current",
+      };
+    },
+
+    /**
+     * Read the snapshot of one *exact* immutable package version.
+     *
+     * Unlike `listPackages`, this is not limited to the current version: a consumer
+     * that froze a specific version (for example a submission package) must be able to
+     * show exactly what that version contains. The read is still fully authorized by
+     * the same actor/Project/application check, and the stored bytes are re-verified
+     * against the recorded content hash. A mismatch is reported, never repaired.
+     *
+     * Only the material, non-sensitive package fields are returned: the snapshot never
+     * contains document bodies, uploaded files or free-text customer content.
+     */
+    async readPackageSnapshot(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly applicationId: string;
+      readonly packageId: string;
+      readonly version: number;
+      readonly contentSha256: string;
+    }): Promise<{
+      readonly packageId: string;
+      readonly version: number;
+      readonly contentSha256: string;
+      readonly snapshot: SchoolApplicationPackageSnapshot | null;
+      readonly reasonCode:
+        | "ok"
+        | "package_not_found"
+        | "version_mismatch"
+        | "content_changed";
+    }> {
+      await authorize(input);
+      const application = await requireApplication(input);
+      if (!isSchoolApplicationUuid(input.packageId)) {
+        throw new SchoolApplicationError("invalid_request");
+      }
+      const packages = await store.listPackages({
+        applicationId: application.id,
+      });
+      const record = packages.find((entry) => entry.id === input.packageId);
+      if (!record || record.projectId !== input.projectId) {
+        return {
+          contentSha256: input.contentSha256,
+          packageId: input.packageId,
+          reasonCode: "package_not_found",
+          snapshot: null,
+          version: input.version,
+        };
+      }
+      if (record.version !== input.version) {
+        return {
+          contentSha256: record.contentSha256,
+          packageId: record.id,
+          reasonCode: "version_mismatch",
+          snapshot: null,
+          version: record.version,
+        };
+      }
+      if (
+        record.contentSha256 !== input.contentSha256 ||
+        !verifySchoolApplicationPackageSnapshot(
+          record.snapshot,
+          record.contentSha256
+        )
+      ) {
+        return {
+          contentSha256: record.contentSha256,
+          packageId: record.id,
+          reasonCode: "content_changed",
+          snapshot: null,
+          version: record.version,
+        };
+      }
+      return {
+        contentSha256: record.contentSha256,
+        packageId: record.id,
+        reasonCode: "ok",
+        snapshot: record.snapshot as SchoolApplicationPackageSnapshot,
+        version: record.version,
       };
     },
 

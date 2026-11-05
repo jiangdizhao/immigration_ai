@@ -1,3 +1,17 @@
+<!-- BEGIN D_P13_029_M8_1_EXACT_VERSION_PACKAGE_2026_11_05 -->
+## D-P13-029 — M8.1 packages reference pinned upstream versions and confirmations bind exact versions
+
+**Date:** 2026-11-05 (Australia/Sydney). **Scope:** Phase 13 M8.1 implementation on `phase13-m8-versioned-submission-authorization` (uncommitted). **Decision:** `M8_1_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_AND_DB_BROWSER_ACCEPTANCE`.
+
+1. **One shared package lifecycle, two narrow adapters.** Both `managed_school_application` and `student_500_visa_application` use the same manifest/confirmation/staleness contract. M8 does not create a second target identity and does not duplicate the M5.1 school package or the M6.2/M7 Student 500 models; it references them.
+2. **Reference, do not copy.** A frozen manifest carries identities, digests, status indicators and disclosures - never document bodies, fact values, chat content or GS section text. The exact customer-visible content is reproducible from the pinned immutable M5.1 package version and M6.2 GS draft version, which is what makes revocation-aware redaction possible without rewriting history.
+3. **Two digests, two jobs.** `manifestSha256` binds the manifest the customer reviewed; `dependencySha256` binds the upstream dependency identity set used for freshness. Staleness is a pure comparison of frozen vs live dependencies with deterministic reason codes - no timers, scores or guesses; an unreadable source yields `source_unavailable`, never an assumption of currency.
+4. **Confirmation is exact-version and statement-specific.** `packageVersionId` + `manifestSha256` + `targetVersion` + statement policy version must all match, consent must be explicit, and the package must still be current. There is no `approved` flag anywhere; confirmation is not professional review, legal advice, eligibility or submission.
+5. **Append-only history.** Migration 0051 adds three insert-only tables whose triggers refuse every UPDATE and DELETE; invalidation evidence is insert-once per observed dependency digest, so an invalidated confirmation keeps its original record and gains evidence instead of being rewritten.
+
+**Not decided here:** self-service or managed submission authorization, professional sign-off, external submission/receipts (M8.2), and any consolidated engineering acceptance (M8.3). Migration 0051 remains unapplied; the capability stays default-OFF; `LIVE_PRODUCTION_NO_GO` stands.
+<!-- END D_P13_029_M8_1_EXACT_VERSION_PACKAGE_2026_11_05 -->
+
 <!-- BEGIN D_P13_028_M7_ENGINEERING_CLOSEOUT_2026_11_04 -->
 ## D-P13-028 — Accept M7 engineering with documented limitations; preserve M8 and production gates
 
