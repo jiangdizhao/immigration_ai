@@ -1,3 +1,16 @@
+<!-- BEGIN PHASE13_M8_EVIDENCE_2026_11_06 -->
+## Current checkpoint — Phase 13 M8 engineering evidence (2026-11-06)
+
+- **Branch/code:** `phase13-m8-versioned-submission-authorization` @ `db70665f473cb1fca22ee8dcca5de05ba20947c9` (owner pushed, remote verified).
+- **Status:** `M8_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS`; owner confirmation and narrowly scoped staff-context security review pending; `LIVE_PRODUCTION_NO_GO` stays.
+- **Real PostgreSQL 17:** disposable PG17 migrations 0000–0052, ledger **53**, M8.3 **12/12 PASS**; prior M8.1 8/8. Owner reported full temporary resource cleanup, no permanent database migration or AWS action.
+- **Manual browser, true NextAuth + DB:** School Project `...b801`, package v1 `2f12dfbfa8d5`; Student 500 Project `...b802`, pinned GS v1/package v1 `f88df606d112`: both double-confirmed and Self-Service authorized, with effective state persisted after reload. No actual school/government submission.
+- **Managed:** `...b803` unavailable and handoff ineligible on screen, but this scenario did not have a fully confirmed package; professional authority remains fail-closed by default.
+- **Automated Chromium:** **INCOMPLETE / NOT PASS** (latest M8.3 three journeys 0/3, failing seeded-application-list preconditions before authorization actions). Owner manual navigation succeeded; precise harness root cause not proven.
+- **Limits:** M4 professional/contract/payment/signature authority not verified; external receipts absent, M6 legal source PARTIAL, document trust DENY, Post-M5 E2E_BLOCKED, default-OFF M8 flags, production NO-GO. Next: M9 planning after owner accepts constraints.
+- **Details:** [M8 engineering evidence and M9 handoff](./PHASE13_M8_ENGINEERING_EVIDENCE_AND_M9_HANDOFF_2026_11_06.md).
+<!-- END PHASE13_M8_EVIDENCE_2026_11_06 -->
+
 <!-- BEGIN PHASE13_M8_1_R2_IMPLEMENTED_2026_11_05 -->
 ## Phase 13 M8.1-R2 - final bounded critical corrections (2026-11-05)
 

@@ -1,3 +1,15 @@
+<!-- BEGIN D_P13_030_M8_EVIDENCE_2026_11_06 -->
+## D-P13-030 — Record M8 acceptance evidence without claiming automated E2E or real professional authority
+
+**Date:** 2026-11-06 (Australia/Sydney). **Source:** owner-pushed `phase13-m8-versioned-submission-authorization` @ `db70665f473cb1fca22ee8dcca5de05ba20947c9`. **Current disposition:** `M8_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS` pending owner confirmation.
+
+Preserve owner-run **PG17 12/12 PASS** with 53 migrations, prior M8.1 PG 8/8, and two **manual** School and Student 500 Self-Service E2E successes with immutable package v1, two confirmations, exact authorization and reload persistence. Distinguish these manual observations from **automated M8.3 Chromium 0/3** at seeded-application-list prerequisites (not accepted). Managed b803 UI was safely unavailable, but without a fully confirmed package; real lawyer eligibility/positive handoff was not verified.
+
+The M4 credential/payment/signature/professional-authority and document-trust limits, independent staff-context security review, M6 source PARTIAL, Post-M5 E2E_BLOCKED, default-OFF M8 feature flags and `LIVE_PRODUCTION_NO_GO` remain. No permanent DB migrations, official submissions, AWS operations or production approvals are authorized.
+
+[Detailed M8 engineering evidence](./PHASE13_M8_ENGINEERING_EVIDENCE_AND_M9_HANDOFF_2026_11_06.md).
+<!-- END D_P13_030_M8_EVIDENCE_2026_11_06 -->
+
 <!-- BEGIN D_P13_029_M8_1_EXACT_VERSION_PACKAGE_2026_11_05 -->
 ## D-P13-029 — M8.1 packages reference pinned upstream versions and confirmations bind exact versions
 
