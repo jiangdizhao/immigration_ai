@@ -1,3 +1,13 @@
+<!-- BEGIN D_P13_031_M9_INTEGRATED_PLAN_2026_11_06 -->
+## D-P13-031 — Freeze M9 as two complete UI/business slices and one consolidated acceptance
+
+**Date:** 2026-11-06 (Australia/Sydney). **Decision:** `M9_INTEGRATED_PLAN_OWNER_APPROVED / IMPLEMENTATION_NOT_STARTED`. Planning branch `phase13-m9-integrated-workspace` created from M8 `54e348e9f6ecb43c051e84f20d959b0d9bc1d034`.
+
+Owner accepts **exactly M9-A Customer Project Workspace**, **M9-B exact-version review and scoped Staff Workspace**, **M9-C consolidated UX/engineering acceptance**. All use the three `doc/Picture*.png` mockups as visual/product references only and source their business state from existing M1–M8 contracts. No new technical-layer micro-milestones, no shadow workflow engine, fake progress, forged lawyer authority, unverified document trust or external receipt. M8 acceptance remains a candidate, with the staff-context-source security check outstanding. `LIVE_PRODUCTION_NO_GO` remains.
+
+**Authority:** [M9 Integrated Implementation Contract](./PHASE13_M9_INTEGRATED_IMPLEMENTATION_CONTRACT_2026_11_06.md). Documentation approval does not dispatch M9-A coding, approve any migrations, feature flags, AWS, payments or production operations.
+<!-- END D_P13_031_M9_INTEGRATED_PLAN_2026_11_06 -->
+
 <!-- BEGIN D_P13_030_M8_EVIDENCE_2026_11_06 -->
 ## D-P13-030 — Record M8 acceptance evidence without claiming automated E2E or real professional authority
 

@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+## Phase 13 M9 — owner-approved integrated implementation plan (2026-11-06)
+
+- **New planning branch:** `phase13-m9-integrated-workspace` from M8 remote `54e348e9f6ecb43c051e84f20d959b0d9bc1d034`; **docs-only**, `M9_INTEGRATED_PLAN_OWNER_APPROVED / IMPLEMENTATION_NOT_STARTED`.
+- **Exactly three deliveries:** **M9-A** complete customer Project/stage-chat/document center (Picture1+2); **M9-B** precise-version checking/confirmation/review + scoped staff workspace (Picture3); **M9-C** one integrated visual/browser/security acceptance. No per-schema/API/UI micro-milestones.
+- **Design authority:** `doc/Picture1.png`, `Picture2.png`, `Picture3.png` for layout and interaction *only*, backed exclusively by existing M1–M8 records/permissions; real statuses and content, responsive zh-CN/en.
+- **M8 unchanged:** `M8_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS` pending owner sign-off and scoped staff-private-package security review; M4 professional authority, Post-M5 E2E, M6 source coverage, document trust and default-OFF gates remain; `LIVE_PRODUCTION_NO_GO`.
+- **Next:** owner local sync, then explicit M9-A dispatch. No implementation, migration, environment changes, AWS, provider, Stripe or deployment authorized by this planning commit. See [M9 Integrated Implementation Contract](./PHASE13_M9_INTEGRATED_IMPLEMENTATION_CONTRACT_2026_11_06.md).
+<!-- END PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+
 <!-- BEGIN PHASE13_M8_EVIDENCE_2026_11_06 -->
 ## Current checkpoint — Phase 13 M8 engineering evidence (2026-11-06)
 

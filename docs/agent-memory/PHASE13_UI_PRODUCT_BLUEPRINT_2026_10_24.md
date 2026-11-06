@@ -1,3 +1,7 @@
+<!-- BEGIN PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+**2026-11-06 M9 design freeze:** The owner accepted a three-delivery integrated implementation contract with Picture1 step chat/materials, Picture2 Project file center and Picture3 exact-version/user/professional review. [M9 Integrated Implementation Contract](./PHASE13_M9_INTEGRATED_IMPLEMENTATION_CONTRACT_2026_11_06.md) is the **current M9 implementation planning reference**; this 2026-10-24 blueprint remains historical design background. The mockup numbers/statuses are examples, not actual data or authority. M9 code has **not** started; existing M4/M8/production restrictions remain.
+<!-- END PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+
 # Phase 13 — Project-Centric Customer UX / Product Blueprint (owner-accepted direction)
 
 **Date:** 2026-10-24

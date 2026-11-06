@@ -1,0 +1,60 @@
+# Phase 13 M9 — Integrated Customer/Staff Workspace Implementation Contract
+
+**Date:** 2026-11-06 (Australia/Sydney)  
+**Branch:** `phase13-m9-integrated-workspace` (forked from M8 documentation checkpoint `54e348e9f6ecb43c051e84f20d959b0d9bc1d034`)  
+**Decision:** `M9_INTEGRATED_PLAN_OWNER_APPROVED / IMPLEMENTATION_NOT_STARTED`  
+**Milestones:** exactly **M9-A, M9-B, M9-C** — two coherent functional deliveries and one consolidated acceptance; **no further milestones by technical layer**.  
+**Release:** `LIVE_PRODUCTION_NO_GO`; this documentation approval authorizes **no code execution, schema application, AWS/Stripe/provider calls, feature-flag activation or deployment**.
+
+## 1. Product authority and current baseline
+
+- **Visual/product target:** `doc/Picture1.png` (step-specific conversation + related materials/actions), `doc/Picture2.png` (Project document center + filterable list + selected-version preview), `doc/Picture3.png` (distinct AI check, customer confirmation, precise-version preview and request-scoped lawyer review). Match information hierarchy, density, layout and workflow on desktop; adapt responsively rather than copying pixels. The images are **design references, not status/legal/financial evidence**.
+- **Canonical constraints:** `AGENTS.md`, `PHASE13_STUDY_JOURNEY_ROADMAP.md`, `PHASE13_UI_PRODUCT_BLUEPRINT_2026_10_24.md`, `DECISIONS.md` and source contracts M1–M8 take precedence over decorative mocks.
+- **Starting truth:** M8 implementation `db70665f` and evidence handoff `PHASE13_M8_ENGINEERING_EVIDENCE_AND_M9_HANDOFF_2026_11_06.md`; `M8_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS` awaiting owner closeout and focused staff-context review, **not** a production release. Real PG17 M8.3 12/12 and two manual Self-Service synthetic journeys passed; automated Chromium M8.3 0/3 (pre-workflow fixture/navigation failure), Managed end-to-end not proven.
+- **Existing UI foundation to extend, not replace:** `chatbot/components/immigration-ai-workspace.tsx`, `project-entry-panel.tsx`, `project-workspace-home.tsx`, `project-documents-panel.tsx`, `school-applications-panel.tsx`, `school-admissions-workflow-panel.tsx`, `student-500-panel.tsx`, `submission-package-section.tsx`, `submission-authorization-section.tsx`; inspect controllers, server gates and true API contracts before changing them. The November 1 UX integration already relocated Project operations into the main pane — do not regress to cramped sidebar forms.
+
+## 2. One product, three views
+
+Shared `/ai-workspace` Project shell: site header (existing zh-CN/en locale and account); **left** Project/stage/document/review navigation; **center** active Project overview, step conversation, admissions/Student 500 flow or searchable file center; **right** step-scoped materials, facts, provenance, latest actual check and one valid next action. On narrow screens use accessible drawers/tabs/stacked content, **not** three fixed-width columns. Preserve standalone chat and Policy Intelligence launch unchanged.
+
+- **Picture 1 / Step workspace:** authentic workflow stage/task and optional conditional/parallel prerequisites; Project-wide and explicitly step-bound **owner-scoped** Chats; step-specific documents and generated versioned artifacts, link from assistant messages to real saved artifact identities, concise check status and action. Never hardcode the illustrated universal five steps or `4/12` completion; do not turn a chat message into a verified fact or approved document.
+- **Picture 2 / Document center:** Project-scoped authorized assets + versions and *real* M5/M6/M7/M8 generated artifacts when legitimately available; filters for source, actual processing/check state, associated step, current/history; selected-version preview, permitted download and provenance. Distinguish raw upload, AI draft, report, reviewed artifact; missing underlying content means no simulated preview, export or download.
+- **Picture 3 / Review:** selected exact-version preview plus three independent columns: **AI checking**, **customer acknowledgement/confirmation**, **professional review**. Only request review of an authorized, still-current and eligible exact version; show real request/assignment/response/history, do not label AI-generated or user-confirmed material `lawyer-approved`. An unavailable staff authority path is visibly blocked.
+
+## 3. Implementation invariants
+
+1. **One authority per object.** Reuse `StudyJourneyProject`, `ProjectConversation`, the existing `Chat`/`ConversationTurn` ledger, M2 document/fact provenance and authorization, M3 source identity, M4 staff/engagement/review, M5 school applications, M6/M7 Student 500 + GS, M8 exact packages and authorization. No second workflow engine, chat ledger, fact store, document store, file processor or submission service.
+2. **Stage/chat binding:** first inspect existing persisted target relationships. If a real step-to-Chat association is missing, introduce only the minimal typed, owner-authorized and additive persisted link (Project + Chat + step/target identity, validated server-side); no universal rigid stage table, silent old-Chat migration or client-derived authority. A Project membership does not reveal another member's private Chat.
+3. **Document permissions:** listing, preview, raw download, AI-context use and professional disclosure are **separate grants**. A document's presence in the Project is not a grant to every member, staff account or AI. Preserve exact asset/version/extraction run/source locator and current scan/trust; `document trust DENY` remains; do not borrow old MatterDocument `clean` status.
+4. **Truthful progress:** derive counts and progress only from real versioned requirement/task records; display `unknown/unavailable` otherwise. Preparation progress is never eligibility, readiness, permission to submit or school admission. AI check, customer confirmation, lawyer approval and external receipt are independent; do not invent Offer, CoE, dates, payment, credentials, submission or risk percentages.
+5. **Legal/staff guardrails:** preserve M4 `ENGINEERING_CLOSED_WITH_BLOCKERS`, Post-M5 `E2E_BLOCKED`, M6 legal coverage `PARTIAL` / `UNKNOWN` / `HUMAN_CHECK`, M8 default-OFF and `LIVE_PRODUCTION_NO_GO`. Staff service-side access to a requesting customer's protected package requires a **separate narrow authorization and privacy source review** before any positive path. Request assignment cannot imply whole-Project or private-Chat access.
+6. **Version + concurrency:** pin artifact identity and digest for selection/confirmation/review; stale, superseded, revoked, conflicting and edited inputs must invalidate dependent actions through existing contracts; respect idempotency/CAS and avoid frontend-only security gates.
+7. **Presentation:** Chinese-first + existing English switch, accessible keyboard/focus semantics, responsive desktop/mobile, meaningful loading/empty/error/blocked states, no stale Project A after switching to B, and one primary next action per view.
+
+## 4. Exactly three integrated deliveries
+
+### M9-A — Customer Project Workspace (functional vertical slice)
+
+**Scope:** Integrate Project home, genuine stage/task navigation, Project-wide + step-specific owner Chat access, selected-step material panel, real progress-vs-readiness, M5 School Applications, M6/M7 Student 500/GS, and the version-aware Project document center. Add only minimal required persistent stage-binding/navigation state, behind existing server authorization. Reuse current panels and controllers; coherent visual layout should resemble **Picture 1 and Picture 2**, including selected-file details and navigation back to originating step.
+
+**Acceptance (owner browser, synthetic data):** (A1) open Project with no Chat → usable overview; (A2) stage ↔ own Chat ↔ M5 application ↔ Student 500 ↔ Project file center ↔ exact artifact history, reload without losing identity; (A3) Project A → B → standalone gives zero cross-project/chat leakage; (A4) missing/private/untrusted files and unavailable tools display truthful blocks; (A5) desktop + narrow viewport and zh-CN/en navigation work. A1–A5 are **one M9-A acceptance**, not independent milestones.
+
+### M9-B — Exact-version Review & Staff Workspace (functional vertical slice)
+
+**Scope:** Build **Picture 3** customer file/version/check/confirmation/review surface and coherent staff queue/detail/feedback access using existing M4/M7/M8 contracts. Provide authorized review requests, scoped messages, exact-version viewing, returned correction/re-review, status/history and meaningful agreement/payment/disclosure indicators *only* where genuine backing state exists. Keep Managed Service unavailable until real authority is verified. Do not fabricate a staff, an actual payment, a signed agreement or external submission.
+
+**Acceptance (two synthetic roles):** (B1) customer selects authorized exact version, sees AI/customer/professional statuses independently; (B2) request-specific eligible staff sees only explicitly authorized object/fields, records feedback and customer sees it; (B3) version change, consent revocation, member revocation, Project switch and unauthorized staff access fail closed; (B4) missing M4 authority yields blocked/unknown state, not fake success. The pending M8 staff-private-package review is a **specific hard gate**, not permission to reopen all M4 repair campaigns.
+
+### M9-C — Consolidated UX and Engineering Acceptance (no new feature program)
+
+**Scope:** One integrated pass for visual consistency against all three pictures, mobile/desktop, locale, loading/error, responsive preview/navigation and selective regression. Repair only reproducible primary-path, privacy/authorization, state-integrity or build failures; bounded follow-up patch if needed, not perpetual R1/R2 loops.
+
+**Acceptance:** owner-operated browser flows for Picture1 → Picture2 → Picture3, both service-mode outcomes (positive self-service; honest managed blocked unless truly authorized), Project A/B isolation, standalone preservation, version invalidation, staff negative permissions, zh-CN/en and one narrow viewport. Reuse focused unit/API tests and only scope-justified guarded disposable PostgreSQL checks. Automated Playwright may cover a few stable journeys but must not assert M8 Chromium 3/3; distinguish harness failures, code failures, manual evidence and skipped tests. A visual match alone is not a production security/compliance pass.
+
+## 5. Delivery discipline and release boundary
+
+- **Only three milestone reviews:** M9-A functional implementation/review, M9-B functional implementation/review, M9-C consolidated acceptance. Schema/API/UI/tests live within their respective functional slice; no extra A1/A2/A3 or per-component milestone hierarchy.
+- For each: first verify branch/HEAD/worktree and canonical contracts; Codex/Cline implements a bounded cumulative patch **without auto-commit**; ChatGPT independently reviews actual diff and evidence; owner authorizes and runs necessary guarded local tests; owner commits/pushes; reviewer checks remote SHA and updates `CURRENT_HANDOFF.md`/`CURRENT_MILESTONE.md`/`PROJECT_STATE.md`. Stop after accepted primary objectives, record low-value defects as debt.
+- New migration SQL may be proposed in a code delivery but **must remain unapplied** until separate owner approval; never mutate existing data, normal local `chatbot`/`immigration_legal`, AWS, Stripe or external submissions under this planning contract. Use isolated synthetic test data only with explicit approval.
+- M9 completion means **integrated engineering UX accepted with limitations accurately recorded**, not real lawyer credential/payment/signature verification, complete Student 500 legal correctness, trusted production document scanning, school/government submission, commercial release or M10 acceptance.
+- **Immediate next action:** after the owner synchronizes and explicitly dispatches M9-A, prepare one comprehensive M9-A Coding Agent prompt referencing this frozen contract. No implementation is launched by creating these documents.

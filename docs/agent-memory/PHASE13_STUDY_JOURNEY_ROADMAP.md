@@ -1,3 +1,7 @@
+<!-- BEGIN PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+**2026-11-06 M9 planning update (current):** Owner approved exactly **M9-A Customer Project Workspace (Picture1+2), M9-B versioned document review + Staff Workspace (Picture3), M9-C one consolidated acceptance**. Read [M9 Integrated Implementation Contract](./PHASE13_M9_INTEGRATED_IMPLEMENTATION_CONTRACT_2026_11_06.md); this elaborates the existing M9 row without changing M0–M10 numbering. M8 remains an engineering acceptance **candidate** with constraints; production remains NO-GO. No M9 code is authorized or implemented by this note.
+<!-- END PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
+
 <!-- BEGIN PHASE13_M6_FINAL_VERIFIED_CLOSEOUT_M7_HANDOFF_2026_11_04 -->
 ## Current authoritative checkpoint — M6 engineering closed; M7 is next (2026-11-04)
 
