@@ -55,7 +55,17 @@ const NAV_LABEL_KEYS = {
   applications: "projectSchoolApplicationsTab",
   admissions: "projectSchoolAdmissionsTab",
   student500: "projectStudent500Tab",
-} as const satisfies Record<ProjectWorkspaceView, keyof ProjectEntryCopy>;
+} as const satisfies Record<ProjectPanelView, keyof ProjectEntryCopy>;
+
+/**
+ * Phase 13 M9-A: the Project document centre is reached from the step rail and the
+ * main-area section tabs, so this legacy compact section list keeps exactly the four
+ * sections it has always offered.
+ */
+type ProjectPanelView = Exclude<ProjectWorkspaceView, "documents">;
+const PANEL_VIEWS: readonly ProjectPanelView[] = PROJECT_WORKSPACE_VIEWS.filter(
+  (view): view is ProjectPanelView => view !== "documents"
+);
 
 function projectLabel(
   project: ProjectEntryProject,
@@ -374,7 +384,7 @@ export function ProjectEntryPanel({
               className="grid gap-1"
               data-testid="project-view-nav"
             >
-              {PROJECT_WORKSPACE_VIEWS.map((view) => (
+              {PANEL_VIEWS.map((view) => (
                 <button
                   aria-current={projectView === view ? "page" : undefined}
                   className={

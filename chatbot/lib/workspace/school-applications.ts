@@ -80,6 +80,76 @@ export type SchoolApplicationDraft = {
   intakeLabel: string | null;
 };
 
+/** A draft field that the customer types into. */
+export type SchoolApplicationDraftTextKey =
+  | "institutionName"
+  | "courseTitle"
+  | "intakeLabel"
+  | "institutionId"
+  | "courseId"
+  | "deliveryId"
+  | "intakeId";
+
+/**
+ * Phase 13 M9-A final UX correction 1 — the controlled input value.
+ *
+ * Returns exactly what the customer has typed so far. It deliberately does **not**
+ * trim: a controlled input that trims on every `onChange` deletes a trailing space
+ * before the next word can be typed (`University ␣` → `University`), which is a pure
+ * input-UX defect, not a business rule.
+ */
+export function schoolApplicationDraftText(
+  draft: SchoolApplicationDraft,
+  key: SchoolApplicationDraftTextKey
+): string {
+  return draft[key] ?? "";
+}
+
+/**
+ * Phase 13 M9-A final UX correction 1 — one keystroke.
+ *
+ * The raw value is stored verbatim, including interim and trailing spaces, so ordinary
+ * multi-word input works. Normalisation happens only at the submission boundary
+ * (`normalizeSchoolApplicationDraft`), never while typing.
+ */
+export function applySchoolApplicationDraftInput(
+  draft: SchoolApplicationDraft,
+  key: SchoolApplicationDraftTextKey,
+  raw: string
+): SchoolApplicationDraft {
+  return { ...draft, [key]: raw };
+}
+
+/**
+ * Phase 13 M9-A final UX correction 1 — the submission boundary.
+ *
+ * `null`-able optional fields become `null` when blank and text is trimmed, which is what
+ * the existing M5.1 API and `normalizeSchoolApplicationText` already expect. This is the
+ * only place a draft is normalised; the M5 server-side validation, CAS/revision contract
+ * and normalization are unchanged.
+ */
+export function normalizeSchoolApplicationDraft(
+  draft: SchoolApplicationDraft
+): SchoolApplicationDraft {
+  return {
+    courseId: toNullableDraftText(draft.courseId),
+    courseTitle: draft.courseTitle.trim(),
+    deliveryId: toNullableDraftText(draft.deliveryId),
+    institutionId: toNullableDraftText(draft.institutionId),
+    institutionName: draft.institutionName.trim(),
+    intakeId: toNullableDraftText(draft.intakeId),
+    intakeLabel: toNullableDraftText(draft.intakeLabel),
+  };
+}
+
+function toNullableDraftText(value: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 export type SchoolApplicationErrorKind =
   | "authentication_required"
   | "not_found"
@@ -311,14 +381,17 @@ export function buildSchoolApplicationCreateBody(input: {
   operationId: string;
   draft: SchoolApplicationDraft;
 }) {
+  // The submission boundary normalises: the editing state keeps exactly what the
+  // customer typed (spaces included), and only the request body is trimmed/null-ed.
+  const draft = normalizeSchoolApplicationDraft(input.draft);
   return {
-    courseId: input.draft.courseId,
-    courseTitle: input.draft.courseTitle,
-    deliveryId: input.draft.deliveryId,
-    institutionId: input.draft.institutionId,
-    institutionName: input.draft.institutionName,
-    intakeId: input.draft.intakeId,
-    intakeLabel: input.draft.intakeLabel,
+    courseId: draft.courseId,
+    courseTitle: draft.courseTitle,
+    deliveryId: draft.deliveryId,
+    institutionId: draft.institutionId,
+    institutionName: draft.institutionName,
+    intakeId: draft.intakeId,
+    intakeLabel: draft.intakeLabel,
     operationId: input.operationId,
   };
 }

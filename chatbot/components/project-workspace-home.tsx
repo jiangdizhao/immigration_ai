@@ -1,12 +1,18 @@
 "use client";
 
 import { BookOpenCheck, FolderLock, GraduationCap, School } from "lucide-react";
+import type { SiteLocale } from "@/lib/site-locale";
+import type { ProjectArtifactsSummary } from "@/lib/workspace/project-artifacts";
+import type { ProjectOverview } from "@/lib/workspace/project-overview";
+import type { ProjectStage } from "@/lib/workspace/project-stages";
 import {
   PROJECT_WORKSPACE_VIEWS,
   type ProjectWorkspaceView,
 } from "@/lib/workspace/project-workspace-view";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
+import { ProjectDocumentsCenter } from "./project-documents-center";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
+import { ProjectOverviewPanel } from "./project-overview-panel";
 import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
 import { SchoolApplicationsPanel } from "./school-applications-panel";
 import { Student500Panel } from "./student-500-panel";
@@ -18,6 +24,7 @@ const TAB_LABEL_KEYS = {
   applications: "projectSchoolApplicationsTab",
   admissions: "projectSchoolAdmissionsTab",
   student500: "projectStudent500Tab",
+  documents: "projectDocumentsTab",
 } as const satisfies Record<ProjectWorkspaceView, keyof ProjectHomeCopy>;
 
 /**
@@ -45,6 +52,14 @@ export function ProjectWorkspaceHome({
   student500Enabled = false,
   student500Copy,
   projectDocumentsEnabled = false,
+  stages = [],
+  overview = null,
+  summaryState = "ready",
+  onRefreshSummary,
+  onReturnToPreviousView,
+  returnToPreviousViewLabel,
+  onOpenArtifactOwner,
+  artifacts = null,
 }: {
   copy: ProjectHomeCopy;
   locale: string;
@@ -67,6 +82,25 @@ export function ProjectWorkspaceHome({
   student500Copy: WorkspaceCopy["student500"];
   /** Remains false until the separate document privacy/scan gates open. */
   projectDocumentsEnabled?: boolean;
+  /**
+   * Phase 13 M9-A: the real, server-authorized Project stage model and overview.
+   * Missing/empty values simply render the overview's honest unavailable state; they
+   * never fall back to invented progress.
+   */
+  stages?: readonly ProjectStage[];
+  overview?: ProjectOverview | null;
+  summaryState?: "idle" | "loading" | "ready" | "failed";
+  onRefreshSummary?: () => void;
+  /**
+   * Phase 13 M9-A R1-04: the document centre returns to the view the customer came
+   * from. No document→step association is claimed, because none is authorized.
+   */
+  onReturnToPreviousView?: () => void;
+  returnToPreviousViewLabel?: string;
+  /** Navigation into the workspace view that owns a generated artifact. */
+  onOpenArtifactOwner?: (view: ProjectWorkspaceView) => void;
+  /** Metadata-only generated-artifact references (R1-05). */
+  artifacts?: ProjectArtifactsSummary | null;
 }) {
   const created = new Intl.DateTimeFormat(locale, {
     year: "numeric",
@@ -155,6 +189,39 @@ export function ProjectWorkspaceHome({
 
         {view === "home" ? (
           <div className="space-y-4" data-testid="project-home-overview">
+            {/*
+              Phase 13 M9-A: the overview is derived only from authorized reads. When
+              no summary could be read the panel says so and shows a blocked area
+              instead of zero progress.
+            */}
+            <ProjectOverviewPanel
+              copy={copy.projectWorkspace}
+              navigationBusy={navigationBusy}
+              onRefresh={onRefreshSummary ?? (() => undefined)}
+              onSelectView={onSelectView}
+              overview={
+                overview ?? {
+                  blockers: [
+                    "documents_unavailable",
+                    "step_conversations_unavailable",
+                  ],
+                  nextAction: { kind: "none", reason: "nothing_available" },
+                  preparation: {
+                    needsAttention: null,
+                    openItems: null,
+                    readableStages: 0,
+                    state: "unknown",
+                    totalStages: stages.length,
+                  },
+                  readiness: {
+                    reason: "submission_capability_disabled",
+                    state: "unavailable",
+                  },
+                }
+              }
+              stages={stages}
+              summaryState={summaryState}
+            />
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-slate-950">
                 {copy.projectHomeNextSteps}
@@ -238,12 +305,6 @@ export function ProjectWorkspaceHome({
             <p className="text-[11px] leading-5 text-slate-600">
               {copy.projectHomeChatsHint}
             </p>
-            <ProjectDocumentsPanel
-              copy={copy.documents}
-              enabled={projectDocumentsEnabled}
-              projectId={project.id}
-              projectRevision={project.revision}
-            />
           </div>
         ) : null}
 
@@ -297,6 +358,7 @@ export function ProjectWorkspaceHome({
               <SchoolAdmissionsWorkflowPanel
                 copy={schoolAdmissionsCopy}
                 enabled={schoolAdmissionsEnabled}
+                locale={locale as SiteLocale}
                 projectId={project.id}
               />
             ) : (
@@ -310,6 +372,34 @@ export function ProjectWorkspaceHome({
                   : copy.projectHomeAdmissionsUnavailable}
               </p>
             )}
+          </div>
+        ) : null}
+        {view === "documents" ? (
+          <div className="space-y-3" data-testid="project-home-documents">
+            <ProjectDocumentsCenter
+              artifacts={artifacts}
+              centreCopy={copy.projectWorkspace}
+              copy={copy.documents}
+              enabled={projectDocumentsEnabled}
+              onOpenArtifactOwner={onOpenArtifactOwner}
+              onReturnToPrevious={onReturnToPreviousView}
+              projectId={project.id}
+              projectRevision={project.revision}
+              returnLabel={returnToPreviousViewLabel}
+            />
+            {/*
+              Upload/import stay in the same authorized panel the M2 contracts already
+              define. They are only offered while the document capability is open, so a
+              closed gate never renders two conflicting "unavailable" blocks.
+            */}
+            {projectDocumentsEnabled ? (
+              <ProjectDocumentsPanel
+                copy={copy.documents}
+                enabled={projectDocumentsEnabled}
+                projectId={project.id}
+                projectRevision={project.revision}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>

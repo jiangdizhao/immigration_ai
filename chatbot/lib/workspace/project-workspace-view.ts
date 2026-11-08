@@ -13,6 +13,8 @@ export const PROJECT_WORKSPACE_VIEWS = [
   "admissions",
   /** Phase 13 M6.1: Student 500 application preparation. */
   "student500",
+  /** Phase 13 M9-A: the version-aware Project document centre. */
+  "documents",
 ] as const;
 
 export type ProjectWorkspaceView = (typeof PROJECT_WORKSPACE_VIEWS)[number];

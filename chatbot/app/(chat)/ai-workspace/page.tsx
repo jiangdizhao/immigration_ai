@@ -20,6 +20,7 @@ import {
 import { schoolAdmissionsEnabled } from "@/lib/school-admissions/contracts";
 import { schoolApplicationsEnabled } from "@/lib/school-applications/contracts";
 import { student500ApplicationsEnabled } from "@/lib/student-500/contracts";
+import { submissionPackagesEnabled } from "@/lib/submission-packages/contracts";
 
 export default async function AIWorkspacePage({
   searchParams,
@@ -128,6 +129,7 @@ export default async function AIWorkspacePage({
             schoolPreparation.restricted || student500Preparation.restricted
           }
           student500Enabled={student500Preparation.enabled}
+          submissionCapabilityEnabled={submissionPackagesEnabled()}
           temporaryGuestProject={personalProject.temporaryGuestProject}
         />
       </main>

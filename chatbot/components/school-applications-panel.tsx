@@ -13,10 +13,13 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SubmissionAuthorizationSection } from "@/components/submission-authorization-section";
 import { SubmissionPackageSection } from "@/components/submission-package-section";
 import {
+  applySchoolApplicationDraftInput,
   createSchoolApplicationsController,
   type SchoolApplicationDetail,
   type SchoolApplicationDraft,
+  type SchoolApplicationDraftTextKey,
   type SchoolApplicationErrorKind,
+  schoolApplicationDraftText,
   schoolApplicationStatusLabelKey,
 } from "@/lib/workspace/school-applications";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
@@ -128,12 +131,15 @@ function draftFrom(detail: SchoolApplicationDetail): SchoolApplicationDraft {
   };
 }
 
-function toNullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
-function DraftFields({
+/**
+ * Phase 13 M9-A final UX correction 1.
+ *
+ * The controlled inputs hold exactly what the customer typed — including a space typed
+ * between words — and normalisation happens only at the submission boundary
+ * (`buildSchoolApplicationCreateBody` / `normalizeSchoolApplicationDraft`). Exported so
+ * the offline input-UX regression test can assert the rendered value keeps its spaces.
+ */
+export function SchoolApplicationDraftFields({
   copy,
   draft,
   idPrefix,
@@ -145,7 +151,7 @@ function DraftFields({
   onChange: (next: SchoolApplicationDraft) => void;
 }) {
   const fields: {
-    key: keyof SchoolApplicationDraft;
+    key: SchoolApplicationDraftTextKey;
     label: string;
     required?: boolean;
   }[] = [
@@ -170,13 +176,16 @@ function DraftFields({
             data-testid={`${idPrefix}-${field.key}`}
             maxLength={200}
             onChange={(event) =>
-              onChange({
-                ...draft,
-                [field.key]: toNullable(event.target.value),
-              })
+              onChange(
+                applySchoolApplicationDraftInput(
+                  draft,
+                  field.key,
+                  event.target.value
+                )
+              )
             }
             required={field.required}
-            value={draft[field.key] ?? ""}
+            value={schoolApplicationDraftText(draft, field.key)}
           />
         </label>
       ))}
@@ -331,7 +340,7 @@ function SchoolApplicationsPanelInstance({
           <p className="text-[11px] leading-4 text-slate-600">
             {copy.createDescription}
           </p>
-          <DraftFields
+          <SchoolApplicationDraftFields
             copy={copy}
             draft={createDraft}
             idPrefix="school-application-create"
@@ -612,7 +621,7 @@ function SchoolApplicationsPanelInstance({
               className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-2.5"
               data-testid="school-application-edit-form"
             >
-              <DraftFields
+              <SchoolApplicationDraftFields
                 copy={copy}
                 draft={editDraft}
                 idPrefix="school-application-edit"

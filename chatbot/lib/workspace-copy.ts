@@ -118,6 +118,8 @@ export type WorkspaceCopy = {
     projectSchoolApplicationsTab: string;
     projectSchoolAdmissionsTab: string;
     projectStudent500Tab: string;
+    /** Phase 13 M9-A: the Project-level document centre section label. */
+    projectDocumentsTab: string;
     projectHomeNextSteps: string;
     projectHomeOpenApplications: string;
     projectHomeOpenAdmissions: string;
@@ -162,6 +164,103 @@ export type WorkspaceCopy = {
       cleanupPending: string;
       securityPending: string;
       securityFailed: string;
+    };
+    /**
+     * Phase 13 M9-A integrated customer workspace: Project navigation, the truthful
+     * overview, step conversations, the contextual materials rail and the document
+     * centre. Every label below describes real persisted state or an honest blocked
+     * state; none of them is an eligibility, readiness, approval or submission claim.
+     */
+    projectWorkspace: {
+      navTitle: string;
+      navStages: string;
+      navConversations: string;
+      stageApplications: string;
+      stageAdmissions: string;
+      stageStudent500: string;
+      stageDocuments: string;
+      statusNotStarted: string;
+      statusInProgress: string;
+      statusNeedsInformation: string;
+      statusBlocked: string;
+      statusUnknown: string;
+      stepChatOpen: string;
+      stepChatReopen: string;
+      stepChatUnavailable: string;
+      stepChatOpening: string;
+      overviewTitle: string;
+      overviewPreparation: string;
+      overviewReadiness: string;
+      overviewBlockers: string;
+      overviewNoBlockers: string;
+      overviewNextAction: string;
+      coverage: (readable: number, total: number) => string;
+      openItems: (count: number) => string;
+      needsAttention: (count: number) => string;
+      progressUnavailable: string;
+      readinessDisabled: string;
+      readinessNotAssessed: string;
+      blockerDocumentsUnavailable: string;
+      blockerApplicationsDisabled: string;
+      blockerStudent500Disabled: string;
+      blockerStepChatsUnavailable: string;
+      blockerApplicationMissingInformation: string;
+      blockerApplicationPackageStale: string;
+      blockerStudent500MissingFacts: string;
+      blockerStudent500HumanReview: string;
+      nextNeedsInformation: string;
+      nextInProgress: string;
+      nextNotStarted: string;
+      nextDocuments: string;
+      nextNone: string;
+      refresh: string;
+      loading: string;
+      loadFailed: string;
+      materialsTitle: string;
+      materialsDocuments: string;
+      materialsConversation: string;
+      materialsNextAction: string;
+      materialsStepUnavailable: string;
+      materialsNoDocuments: string;
+      materialsOpenDocuments: string;
+      documentsCenterTitle: string;
+      documentsCenterSubtitle: string;
+      documentsFilterAll: string;
+      documentsFilterSource: string;
+      documentsFilterState: string;
+      documentsSearch: string;
+      documentsSearchPlaceholder: string;
+      documentsSelected: string;
+      documentsVersionHistory: string;
+      documentsVersionLabel: (version: number) => string;
+      documentsOrigin: string;
+      documentsProvenance: string;
+      documentsNoSelection: string;
+      documentsEmptyFilter: string;
+      documentsBackToStep: string;
+      /** Phase 13 M9-A R1-04: return to whichever view the customer came from. */
+      documentsBackToPrevious: string;
+      /** Phase 13 M9-A R1-05: metadata-only generated-artifact references. */
+      artifactsTitle: string;
+      artifactsSubtitle: string;
+      artifactsEmpty: string;
+      artifactsTruncated: string;
+      artifactsNoContent: string;
+      artifactOpenOwner: string;
+      artifactVersion: string;
+      artifactStale: string;
+      artifactKindSchoolApplicationPackage: string;
+      artifactKindStudent500GsDraft: string;
+      artifactKindStudent500Snapshot: string;
+      artifactKindSubmissionPackage: string;
+      artifactKindDisabled: string;
+      artifactKindUnsupported: string;
+      artifactKindUnavailable: string;
+      documentsUnavailable: string;
+      sourceDirectUpload: string;
+      sourceChatImport: string;
+      lifecycleActive: string;
+      lifecycleWithdrawn: string;
     };
   };
   /**
@@ -209,6 +308,30 @@ export type WorkspaceCopy = {
     draftHeading: string;
     provisionalNotice: string;
     section: Record<string, string>;
+    /**
+     * Phase 13 M9-A final UX correction 3 — locale presentation of the stored M5.2 draft.
+     * The stored body stays English; these keys localize the *view*.
+     */
+    draftSectionOther: string;
+    draftViewNotice: string;
+    draftAssistedNotice: string;
+    draftStoredOriginalLabel: string;
+    draftOutstandingHeading: string;
+    draftOutstandingEmpty: string;
+    draftUnknownRequirement: string;
+    draftTemplate: {
+      application_summary: string;
+      intakeClause: string;
+      academic_background_satisfied: string;
+      academic_background_missing: string;
+      english_proficiency: string;
+      financial_capacity: string;
+      study_purpose: string;
+      provider_requirements_unverified: string;
+      provider_requirements_missing: string;
+      provider_requirements_unavailable: string;
+      next_steps: string;
+    };
     confirmDraft: string;
     confirmedNotice: string;
     staleNotice: string;
@@ -755,6 +878,7 @@ const zh: WorkspaceCopy = {
     projectSchoolApplicationsTab: "学校申请",
     projectSchoolAdmissionsTab: "入学流程",
     projectStudent500Tab: "学生签证 500",
+    projectDocumentsTab: "项目文件",
     projectHomeNextSteps: "下一步",
     projectHomeOpenApplications: "查看或新建学校申请草稿。",
     projectHomeOpenAdmissions: "查看入学准备流程及其真实状态。",
@@ -804,6 +928,102 @@ const zh: WorkspaceCopy = {
       cleanupPending: "存储状态：等待安全清理",
       securityPending: "安全状态：等待扫描",
       securityFailed: "安全状态：扫描失败",
+    },
+    projectWorkspace: {
+      navTitle: "项目导航",
+      navStages: "工作步骤",
+      navConversations: "项目对话",
+      stageApplications: "学校申请",
+      stageAdmissions: "入学流程",
+      stageStudent500: "学生签证 500 准备",
+      stageDocuments: "项目文件中心",
+      statusNotStarted: "尚未开始",
+      statusInProgress: "进行中",
+      statusNeedsInformation: "需要补充信息",
+      statusBlocked: "当前不可用",
+      statusUnknown: "状态未知",
+      stepChatOpen: "打开本步骤对话",
+      stepChatReopen: "返回本步骤对话",
+      stepChatUnavailable: "步骤对话暂不可用（步骤绑定尚未启用）。",
+      stepChatOpening: "正在打开步骤对话…",
+      overviewTitle: "项目概览",
+      overviewPreparation: "准备工作",
+      overviewReadiness: "提交准备状态",
+      overviewBlockers: "阻塞与限制",
+      overviewNoBlockers: "未发现来自系统记录的阻塞项。",
+      overviewNextAction: "建议的下一步",
+      coverage: (readable, total) =>
+        `可读取 ${readable} / ${total} 个工作区域；其余区域在此环境不可用。`,
+      openItems: (count) => `系统记录中的相关条目：${count}`,
+      needsAttention: (count) => `需要您处理：${count}`,
+      progressUnavailable: "当前没有可读取的项目记录，因此不显示任何进度。",
+      readinessDisabled: "此版本尚未启用提交能力，因此没有权威的提交准备状态。",
+      readinessNotAssessed: "提交准备状态由具体流程自行判定，此处不做推断。",
+      blockerDocumentsUnavailable:
+        "项目文件中心尚未开放：生产文件存储与扫描尚未获批。",
+      blockerApplicationsDisabled: "当前环境未开放学校申请功能。",
+      blockerStudent500Disabled: "当前环境未开放学生签证 500 准备功能。",
+      blockerStepChatsUnavailable: "步骤对话尚未启用；项目对话仍可正常使用。",
+      blockerApplicationMissingInformation: "有学校申请草稿仍缺少必填信息。",
+      blockerApplicationPackageStale:
+        "有学校申请准备包的输入已变化，需要重新生成。",
+      blockerStudent500MissingFacts: "有学生签证 500 申请仍缺少事实信息。",
+      blockerStudent500HumanReview: "有学生签证 500 要求需要人工复核。",
+      nextNeedsInformation: "先补充缺失信息。",
+      nextInProgress: "继续未完成的工作。",
+      nextNotStarted: "开始这一步骤。",
+      nextDocuments: "查看项目文件中心。",
+      nextNone: "当前没有可执行的下一步；请在左侧选择项目对话继续沟通。",
+      refresh: "刷新",
+      loading: "正在加载项目状态…",
+      loadFailed: "无法加载项目状态。",
+      materialsTitle: "本步骤材料",
+      materialsDocuments: "相关文件与版本",
+      materialsConversation: "本步骤对话",
+      materialsNextAction: "可执行动作",
+      materialsStepUnavailable: "此步骤的材料在此环境不可用。",
+      materialsNoDocuments: "此步骤没有您可查看的文件。",
+      materialsOpenDocuments: "打开文件中心",
+      documentsCenterTitle: "项目文件中心",
+      documentsCenterSubtitle:
+        "仅显示您被授权查看的文件与版本；文件存在不等于可以读取内容或下载。",
+      documentsFilterAll: "全部",
+      documentsFilterSource: "来源",
+      documentsFilterState: "状态",
+      documentsSearch: "搜索文件",
+      documentsSearchPlaceholder: "按类型或来源筛选",
+      documentsSelected: "已选版本",
+      documentsVersionHistory: "版本记录",
+      documentsVersionLabel: (version) => `第 ${version} 版`,
+      documentsOrigin: "来源",
+      documentsProvenance: "来源信息",
+      documentsNoSelection: "尚未选择文件版本。",
+      documentsEmptyFilter: "没有符合筛选条件的文件。",
+      documentsBackToStep: "返回相关步骤",
+      documentsBackToPrevious: "返回上一视图",
+      artifactsTitle: "生成的成果（仅引用）",
+      artifactsSubtitle:
+        "这些条目来自学校申请与学生签证 500 流程自身保存的版本，只显示身份、版本与状态；它们不是项目上传文件，也不在此处提供内容预览或下载。",
+      artifactsEmpty: "此项目暂无可引用的生成成果。",
+      artifactsTruncated: "仅显示最新的部分成果。",
+      artifactsNoContent:
+        "此处不复制成果正文，也不新增任何访问权限；请在所属流程中查看与操作。",
+      artifactOpenOwner: "打开所属流程",
+      artifactVersion: "版本",
+      artifactStale: "输入已变化，需要重新生成",
+      artifactKindSchoolApplicationPackage: "学校申请准备包",
+      artifactKindStudent500GsDraft: "学生签证 500 陈述草稿",
+      artifactKindStudent500Snapshot: "学生签证 500 准备快照",
+      artifactKindSubmissionPackage: "提交包",
+      artifactKindDisabled: "此环境尚未开放该类成果。",
+      artifactKindUnsupported:
+        "本里程碑不提供该类成果的汇总引用（仅支持按目标读取）。",
+      artifactKindUnavailable: "暂时无法读取该类成果。",
+      documentsUnavailable: "项目文件中心当前不可用。",
+      sourceDirectUpload: "直接上传",
+      sourceChatImport: "从对话导入",
+      lifecycleActive: "有效",
+      lifecycleWithdrawn: "已撤回",
     },
   },
   schoolAdmissions: {
@@ -880,6 +1100,37 @@ const zh: WorkspaceCopy = {
       study_purpose: "学习目的",
       provider_requirements: "学校要求",
       next_steps: "下一步",
+    },
+    draftSectionOther: "其他草稿部分",
+    draftViewNotice:
+      "草稿正文保存时的语言为英文。下方为同一确定性模板的中文视图，未修改已保存的版本、内容哈希或来源记录；英文原文始终可以查看。",
+    draftAssistedNotice:
+      "此版本的草稿正文包含辅助生成内容，不一定是确定性模板，因此不做翻译：下方原样显示保存时的英文正文。",
+    draftStoredOriginalLabel: "查看已保存的英文原文",
+    draftOutstandingHeading: "仍需完成的检查项",
+    draftOutstandingEmpty: "目前没有仍需完成的检查项。",
+    draftUnknownRequirement: "其他检查项（该内部代码暂无本地化名称）",
+    draftTemplate: {
+      application_summary:
+        "「{institution} — {course}」的临时准备草稿{intake_clause}。目标信息由客户提供，未经任何院校独立核实；准备包是否可用请以学校申请的准备包状态为准。",
+      intakeClause: "，入学批次：{intake}",
+      academic_background_satisfied:
+        "本草案引用了经客户授权的学习事实记录。其数值必须由客户确认，院校要求的任何学术陈述都必须由授权文件支持。",
+      academic_background_missing:
+        "本流程目前没有可用的、经客户授权的学习事实，因此不撰写任何学术陈述。",
+      english_proficiency:
+        "本流程未审阅任何经独立核实的英语能力结果。请仅依据授权文件记录考试类型、日期与分数；此处不作任何推断。",
+      financial_capacity:
+        "本流程尚未认证任何资金证明。学费、生活费或押金数额必须来自授权文件或获批的院校声明；本草案不对任何金额或付款作出断言。",
+      study_purpose:
+        "请以客户自己的语言撰写学习目的。本部分仅为占位内容：此处不生成、不评估也不保证任何真实临时入境或签证论点。",
+      provider_requirements_unverified:
+        "教育目录记录匹配了所填院校/课程。目录记录并非院校的独立确认，本流程不对任何院校要求、截止日期或费用作出断言。",
+      provider_requirements_missing:
+        "没有目录记录匹配所填院校/课程。在客户或获授权审核人提供之前，院校要求仍属未知。",
+      provider_requirements_unavailable:
+        "本流程无法获得院校要求，因此不作任何断言。",
+      next_steps: "以下检查项仍未完成：",
     },
     confirmDraft: "确认此草稿版本",
     confirmedNotice:
@@ -1728,6 +1979,7 @@ const en: WorkspaceCopy = {
     projectSchoolApplicationsTab: "School applications",
     projectSchoolAdmissionsTab: "Admissions workflow",
     projectStudent500Tab: "Student 500 visa",
+    projectDocumentsTab: "Project documents",
     projectHomeNextSteps: "Next steps",
     projectHomeOpenApplications: "Review or create a school application draft.",
     projectHomeOpenAdmissions:
@@ -1785,6 +2037,116 @@ const en: WorkspaceCopy = {
       cleanupPending: "Storage: cleanup pending",
       securityPending: "Security: scan pending",
       securityFailed: "Security: scan failed",
+    },
+    projectWorkspace: {
+      navTitle: "Project navigation",
+      navStages: "Work steps",
+      navConversations: "Project conversations",
+      stageApplications: "School applications",
+      stageAdmissions: "Admissions workflow",
+      stageStudent500: "Student 500 preparation",
+      stageDocuments: "Project document centre",
+      statusNotStarted: "Not started",
+      statusInProgress: "In progress",
+      statusNeedsInformation: "Needs information",
+      statusBlocked: "Unavailable here",
+      statusUnknown: "State unknown",
+      stepChatOpen: "Open this step's conversation",
+      stepChatReopen: "Return to this step's conversation",
+      stepChatUnavailable:
+        "Step conversations are not available yet (the step binding is not enabled).",
+      stepChatOpening: "Opening the step conversation…",
+      overviewTitle: "Project overview",
+      overviewPreparation: "Preparation",
+      overviewReadiness: "Submission readiness",
+      overviewBlockers: "Blockers and limits",
+      overviewNoBlockers: "No blocker was reported by the system records.",
+      overviewNextAction: "Suggested next step",
+      coverage: (readable, total) =>
+        `${readable} of ${total} work areas can be read; the rest are unavailable in this environment.`,
+      openItems: (count) => `Records reported by the system: ${count}`,
+      needsAttention: (count) => `Needs your input: ${count}`,
+      progressUnavailable:
+        "No Project records can be read, so no progress is shown.",
+      readinessDisabled:
+        "Submission is not enabled in this build, so no authoritative readiness state exists.",
+      readinessNotAssessed:
+        "Readiness is decided by the specific workflow; nothing is inferred here.",
+      blockerDocumentsUnavailable:
+        "The Project document centre is not open: production storage and scanning are not approved.",
+      blockerApplicationsDisabled:
+        "School applications are not enabled in this environment.",
+      blockerStudent500Disabled:
+        "Student 500 preparation is not enabled in this environment.",
+      blockerStepChatsUnavailable:
+        "Step conversations are not enabled yet; Project conversations still work.",
+      blockerApplicationMissingInformation:
+        "A school application draft is still missing required information.",
+      blockerApplicationPackageStale:
+        "A school application package no longer matches its inputs and must be regenerated.",
+      blockerStudent500MissingFacts:
+        "A Student 500 application is still missing fact information.",
+      blockerStudent500HumanReview:
+        "A Student 500 requirement needs human review.",
+      nextNeedsInformation: "Supply the missing information first.",
+      nextInProgress: "Continue the unfinished work.",
+      nextNotStarted: "Start this step.",
+      nextDocuments: "Open the Project document centre.",
+      nextNone:
+        "No next action is available. Use a Project conversation on the left to continue.",
+      refresh: "Refresh",
+      loading: "Loading Project state…",
+      loadFailed: "The Project state could not be loaded.",
+      materialsTitle: "Materials for this step",
+      materialsDocuments: "Related documents and versions",
+      materialsConversation: "This step's conversation",
+      materialsNextAction: "Available action",
+      materialsStepUnavailable:
+        "Materials for this step are unavailable in this environment.",
+      materialsNoDocuments: "You have no viewable documents for this step.",
+      materialsOpenDocuments: "Open the document centre",
+      documentsCenterTitle: "Project document centre",
+      documentsCenterSubtitle:
+        "Only documents and versions you are authorized to view are listed; a listed file is not permission to read or download its content.",
+      documentsFilterAll: "All",
+      documentsFilterSource: "Source",
+      documentsFilterState: "State",
+      documentsSearch: "Search documents",
+      documentsSearchPlaceholder: "Filter by type or origin",
+      documentsSelected: "Selected version",
+      documentsVersionHistory: "Version history",
+      documentsVersionLabel: (version) => `Version ${version}`,
+      documentsOrigin: "Origin",
+      documentsProvenance: "Provenance",
+      documentsNoSelection: "No document version is selected.",
+      documentsEmptyFilter: "No document matches the current filter.",
+      documentsBackToStep: "Return to the related step",
+      documentsBackToPrevious: "Return to the previous view",
+      artifactsTitle: "Generated artifacts (references only)",
+      artifactsSubtitle:
+        "These entries come from the versions the school-application and Student 500 workflows already saved. They show identity, version and status only, are not project uploads, and no content preview or download is offered here.",
+      artifactsEmpty: "No generated artifact is available to reference yet.",
+      artifactsTruncated: "Only the most recent artifacts are listed.",
+      artifactsNoContent:
+        "No artifact text is copied here and no access is added; open the owning workflow to view or act on it.",
+      artifactOpenOwner: "Open the owning workflow",
+      artifactVersion: "Version",
+      artifactStale: "Inputs changed; regenerate required",
+      artifactKindSchoolApplicationPackage: "School application package",
+      artifactKindStudent500GsDraft: "Student 500 statement draft",
+      artifactKindStudent500Snapshot: "Student 500 preparation snapshot",
+      artifactKindSubmissionPackage: "Submission package",
+      artifactKindDisabled:
+        "This artifact type is not open in this environment.",
+      artifactKindUnsupported:
+        "This milestone does not aggregate this artifact type (per-target reads only).",
+      artifactKindUnavailable: "This artifact type cannot be read right now.",
+      documentsUnavailable:
+        "The Project document centre is unavailable right now.",
+      sourceDirectUpload: "Direct upload",
+      sourceChatImport: "Imported from a conversation",
+      lifecycleActive: "Active",
+      lifecycleWithdrawn: "Withdrawn",
     },
   },
   schoolAdmissions: {
@@ -1861,6 +2223,38 @@ const en: WorkspaceCopy = {
       study_purpose: "Study purpose",
       provider_requirements: "Provider requirements",
       next_steps: "Next steps",
+    },
+    draftSectionOther: "Other draft section",
+    draftViewNotice:
+      "Draft bodies are stored in English, which is the original language of the saved version.",
+    draftAssistedNotice:
+      "This draft version contains assisted prose, so it is shown exactly as stored in English and is not translated.",
+    draftStoredOriginalLabel: "View the stored English text",
+    draftOutstandingHeading: "Outstanding checks",
+    draftOutstandingEmpty: "No outstanding checks are recorded.",
+    draftUnknownRequirement:
+      "Other check (no localized name exists for this internal code)",
+    draftTemplate: {
+      application_summary:
+        "Provisional draft for {institution} — {course}{intake_clause}. Target details were provided by the customer and are not independently verified by any institution.",
+      intakeClause: ", intake {intake}",
+      academic_background_satisfied:
+        "This draft references customer-authorised study fact records. Their values must be confirmed by the customer, and any academic claim required by the institution must be supported by an authorised document.",
+      academic_background_missing:
+        "No customer-authorised study facts are available to this workflow yet, so no academic claim is drafted.",
+      english_proficiency:
+        "No independently verified English proficiency result is reviewed in this workflow. Record the test type, date and score only from an authorised document; nothing is inferred here.",
+      financial_capacity:
+        "No financial evidence has been certified in this workflow. Any tuition, living-cost or deposit figure must come from an authorised document or an approved provider statement; this draft asserts no amount and no payment.",
+      study_purpose:
+        "Draft the customer's own study purpose in their words. This section is a placeholder: no genuine temporary entrant or visa argument is generated, assessed or guaranteed here.",
+      provider_requirements_unverified:
+        "An education catalogue record matched the recorded institution/course. Catalogue records are not independent institutional confirmation, and this workflow asserts no institutional requirement, deadline or fee.",
+      provider_requirements_missing:
+        "No catalogue record matched the recorded institution/course. Institutional requirements remain unknown until the customer or an authorised reviewer supplies them.",
+      provider_requirements_unavailable:
+        "Institutional requirements are unavailable in this workflow and are therefore left unasserted.",
+      next_steps: "The following checks are still outstanding:",
     },
     confirmDraft: "Confirm this draft version",
     confirmedNotice:

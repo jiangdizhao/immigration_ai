@@ -943,7 +943,13 @@ test("Project home and section navigation reuse the navigation-busy contract", (
     projectNavSource.match(
       /runProjectNavigationAction\(\{\s*isBusy: \(\) => projectNavigationBusyRef\.current,/gu
     ) ?? [];
-  assert.equal(guards.length, 2);
+  // Phase 13 M9-A R1-04 adds a third busy-gated Project section action: the document
+  // centre's "return to the previous view". Every Project section action still goes
+  // through the one shared gate, so a new ungated action cannot be added silently.
+  assert.ok(
+    guards.length >= 3,
+    `every Project section action must use the shared busy gate (found ${guards.length})`
+  );
   assert.match(
     workspaceSource,
     /projectNavigationBusyRef\.current = projectNavigationBusy;/u

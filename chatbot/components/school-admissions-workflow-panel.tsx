@@ -2,6 +2,8 @@
 
 import { GraduationCap, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { SiteLocale } from "@/lib/site-locale";
+import { presentAdmissionsDraft } from "@/lib/workspace/admissions-draft-presentation";
 import {
   createSchoolAdmissionsController,
   type SchoolAdmissionsCase,
@@ -72,16 +74,20 @@ export function SchoolAdmissionsWorkflowPanel({
   copy,
   projectId,
   enabled = false,
+  locale = "en",
 }: {
   copy: PanelCopy;
   projectId: string;
   enabled?: boolean;
+  /** Site locale; the stored M5.2 draft body stays English and is presented per locale. */
+  locale?: SiteLocale;
 }) {
   return (
     <SchoolAdmissionsWorkflowPanelInstance
       copy={copy}
       enabled={enabled}
-      key={`${projectId}:${enabled ? "on" : "off"}`}
+      key={`${projectId}:${enabled ? "on" : "off"}:${locale}`}
+      locale={locale}
       projectId={projectId}
     />
   );
@@ -91,10 +97,12 @@ function SchoolAdmissionsWorkflowPanelInstance({
   copy,
   projectId,
   enabled,
+  locale,
 }: {
   copy: PanelCopy;
   projectId: string;
   enabled: boolean;
+  locale: SiteLocale;
 }) {
   const [controller] = useState(() => createSchoolAdmissionsController());
   const snapshot = useSyncExternalStore(
@@ -506,16 +514,92 @@ function SchoolAdmissionsWorkflowPanelInstance({
             </p>
             {detail.preparation ? (
               <div className="mt-1 space-y-1">
-                {detail.preparation.sections.map((section) => (
-                  <div key={section.code}>
-                    <p className="text-[11px] font-semibold text-slate-800">
-                      {label(copy.section, section.code)}
-                    </p>
-                    <p className="text-[11px] leading-4 text-slate-600">
-                      {section.text}
-                    </p>
-                  </div>
-                ))}
+                {(() => {
+                  /**
+                   * Correction 3: the stored M5.2 body is immutable English. Chinese
+                   * locale renders an equivalent deterministic-template view; assisted
+                   * or unknown prose is shown as stored and explicitly marked. The
+                   * stored English text stays reachable for every section.
+                   */
+                  const view = presentAdmissionsDraft({
+                    assistKind: detail.preparation.assistKind,
+                    copy: {
+                      assistedNotice: copy.draftAssistedNotice,
+                      outstandingEmpty: copy.draftOutstandingEmpty,
+                      outstandingHeading: copy.draftOutstandingHeading,
+                      requirement: copy.requirement,
+                      requirementStatus: copy.requirementStatus,
+                      section: copy.section,
+                      sectionOther: copy.draftSectionOther,
+                      storedOriginalLabel: copy.draftStoredOriginalLabel,
+                      template: copy.draftTemplate,
+                      unknownRequirement: copy.draftUnknownRequirement,
+                      viewNotice: copy.draftViewNotice,
+                    },
+                    courseTitle: detail.courseTitle,
+                    institutionName: detail.institutionName,
+                    intakeLabel: detail.intakeLabel,
+                    locale: locale === "zh-CN" ? "zh-CN" : "en",
+                    requirements: detail.requirements,
+                    sections: detail.preparation.sections,
+                  });
+                  return (
+                    <>
+                      {view.notice ? (
+                        <p className="rounded bg-slate-50 px-2 py-1 text-[10px] leading-4 text-slate-600">
+                          {view.notice}
+                        </p>
+                      ) : null}
+                      {view.sections.map((section) => (
+                        <div key={section.code}>
+                          <p className="text-[11px] font-semibold text-slate-800">
+                            {section.heading}
+                          </p>
+                          <p className="text-[11px] leading-4 text-slate-600">
+                            {section.body}
+                          </p>
+                          {section.code === "next_steps" &&
+                          view.outstanding.length > 0 ? (
+                            <ul
+                              className="mt-0.5 space-y-0.5"
+                              data-testid="admissions-draft-outstanding"
+                            >
+                              {view.outstanding.map((item) => (
+                                <li
+                                  className="text-[11px] leading-4 text-slate-700"
+                                  data-testid={`admissions-draft-outstanding-${item.code}`}
+                                  key={item.code}
+                                  title={item.unknown ? item.code : undefined}
+                                >
+                                  · {item.label}
+                                  {item.statusLabel
+                                    ? ` · ${item.statusLabel}`
+                                    : null}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {section.code === "next_steps" &&
+                          view.outstanding.length === 0 ? (
+                            <p className="text-[11px] text-slate-600">
+                              {view.outstandingEmpty}
+                            </p>
+                          ) : null}
+                          {section.bodyDiffersFromStored ? (
+                            <details className="mt-0.5">
+                              <summary className="cursor-pointer text-[10px] font-semibold text-slate-500">
+                                {view.storedOriginalLabel}
+                              </summary>
+                              <p className="mt-0.5 text-[10px] leading-4 text-slate-500">
+                                {section.storedText}
+                              </p>
+                            </details>
+                          ) : null}
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
             ) : null}
           </div>

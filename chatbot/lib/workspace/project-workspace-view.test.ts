@@ -11,15 +11,16 @@ import {
 const projectA = "11111111-1111-4111-8111-111111111111";
 const projectB = "22222222-2222-4222-8222-222222222222";
 
-test("only the three authorized Project sections are recognized", () => {
+test("only the authorized Project sections are recognized", () => {
+  // Phase 13 M9-A adds the version-aware Project document centre as a real section.
   assert.deepEqual(
     [...PROJECT_WORKSPACE_VIEWS],
-    ["home", "applications", "admissions"]
+    ["home", "applications", "admissions", "student500", "documents"]
   );
   for (const view of PROJECT_WORKSPACE_VIEWS) {
     assert.equal(isProjectWorkspaceView(view), true);
   }
-  for (const value of ["", "documents", "review", "HOME", null, 1, undefined]) {
+  for (const value of ["", "review", "HOME", "Documents", null, 1, undefined]) {
     assert.equal(isProjectWorkspaceView(value), false);
   }
 });

@@ -42,6 +42,7 @@ import {
   type PoliticalGateResult,
   sanitizePoliticalHistory,
 } from "@/lib/political-gate";
+import type { ProjectConversationStageKey } from "@/lib/projects/stage-keys";
 import { cn, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import {
   type ConversationOrigin,
@@ -64,6 +65,20 @@ import {
   runProjectNavigationAction,
   shouldShowNeutralProjectSelection,
 } from "@/lib/workspace/project-entry";
+import { deriveProjectOverview } from "@/lib/workspace/project-overview";
+import { openProjectStageChat } from "@/lib/workspace/project-stage-chats";
+import {
+  deriveProjectStages,
+  stageSignalsFromSummary,
+} from "@/lib/workspace/project-stages";
+import {
+  EMPTY_PROJECT_WORKSPACE_DATA,
+  type ProjectWorkspaceData,
+  projectWorkspaceDataForSelection,
+  projectWorkspaceDataOnSelectionChange,
+  shouldApplyProjectWorkspaceSummary,
+} from "@/lib/workspace/project-workspace-state";
+import { loadProjectWorkspaceSummary } from "@/lib/workspace/project-workspace-summary-client";
 import {
   nextProjectWorkspaceView,
   type ProjectWorkspaceView,
@@ -96,7 +111,9 @@ import {
 } from "./legacy-conversation-notice";
 import { MatterDocumentsPanel } from "./matter-documents-panel";
 import { ProjectEntryPanel } from "./project-entry-panel";
+import { ProjectStepMaterialsPanel } from "./project-step-materials-panel";
 import { ProjectWorkspaceHome } from "./project-workspace-home";
+import { ProjectWorkspaceNav } from "./project-workspace-nav";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -106,6 +123,21 @@ import { UserDocumentHistoryPanel } from "./user-document-history-panel";
 const TYPEWRITER_TICK_MS = 38;
 const TYPEWRITER_WORDS_PER_TICK = 3;
 const SHOW_WORKSPACE_DEBUG = process.env.NEXT_PUBLIC_WIDGET_DEBUG === "true";
+
+/**
+ * Phase 13 M9-A R1-04: section labels for the document centre's truthful
+ * "return to the previous view" action.
+ */
+const PROJECT_VIEW_TAB_LABEL_KEYS = {
+  admissions: "projectSchoolAdmissionsTab",
+  applications: "projectSchoolApplicationsTab",
+  documents: "projectDocumentsTab",
+  home: "projectHomeTab",
+  student500: "projectStudent500Tab",
+} as const satisfies Record<
+  ProjectWorkspaceView,
+  keyof ReturnType<typeof getWorkspaceCopy>["projectEntry"]
+>;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -570,6 +602,7 @@ export function ImmigrationAIWorkspace({
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
   student500Enabled = false,
+  submissionCapabilityEnabled = false,
 }: {
   assistantMode?: AssistantMode;
   policyReference?: PolicyWorkspaceReference | null;
@@ -599,6 +632,12 @@ export function ImmigrationAIWorkspace({
   schoolAdmissionsEnabled?: boolean;
   /** Phase 13 M6.1 Student 500 preparation: capability + eligibility. */
   student500Enabled?: boolean;
+  /**
+   * Phase 13 M8 submission capability, resolved server-side. Default-OFF, so the
+   * overview reports submission readiness as unavailable instead of implying progress
+   * towards a submission.
+   */
+  submissionCapabilityEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const router = useRouter();
@@ -620,6 +659,14 @@ export function ImmigrationAIWorkspace({
   const [selectedProject, setSelectedProject] =
     useState<ProjectEntryProject | null>(null);
   const [projectView, setProjectView] = useState<ProjectWorkspaceView>("home");
+  /**
+   * Phase 13 M9-A R1-04: the section the customer came from, so the document centre can
+   * offer a truthful "return to the previous view" (there is no authorized
+   * document→step association to claim).
+   */
+  const [previousProjectView, setPreviousProjectView] =
+    useState<ProjectWorkspaceView>("home");
+  const previousProjectViewRef = useRef<ProjectWorkspaceView>("home");
   /** Mirrors the selection so a Project switch can reset the section safely. */
   const selectedProjectIdRef = useRef<string | null>(null);
   /**
@@ -771,6 +818,12 @@ export function ImmigrationAIWorkspace({
       selectedProjectIdRef.current = projectId;
       setSelectedProjectId(projectId);
       setSelectedProject(project);
+      // Phase 13 M9-A R1-04: a different Project must not inherit the previous
+      // Project's remembered section.
+      if (previousProjectId !== projectId) {
+        previousProjectViewRef.current = "home";
+        setPreviousProjectView("home");
+      }
       if (
         projectSwitchClearsConversation({
           previousProjectId,
@@ -788,6 +841,10 @@ export function ImmigrationAIWorkspace({
   /**
    * Section navigation follows the same busy contract as Project Chat navigation:
    * while a turn or a conversation load is in progress the section is unchanged.
+   *
+   * Phase 13 M9-A R1-04: the section the customer leaves is remembered, so the document
+   * centre can offer a correctly labelled "return to the previous view" instead of
+   * claiming a document's (non-existent, unauthorized) originating step.
    */
   const handleSelectProjectView = useCallback(
     (view: ProjectWorkspaceView) => {
@@ -797,7 +854,13 @@ export function ImmigrationAIWorkspace({
           if (conversationOriginRef.current === "project") {
             resetProjectConversation();
           }
-          setProjectView(view);
+          setProjectView((current) => {
+            if (current !== view) {
+              previousProjectViewRef.current = current;
+              setPreviousProjectView(current);
+            }
+            return view;
+          });
         },
       });
       if (!navigation.allowed) {
@@ -806,6 +869,100 @@ export function ImmigrationAIWorkspace({
     },
     [resetProjectConversation]
   );
+
+  /** Back to the section the customer came from (the document centre's return path). */
+  const returnToPreviousProjectView = useCallback(() => {
+    const navigation = runProjectNavigationAction({
+      isBusy: () => projectNavigationBusyRef.current,
+      action: () => {
+        const target = previousProjectViewRef.current;
+        if (!target || target === "documents") {
+          return;
+        }
+        previousProjectViewRef.current = "documents";
+        setPreviousProjectView("documents");
+        setProjectView(target);
+      },
+    });
+    if (!navigation.allowed) {
+      return;
+    }
+  }, []);
+
+  /**
+   * Phase 13 M9-A: the Project overview projection, the actor's own step-conversation
+   * bindings and the step-chat request state. Everything is keyed to the selected
+   * Project: a selection change clears the projection immediately and a late response
+   * is dropped, so Project A's overview can never render on Project B.
+   */
+  const [workspaceData, setWorkspaceData] = useState<ProjectWorkspaceData>(
+    EMPTY_PROJECT_WORKSPACE_DATA
+  );
+  const [pendingStageChatKey, setPendingStageChatKey] =
+    useState<ProjectConversationStageKey | null>(null);
+  const [stageChatError, setStageChatError] = useState<string | null>(null);
+  const workspaceDataSequenceRef = useRef(0);
+
+  const refreshProjectWorkspaceData = useCallback(async () => {
+    const projectId = selectedProjectIdRef.current;
+    workspaceDataSequenceRef.current += 1;
+    const sequence = workspaceDataSequenceRef.current;
+    if (!projectId) {
+      setWorkspaceData(EMPTY_PROJECT_WORKSPACE_DATA);
+      return;
+    }
+    // Never keep another Project's summary while this request is in flight.
+    setWorkspaceData(
+      projectWorkspaceDataOnSelectionChange({ nextProjectId: projectId })
+    );
+    const result = await loadProjectWorkspaceSummary({ projectId });
+    if (workspaceDataSequenceRef.current !== sequence) {
+      return;
+    }
+    if (
+      result.ok &&
+      shouldApplyProjectWorkspaceSummary({
+        latestRequestSequence: sequence,
+        requestProjectId: projectId,
+        requestSequence: sequence,
+        selectedProjectId: selectedProjectIdRef.current,
+        summaryProjectId: result.summary.projectId,
+      })
+    ) {
+      setWorkspaceData({ state: "ready", summary: result.summary });
+      return;
+    }
+    if (workspaceDataSequenceRef.current !== sequence) {
+      return;
+    }
+    setWorkspaceData({ state: "failed", summary: null });
+  }, []);
+
+  /**
+   * A Project switch must invalidate the previous projection **before** the async
+   * reload resolves, so the effect resets state synchronously and the render gate
+   * below additionally hides any summary that does not match the current selection.
+   */
+  useEffect(() => {
+    setWorkspaceData((current) =>
+      current.summary
+        ? projectWorkspaceDataOnSelectionChange({
+            nextProjectId: selectedProjectId,
+          })
+        : current
+    );
+    if (!selectedProjectId) {
+      return;
+    }
+    refreshProjectWorkspaceData().catch(() => undefined);
+  }, [selectedProjectId, refreshProjectWorkspaceData]);
+
+  const visibleWorkspaceData = projectWorkspaceDataForSelection({
+    data: workspaceData,
+    selectedProjectId,
+  });
+  const workspaceSummary = visibleWorkspaceData.summary;
+  const workspaceSummaryState = visibleWorkspaceData.state;
 
   const latestAssistant = useMemo(
     () => [...messages].reverse().find(isAssistantMessage) ?? null,
@@ -879,6 +1036,52 @@ export function ImmigrationAIWorkspace({
     conversationOrigin,
     conversationProjectId,
   });
+  /**
+   * Phase 13 M9-A navigation/overview. Derived only from the server-authorized
+   * projection: no summary means no stages and no fabricated counts.
+   */
+  const projectStages = useMemo(() => {
+    if (!workspaceSummary) {
+      return [];
+    }
+    const admissionsCapability = schoolAdmissionsEnabled
+      ? "available"
+      : schoolPreparationRestricted
+        ? "restricted"
+        : "disabled";
+    return deriveProjectStages({
+      boundStageKeys: workspaceSummary.stageChats.bindings.map(
+        (binding) => binding.stageKey
+      ),
+      signals: stageSignalsFromSummary({
+        admissionsCapability,
+        summary: workspaceSummary,
+      }),
+      stageChatsAvailable: workspaceSummary.stageChats.state === "available",
+    });
+  }, [schoolAdmissionsEnabled, schoolPreparationRestricted, workspaceSummary]);
+  const projectOverview = useMemo(
+    () =>
+      workspaceSummary
+        ? deriveProjectOverview({
+            stages: projectStages,
+            submissionCapabilityEnabled,
+            summary: workspaceSummary,
+          })
+        : null,
+    [projectStages, submissionCapabilityEnabled, workspaceSummary]
+  );
+  /** Which step conversation, if any, the open Chat is bound to. */
+  const activeStageChatKey = useMemo(() => {
+    if (!(workspaceSummary && conversationId)) {
+      return null;
+    }
+    return (
+      workspaceSummary.stageChats.bindings.find(
+        (binding) => binding.chatId === conversationId
+      )?.stageKey ?? null
+    );
+  }, [conversationId, workspaceSummary]);
   const latestKnownFacts =
     latestAssistant?.interactionPlan?.known_facts_summary ?? {};
   const latestRequestedFacts =
@@ -1107,6 +1310,45 @@ export function ImmigrationAIWorkspace({
       }
     },
     [refreshConversationList]
+  );
+
+  /**
+   * Phase 13 M9-A: open (or reopen) the actor's own conversation for one Project
+   * step. The server performs the find-or-create and returns the Chat identity, so a
+   * repeated click can never create a second Chat, and the response is only applied
+   * while the same Project is still selected.
+   */
+  const handleOpenStageConversation = useCallback(
+    async (stageKey: ProjectConversationStageKey) => {
+      const projectId = selectedProjectIdRef.current;
+      if (!projectId || projectNavigationBusyRef.current) {
+        return;
+      }
+      setPendingStageChatKey(stageKey);
+      setStageChatError(null);
+      try {
+        const result = await openProjectStageChat({ projectId, stageKey });
+        if (selectedProjectIdRef.current !== projectId) {
+          return;
+        }
+        if (!result.ok) {
+          setStageChatError(
+            result.state === "unavailable"
+              ? copy.projectEntry.projectWorkspace.stepChatUnavailable
+              : copy.projectEntry.projectWorkspace.loadFailed
+          );
+          return;
+        }
+        await loadConversation(result.chatId);
+      } catch {
+        if (selectedProjectIdRef.current === projectId) {
+          setStageChatError(copy.projectEntry.projectWorkspace.loadFailed);
+        }
+      } finally {
+        setPendingStageChatKey(null);
+      }
+    },
+    [copy.projectEntry.projectWorkspace, loadConversation]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -2094,6 +2336,24 @@ export function ImmigrationAIWorkspace({
             temporaryGuestProject={temporaryGuestProject}
           />
 
+          {/*
+            Phase 13 M9-A: real step navigation with real status. It is only rendered
+            for a selected Project, and every stage behind it re-checks authorization.
+          */}
+          {selectedProjectId ? (
+            <ProjectWorkspaceNav
+              activeStageChatKey={activeStageChatKey}
+              copy={copy.projectEntry.projectWorkspace}
+              navigationBusy={projectNavigationBusy}
+              onOpenStageChat={handleOpenStageConversation}
+              onSelectView={handleSelectProjectView}
+              pendingStageChatKey={pendingStageChatKey}
+              stageChatError={stageChatError}
+              stages={projectStages}
+              view={projectView}
+            />
+          ) : null}
+
           {selectedProjectId ? null : (
             <>
               <div className="space-y-2">
@@ -2320,19 +2580,37 @@ export function ImmigrationAIWorkspace({
           {isNeutralProjectSelection ? (
             selectedProject ? (
               <ProjectWorkspaceHome
+                artifacts={workspaceSummary?.artifacts ?? null}
                 copy={copy.projectEntry}
                 locale={locale}
                 navigationBusy={projectNavigationBusy}
+                onOpenArtifactOwner={handleSelectProjectView}
+                onRefreshSummary={() => {
+                  refreshProjectWorkspaceData().catch(() => undefined);
+                }}
+                onReturnToPreviousView={returnToPreviousProjectView}
                 onSelectView={handleSelectProjectView}
+                overview={projectOverview}
                 project={selectedProject}
                 projectDocumentsEnabled={false}
+                returnToPreviousViewLabel={
+                  previousProjectView === "documents"
+                    ? undefined
+                    : `← ${
+                        copy.projectEntry[
+                          PROJECT_VIEW_TAB_LABEL_KEYS[previousProjectView]
+                        ]
+                      }`
+                }
                 schoolAdmissionsCopy={copy.schoolAdmissions}
                 schoolAdmissionsEnabled={schoolAdmissionsEnabled}
                 schoolApplicationsCopy={copy.schoolApplications}
                 schoolApplicationsEnabled={schoolApplicationsEnabled}
                 schoolPreparationRestricted={schoolPreparationRestricted}
+                stages={projectStages}
                 student500Copy={copy.student500}
                 student500Enabled={student500Enabled}
+                summaryState={workspaceSummaryState}
                 temporaryGuestProject={temporaryGuestProject}
                 view={projectView}
               />
@@ -2903,7 +3181,25 @@ export function ImmigrationAIWorkspace({
             )}
             data-testid="workspace-project-context-notice"
           >
-            <p className="rounded-xl bg-white p-4 text-sm leading-6 text-slate-600">
+            {/*
+              Phase 13 M9-A: the right rail is scoped to the selected step, so switching
+              Project or section cannot leave stale detail behind. The component is keyed
+              by Project + section for exactly that reason.
+            */}
+            <ProjectStepMaterialsPanel
+              activeStageChatKey={activeStageChatKey}
+              copy={copy.projectEntry.projectWorkspace}
+              key={`project-step-materials:${selectedProjectId ?? "none"}:${projectView}`}
+              navigationBusy={projectNavigationBusy}
+              onOpenStageChat={handleOpenStageConversation}
+              onSelectView={handleSelectProjectView}
+              overview={projectOverview}
+              pendingStageChatKey={pendingStageChatKey}
+              stageChatError={stageChatError}
+              stages={projectStages}
+              view={projectView}
+            />
+            <p className="mt-2 rounded-xl bg-white p-3 text-[11px] leading-5 text-slate-600">
               {copy.projectEntry.projectContextUnavailable}
             </p>
           </aside>

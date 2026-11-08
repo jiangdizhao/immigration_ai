@@ -28,6 +28,7 @@ export function PremiumAnswerModeWorkspace({
   schoolApplicationsEnabled = false,
   student500Enabled = false,
   schoolAdmissionsEnabled = false,
+  submissionCapabilityEnabled = false,
 }: {
   policyReference?: PolicyWorkspaceReference | null;
   policyLaunch?: boolean;
@@ -50,6 +51,11 @@ export function PremiumAnswerModeWorkspace({
   student500Enabled?: boolean;
   /** Phase 13 M5.2 capability; re-checked by the API. */
   schoolAdmissionsEnabled?: boolean;
+  /**
+   * Phase 13 M8 submission capability (server-resolved, default-OFF). Used only to
+   * report whether an authoritative submission readiness signal exists at all.
+   */
+  submissionCapabilityEnabled?: boolean;
 }) {
   const { locale } = useSiteLocale();
   const copy = getWorkspaceCopy(locale).mode;
@@ -206,6 +212,7 @@ export function PremiumAnswerModeWorkspace({
         schoolApplicationsEnabled={schoolApplicationsEnabled}
         schoolPreparationRestricted={schoolPreparationRestricted}
         student500Enabled={student500Enabled}
+        submissionCapabilityEnabled={submissionCapabilityEnabled}
         temporaryGuestProject={temporaryGuestProject}
         userType={hydratedAccessPolicy.userType}
       />

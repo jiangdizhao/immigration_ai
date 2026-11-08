@@ -23,6 +23,7 @@ import type {
   EducationFieldValue,
 } from "@/lib/education-intelligence/contracts";
 import { MATTER_DOCUMENT_MIME_TYPES } from "@/lib/matter-documents/formats";
+import { PROJECT_CONVERSATION_STAGE_KEYS } from "@/lib/projects/stage-keys";
 
 export const user = pgTable(
   "User",
@@ -745,10 +746,67 @@ export const projectConversation = pgTable(
       table.createdAt,
       table.chatId
     ),
+    /**
+     * Phase 13 M9-A: a step-bound conversation must reference a Chat that belongs
+     * to the same Project and the same creator. The referenced columns of a
+     * composite foreign key need a matching unique constraint, and this index is
+     * also what makes a cross-Project or cross-owner binding impossible.
+     */
+    chatProjectCreatorUnique: uniqueIndex(
+      "ProjectConversation_chat_project_creator_unique"
+    ).on(table.chatId, table.projectId, table.createdByUserId),
   })
 );
 
 export type ProjectConversation = InferSelectModel<typeof projectConversation>;
+
+/**
+ * Phase 13 M9-A — which Project workflow step an owner-scoped Chat was opened
+ * from.
+ *
+ * This is the only new persistent state M9-A introduces. It deliberately does
+ * NOT widen anything: the bound Chat is still an ordinary `ProjectConversation`
+ * owned by one actor, so Project membership still never reveals another member's
+ * private Chat, and a stage binding grants no document, fact or evidence access.
+ *
+ * The stage vocabulary is a closed, typed list of real workspace steps. It is not
+ * a universal immigration checklist and it is not an authority on requirements.
+ */
+export {
+  PROJECT_CONVERSATION_STAGE_KEYS,
+  type ProjectConversationStageKey,
+} from "@/lib/projects/stage-keys";
+
+export const projectConversationStage = pgTable(
+  "ProjectConversationStage",
+  {
+    chatId: uuid("chatId").primaryKey().notNull(),
+    projectId: uuid("projectId").notNull(),
+    createdByUserId: uuid("createdByUserId").notNull(),
+    stageKey: varchar("stageKey", {
+      enum: PROJECT_CONVERSATION_STAGE_KEYS,
+    }).notNull(),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    conversationForeignKey: foreignKey({
+      columns: [table.chatId, table.projectId, table.createdByUserId],
+      foreignColumns: [
+        projectConversation.chatId,
+        projectConversation.projectId,
+        projectConversation.createdByUserId,
+      ],
+      name: "ProjectConversationStage_conversation_fk",
+    }).onDelete("restrict"),
+    ownerStageUnique: uniqueIndex(
+      "ProjectConversationStage_owner_stage_unique"
+    ).on(table.projectId, table.createdByUserId, table.stageKey),
+  })
+);
+
+export type ProjectConversationStage = InferSelectModel<
+  typeof projectConversationStage
+>;
 
 export const PROJECT_AUDIT_ACTOR_KINDS = ["user", "service"] as const;
 export type ProjectAuditActorKind = (typeof PROJECT_AUDIT_ACTOR_KINDS)[number];

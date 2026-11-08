@@ -61,10 +61,16 @@ test("the Project home replaces the empty pane with real Project identity", () =
   assert.doesNotMatch(markup, /project-selection-empty-state/u);
 });
 
-test("the Project home exposes the M5 sections as tabs plus next-step cards", () => {
+test("the Project home exposes the M5 sections and the M9-A document centre as tabs", () => {
   const markup = render();
   assert.match(markup, /data-testid="project-home-tabs"/u);
-  for (const tab of ["home", "applications", "admissions", "student500"]) {
+  for (const tab of [
+    "home",
+    "applications",
+    "admissions",
+    "student500",
+    "documents",
+  ]) {
     assert.match(
       markup,
       new RegExp(`data-testid="project-view-tab-${tab}"`, "u")
@@ -163,7 +169,7 @@ test("the Project home does not offer section changes while navigation is busy",
   const tabs = busy.match(
     /<button[^>]*data-testid="project-view-tab-[^"]+"[^>]*>/gu
   );
-  assert.ok(tabs && tabs.length === 4);
+  assert.ok(tabs && tabs.length === 5);
   for (const tab of tabs) {
     assert.match(tab, /disabled=""/u);
   }

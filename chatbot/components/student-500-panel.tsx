@@ -231,11 +231,22 @@ export function SchoolApplicationLinkField({
   );
 }
 
-function DraftForm({
+/**
+ * Phase 13 M9-A final UX correction 2 — the create/edit context form.
+ *
+ * The authorized `SchoolApplicationLinkField` is mounted here (it previously existed but
+ * was never rendered, so the customer could not select an M5.1 application). Exported so
+ * the offline regression test can prove the selector is present, Project-scoped and
+ * truthfully degraded without a browser.
+ */
+export function Student500DraftForm({
   copy,
   draft,
   idPrefix,
+  linkState,
+  links,
   onChange,
+  onLoadLinks,
 }: {
   copy: PanelCopy;
   draft: Student500Draft;
@@ -269,6 +280,22 @@ function DraftForm({
         options={{ "": copy.optionalHint, ...copy.entryRoute }}
         testId={`${idPrefix}-entry-route`}
         value={draft.entryRoute ?? ""}
+      />
+      {/*
+        Phase 13 M9-A final UX correction 2 — the authorized M5.1 School Application
+        selector, mounted in both the create and edit form. It only appears for the
+        in-progress study route (or when a link is already saved), offers only records
+        this actor may already see in this Project, and the server re-authorizes the
+        chosen id on save. No second association store, and no Offer/CoE claim.
+      */}
+      <SchoolApplicationLinkField
+        copy={copy}
+        draft={draft}
+        idPrefix={idPrefix}
+        linkState={linkState}
+        links={links}
+        onChange={onChange}
+        onLoadLinks={onLoadLinks}
       />
       <SelectField
         label={copy.applicationPlaceLabel}
@@ -806,8 +833,21 @@ function Student500PanelInstance({
   }
 
   function beginEdit(current: Student500ApplicationSummary) {
-    setEditDraft(draftFromStudent500Context(current.context));
+    const draft = draftFromStudent500Context(current.context);
+    setEditDraft(draft);
     setEditing(true);
+    /**
+     * Correction 2: restoring a saved link must not present it as "unavailable" just
+     * because the authorized option list has not been fetched yet in this session, so
+     * the list is loaded when the edit form opens with a link (or the in-progress route).
+     */
+    if (
+      (draft.schoolApplicationId !== null ||
+        draft.entryRoute === "school_application_in_progress") &&
+      linkState === "idle"
+    ) {
+      loadLinks();
+    }
   }
 
   return (
@@ -869,7 +909,7 @@ function Student500PanelInstance({
           <p className="text-[11px] leading-4 text-slate-600">
             {copy.createDescription}
           </p>
-          <DraftForm
+          <Student500DraftForm
             copy={copy}
             draft={createDraft}
             idPrefix="student500-create"
@@ -905,7 +945,7 @@ function Student500PanelInstance({
           data-testid="student500-edit-form"
         >
           <h4 className="text-xs font-semibold text-slate-900">{copy.edit}</h4>
-          <DraftForm
+          <Student500DraftForm
             copy={copy}
             draft={editDraft}
             idPrefix="student500-edit"

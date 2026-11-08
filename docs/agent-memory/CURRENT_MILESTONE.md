@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE13_M9_A_ENGINEERING_CLOSEOUT_2026_11_08 -->
+## Current milestone: M9-A accepted with documented limitations; M9-B next (2026-11-08)
+
+**State:** `M9_A_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / COMMIT_PUSH_PENDING / LIVE_PRODUCTION_NO_GO`; working branch `phase13-m9-integrated-workspace`, baseline HEAD `87af10142080e5e8cc78afba6bdc1786adf8a910`. The 62-file M9-A source is **uncommitted locally**; M9-B is **not started**. See [CURRENT_HANDOFF](./CURRENT_HANDOFF.md) and decision D-P13-032 in [DECISIONS](./DECISIONS.md).
+
+- **Completed M9-A:** customer Project overview, real stage/status navigation, step-bound owner-only Project Chats, school/admissions/Student 500 integration, truthful progress vs readiness, authorized M2 metadata-only document center and M5/M6 generated artifact references, bilingual desktop/mobile UI. Owner browser A1–A5 covered primary synthetic paths, version invalidation, Project A/B/Standalone isolation, disabled capability and responsive navigation.
+- **Engineering evidence:** reported unit **1344/1344 PASS**; build PASS; TypeScript historical 44 diagnostics / 0 new; owner-run disposable PG17 migrations **0000–0053** (ledger 54), guarded integration **3/3 PASS**; final UI smoke primary paths for Issues #1–#3 observed. Final pre-closeout patch SHA-256 `fa12f1986657c42007ee56556fc49e8d0c070b9fbe8a0dd00fd07b1c7297d0aa` (regenerate after these docs are appended).
+- **Next M9-B (one cohesive delivery):** integrate customer exact-version AI-check / customer-confirmation / authorized professional-review state with staff assignment, scoped staff work queue/messages/feedback and permitted M4/M7/M8 contract/payment/handoff projections, reflecting `doc/Picture3.png`. The **independent M8 staff-private-package context authorization review is a hard gate** before staff reads private customer packages. No synthetic credentials, approval, contract/payment, receipt or Managed positive authorization.
+- **M9-C:** one consolidated final UX/engineering acceptance against Picture1–3; preserve existing M0–M10 roadmap and exactly M9-A/B/C structure. Do not reopen micro-milestones.
+- **Not authorized:** code changes for M9-B without owner dispatch; normal/staging/prod DB migrations, feature activation, production deployment, AWS/Stripe, real customer data or external submission. M4/M6/M8 and document trust restrictions remain; `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE13_M9_A_ENGINEERING_CLOSEOUT_2026_11_08 -->
+
 <!-- BEGIN PHASE13_M9_INTEGRATED_PLAN_2026_11_06 -->
 ## Phase 13 M9 — owner-approved integrated implementation plan (2026-11-06)
 

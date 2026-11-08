@@ -1324,6 +1324,30 @@ export function createProjectFoundationRepository(
         return project;
       });
     },
+    /**
+     * Phase 13 M9-A: Project-scoped **read** authority without naming a Chat.
+     *
+     * This deliberately reuses the canonical `assertProjectAuthority` rule set rather
+     * than re-implementing membership logic: the owner or an ACTIVE membership may
+     * read, a pending or revoked membership may not, and a closed Project stays
+     * readable because its content is read-only history (the same intent a closed
+     * Project's Chat history already uses). It grants no write authority.
+     */
+    authorizeProjectRead(input: {
+      actorUserId: string;
+      projectId: string;
+    }): Promise<ProjectFoundationProject> {
+      return database.transaction(async (tx) => {
+        const project = await lockProject(tx, input.projectId);
+        await assertProjectAuthority(
+          tx,
+          project,
+          input.actorUserId,
+          "chat_history"
+        );
+        return project;
+      });
+    },
 
     getProjectChatOrigin(
       chatId: string

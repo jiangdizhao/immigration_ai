@@ -2,15 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SchoolApplicationsPanel } from "@/components/school-applications-panel";
+import {
+  SchoolApplicationDraftFields,
+  SchoolApplicationsPanel,
+} from "@/components/school-applications-panel";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 import {
+  applySchoolApplicationDraftInput,
   buildSchoolApplicationCreateBody,
   buildSchoolApplicationReferenceBody,
   buildSchoolApplicationUpdateBody,
   classifySchoolApplicationError,
   createSchoolApplicationsController,
+  normalizeSchoolApplicationDraft,
   parseSchoolApplication,
+  type SchoolApplicationDraft,
+  schoolApplicationDraftText,
   schoolApplicationStatusLabelKey,
 } from "./school-applications";
 
@@ -420,4 +427,128 @@ test("the School Application panel is absent when the flag is OFF and bilingual 
     getWorkspaceCopy("zh-CN").schoolApplications.title,
     "我的学校申请"
   );
+});
+
+/**
+ * Phase 13 M9-A final UX correction 1 (Issue #1).
+ *
+ * The controlled inputs previously trimmed on every keystroke, so a space typed after a
+ * word disappeared before the next word could be typed. Editing now keeps the raw text and
+ * only the submission boundary normalises.
+ */
+test("typing keeps interim spaces; only the request body is normalised", () => {
+  let draft: SchoolApplicationDraft = {
+    courseId: null,
+    courseTitle: "",
+    deliveryId: null,
+    institutionId: null,
+    institutionName: "",
+    intakeId: null,
+    intakeLabel: null,
+  };
+
+  // Character-by-character entry of "University of Wollongong" — the space survives.
+  for (const character of "University of Wollongong") {
+    draft = applySchoolApplicationDraftInput(
+      draft,
+      "institutionName",
+      `${schoolApplicationDraftText(draft, "institutionName")}${character}`
+    );
+  }
+  assert.equal(
+    schoolApplicationDraftText(draft, "institutionName"),
+    "University of Wollongong"
+  );
+  // A trailing space is preserved while the customer is still typing.
+  draft = applySchoolApplicationDraftInput(draft, "courseTitle", "Master of ");
+  assert.equal(schoolApplicationDraftText(draft, "courseTitle"), "Master of ");
+  draft = applySchoolApplicationDraftInput(
+    draft,
+    "courseTitle",
+    "Master of Science"
+  );
+  assert.equal(
+    schoolApplicationDraftText(draft, "courseTitle"),
+    "Master of Science"
+  );
+
+  // The submission boundary trims text and turns blank optionals into null.
+  const body = buildSchoolApplicationCreateBody({
+    draft: {
+      ...draft,
+      courseTitle: "  Master of Science  ",
+      institutionName: " University of Wollongong ",
+      intakeLabel: "   ",
+    },
+    operationId: "op-1",
+  });
+  assert.equal(body.institutionName, "University of Wollongong");
+  assert.equal(body.courseTitle, "Master of Science");
+  assert.equal(body.intakeLabel, null);
+  assert.equal(body.institutionId, null);
+  assert.equal(body.courseId, null);
+  assert.equal(body.deliveryId, null);
+  assert.equal(body.intakeId, null);
+});
+
+test("draft normalisation is idempotent and preserves interior spacing", () => {
+  const normalized = normalizeSchoolApplicationDraft({
+    courseId: " c-1 ",
+    courseTitle: " Master  of Science ",
+    deliveryId: "",
+    institutionId: null,
+    institutionName: " University of Wollongong ",
+    intakeId: "   ",
+    intakeLabel: " Feb 2027 ",
+  });
+  assert.deepEqual(normalized, {
+    courseId: "c-1",
+    courseTitle: "Master  of Science",
+    deliveryId: null,
+    institutionId: null,
+    institutionName: "University of Wollongong",
+    intakeId: null,
+    intakeLabel: "Feb 2027",
+  });
+  assert.deepEqual(normalizeSchoolApplicationDraft(normalized), normalized);
+});
+
+test("required and optional fields render exactly what was typed", () => {
+  const copy = getWorkspaceCopy("en").schoolApplications;
+  const draft: SchoolApplicationDraft = {
+    courseId: null,
+    courseTitle: "Master of Science",
+    deliveryId: null,
+    institutionId: null,
+    institutionName: "University of Wollongong ",
+    intakeId: null,
+    intakeLabel: "",
+  };
+  for (const idPrefix of [
+    "school-application-create",
+    "school-application-edit",
+  ]) {
+    const markup = renderToStaticMarkup(
+      React.createElement(SchoolApplicationDraftFields, {
+        copy,
+        draft,
+        idPrefix,
+        onChange: () => undefined,
+      })
+    );
+    // The trailing space the customer just typed is still in the controlled value.
+    assert.match(markup, /value="University of Wollongong "/u);
+    assert.match(markup, /value="Master of Science"/u);
+    // Both text fields are marked required; the optional fields are not.
+    assert.match(
+      markup,
+      /data-testid="school-application-(create|edit)-institutionName"/u
+    );
+    const requiredCount = (markup.match(/required=""/gu) ?? []).length;
+    assert.equal(
+      requiredCount,
+      2,
+      "institution and course are the required fields"
+    );
+  }
 });

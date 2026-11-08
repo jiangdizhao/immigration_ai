@@ -42,9 +42,9 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
     /\.sql$/u.test(file)
   );
   assert.equal(files.filter((file) => /^0045_/u.test(file)).length, 1);
-  // Phase 13 M5.1, M5.2, M6.1, M6.2, M7, M8.1 and M8.2 each added exactly one further
-  // additive migration. Nothing beyond the M8.2 one may exist, and 0044/0045 remain
-  // byte-for-byte frozen above.
+  // Phase 13 M5.1, M5.2, M6.1, M6.2, M7, M8.1, M8.2 and M9-A each added exactly one
+  // further additive migration. Nothing beyond the M9-A one may exist, and
+  // 0044/0045 remain byte-for-byte frozen above.
   assert.deepEqual(
     files.filter((file) =>
       /^(00(4[6-9]|[5-9][0-9])|0[1-9][0-9]{2})_/u.test(file)
@@ -57,6 +57,7 @@ test("migrations 0000-0044 are unchanged and 0045 is pinned", () => {
       "0050_phase13_m7_student500_deep_preparation.sql",
       "0051_phase13_m8_submission_packages.sql",
       "0052_phase13_m8_2_submission_authorization.sql",
+      "0053_phase13_m9_a_project_conversation_stage.sql",
     ]
   );
 });
