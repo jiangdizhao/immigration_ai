@@ -1,3 +1,17 @@
+<!-- BEGIN D_P13_033_M9_B_BOUNDED_BROWSER_ACCEPTANCE_2026_11_10 -->
+## D-P13-033 — Record bounded M9-B browser acceptance and proceed to M9-C with explicit unverified Staff scope
+
+**Date:** 2026-11-10 (Australia/Sydney). **Decision:** `M9_B_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS / COMMIT_PUSH_PENDING / LIVE_PRODUCTION_NO_GO`. The owner explicitly stops M9-B browser expansion and authorizes documenting the results and preparing the already-planned M9-C handoff. This decision is not a claim of complete professional or production security acceptance.
+
+**Evidence split:** Cline executed unit **1408/1408 PASS**, scoped M9-B **57/57**, authorization **74/74**, build PASS and zero new TypeScript issues over baseline 44; independent review of R1 targeted source changes passed with documented source-partiality limitation. No M9-B database-backed acceptance was run, and no migration was added. Cumulative source patch (before this docs addition): SHA-256 `6a2a37ca73ed230c02d3f3f7fca1270da377178522e78de561b4b2406ed01acc`, 42 paths, relative to remote M9-A `f531daebf19237061aab016e936bb2fcb9681af4`.
+
+**Owner browser verdicts:** **B1 PASS**: customer Project A review panel displays current M5.1 package v2 and superseded v1, correct independent AI/check/confirmation/professional states, valid identity/digest and blocked professional action. **B3/B4 PASS in observed negative UI only**: customer direct `/lawyer-portal` navigation redirects to AI Workspace; lawyer request is blocked instead of falsely approved. **B2 NOT VERIFIED**: isolated PostgreSQL synthetic-lawyer search returned 0 rows, so no Staff Portal positive browser or real scoped-review decision was tested. Do not relabel that as PASS or manufacture professional authority.
+
+**Security/release debt carried forward:** independent M8.2 customer-identity staff observation/authority substitution review is **PENDING**; direct M8.1 staff package read denied; M4-004 staff resource disclosure and M4-006 professional service deny; M2 document trust/production content DENY; M6 legal source PARTIAL; Post-M5 `E2E_BLOCKED`; existing M8 candidate status; incomplete M8 source reads can under-report partiality. No real contract, payment, credential, Offer/CoE, lawyer review or school/government submission has been verified. `LIVE_PRODUCTION_NO_GO` remains.
+
+**Disposition:** one docs-only closeout supplement, one complete cumulative patch review, owner-controlled non-force Git commit/push and remote SHA verification; then **M9-C**, as the single already approved integrated Picture1/2/3 UX/security acceptance. No extra milestones, synthetic professional-positive shortcuts, or perpetual repair/test loops. Historical M9-A/M9-B pending statements remain historical; record the actual new SHA after push in the M9-C checkpoint.
+<!-- END D_P13_033_M9_B_BOUNDED_BROWSER_ACCEPTANCE_2026_11_10 -->
+
 <!-- BEGIN D_P13_032_M9_A_ENGINEERING_ACCEPTANCE_2026_11_08 -->
 ## D-P13-032 — Accept M9-A customer Project Workspace engineering with limitations; close A1–A5 manual acceptance
 

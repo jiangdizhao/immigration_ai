@@ -36,6 +36,7 @@ function render(
       onSelectView: () => undefined,
       project: { ...project, status: input.projectStatus ?? project.status },
       projectDocumentsEnabled: false,
+      projectReviewCopy: copy.projectReview,
       schoolAdmissionsCopy: copy.schoolAdmissions,
       schoolAdmissionsEnabled: input.schoolAdmissionsEnabled ?? true,
       schoolApplicationsCopy: copy.schoolApplications,
@@ -169,7 +170,8 @@ test("the Project home does not offer section changes while navigation is busy",
   const tabs = busy.match(
     /<button[^>]*data-testid="project-view-tab-[^"]+"[^>]*>/gu
   );
-  assert.ok(tabs && tabs.length === 5);
+  // home, applications, admissions, student500, documents, review (M9-B).
+  assert.ok(tabs && tabs.length === 6);
   for (const tab of tabs) {
     assert.match(tab, /disabled=""/u);
   }

@@ -120,6 +120,7 @@ export type WorkspaceCopy = {
     projectStudent500Tab: string;
     /** Phase 13 M9-A: the Project-level document centre section label. */
     projectDocumentsTab: string;
+    projectReviewTab: string;
     projectHomeNextSteps: string;
     projectHomeOpenApplications: string;
     projectHomeOpenAdmissions: string;
@@ -764,6 +765,84 @@ export type WorkspaceCopy = {
     consultationDescription: string;
     consultationLink: string;
   };
+  /**
+   * Phase 13 M9-B exact-version review surface (Picture3). Three independent dimensions
+   * are named separately on purpose: no label may imply that one substitutes for another.
+   */
+  projectReview: {
+    tab: string;
+    heading: string;
+    subtitle: string;
+    notice: string;
+    loading: string;
+    empty: string;
+    error: string;
+    retry: string;
+    refreshed: string;
+    selectedHeading: string;
+    versionLabel: string;
+    digestLabel: string;
+    digestUnknown: string;
+    sourceLabel: string;
+    kindLabel: Record<string, string>;
+    dimensionsHeading: string;
+    aiCheckLabel: string;
+    confirmationLabel: string;
+    professionalLabel: string;
+    integrityLabel: string;
+    aiCheck: Record<string, string>;
+    confirmation: Record<string, string>;
+    professional: Record<string, string>;
+    integrity: Record<string, string>;
+    /** Phase 13 M9-B correction 3: what the artifact source actually did. */
+    sourceState: Record<string, string>;
+    reason: Record<string, string>;
+    requestReview: string;
+    requesting: string;
+    requestBlocked: string;
+    requestRecorded: string;
+    requestHistoryNote: string;
+    reviewHistoryNote: string;
+    staleNote: string;
+    truncatedNote: string;
+    approvalsAreExactVersion: string;
+    notLegalAdvice: string;
+    openOwnerView: string;
+    professionalScope: string;
+  };
+  /** Phase 13 M9-B staff/lawyer workspace (queue + scoped detail). */
+  staffWorkspace: {
+    heading: string;
+    subtitle: string;
+    notice: string;
+    loading: string;
+    empty: string;
+    error: string;
+    retry: string;
+    bucketsHeading: string;
+    bucket: Record<string, string>;
+    categoriesHeading: string;
+    category: Record<string, string>;
+    categoryState: Record<string, string>;
+    entryLabel: Record<string, string>;
+    openProject: string;
+    detailHeading: string;
+    shellHeading: string;
+    disclosureHeading: string;
+    permittedHeading: string;
+    blockedHeading: string;
+    reviewHeading: string;
+    assignmentLabel: string;
+    assignmentStatusLabel: string;
+    acceptedLabel: string;
+    lifecycleLabel: string;
+    disclosureAllowed: string;
+    disclosureDenied: string;
+    noContentNotice: string;
+    professionalNotice: string;
+    backToQueue: string;
+    reason: Record<string, string>;
+  };
 };
 
 const zh: WorkspaceCopy = {
@@ -879,6 +958,7 @@ const zh: WorkspaceCopy = {
     projectSchoolAdmissionsTab: "入学流程",
     projectStudent500Tab: "学生签证 500",
     projectDocumentsTab: "项目文件",
+    projectReviewTab: "律师审核",
     projectHomeNextSteps: "下一步",
     projectHomeOpenApplications: "查看或新建学校申请草稿。",
     projectHomeOpenAdmissions: "查看入学准备流程及其真实状态。",
@@ -1851,6 +1931,192 @@ const zh: WorkspaceCopy = {
     consultationDescription: "律师审阅此答复与一对一咨询是两项独立服务。",
     consultationLink: "预约一对一咨询",
   },
+  projectReview: {
+    tab: "律师审核",
+    heading: "精确版本审核",
+    subtitle:
+      "每个版本分开查看：AI 检查、您的确认与律师审核是三件互不替代的事。",
+    notice:
+      "此处只显示来源系统真实记录的状态。律师审核由独立的专业审核流程记录，本项目目前无法发起或展示其结论。",
+    loading: "正在加载审核信息…",
+    empty: "此项目目前没有可审核的精确版本记录。生成准备包或提交包后才会出现。",
+    error: "无法加载审核信息，请稍后重试。",
+    retry: "重新加载",
+    refreshed: "审核信息已更新",
+    selectedHeading: "所选版本",
+    versionLabel: "版本",
+    digestLabel: "内容摘要",
+    digestUnknown: "未提供内容摘要",
+    sourceLabel: "来源类型",
+    kindLabel: {
+      school_application_package: "学校申请准备包",
+      student500_gs_draft: "学生 500 GS 草稿",
+      student500_snapshot: "学生 500 准备快照",
+      submission_package: "提交包",
+    },
+    dimensionsHeading: "三项独立状态",
+    aiCheckLabel: "AI 检查",
+    confirmationLabel: "您的确认",
+    professionalLabel: "律师审核",
+    integrityLabel: "完整性校验",
+    aiCheck: {
+      checked: "已检查",
+      failed: "检查发现问题",
+      not_checked: "尚未检查",
+      unsupported: "本平台未提供 AI 检查",
+      unavailable: "检查服务不可用",
+    },
+    confirmation: {
+      confirmed: "已确认此版本",
+      stale: "确认已不适用于此版本",
+      not_confirmed: "尚未确认",
+      not_applicable: "此类型无需确认",
+      unavailable: "确认状态不可用",
+    },
+    professional: {
+      not_requested: "未申请",
+      requested: "已提交申请",
+      in_review: "审核中",
+      changes_requested: "需要修改",
+      approved: "已批准（仅对此精确版本）",
+      rejected: "未通过",
+      invalidated: "已失效",
+      unsupported: "此版本类型不支持律师审核",
+      unavailable: "律师审核暂不可用",
+    },
+    integrity: {
+      verified: "校验通过",
+      unverified: "校验未通过",
+      unknown: "无独立校验记录",
+    },
+    sourceState: {
+      available: "已读取来源",
+      empty: "没有符合条件的最新版本",
+      partial: "部分来源未能读取",
+      disabled: "来源功能未启用",
+      restricted: "来源仅限受限账号",
+      unavailable: "来源暂时无法读取",
+    },
+    reason: {
+      ai_check_not_integrated: "本平台尚未接入按版本执行的 AI 检查。",
+      ai_check_result_missing: "尚未对此版本执行检查。",
+      confirmation_not_applicable_to_kind:
+        "此类记录没有客户确认流程，确认只适用于提交包版本。",
+      confirmation_not_current: "此前的确认不适用于当前版本内容。",
+      professional_review_disabled: "专业审核功能在当前环境未启用。",
+      professional_authority_unavailable:
+        "尚未配置经批准的专业审核权限，因此任何人都无法发起或查看审核结论。",
+      professional_credential_registry_unavailable:
+        "尚未接入执业资格核验，无法确认审核人资格。",
+      managed_target_provider_unavailable: "尚未接入可审核的目标版本来源。",
+      review_authority_denied: "当前账号无权执行此审核操作。",
+      review_target_kind_unsupported: "此版本类型不能绑定律师审核。",
+      review_state_not_requestable: "当前状态下不能再次申请审核。",
+      review_no_longer_current: "审核结论已不再适用于当前版本。",
+      review_state_unavailable: "审核状态暂时无法确认。",
+      integrity_not_applicable_to_kind: "此类型没有独立完整性校验。",
+      package_integrity_unverified: "提交包完整性校验未通过。",
+      submission_packages_disabled: "提交包功能未启用。",
+      submission_packages_restricted: "提交包仅对已注册账号开放。",
+      exact_version_stale: "此版本已被更新的版本取代，不能申请审核。",
+      review_target_identity_incomplete:
+        "此版本的审核目标标识不完整，无法绑定审核申请。",
+      artifact_source_unavailable: "暂时无法读取本项目的版本来源。",
+      artifact_source_restricted: "当前账号无法读取本项目的版本来源。",
+      artifact_source_partial: "部分版本来源未能读取，列表可能不完整。",
+      artifact_source_disabled: "本项目的版本来源功能未启用。",
+      submission_source_unavailable: "暂时无法读取提交包来源。",
+    },
+    requestReview: "申请律师审核",
+    requesting: "正在提交…",
+    requestBlocked: "当前无法申请律师审核",
+    requestRecorded: "审核申请已记录",
+    requestHistoryNote:
+      "本次申请的编号仅在本次会话中显示；本环境尚未提供按项目列出全部审核申请的接口。",
+    reviewHistoryNote: "审核决定逐条追加，历史记录不会被覆盖。",
+    staleNote: "此版本已被更新版本取代。",
+    truncatedNote: "仅显示最近的部分版本。",
+    approvalsAreExactVersion:
+      "任何批准只对显示的这个精确版本有效，不会转移到新版本。",
+    notLegalAdvice: "以上状态不是法律意见，也不代表院校或政府的任何决定。",
+    openOwnerView: "前往相关步骤",
+    professionalScope: "审核范围",
+  },
+  staffWorkspace: {
+    heading: "律师工作台",
+    subtitle: "只显示已授权给您的项目与审核事项。",
+    notice:
+      "项目成员身份或分配本身不授予客户文件、事实、AI 对话或提交包内容的访问权。需要单独的客户披露授权。",
+    loading: "正在加载工作台…",
+    empty: "当前没有已授权给您的项目或事项。",
+    error: "无法加载律师工作台，请稍后重试。",
+    retry: "重新加载",
+    bucketsHeading: "待办分组",
+    bucket: {
+      assigned_projects: "已分配项目",
+      needs_review: "需要您处理",
+      awaiting_customer: "等待客户",
+      reviewed: "已处理",
+      blocked: "受限",
+    },
+    categoriesHeading: "事项类别",
+    category: {
+      project_assignments: "项目分配",
+      professional_reviews: "专业审核",
+      lawyer_requests: "律师请求",
+      human_messages: "人工消息",
+      managed_handoffs: "代办交接",
+    },
+    categoryState: {
+      available: "可读取",
+      disabled: "未启用",
+      unavailable: "暂不可用",
+      unsupported: "尚未接入",
+      restricted: "受限",
+    },
+    entryLabel: {
+      staffInvitationPending: "待您确认的项目分配邀请",
+      staffAssignedProject: "已生效的项目分配",
+    },
+    openProject: "查看项目详情",
+    detailHeading: "项目审核详情",
+    shellHeading: "最小项目外壳",
+    disclosureHeading: "内容授权",
+    permittedHeading: "您可查看的字段",
+    blockedHeading: "未授权的内容",
+    reviewHeading: "审核事项",
+    assignmentLabel: "分配编号",
+    assignmentStatusLabel: "分配状态",
+    acceptedLabel: "接受时间",
+    lifecycleLabel: "项目状态",
+    disclosureAllowed: "内容授权已通过",
+    disclosureDenied: "内容授权未通过",
+    noContentNotice:
+      "未获得客户对具体资源的披露授权前，本页面不会返回任何受保护内容。",
+    professionalNotice: "专业审核结论需要经批准的专业审核权限。",
+    backToQueue: "返回工作台",
+    reason: {
+      staff_workspace_disabled: "律师工作台在当前环境未启用。",
+      staff_workspace_schema_unavailable:
+        "律师工作台所需的数据库结构尚未就绪。",
+      staff_workspace_unavailable: "律师工作台暂时不可用。",
+      staff_invitations_unavailable: "无法读取分配邀请。",
+      category_not_integrated: "此类别尚未接入本工作台。",
+      review_enumeration_unavailable: "尚未提供按项目列出审核申请的接口。",
+      professional_authority_unavailable: "尚未配置经批准的专业审核权限。",
+      professional_review_disabled: "专业审核功能未启用。",
+      professional_credential_registry_unavailable: "尚未接入执业资格核验。",
+      resource_source_unavailable: "客户内容的权威来源适配器尚未接入。",
+      disclosure_unverified: "内容授权无法核实。",
+      staff_role_required: "需要律师账号。",
+      staff_assignment_missing: "没有有效的项目分配。",
+      staff_assignment_inactive: "项目分配已失效。",
+      staff_assignment_unavailable: "无法确认项目分配状态。",
+      staff_project_shell_unavailable: "无法确认最小项目外壳。",
+      project_not_active: "项目当前不可用。",
+      project_not_found: "项目不存在或未分配给您。",
+    },
+  },
 };
 
 const en: WorkspaceCopy = {
@@ -1980,6 +2246,7 @@ const en: WorkspaceCopy = {
     projectSchoolAdmissionsTab: "Admissions workflow",
     projectStudent500Tab: "Student 500 visa",
     projectDocumentsTab: "Project documents",
+    projectReviewTab: "Lawyer review",
     projectHomeNextSteps: "Next steps",
     projectHomeOpenApplications: "Review or create a school application draft.",
     projectHomeOpenAdmissions:
@@ -3044,6 +3311,223 @@ const en: WorkspaceCopy = {
     consultationDescription:
       "A lawyer review of this answer and a one-to-one consultation are separate services.",
     consultationLink: "Book a one-to-one consultation",
+  },
+  projectReview: {
+    tab: "Lawyer review",
+    heading: "Exact-version review",
+    subtitle:
+      "Each version is shown separately: AI checking, your confirmation and lawyer review are three different things.",
+    notice:
+      "Only states recorded by the source systems are shown. Lawyer review is recorded by a separate professional-review workflow, and this environment cannot currently start one or display a decision.",
+    loading: "Loading review information…",
+    empty:
+      "This Project has no reviewable exact version yet. Versions appear once a preparation or submission package exists.",
+    error: "Review information could not be loaded. Try again later.",
+    retry: "Reload",
+    refreshed: "Review information refreshed",
+    selectedHeading: "Selected version",
+    versionLabel: "Version",
+    digestLabel: "Content digest",
+    digestUnknown: "No content digest provided",
+    sourceLabel: "Source type",
+    kindLabel: {
+      school_application_package: "School application preparation package",
+      student500_gs_draft: "Student 500 GS draft",
+      student500_snapshot: "Student 500 preparation snapshot",
+      submission_package: "Submission package",
+    },
+    dimensionsHeading: "Three independent states",
+    aiCheckLabel: "AI check",
+    confirmationLabel: "Your confirmation",
+    professionalLabel: "Lawyer review",
+    integrityLabel: "Integrity check",
+    aiCheck: {
+      checked: "Checked",
+      failed: "Check found a problem",
+      not_checked: "Not checked",
+      unsupported: "No AI check is provided",
+      unavailable: "Check service unavailable",
+    },
+    confirmation: {
+      confirmed: "This version is confirmed",
+      stale: "The confirmation no longer applies",
+      not_confirmed: "Not confirmed",
+      not_applicable: "Not applicable to this kind",
+      unavailable: "Confirmation state unavailable",
+    },
+    professional: {
+      not_requested: "Not requested",
+      requested: "Requested",
+      in_review: "In review",
+      changes_requested: "Changes requested",
+      approved: "Approved (this exact version only)",
+      rejected: "Not approved",
+      invalidated: "No longer valid",
+      unsupported: "Lawyer review is not supported for this kind",
+      unavailable: "Lawyer review unavailable",
+    },
+    integrity: {
+      verified: "Verified",
+      unverified: "Not verified",
+      unknown: "No separate integrity record",
+    },
+    sourceState: {
+      available: "Source read",
+      empty: "No matching versions exist",
+      partial: "Some sources could not be read",
+      disabled: "Source capability not enabled",
+      restricted: "Source is restricted",
+      unavailable: "Source currently unreadable",
+    },
+    reason: {
+      ai_check_not_integrated:
+        "No per-version AI check is integrated in this platform.",
+      ai_check_result_missing: "No check has run for this version.",
+      confirmation_not_applicable_to_kind:
+        "This record has no customer confirmation workflow; confirmation applies to submission package versions.",
+      confirmation_not_current:
+        "An earlier confirmation does not apply to this version's content.",
+      professional_review_disabled:
+        "Professional review is not enabled in this environment.",
+      professional_authority_unavailable:
+        "No approved professional-review authority is configured, so nobody can start or read a review decision.",
+      professional_credential_registry_unavailable:
+        "No practising-credential verification is integrated, so reviewer qualification cannot be established.",
+      managed_target_provider_unavailable:
+        "No authoritative reviewable target source is integrated.",
+      review_authority_denied:
+        "This account may not perform that review action.",
+      review_target_kind_unsupported:
+        "Lawyer review cannot be bound to this version kind.",
+      review_state_not_requestable:
+        "A review cannot be requested in this state.",
+      review_no_longer_current:
+        "The review decision no longer applies to the current version.",
+      review_state_unavailable:
+        "The review state cannot be confirmed right now.",
+      integrity_not_applicable_to_kind:
+        "This kind has no separate integrity check.",
+      package_integrity_unverified:
+        "The submission package integrity check did not pass.",
+      submission_packages_disabled: "Submission packages are not enabled.",
+      submission_packages_restricted:
+        "Submission packages are available to registered accounts only.",
+      exact_version_stale:
+        "A newer version has superseded this one, so it cannot be sent for review.",
+      review_target_identity_incomplete:
+        "This version's review target identity is incomplete, so a review cannot be bound to it.",
+      artifact_source_unavailable:
+        "This Project's version source cannot be read right now.",
+      artifact_source_restricted:
+        "This account may not read this Project's version source.",
+      artifact_source_partial:
+        "Some version sources could not be read, so the list may be incomplete.",
+      artifact_source_disabled:
+        "The version source capability is not enabled for this Project.",
+      submission_source_unavailable:
+        "The submission package source cannot be read right now.",
+    },
+    requestReview: "Request lawyer review",
+    requesting: "Submitting…",
+    requestBlocked: "Lawyer review cannot be requested now",
+    requestRecorded: "Review request recorded",
+    requestHistoryNote:
+      "This request's identifier is shown for this session only; no per-Project review listing API exists in this environment yet.",
+    reviewHistoryNote:
+      "Review decisions are appended, never overwritten, and history is retained.",
+    staleNote: "A newer version has superseded this one.",
+    truncatedNote: "Only the most recent versions are shown.",
+    approvalsAreExactVersion:
+      "Any approval applies only to the exact version shown and never transfers to a new version.",
+    notLegalAdvice:
+      "These states are not legal advice and do not represent any institution or government decision.",
+    openOwnerView: "Open the owning step",
+    professionalScope: "Review scope",
+  },
+  staffWorkspace: {
+    heading: "Lawyer workspace",
+    subtitle: "Only Projects and review items authorized for you are listed.",
+    notice:
+      "Project membership or an assignment does not grant access to customer documents, facts, AI chats or submission package content. Separate customer disclosure authorization is required.",
+    loading: "Loading the workspace…",
+    empty: "No Project or item is currently authorized for you.",
+    error: "The lawyer workspace could not be loaded. Try again later.",
+    retry: "Reload",
+    bucketsHeading: "Queue groups",
+    bucket: {
+      assigned_projects: "Assigned Projects",
+      needs_review: "Needs your action",
+      awaiting_customer: "Waiting for the customer",
+      reviewed: "Reviewed",
+      blocked: "Restricted",
+    },
+    categoriesHeading: "Categories",
+    category: {
+      project_assignments: "Project assignments",
+      professional_reviews: "Professional reviews",
+      lawyer_requests: "Lawyer requests",
+      human_messages: "Human messages",
+      managed_handoffs: "Managed handoffs",
+    },
+    categoryState: {
+      available: "Readable",
+      disabled: "Not enabled",
+      unavailable: "Unavailable",
+      unsupported: "Not integrated",
+      restricted: "Restricted",
+    },
+    entryLabel: {
+      staffInvitationPending: "Project assignment invitation awaiting you",
+      staffAssignedProject: "Active Project assignment",
+    },
+    openProject: "Open Project detail",
+    detailHeading: "Project review detail",
+    shellHeading: "Minimal Project shell",
+    disclosureHeading: "Content authorization",
+    permittedHeading: "Fields you may see",
+    blockedHeading: "Withheld content",
+    reviewHeading: "Review items",
+    assignmentLabel: "Assignment",
+    assignmentStatusLabel: "Assignment status",
+    acceptedLabel: "Accepted",
+    lifecycleLabel: "Project status",
+    disclosureAllowed: "Content authorization allowed",
+    disclosureDenied: "Content authorization denied",
+    noContentNotice:
+      "No protected content is returned on this page until the customer authorizes disclosure for that specific resource.",
+    professionalNotice:
+      "A professional review decision requires approved professional-review authority.",
+    backToQueue: "Back to the workspace",
+    reason: {
+      staff_workspace_disabled:
+        "The lawyer workspace is not enabled in this environment.",
+      staff_workspace_schema_unavailable:
+        "The database schema the lawyer workspace needs is not ready.",
+      staff_workspace_unavailable: "The lawyer workspace is unavailable.",
+      staff_invitations_unavailable:
+        "Assignment invitations could not be read.",
+      category_not_integrated: "This category is not integrated yet.",
+      review_enumeration_unavailable:
+        "No per-Project review listing API exists yet.",
+      professional_authority_unavailable:
+        "No approved professional-review authority is configured.",
+      professional_review_disabled: "Professional review is not enabled.",
+      professional_credential_registry_unavailable:
+        "No practising-credential verification is integrated.",
+      resource_source_unavailable:
+        "No authoritative source adapter for customer content is integrated.",
+      disclosure_unverified: "Content authorization could not be verified.",
+      staff_role_required: "A lawyer account is required.",
+      staff_assignment_missing: "No current Project assignment exists.",
+      staff_assignment_inactive: "The Project assignment is no longer active.",
+      staff_assignment_unavailable:
+        "The Project assignment state could not be confirmed.",
+      staff_project_shell_unavailable:
+        "The minimal Project shell could not be confirmed.",
+      project_not_active: "The Project is not currently active.",
+      project_not_found:
+        "The Project does not exist or is not assigned to you.",
+    },
   },
 };
 

@@ -28,6 +28,7 @@ export function PremiumAnswerModeWorkspace({
   schoolApplicationsEnabled = false,
   student500Enabled = false,
   schoolAdmissionsEnabled = false,
+  projectReviewEnabled = false,
   submissionCapabilityEnabled = false,
 }: {
   policyReference?: PolicyWorkspaceReference | null;
@@ -51,6 +52,7 @@ export function PremiumAnswerModeWorkspace({
   student500Enabled?: boolean;
   /** Phase 13 M5.2 capability; re-checked by the API. */
   schoolAdmissionsEnabled?: boolean;
+  projectReviewEnabled?: boolean;
   /**
    * Phase 13 M8 submission capability (server-resolved, default-OFF). Used only to
    * report whether an authoritative submission readiness signal exists at all.
@@ -207,6 +209,7 @@ export function PremiumAnswerModeWorkspace({
         policyLaunchState={policyLaunchState}
         policyReference={policyReference}
         projectAvailability={projectAvailability}
+        projectReviewEnabled={projectReviewEnabled}
         requestedPolicySlug={requestedPolicySlug}
         schoolAdmissionsEnabled={schoolAdmissionsEnabled}
         schoolApplicationsEnabled={schoolApplicationsEnabled}

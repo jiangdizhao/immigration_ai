@@ -15,6 +15,8 @@ export const PROJECT_WORKSPACE_VIEWS = [
   "student500",
   /** Phase 13 M9-A: the version-aware Project document centre. */
   "documents",
+  /** Phase 13 M9-B: exact-version check/confirmation/lawyer-review surface. */
+  "review",
 ] as const;
 
 export type ProjectWorkspaceView = (typeof PROJECT_WORKSPACE_VIEWS)[number];

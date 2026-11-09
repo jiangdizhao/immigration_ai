@@ -59,6 +59,7 @@ import type {
   SubmissionHandoffEventRecord,
   SubmissionHandoffRecord,
 } from "./ports";
+import { observeHandoffPackageCurrency } from "./staff-observation";
 
 /**
  * Phase 13 M8.2 - submission authorization, sign-off and handoff service.
@@ -1299,15 +1300,32 @@ export function createSubmissionAuthorizationService(
       // human could ever accept. Staff authorization is unchanged: requireStaff (role +
       // active assignment + authority decision) and the recipient check above still gate
       // this action, and no package content is returned to the staff member.
+      //
+      // M9-B: the substitution is now an explicit, typed observation
+      // (`staff-observation.ts`) with a coarse three-value outcome, so the security
+      // review has one place to inspect and the staff actor never receives package
+      // status detail.
       const context = await managedContext({
         ...scope,
         actorUserId: handoff.requestedByUserId,
       });
-      if (
-        context.pkg === null ||
-        context.pkg.packageVersionId !== handoff.packageVersionId ||
-        context.pkg.manifestSha256 !== handoff.manifestSha256
-      ) {
+      const observation = observeHandoffPackageCurrency({
+        boundManifestSha256: handoff.manifestSha256,
+        boundPackageVersionId: handoff.packageVersionId,
+        handoffRequestedByUserId: handoff.requestedByUserId,
+        observedCurrentPackage:
+          context.pkg === null
+            ? null
+            : {
+                manifestSha256: context.pkg.manifestSha256,
+                packageVersionId: context.pkg.packageVersionId,
+              },
+        staffActorUserId: input.actorUserId,
+      });
+      if (observation.outcome === "unknown") {
+        throw new SubmissionAuthorizationError("handoff_not_current");
+      }
+      if (observation.outcome === "not_current") {
         throw new SubmissionAuthorizationError("handoff_not_current");
       }
       const managed = context.managed;

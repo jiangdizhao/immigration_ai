@@ -133,6 +133,7 @@ const PROJECT_VIEW_TAB_LABEL_KEYS = {
   applications: "projectSchoolApplicationsTab",
   documents: "projectDocumentsTab",
   home: "projectHomeTab",
+  review: "projectReviewTab",
   student500: "projectStudent500Tab",
 } as const satisfies Record<
   ProjectWorkspaceView,
@@ -601,6 +602,7 @@ export function ImmigrationAIWorkspace({
   schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
+  projectReviewEnabled = false,
   student500Enabled = false,
   submissionCapabilityEnabled = false,
 }: {
@@ -630,6 +632,8 @@ export function ImmigrationAIWorkspace({
   schoolApplicationsEnabled?: boolean;
   /** Phase 13 M5.2 school admissions: enabled by capability + eligibility. */
   schoolAdmissionsEnabled?: boolean;
+  /** Phase 13 M9-B exact-version review surface (server keeps the real gate). */
+  projectReviewEnabled?: boolean;
   /** Phase 13 M6.1 Student 500 preparation: capability + eligibility. */
   student500Enabled?: boolean;
   /**
@@ -2593,6 +2597,8 @@ export function ImmigrationAIWorkspace({
                 overview={projectOverview}
                 project={selectedProject}
                 projectDocumentsEnabled={false}
+                projectReviewCopy={copy.projectReview}
+                projectReviewEnabled={projectReviewEnabled}
                 returnToPreviousViewLabel={
                   previousProjectView === "documents"
                     ? undefined

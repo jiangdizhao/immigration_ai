@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M9_B_BROWSER_CLOSEOUT_TO_M9_C_2026_11_10 -->
+## Current milestone — M9-B bounded acceptance recorded; M9-C next (2026-11-10)
+
+- **M9-B status:** `M9_B_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS / COMMIT_PUSH_PENDING`; **not** a full positive staff/professional acceptance. Remote accepted M9-A baseline `f531daebf19237061aab016e936bb2fcb9681af4`; local M9-B uncommitted patch SHA-256 `6a2a37ca73ed230c02d3f3f7fca1270da377178522e78de561b4b2406ed01acc` (42 files before this docs amendment).
+- **Owner browser result:** B1 **PASS** (customer review, exact v1/v2, three independent statuses, correct blocking); B3/B4 **PASS in observed customer UI** (regular customer redirected from `/lawyer-portal`, professional request disabled); B2 **NOT VERIFIED** (zero synthetic lawyer accounts found, no synthetic credentials or role escalation). No standalone direct-API staff/privileged authorization E2E is claimed.
+- **Cline offline validation:** 1408/1408 unit tests, 57 M9-B review/staff, 74 scoped authorization tests, build PASS, no new TypeScript diagnostics (44 historical); not rerun independently. No M9-B PostgreSQL acceptance or migration run. R1 static review PASS with one partial-source-read limitation remaining.
+- **M9-C scope is frozen:** one integrated Picture1 → Picture2 → Picture3 desktop/mobile, zh-CN/en and security-state acceptance, reusing prior A1–A5/M9-B evidence. No B2 positive fabricated role, automatic M8 staff-private-package access, production trust or M4 professional-credential claims. No new micro-milestones. Only fix reproducible primary-path/authorization/state-integrity/build blockers; stop after a bounded pass.
+- **Next:** apply docs patch, verify cumulative patch, owner-controlled non-force commit/push, independently check remote SHA, then separately dispatch M9-C coding/acceptance. `LIVE_PRODUCTION_NO_GO` stays.
+<!-- END PHASE13_M9_B_BROWSER_CLOSEOUT_TO_M9_C_2026_11_10 -->
+
 <!-- BEGIN PHASE13_M9_A_ENGINEERING_CLOSEOUT_2026_11_08 -->
 ## Current milestone: M9-A accepted with documented limitations; M9-B next (2026-11-08)
 

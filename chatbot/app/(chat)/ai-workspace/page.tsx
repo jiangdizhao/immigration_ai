@@ -122,6 +122,10 @@ export default async function AIWorkspacePage({
           policyLaunchState={policyLaunchState}
           policyReference={policyReference}
           projectAvailability={personalProject.availability}
+          projectReviewEnabled={
+            process.env.PHASE13_PROJECT_REVIEW_ENABLED?.trim().toLowerCase() ===
+            "true"
+          }
           requestedPolicySlug={requestedSlug}
           schoolAdmissionsEnabled={schoolPreparation.admissionsEnabled}
           schoolApplicationsEnabled={schoolPreparation.applicationsEnabled}

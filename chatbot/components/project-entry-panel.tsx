@@ -62,9 +62,9 @@ const NAV_LABEL_KEYS = {
  * main-area section tabs, so this legacy compact section list keeps exactly the four
  * sections it has always offered.
  */
-type ProjectPanelView = Exclude<ProjectWorkspaceView, "documents">;
+type ProjectPanelView = Exclude<ProjectWorkspaceView, "documents" | "review">;
 const PANEL_VIEWS: readonly ProjectPanelView[] = PROJECT_WORKSPACE_VIEWS.filter(
-  (view): view is ProjectPanelView => view !== "documents"
+  (view): view is ProjectPanelView => view !== "documents" && view !== "review"
 );
 
 function projectLabel(

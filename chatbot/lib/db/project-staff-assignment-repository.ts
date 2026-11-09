@@ -756,6 +756,44 @@ export function createProjectStaffAssignmentRepository(
       });
     },
 
+    /**
+     * Phase 13 M9-B — candidate read only.
+     *
+     * Returns the *identifiers* of this actor's active assignments so a staff workspace can
+     * compose per-Project shells. It deliberately grants nothing: every candidate must
+     * still pass `getStaffShell` (locked, authoritative, fail-closed) before any Project
+     * identity is returned to a caller. No Project column other than the id is read, so a
+     * candidate list can never leak Project names, statuses or content.
+     */
+    listActiveStaffAssignmentCandidates(input: {
+      actorUserId: string;
+      limit?: number;
+    }) {
+      requireUuid(input.actorUserId);
+      const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
+      return database.transaction(async (tx) => {
+        const actors = await lockUsers(tx, [input.actorUserId]);
+        if (!currentLawyer(actors.get(input.actorUserId))) {
+          throw new ProjectStaffAssignmentError("forbidden");
+        }
+        return tx
+          .select({
+            assignmentId: projectStaffAssignment.id,
+            projectId: projectStaffAssignment.projectId,
+            updatedAt: projectStaffAssignment.updatedAt,
+          })
+          .from(projectStaffAssignment)
+          .where(
+            and(
+              eq(projectStaffAssignment.staffUserId, input.actorUserId),
+              eq(projectStaffAssignment.status, "active")
+            )
+          )
+          .orderBy(asc(projectStaffAssignment.createdAt))
+          .limit(limit);
+      });
+    },
+
     getStaffShell(input: { actorUserId: string; projectId: string }) {
       requireUuid(input.actorUserId);
       requireUuid(input.projectId);

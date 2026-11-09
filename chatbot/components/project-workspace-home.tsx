@@ -13,6 +13,7 @@ import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsCenter } from "./project-documents-center";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
 import { ProjectOverviewPanel } from "./project-overview-panel";
+import { ProjectReviewPanel } from "./project-review-panel";
 import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
 import { SchoolApplicationsPanel } from "./school-applications-panel";
 import { Student500Panel } from "./student-500-panel";
@@ -25,6 +26,7 @@ const TAB_LABEL_KEYS = {
   admissions: "projectSchoolAdmissionsTab",
   student500: "projectStudent500Tab",
   documents: "projectDocumentsTab",
+  review: "projectReviewTab",
 } as const satisfies Record<ProjectWorkspaceView, keyof ProjectHomeCopy>;
 
 /**
@@ -52,6 +54,8 @@ export function ProjectWorkspaceHome({
   student500Enabled = false,
   student500Copy,
   projectDocumentsEnabled = false,
+  projectReviewEnabled = false,
+  projectReviewCopy,
   stages = [],
   overview = null,
   summaryState = "ready",
@@ -82,6 +86,9 @@ export function ProjectWorkspaceHome({
   student500Copy: WorkspaceCopy["student500"];
   /** Remains false until the separate document privacy/scan gates open. */
   projectDocumentsEnabled?: boolean;
+  /** Phase 13 M9-B exact-version review surface (server keeps the real gate). */
+  projectReviewEnabled?: boolean;
+  projectReviewCopy: WorkspaceCopy["projectReview"];
   /**
    * Phase 13 M9-A: the real, server-authorized Project stage model and overview.
    * Missing/empty values simply render the overview's honest unavailable state; they
@@ -374,6 +381,25 @@ export function ProjectWorkspaceHome({
             )}
           </div>
         ) : null}
+        {view === "review" ? (
+          <div className="space-y-3" data-testid="project-home-review">
+            {/*
+              Phase 13 M9-B: the exact-version review surface. It reads only what the
+              M9-A/M8.1/M4-006 services already authorized for this actor, and every
+              dimension it shows is a server-reported state. When lawyer review is
+              fail-closed the panel says so instead of offering a request that would fail.
+            */}
+            <ProjectReviewPanel
+              copy={projectReviewCopy}
+              enabled={projectReviewEnabled}
+              onOpenOwnerView={(next) =>
+                onOpenArtifactOwner?.(next as ProjectWorkspaceView)
+              }
+              projectId={project.id}
+            />
+          </div>
+        ) : null}
+
         {view === "documents" ? (
           <div className="space-y-3" data-testid="project-home-documents">
             <ProjectDocumentsCenter

@@ -32,6 +32,18 @@ import { unavailableManagedTargetProvider } from "./target-provider";
  *
  * Test-only synthetic ports are never imported here.
  */
+export const professionalReviewService = createProfessionalReviewService({
+  authority: denyAllProfessionalReviewAuthority,
+  credentialVerifier: unavailableProfessionalCredentialVerifier,
+  store: createPostgresProfessionalReviewStore(),
+  targetProvider: unavailableManagedTargetProvider,
+});
+
+/**
+ * Phase 13 M9-B: the same service instance is exported so the integrated review surface
+ * composes *this* composition (deny-all authority, no credential registry, no target
+ * provider) instead of rebuilding its own. Exporting the instance cannot widen authority.
+ */
 export const professionalReviewHandlers = createProfessionalReviewHandlers({
   actorContext() {
     // No approved assignment-verification policy for review actions: the state is
@@ -72,10 +84,5 @@ export const professionalReviewHandlers = createProfessionalReviewHandlers({
       throw error;
     }
   },
-  service: createProfessionalReviewService({
-    authority: denyAllProfessionalReviewAuthority,
-    credentialVerifier: unavailableProfessionalCredentialVerifier,
-    store: createPostgresProfessionalReviewStore(),
-    targetProvider: unavailableManagedTargetProvider,
-  }),
+  service: professionalReviewService,
 });

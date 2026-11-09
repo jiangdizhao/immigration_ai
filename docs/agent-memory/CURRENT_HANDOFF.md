@@ -1,3 +1,97 @@
+<!-- BEGIN PHASE13_M9_B_OWNER_ACCEPTANCE_EVIDENCE_2026_11_10 -->
+## Phase 13 M9-B — owner-operated bounded browser acceptance and M9-C handoff (2026-11-10)
+
+**Current engineering disposition:** `M9_B_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS / COMMIT_PUSH_PENDING / LIVE_PRODUCTION_NO_GO`. The owner deliberately stopped browser acceptance after the narrow, sufficient primary-path campaign; this is not production acceptance or a claim that professional review can operate. M9-B implementation is still **local and uncommitted** as of this evidence entry. M9-A pushed baseline: `f531daebf19237061aab016e936bb2fcb9681af4` on `phase13-m9-integrated-workspace`.
+
+**Code provenance:** reviewed M9-B R1 cumulative patch `~/phase13_m9_b_review.patch`, **42 paths (14 modified / 28 added), 266,330 bytes**, SHA-256 `6a2a37ca73ed230c02d3f3f7fca1270da377178522e78de561b4b2406ed01acc`. Independent review was **targeted static review PASS with limitations**, not an independent rerun of all tests. Cline reported `pnpm test:unit` **1408/1408 PASS**, M9-B review/staff **57/57**, scoped authorization regressions **74/74**, build PASS, Biome clean, `git diff --check` clean, and TypeScript **44 historical diagnostics / 0 new**. M9-B had **no new migration**; its SQL-backed composition was not executed in owner PostgreSQL acceptance.
+
+**Owner browser acceptance on isolated synthetic local DB** `immigration_ai_phase13_m9_a_test` (not the ordinary `chatbot` or legal DB):
+
+- **B1 CUSTOMER REVIEW — PASS in observed primary path.** Authenticated synthetic customer `m9a.customer.20261108@example.test`, Project A `#5401f8c8`: `律师审核` opens; M5.1 prepared package **v2 current** and **v1 superseded** select with distinct matching version/digest identities; AI check accurately says **not integrated**; customer confirmation **not confirmed**; professional review **unsupported for this type**, request button disabled with a reason. Partial-source warning appears instead of implying a complete list. No actual review request, approval or version confirmation was created.
+- **B3/B4 CUSTOMER → STAFF PAGE NEGATIVE — PASS only at browser entry.** A regular customer navigating directly to `/lawyer-portal` was redirected back to the ordinary AI Workspace, without staff queue or protected customer details. This is **not** independent proof of every direct staff API, cross-account, revocation or race scenario; focused offline authorization regression evidence is separate.
+- **B4 UNAVAILABLE PROFESSIONAL ACTION — PASS on observed customer version.** Professional request is visibly disabled; there is no fabricated lawyer approval or external submission. The underlying M4-006 professional authority remains deny-all / unavailable.
+- **B2 STAFF POSITIVE BROWSER — NOT VERIFIED / NOT PASS.** A **read-only search for synthetic lawyer accounts** (`role = lawyer` with `@example.test` email) returned **zero rows** in the isolated database. No test lawyer was created, no role elevated, no professional credential forged, and no positive staff queue/detail flow exercised. The M9-B implementation must not be described as owner-browser-verified for B2. Retain Cline's offline staff tests as separate evidence.
+
+**Known limitations and security hard gates:** M8.1 customer-only package access remains enforced; M8.2's typed customer-scoped staff observation uses an authority substitution inside a currently unreachable/unavailable handoff path: **independent staff-private-package security approval is still PENDING**. M4-004 protected-resource disclosure remains DENY, M4-006 professional requests remain unavailable, and no genuine payment, contract, credential, document-trust or external receipt is verified. M9-B sources can still under-report partial M8 failures because an inner candidate collector swallows some reads; do not misrepresent incomplete data as authoritative. No new migration, AWS, provider, paid-model or deployment action was performed for M9-B; prior M9-A isolated DB migration 0053 remains isolated. `M6 LEGAL_SOURCE_COVERAGE_PARTIAL`, `POST_M5_E2E_BLOCKED`, prior M8 candidate status and `LIVE_PRODUCTION_NO_GO` remain unchanged.
+
+**Owner-authorized stop and next:** No B2 synthetic credential construction, broad PostgreSQL replay, more R2/R3 correction loops or full M9-A browser retest. Apply this **docs-only** evidence patch over the current M9-B uncommitted worktree; regenerate one complete cumulative Git patch and verify its SHA/paths; then owner-approved **normal non-force commit/push** and verify actual remote HEAD. **M9-C is next**, limited to the approved one-pass Picture1–3 integrated UX/security acceptance. M9-C must carry B2 as *not verified* unless legitimate safe staff fixtures become available; preserve release and professional-security gates. Record pushed M9-B SHA in the next current-state checkpoint after Git verification rather than rewriting historical pending text.
+<!-- END PHASE13_M9_B_OWNER_ACCEPTANCE_EVIDENCE_2026_11_10 -->
+
+<!-- BEGIN PHASE13_M9_B_IMPLEMENTED_2026_11_08 -->
+## Phase 13 M9-B — exact-version review and integrated Staff workspace (2026-11-08)
+
+**Decision:** `M9_B_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_AND_OWNER_ACCEPTANCE / LIVE_PRODUCTION_NO_GO`.
+M9-B is implemented at engineering scope only; it is **not** accepted, not committed and not released.
+
+- **Baseline correction (historical record preserved above):** the M9-A closeout text still says
+  `COMMIT_PUSH_PENDING` because it was authored before the owner committed and pushed. The
+  authoritative M9-A commit is **`f531daebf19237061aab016e936bb2fcb9681af4`**
+  (`feat(phase13): complete M9-A customer workspace with limitations`), which is the verified
+  `origin/phase13-m9-integrated-workspace` head and the starting HEAD of M9-B. The older
+  `87af1014…` reference describes the reviewed patch baseline, not the current remote state.
+- **M9-B scope delivered (one integrated slice, no sub-milestones):** a customer exact-version
+  review surface (Picture3) inside the existing M9-A Project Workspace; a scoped Staff/Lawyer
+  queue and Project detail inside the existing lawyer portal; and a written + executable audit of
+  the M8 staff/handoff authority substitution.
+- **Three review dimensions are structurally separate** (`lib/review/review-dimensions.ts`):
+  AI check, customer confirmation and professional review. No dimension can be derived from
+  another, and `unsupported`/`unavailable`/`disabled` are first-class states. No AI checker exists
+  for any artifact kind, so AI check reports `unsupported` — it is never displayed as passed.
+- **Professional review stays fail-closed:** the M4-006 composition is deny-all authority +
+  unavailable credential verifier + unavailable managed-target provider + default-OFF flag, so
+  `professional_authority_unavailable` is reported and the request button is blocked *before* any
+  write. Synthetic positive authority is **not** wired into production.
+- **Staff access stays blocked:** the queue lists only this lawyer's own M4-002 invitations and
+  active assignments (each re-validated through the locked `getStaffShell`); the Project detail
+  returns the minimal shell plus the M4-004 disclosure decision, which currently denies
+  (`resource_source_unavailable`), so no review items, documents, facts, chats or package content
+  are returned. Categories that cannot be read are labelled, never shown as empty.
+- **M8 staff-private-package audit:** documented in
+  `~/phase13_m9_b_implementation_report.md` and encoded in
+  `lib/submission-authorization/staff-observation.ts`; the handoff accept path now goes through an
+  explicit typed customer-scoped observation with a coarse three-value outcome, and the M8.1
+  package service still refuses staff (`actor_not_eligible`). Independent security review remains
+  **required and not performed**.
+- **No new migration.** No database write, no schema application, no feature-flag activation, no
+  AWS/Stripe/provider call, no external submission.
+- **Validation reported by the coding agent (not rerun by any reviewer):** see the implementation
+  report section 7. PostgreSQL and browser acceptance for M9-B are **not** performed.
+- **Next action:** independent review of `~/phase13_m9_b_review.patch`, then owner-authorized
+  browser smoke of the review tab and the lawyer portal with synthetic accounts (needs
+  `PHASE13_PROJECT_REVIEW_ENABLED=true` and `PHASE13_STAFF_WORKSPACE_ENABLED=true` locally), then
+  M9-C consolidation. Do **not** start M9-C, commit, migrate or deploy from this record.
+
+**M9-B R1 corrections (bounded independent-review pass, 2026-11-08):** three defects corrected in one
+pass; status stays `M9_B_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_AND_OWNER_ACCEPTANCE`.
+
+1. **Exact-version eligibility** — `lib/review/review-summary.ts` now decides requestability with the
+exported `reviewRequestIneligibility()` predicate: stale versions (`exact_version_stale`), failed
+integrity checks (`package_integrity_unverified`) and incomplete review-target identities
+(`review_target_identity_incomplete`) can never be offered as requestable even when the workflow is
+injected as `available`. M4-006 service-side authorization remains the final authority; an `unknown`
+integrity state (no check exists for the kind) is not a refusal.
+2. **Staff Project selection** — new pure `lib/staff-workspace/staff-detail-selection.ts` clears the
+previous Project detail in the same transition and commits a response only when both a monotonic
+generation **and** the selected Project id still match, so a late success or failure for a previous
+Project cannot overwrite or blank the current one. M4 assignment / M4-004 disclosure rules untouched.
+3. **Unreadable sources** — `lib/review/review-composition.ts` reports each source read as a fact and
+the summary gains `artifactSource: { state: available|empty|partial|disabled|restricted|unavailable,
+reasonCode }`, so a failed artifact read can no longer be rendered as "no versions". Only stable codes
+cross the boundary; the client parse rejects a response without the field.
+
+- **Validation reported by the coding agent (not rerun by any reviewer):** `pnpm test:unit`
+  **1408/1408 pass, 0 fail, 0 skip**; all M9-B review/staff suites **57/57**; relevant authorization
+  regression set **74/74**; `tsc --noEmit` **44 = baseline, 0 new**; Biome clean on 27 changed files;
+  `pnpm build` **PASS**; `git diff --check` clean. One stale M9-A assertion (Project home tab count
+  5 → 6) was corrected and that never-registered suite is now part of `test:unit`.
+- **Security boundary unchanged:** M8.1 package reads remain customer-only, the M8.2 handoff authority
+  port remains unavailable, and no staff customer-identity substitution was enabled. The independent
+  M8 staff-private-package security gate remains **PENDING**.
+- **Still not done:** no database access/migration, no browser acceptance, no feature-flag activation,
+  no commit/push, M9-C not started. Patch regenerated; see the implementation report section 10A and 11.
+
+<!-- END PHASE13_M9_B_IMPLEMENTED_2026_11_08 -->
+
 <!-- BEGIN PHASE13_M9_A_ENGINEERING_CLOSEOUT_2026_11_08 -->
 ## Phase 13 M9-A — customer Project Workspace engineering closeout (2026-11-08)
 

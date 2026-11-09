@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M9_B_OWNER_ACCEPTANCE_STATE_2026_11_10 -->
+## Project state — M9-B reviewed with bounded owner browser evidence; M9-C next (2026-11-10)
+
+- **Code provenance:** `phase13-m9-integrated-workspace` M9-A pushed `f531daebf19237061aab016e936bb2fcb9681af4`; M9-B currently implemented **locally, uncommitted**; pre-docs cumulative patch `~/phase13_m9_b_review.patch`, 42 paths, SHA-256 `6a2a37ca73ed230c02d3f3f7fca1270da377178522e78de561b4b2406ed01acc`. Status `M9_B_ENGINEERING_ACCEPTANCE_CANDIDATE_WITH_LIMITATIONS / COMMIT_PUSH_PENDING / LIVE_PRODUCTION_NO_GO`.
+- **Delivered:** customer exact-version Picture3 review, AI/customer/professional states separated, Staff/Lawyer minimal authorized queue/detail and explicit M8 staff-observation audit. M4 professional request and private staff-content access remain blocked by service authorization; no made-up positive authority.
+- **Evidence:** coding-agent unit 1408/1408 and scoped auth 74/74; independently reviewed bounded R1 corrections (version freshness/integrity, stale Staff responses, explicit partial/unavailable artifacts). Owner B1 PASS (School Application package v2 current and v1 stale, accurate three dimensions), B3/B4 customer page restriction and unavailable lawyer action PASS (observed scope only), B2 **NOT VERIFIED** (no synthetic lawyer account). M9-B no new DB migration and no owner SQL integration pass.
+- **Unresolved:** independent M8.2 staff-private-package/authority-substitution review PENDING; M2 content trust DENY; M4 credentials, agreement/payment, genuine review unavailable; M6 legal source PARTIAL and Post-M5 E2E_BLOCKED; partial M8 candidate-read failures may appear incomplete; cross-account positive Staff/browser E2E unverified. Do not claim production/legal/managed readiness.
+- **Next:** local docs application and final cumulative patch, owner-approved commit/push + remote-SHA check; M9-C one consolidated limited UX/security acceptance per frozen 2026-11-06 contract (Pictures 1–3). No additional B2 fixture or repeated broad testing simply to achieve all-green.
+<!-- END PHASE13_M9_B_OWNER_ACCEPTANCE_STATE_2026_11_10 -->
+
 <!-- BEGIN PHASE13_M9_A_ENGINEERING_CLOSEOUT_2026_11_08 -->
 ## Current project state — Phase 13 M9-A engineering accepted with limitations (2026-11-08)
 
