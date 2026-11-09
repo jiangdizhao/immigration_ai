@@ -403,6 +403,7 @@ export function ProjectWorkspaceHome({
         {view === "documents" ? (
           <div className="space-y-3" data-testid="project-home-documents">
             <ProjectDocumentsCenter
+              artifactSourceState={summaryState}
               artifacts={artifacts}
               centreCopy={copy.projectWorkspace}
               copy={copy.documents}

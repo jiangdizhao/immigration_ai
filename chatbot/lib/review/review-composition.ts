@@ -38,11 +38,43 @@ export type ArtifactReadResult =
 
 /** Result of the caller's M8.1 package read, as a fact rather than an exception. */
 export type SubmissionReadResult =
-  | { readonly kind: "ok"; readonly candidates: readonly ReviewCandidate[] }
+  | {
+      readonly kind: "ok";
+      readonly candidates: readonly ReviewCandidate[];
+      /**
+       * Set only when part of the source answered — for example one target's M8.1
+       * package read failed while another succeeded. A partly readable source must
+       * never be reported as a complete list.
+       */
+      readonly partialReasonCode?: string | null;
+    }
   | {
       readonly kind: "denied" | "disabled" | "unavailable";
       readonly reasonCode: string;
     };
+
+/** Stable code for "this source answered, but not for every target". */
+export const SUBMISSION_SOURCE_PARTIAL = "submission_source_partial";
+
+/**
+ * M9-C: turns the caller's M8.1 read outcome into a result.
+ *
+ * `failedReads` counts the target- and kind-level reads that did not answer. The old
+ * runtime discarded that count, so a half-readable package source produced a list that
+ * looked complete — the under-reported partiality recorded as M9-B debt. Counting is
+ * mechanical: it never decides whether a package exists, only whether the enumeration
+ * finished.
+ */
+export function submissionReadResult(input: {
+  readonly candidates: readonly ReviewCandidate[];
+  readonly failedReads: number;
+}): SubmissionReadResult {
+  return {
+    candidates: input.candidates,
+    kind: "ok",
+    partialReasonCode: input.failedReads > 0 ? SUBMISSION_SOURCE_PARTIAL : null,
+  };
+}
 
 function artifactFailureState(
   result: Exclude<ArtifactReadResult, { kind: "ok" }>
@@ -101,6 +133,13 @@ export async function composeProjectReviewSummary(input: {
     const submission = await input.readSubmission();
     if (submission.kind === "ok") {
       submissionCandidates = [...submission.candidates];
+      // A source that answered only in part is handled exactly like the other
+      // "did not answer" outcomes, so the existing precedence below labels the list
+      // `partial` (some items readable) or `unavailable` (nothing readable) instead of
+      // `available`/`empty`. No new state vocabulary and no new authorization.
+      if (submission.partialReasonCode) {
+        submissionState = "unavailable";
+      }
     } else {
       submissionState = submissionFailureState(submission);
     }

@@ -187,7 +187,15 @@ export function ProjectReviewPanel({
             : null}
         </p>
       ) : null}
-      {review && review.items.length === 0 ? (
+      {review &&
+      review.items.length === 0 &&
+      review.artifactSource.state === "empty" ? (
+        /*
+          M9-C: "no reviewable versions" is only the truth when every source answered
+          with nothing. When a source was restricted, unavailable or only partly read,
+          the notice above already says so, and claiming the Project is empty next to it
+          would contradict it.
+        */
         <p className="rounded-lg bg-white p-3 text-xs leading-5 text-slate-600">
           {copy.empty}
         </p>

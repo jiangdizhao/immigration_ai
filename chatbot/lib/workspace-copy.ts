@@ -245,6 +245,12 @@ export type WorkspaceCopy = {
       artifactsTitle: string;
       artifactsSubtitle: string;
       artifactsEmpty: string;
+      /**
+       * Phase 13 M9-C: shown instead of `artifactsEmpty` when the Project summary that
+       * carries these references could not be read, so a failed read never looks like a
+       * verified empty list.
+       */
+      artifactsUnavailable: string;
       artifactsTruncated: string;
       artifactsNoContent: string;
       artifactOpenOwner: string;
@@ -1085,6 +1091,8 @@ const zh: WorkspaceCopy = {
       artifactsSubtitle:
         "这些条目来自学校申请与学生签证 500 流程自身保存的版本，只显示身份、版本与状态；它们不是项目上传文件，也不在此处提供内容预览或下载。",
       artifactsEmpty: "此项目暂无可引用的生成成果。",
+      artifactsUnavailable:
+        "此项目的成果来源当前无法读取，因此这里不显示为空列表；请稍后重试。",
       artifactsTruncated: "仅显示最新的部分成果。",
       artifactsNoContent:
         "此处不复制成果正文，也不新增任何访问权限；请在所属流程中查看与操作。",
@@ -2393,6 +2401,8 @@ const en: WorkspaceCopy = {
       artifactsSubtitle:
         "These entries come from the versions the school-application and Student 500 workflows already saved. They show identity, version and status only, are not project uploads, and no content preview or download is offered here.",
       artifactsEmpty: "No generated artifact is available to reference yet.",
+      artifactsUnavailable:
+        "This Project's artifact source could not be read, so this is not an empty list. Try again shortly.",
       artifactsTruncated: "Only the most recent artifacts are listed.",
       artifactsNoContent:
         "No artifact text is copied here and no access is added; open the owning workflow to view or act on it.",

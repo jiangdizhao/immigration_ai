@@ -4,7 +4,9 @@ import type { ProjectArtifactsSummary } from "@/lib/workspace/project-artifacts"
 import {
   type ArtifactReadResult,
   composeProjectReviewSummary,
+  SUBMISSION_SOURCE_PARTIAL,
   type SubmissionReadResult,
+  submissionReadResult,
 } from "./review-composition";
 import type { ReviewProfessionalAvailability } from "./review-summary";
 
@@ -155,6 +157,60 @@ test("a disabled submission source alone does not masquerade as an error", async
     reasonCode: "artifact_source_disabled",
     state: "disabled",
   });
+});
+
+test("a partly answered submission source is never reported as a complete list", async () => {
+  /*
+    M9-C: the M8.1 enumeration can read some targets and fail others. Before this
+    correction the runtime discarded that fact, so the customer saw a list that looked
+    finished. With one readable item the surface must say `partial`, not `available`.
+  */
+  const summary = await compose({
+    artifacts: { artifacts: oneArtifact, kind: "ok" },
+    submission: submissionReadResult({ candidates: [], failedReads: 2 }),
+  });
+  assert.equal(summary.items.length, 1);
+  assert.deepEqual(summary.artifactSource, {
+    reasonCode: "artifact_source_partial",
+    state: "partial",
+  });
+});
+
+test("a partly answered submission source with nothing readable is unavailable, not empty", async () => {
+  const summary = await compose({
+    artifacts: { artifacts: emptyArtifacts, kind: "ok" },
+    submission: submissionReadResult({ candidates: [], failedReads: 1 }),
+  });
+  assert.deepEqual(summary.items, []);
+  assert.deepEqual(summary.artifactSource, {
+    reasonCode: "artifact_source_unavailable",
+    state: "unavailable",
+  });
+});
+
+test("a fully answered empty submission source stays a genuine empty", async () => {
+  const summary = await compose({
+    artifacts: { artifacts: emptyArtifacts, kind: "ok" },
+    submission: submissionReadResult({ candidates: [], failedReads: 0 }),
+  });
+  assert.deepEqual(summary.artifactSource, {
+    reasonCode: null,
+    state: "empty",
+  });
+});
+
+test("the read outcome only reports partiality when a read actually failed", () => {
+  const partial = submissionReadResult({ candidates: [], failedReads: 1 });
+  assert.equal(
+    partial.kind === "ok" ? partial.partialReasonCode : "unreachable",
+    SUBMISSION_SOURCE_PARTIAL
+  );
+  const complete = submissionReadResult({ candidates: [], failedReads: 0 });
+  assert.equal(complete.kind, "ok");
+  assert.equal(
+    complete.kind === "ok" ? complete.partialReasonCode : "unreachable",
+    null
+  );
 });
 
 test("the composed payload carries no exception text or foreign identity", async () => {

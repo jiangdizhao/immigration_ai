@@ -1,3 +1,30 @@
+<!-- BEGIN PHASE13_M9_C_INTEGRATED_IMPLEMENTATION_2026_11_10 -->
+## Phase 13 M9-C — consolidated integration pass (IMPLEMENTED, pending review and owner acceptance)
+
+**Status:** `M9_C_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW_AND_OWNER_ACCEPTANCE`. `LIVE_PRODUCTION_NO_GO` unchanged. One bounded correction pass was applied; it is **not** an owner acceptance, a production/security approval, or a claim that professional review, M2 trust or Managed handoff can operate.
+
+**Git baseline (verified before editing):** branch `phase13-m9-integrated-workspace`; HEAD `ab618ea3c5774bf7f57b220b34ec09ba19ad3a18` (equals `origin/phase13-m9-integrated-workspace`); clean worktree. M9-A pushed baseline `f531daebf19237061aab016e936bb2fcb9681af4`; M9-B pushed baseline `ab618ea3c5774bf7f57b220b34ec09ba19ad3a18` (commit `feat(phase13): complete M9-B review workspace with limitations`, 45 files, byte-identical to the reviewed closeout patch `8a7bff8ce414d949f017b721297485b8f46c77f6e82c1b66880b7874d617f902`). Nothing was committed, pushed, merged, rebased, reset or deployed in M9-C.
+
+**Correction 1 — M8 package-source partiality was under-reported (D-P13-033 debt, FIXED).** `lib/review/runtime.ts` swallowed every failed kind- or target-level read in `submissionCandidates()`, so `readSubmission()` always returned `ok` and `artifactSource` reported `available`/`empty` for a list that might be incomplete. The enumeration now counts reads that did not answer, the new pure `submissionReadResult()` maps that count to `partialReasonCode`, and `composeProjectReviewSummary()` folds it into the **existing** `describeArtifactSource` precedence — so a partly readable source becomes `partial` (items readable) or `unavailable` (nothing readable), never `available`/`empty`. No new state vocabulary, no new authorization, no re-derivation of package existence.
+
+**Correction 2 — unreadable artifact source on the Picture2 document centre (FIXED).** `ProjectDocumentsCenter` received only `artifacts`; when the Project summary read failed (`artifacts === null`) it rendered `project-artifacts-empty`, i.e. a failed read looked exactly like a verified empty list, while the M2 document rows above already distinguished `loadFailed`. The centre now takes `artifactSourceState` (`idle`/`loading`/`ready`/`failed`, default `ready`) forwarded from the home's existing `summaryState`, and renders `project-artifacts-loading` / `project-artifacts-unavailable` instead of the empty claim. New localized copy `projectWorkspace.artifactsUnavailable` (zh-CN + en). The M9-A `artifactsEmpty` behaviour is unchanged when the read succeeded.
+
+**Correction 3 — review surface claimed emptiness next to an unreadable source (FIXED).** `ProjectReviewPanel` showed `copy.empty` ("no reviewable exact versions") whenever `items.length === 0`, contradicting the `project-review-source-state` notice rendered above it. The empty message is now gated on `artifactSource.state === "empty"`.
+
+**Tests added (+5, all in already-registered suites):** 4 in `lib/review/review-composition.test.ts` (partly answered source with items → `partial`; with nothing readable → `unavailable` not `empty`; fully answered empty → `empty`; `submissionReadResult` only reports partiality when a read failed) and 1 in `lib/workspace/project-workspace-home.test.ts` (documents view: `ready` → `artifacts-empty`, `failed` → `artifacts-unavailable` with no empty claim, `loading` → `project-artifacts-loading`, zh-CN localized).
+
+**Validation actually executed (not inherited):** `pnpm test:unit` **1413/1413 PASS, 0 fail, 0 skip** (M9-B baseline 1408; +5); review suites **33/33**; `project-workspace-home` **8/8**; `workspace-copy` **5/5**; `project-documents-view` **7/7**; staff-workspace **22/22**; submission-packages/submission-authorization offline suites **33/33**; `tsc --noEmit` **44 = historical baseline, 0 new**; Biome clean on the 8 changed files; `pnpm build` **PASS**; `git diff --check` clean.
+
+**Deliberately not run / not claimed:** no PostgreSQL integration suite (`lib/submission-packages/phase13-m8-1.postgres.integration.test.ts`, `lib/submission-authorization/phase13-m8-3.postgres.integration.test.ts` are excluded from `test:unit` and were **not** executed — no database access, no migration applied, ledger still 0053); no browser/E2E run; no provider, AWS, Stripe or paid-model call; no feature flag enabled; no `.env.local` change. Running those DB suites through a plain glob fails at import without `--conditions=react-server`; that is an invocation artifact of this pass, **not** a passing test.
+
+**Owner acceptance journeys still PENDING:** C1 customer Project → document → exact version → review; C2 Project A/B isolation, standalone preservation and customer staff-page denial; C3 zh-CN/en desktop + one narrow viewport smoke. **B2 positive Staff browser remains NOT VERIFIED** (no synthetic lawyer was created, no role elevated, no credential forged).
+
+**Carried blockers (unchanged):** independent M8.2 staff-private-package/authority-substitution security approval **PENDING**, so the handoff authority port stays `unavailableHandoffAuthority` and M8.1 package reads stay customer-only; M4-004 disclosure DENY; M4-006 professional review unavailable/deny-all; M2 document trust DENY (metadata-only); M6 legal source PARTIAL; Post-M5 `E2E_BLOCKED`; M4 `CLOSED_WITH_BLOCKERS`. No real contract, payment, credential, Offer/CoE, lawyer review, school or government submission has been verified.
+
+**Non-goals honoured:** no new milestone, no new checker/service/state machine, no schema or migration change, no M4/M5/M6/M7/M8 reopening, no B2 fabrication, no commit/push. `CURRENT_MILESTONE.md`, `PROJECT_STATE.md` and `DECISIONS.md` were intentionally **not** rewritten with an accepted verdict; the owner/reviewer records final M9-C acceptance after completing C1–C3.
+<!-- END PHASE13_M9_C_INTEGRATED_IMPLEMENTATION_2026_11_10 -->
+
+
 <!-- BEGIN PHASE13_M9_B_OWNER_ACCEPTANCE_EVIDENCE_2026_11_10 -->
 ## Phase 13 M9-B — owner-operated bounded browser acceptance and M9-C handoff (2026-11-10)
 

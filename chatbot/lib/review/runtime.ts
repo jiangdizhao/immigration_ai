@@ -30,6 +30,7 @@ import {
   type ArtifactReadResult,
   composeProjectReviewSummary,
   type SubmissionReadResult,
+  submissionReadResult,
 } from "./review-composition";
 import { createReviewHandlers } from "./review-http";
 import type {
@@ -58,6 +59,16 @@ import type {
 /** Bounded so the review page cannot become an application enumeration tool. */
 const MAX_APPLICATION_READS_PER_KIND = 3;
 
+/**
+ * What the package enumeration actually managed to read. `failedReads` is the number of
+ * target- or kind-level reads that did not answer, so the caller can distinguish a
+ * complete list from one that is merely all it could reach.
+ */
+type SubmissionReadOutcome = {
+  readonly candidates: ReviewCandidate[];
+  readonly failedReads: number;
+};
+
 function reviewSurfaceEnabled(): boolean {
   return (
     process.env.PHASE13_PROJECT_REVIEW_ENABLED?.trim().toLowerCase() === "true"
@@ -82,11 +93,18 @@ async function submissionCandidates(input: {
   actorUserId: string;
   actorType: "guest" | "regular";
   projectId: string;
-}): Promise<ReviewCandidate[]> {
+}): Promise<SubmissionReadOutcome> {
   if (!submissionPackagesEnabled() || input.actorType === "guest") {
-    return [];
+    return { candidates: [], failedReads: 0 };
   }
   const targets: { targetId: string; targetKind: string }[] = [];
+  /**
+   * M9-C: reads that do not answer are counted, not discarded. The M9-B runtime dropped
+   * them, so a Project whose package source could only partly be read was presented as a
+   * complete list — the "partiality under-reported" debt recorded in D-P13-033. The count
+   * is mechanical and never interprets a refusal as "no package exists".
+   */
+  let failedReads = 0;
   try {
     if (
       schoolApplicationsEnabled() &&
@@ -106,7 +124,8 @@ async function submissionCandidates(input: {
       }
     }
   } catch {
-    // A refused M5.1 read contributes no target; nothing is inferred from it.
+    // A refused or failed M5.1 read contributes no target, and its targets are unknown.
+    failedReads += 1;
   }
   try {
     if (
@@ -127,7 +146,8 @@ async function submissionCandidates(input: {
       }
     }
   } catch {
-    // Same: no target, no invention.
+    // Same: no target, no invention — but the source is now known to be incomplete.
+    failedReads += 1;
   }
   const candidates: ReviewCandidate[] = [];
   for (const target of targets) {
@@ -148,10 +168,12 @@ async function submissionCandidates(input: {
         );
       }
     } catch {
-      // The M8.1 service refused this target for this actor: contribute nothing.
+      // The M8.1 service refused or could not serve this target for this actor: contribute
+      // no candidate, but never let the rest of the list look complete.
+      failedReads += 1;
     }
   }
-  return candidates;
+  return { candidates, failedReads };
 }
 
 export async function loadProjectReviewSummaryForActor(input: {
@@ -216,7 +238,7 @@ export async function loadProjectReviewSummaryForActor(input: {
       return { kind: "denied", reasonCode: "submission_packages_restricted" };
     }
     try {
-      return { candidates: await submissionCandidates(input), kind: "ok" };
+      return submissionReadResult(await submissionCandidates(input));
     } catch {
       return {
         kind: "unavailable",

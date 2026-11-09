@@ -62,6 +62,7 @@ export function ProjectDocumentsCenter({
   enabled,
   projectId,
   artifacts = null,
+  artifactSourceState = "ready",
   onReturnToPrevious,
   returnLabel,
   onOpenArtifactOwner,
@@ -73,6 +74,12 @@ export function ProjectDocumentsCenter({
   projectRevision?: number;
   /** Read-only generated-artifact references (metadata only, no content). */
   artifacts?: ProjectArtifactsSummary | null;
+  /**
+   * Phase 13 M9-C: whether the Project summary that carries those references answered,
+   * is still loading, or failed. Without it `artifacts === null` is ambiguous, and a
+   * failed read rendered exactly like "this Project has no artifacts".
+   */
+  artifactSourceState?: "idle" | "loading" | "ready" | "failed";
   /**
    * Returns to the view the customer came from. There is no authorized
    * document→step association in this milestone, so the label must never claim the
@@ -441,7 +448,29 @@ export function ProjectDocumentsCenter({
         <p className="text-[11px] leading-5 text-slate-600">
           {centreCopy.artifactsSubtitle}
         </p>
-        {artifacts && artifacts.references.length > 0 ? (
+        {artifactSourceState === "idle" || artifactSourceState === "loading" ? (
+          /*
+            M9-C: the summary is still being read, so "no artifact" is not yet a fact.
+          */
+          <p
+            className="text-[11px] text-slate-600"
+            data-testid="project-artifacts-loading"
+          >
+            {copy.loading}
+          </p>
+        ) : artifactSourceState === "failed" ? (
+          /*
+            M9-C: an unreadable source must never look like a verified empty list. The
+            M2 document list above already distinguishes failure from emptiness; these
+            references now do the same instead of claiming there is nothing to reference.
+          */
+          <p
+            className="text-[11px] font-semibold text-red-700"
+            data-testid="project-artifacts-unavailable"
+          >
+            {centreCopy.artifactsUnavailable}
+          </p>
+        ) : artifacts && artifacts.references.length > 0 ? (
           <ul
             className="divide-y divide-slate-100"
             data-testid="project-artifacts-list"

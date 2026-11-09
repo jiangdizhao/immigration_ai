@@ -25,6 +25,8 @@ function render(
     schoolApplicationsEnabled?: boolean;
     schoolAdmissionsEnabled?: boolean;
     student500Enabled?: boolean;
+    /** Phase 13 M9-C: the workspace summary read state that carries artifact references. */
+    summaryState?: "idle" | "loading" | "ready" | "failed";
   } = {}
 ) {
   const copy = getWorkspaceCopy(input.locale ?? "en");
@@ -44,6 +46,7 @@ function render(
       student500Copy: copy.student500,
       student500Enabled: input.student500Enabled ?? true,
       schoolPreparationRestricted: input.schoolPreparationRestricted,
+      summaryState: input.summaryState ?? "ready",
       temporaryGuestProject: input.temporaryGuestProject,
       view: input.view ?? "home",
     })
@@ -162,6 +165,36 @@ test("the Project home is localized and keeps a closed Project honest", () => {
 
   const closed = render({ projectStatus: "closed" });
   assert.match(closed, />Closed</u);
+});
+
+test("the document centre never presents an unreadable artifact source as empty", () => {
+  /*
+    Phase 13 M9-C: the M2 document list already distinguished failure from emptiness, but
+    the generated-artifact references below it did not. A failed summary read therefore
+    claimed the Project had nothing to reference.
+  */
+  const ready = render({ view: "documents" });
+  assert.match(ready, /data-testid="project-artifacts-empty"/u);
+  assert.doesNotMatch(ready, /data-testid="project-artifacts-unavailable"/u);
+
+  const failed = render({ view: "documents", summaryState: "failed" });
+  assert.match(failed, /data-testid="project-artifacts-unavailable"/u);
+  assert.doesNotMatch(failed, /data-testid="project-artifacts-empty"/u);
+  assert.doesNotMatch(failed, /暂无可引用的生成成果/u);
+
+  // While the summary is still loading, "no artifact" is not yet a fact either.
+  const loading = render({ view: "documents", summaryState: "loading" });
+  assert.match(loading, /data-testid="project-artifacts-loading"/u);
+  assert.doesNotMatch(loading, /data-testid="project-artifacts-empty"/u);
+
+  const zh = render({
+    view: "documents",
+    summaryState: "failed",
+    locale: "zh-CN",
+  });
+  assert.match(zh, /成果来源当前无法读取/u);
+  assert.doesNotMatch(zh, /暂无可引用的生成成果/u);
+  assert.doesNotMatch(zh, /artifact source could not be read/u);
 });
 
 test("the Project home does not offer section changes while navigation is busy", () => {
