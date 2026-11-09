@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_MILESTONE -->
+## Current milestone — M9 engineering accepted with limitations; M10 next (2026-11-10)
+
+- **Verified M9-C pushed HEAD:** `a6b0b7755d9f29c9114aacd58f6cce80bbcea9fa` on `phase13-m9-integrated-workspace`; source and existing implementation handoff committed (9 files). M9-A/B already pushed. Prior `COMMIT_PUSH_PENDING` entries describe historical pre-commit snapshots, not current status.
+- **M9-C owner journeys:** C1 Project A document→review **PASS**; C2 Project B same-account data isolation **PASS**; C3 English desktop and mobile review navigation **PASS** (prior Chinese evidence reused). No more M9 browser campaign.
+- **Validation:** Cline 1413/1413 units and build PASS; independent targeted static review PASS; no M9-C PostgreSQL/browser security certification. B2 Staff positive **NOT VERIFIED**.
+- **Next M10:** bounded end-to-end reliability, synthetic/de-identified scenarios, authorized staff/self-service pathways as available, lawyer/education-agent evaluation, release Go/No-Go matrix. Record blocked positive paths accurately rather than fabricating professional authority. **Explicit limitations:** M9-B B2 positive Staff browser **NOT VERIFIED**; M8.2 Staff/customer-scoped package observation independent security approval **PENDING**; M4 professional authority/credentials/agreement/payment unavailable; M2 trusted document processing/preview **DENY**; M6 legal coverage **PARTIAL** (`UNKNOWN/HUMAN_CHECK`); Post-M5 `E2E_BLOCKED`; no real Offer/CoE, lawyer approval, school/government submission or receipt. Same-account UI observations do not certify cross-account/direct-API security. **`LIVE_PRODUCTION_NO_GO` unchanged.** 
+<!-- END PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_MILESTONE -->
+
 <!-- BEGIN PHASE13_M9_B_BROWSER_CLOSEOUT_TO_M9_C_2026_11_10 -->
 ## Current milestone — M9-B bounded acceptance recorded; M9-C next (2026-11-10)
 

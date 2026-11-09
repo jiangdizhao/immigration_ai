@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_STATE -->
+## Project state — Phase 13 M9 engineering closed with documented limits (2026-11-10)
+
+- **Code provenance:** M9-A pushed `f531daebf19237061aab016e936bb2fcb9681af4`; M9-B pushed `ab618ea3c5774bf7f57b220b34ec09ba19ad3a18`; M9-C pushed `a6b0b7755d9f29c9114aacd58f6cce80bbcea9fa` (9 files, 235 insertions, 10 deletions). M9-C owner C1–C3 completed with scoped PASS; independent static review PASS and Cline-reported 1413/1413 unit tests and build PASS. Actual pushed M9-C commit includes 9 changed files, no new migration.
+- **Product:** integrated customer Project/step Chat, school/admissions/Student 500 navigation, metadata-only document/version center, exact-version review and fail-closed scoped staff surfaces. M9-C corrected three source-status truthfulness defects, not business authorization or legal correctness.
+- **Evidence scope:** C1 Project A v2/v1; C2 Project B isolation in same-account UI; C3 English desktop/mobile, with prior Chinese coverage reused. Full positive staff B2, cross-account adversarial API and production operations are not proven.
+- **Explicit limitations:** M9-B B2 positive Staff browser **NOT VERIFIED**; M8.2 Staff/customer-scoped package observation independent security approval **PENDING**; M4 professional authority/credentials/agreement/payment unavailable; M2 trusted document processing/preview **DENY**; M6 legal coverage **PARTIAL** (`UNKNOWN/HUMAN_CHECK`); Post-M5 `E2E_BLOCKED`; no real Offer/CoE, lawyer approval, school/government submission or receipt. Same-account UI observations do not certify cross-account/direct-API security. **`LIVE_PRODUCTION_NO_GO` unchanged.** 
+- **Next:** M10 limited end-to-end reliability and lawyer/education-agent pilot assessment with explicit Go/No-Go; no automatic full repair of all historical M2/M4/M6 blockers. A separate docs-only follow-up commit will carry this current-state record.
+<!-- END PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_STATE -->
+
 <!-- BEGIN PHASE13_M9_B_OWNER_ACCEPTANCE_STATE_2026_11_10 -->
 ## Project state — M9-B reviewed with bounded owner browser evidence; M9-C next (2026-11-10)
 

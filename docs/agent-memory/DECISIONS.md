@@ -1,3 +1,19 @@
+<!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_DECISION -->
+## D-P13-034 — Accept M9 integrated engineering UX with limitations and hand off to M10
+
+**Date:** 2026-11-10 (Australia/Sydney). **Decision:** `M9_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / LIVE_PRODUCTION_NO_GO`. M9-C is the third and final approved M9 delivery, following M9-A and M9-B. The owner accepted the bounded C1–C3 browser journeys and stopped expansion. This is **not** legal/professional, independent full security, pilot or commercial release approval.
+
+**Pushed source:** `phase13-m9-integrated-workspace` @ `a6b0b7755d9f29c9114aacd58f6cce80bbcea9fa` (owner local/remote equality, independently GitHub verified, 9 files); M9-A `f531daeb...`, M9-B `ab618ea...`.
+
+**Owner C1 PASS (observed):** Project A `#5401f8c8` School Application preparation packages v2 current/v1 superseded appear across Project Documents (metadata-only) and Lawyer Review, with correct trust, partial-source and professional-authority restrictions. **Owner C2 PASS (same-account UI only):** Project B `#51585924` displays neither A package; unavailable sources are honestly labelled. Standalone and ordinary-customer staff-portal isolation reuse earlier accepted observations, not new adversarial tests. **Owner C3 PASS (scoped UI):** English desktop Project B review and approximately 390px mobile Project B/A review navigate, show v2/v1 and partial-source notices, without observed blocking overflow. Prior Chinese desktop coverage reused. 
+
+**Implementation evidence:** one bounded M9-C correction pass fixed M8 partial source failures, Project Document Center unreadable-vs-empty state and Lawyer Review contradictory empty messaging; Cline reported `pnpm test:unit` **1413/1413 PASS**, build PASS, Biome/diff clean and zero new TypeScript diagnostics (44 historical). Independent targeted static patch review PASS; reviewer did not rerun Node or PostgreSQL tests. M9-C added no migration; no owner PostgreSQL, direct API, real provider or deployment acceptance was performed. 
+
+**Explicit limitations:** M9-B B2 positive Staff browser **NOT VERIFIED**; M8.2 Staff/customer-scoped package observation independent security approval **PENDING**; M4 professional authority/credentials/agreement/payment unavailable; M2 trusted document processing/preview **DENY**; M6 legal coverage **PARTIAL** (`UNKNOWN/HUMAN_CHECK`); Post-M5 `E2E_BLOCKED`; no real Offer/CoE, lawyer approval, school/government submission or receipt. Same-account UI observations do not certify cross-account/direct-API security. **`LIVE_PRODUCTION_NO_GO` unchanged.** 
+
+**Disposition:** M9 engineering closeout complete with recorded limitations. Proceed to existing M10 end-to-end reliability and lawyer/education-agent pilot/Go-No-Go assessment, using blocked and unverified classifications honestly. Do not reopen all M2–M9 code campaigns, grant professional credentials, enable trusted files, conduct external submissions, migrate normal databases or deploy under this decision.
+<!-- END PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_DECISION -->
+
 <!-- BEGIN D_P13_033_M9_B_BOUNDED_BROWSER_ACCEPTANCE_2026_11_10 -->
 ## D-P13-033 — Record bounded M9-B browser acceptance and proceed to M9-C with explicit unverified Staff scope
 

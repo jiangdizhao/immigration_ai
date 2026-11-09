@@ -1,3 +1,19 @@
+<!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_HANDOFF -->
+## Phase 13 M9 — final engineering closeout and M10 handoff (2026-11-10)
+
+**Current decision:** `M9_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / LIVE_PRODUCTION_NO_GO`. The owner completed the three agreed M9-C browser journeys, then committed and pushed the reviewed 9-file M9-C implementation. This top block supersedes only old *current* pending/uncommitted claims; older records are retained as time-local evidence.
+
+**Git:** M9-A pushed `f531daebf19237061aab016e936bb2fcb9681af4`; M9-B pushed `ab618ea3c5774bf7f57b220b34ec09ba19ad3a18`; M9-C pushed `a6b0b7755d9f29c9114aacd58f6cce80bbcea9fa` (9 files, 235 insertions, 10 deletions). Owner terminal showed local HEAD = `git ls-remote` and clean `git status --short`; independent GitHub lookup verified the same remote HEAD and exact 9 changed paths.
+
+**Owner C1 PASS (observed):** Project A `#5401f8c8` School Application preparation packages v2 current/v1 superseded appear across Project Documents (metadata-only) and Lawyer Review, with correct trust, partial-source and professional-authority restrictions. **Owner C2 PASS (same-account UI only):** Project B `#51585924` displays neither A package; unavailable sources are honestly labelled. Standalone and ordinary-customer staff-portal isolation reuse earlier accepted observations, not new adversarial tests. **Owner C3 PASS (scoped UI):** English desktop Project B review and approximately 390px mobile Project B/A review navigate, show v2/v1 and partial-source notices, without observed blocking overflow. Prior Chinese desktop coverage reused. 
+
+**Implementation evidence:** one bounded M9-C correction pass fixed M8 partial source failures, Project Document Center unreadable-vs-empty state and Lawyer Review contradictory empty messaging; Cline reported `pnpm test:unit` **1413/1413 PASS**, build PASS, Biome/diff clean and zero new TypeScript diagnostics (44 historical). Independent targeted static patch review PASS; reviewer did not rerun Node or PostgreSQL tests. M9-C added no migration; no owner PostgreSQL, direct API, real provider or deployment acceptance was performed. 
+
+**Explicit limitations:** M9-B B2 positive Staff browser **NOT VERIFIED**; M8.2 Staff/customer-scoped package observation independent security approval **PENDING**; M4 professional authority/credentials/agreement/payment unavailable; M2 trusted document processing/preview **DENY**; M6 legal coverage **PARTIAL** (`UNKNOWN/HUMAN_CHECK`); Post-M5 `E2E_BLOCKED`; no real Offer/CoE, lawyer approval, school/government submission or receipt. Same-account UI observations do not certify cross-account/direct-API security. **`LIVE_PRODUCTION_NO_GO` unchanged.** 
+
+**Next:** M10, the existing end-to-end reliability + lawyer/education-agent pilot and Go/No-Go acceptance milestone. Reuse historical evidence; do not automatically reopen every M2/M4/M6 development item. Any actual managed-service release requires separately verified professional/security/operational conditions. This is a documentation-only post-commit supplement, not a feature, database or deployment authorization.
+<!-- END PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_HANDOFF -->
+
 <!-- BEGIN PHASE13_M9_C_INTEGRATED_IMPLEMENTATION_2026_11_10 -->
 ## Phase 13 M9-C — consolidated integration pass (IMPLEMENTED, pending review and owner acceptance)
 
