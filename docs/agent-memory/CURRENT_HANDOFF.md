@@ -1,3 +1,38 @@
+<!-- BEGIN PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
+## Phase 13 M10 — bounded engineering acceptance closeout (2026-11-10)
+
+**Owner-directed decision:** `M10_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED / LIVE_PRODUCTION_NO_GO`, recorded in [D-P13-035](./DECISIONS.md). This supersedes the *current* `PENDING_OWNER_REVIEW` status of the M10 implementation-evidence block below while preserving that block as the coding-agent's dated record; it is **not** professional pilot, complete security certification, or production acceptance.
+
+**Frozen code:** `phase13-m9-integrated-workspace` @ `842e3fd87a5aa081ff45eccef4362b437ea9955f` (M9 owner closeout). M10 made **no product, schema or test-source changes**. Cline's M10 evidence was offline only: E1 **386/386 PASS**; E2 **214/216 PASS, 2 FAIL** (Self-Service assertions pass; Managed deliberately `BLOCKED`); E3 **259/259 PASS**; overall **859/861 PASS, 2 FAIL, 0 SKIP**. Reviewer inspected the two migration-order test assertions and evidence report but did **not** rerun Node/DB/browser suites.
+
+**Two FAIL remain real test results:** `lib/db/m8-submission-package-migration-order.test.ts:104` and `lib/db/m8-2-authorization-migration-order.test.ts:217` assume migration `0052` is still the journal head, while M9-A correctly added `0053`; keep them as **two stale-test-metadata FAIL**, not product failures and not PASS. Narrow test-maintenance correction is deferred; no new repair loop is authorized by this closeout. Historical Post-M5 Offer E2E-06 `FAIL/OPEN` and E2E-07 `PARTIAL` likewise remain unchanged.
+
+**Professional/release boundary:** synthetic school and Student 500 pilot packets plus eight-item rubric were prepared, **no professional reviewed or signed** (`PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED`). M8.2 Staff/customer-scoped private-package security approval **PENDING**; M9-B positive Staff browser **NOT VERIFIED**; M4 verified professional agreement/payment/credential authority unavailable; M2 document trust **DENY**; M6 legal coverage **PARTIAL** with `UNKNOWN/HUMAN_CHECK`; Post-M5 `E2E_BLOCKED`; no real Offer/CoE/receipt or external submission. `LIVE_PRODUCTION_NO_GO` remains in force.
+
+**Retained evidence:** [M10 consolidated protocol](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_PROTOCOL_2026_11_10.md) and [M10 acceptance report](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_REPORT_2026_11_10.md). The report's `PENDING_OWNER_REVIEW` header describes its original authoring state; D-P13-035 is the subsequent engineering disposition. Original Cline report SHA-256 `855648c4c6b715897906240129555af5c04ec50eecab207d259b4e1d337371c9`; version-controlled copy removes trailing blank lines only (SHA-256 `293e0cfea46bf11014274a7db415053432ff0cd57059bf367d616d7be381363d`); Cline's *pre-closeout* two-file patch SHA-256 `849fd98c33c9cbdd3bb430e215f03a8728c69743468038714ec25ccd0a151a97`. The final combined patch must be regenerated after these docs.
+
+**Next:** Phase 13 engineering acceptance records close with limitations. Any professional pilot, security remediation, trusted documents, legal-source expansion or commercial release belongs to separately scoped owner-approved work and must not be inferred from this M10 acceptance. No new test, migration, feature flag, deployment or external-provider authorization is granted here.
+<!-- END PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
+
+<!-- BEGIN PHASE13_M10_ACCEPTANCE_EVIDENCE_2026_11_10 -->
+## Phase 13 M10 — consolidated acceptance evidence prepared (pending owner review)
+
+**Status:** `M10_ACCEPTANCE_EVIDENCE_PREPARED_PENDING_OWNER_REVIEW`. `LIVE_PRODUCTION_NO_GO` unchanged. M10 was run as an **acceptance** milestone: no feature work, no source correction applied, nothing committed. Owner acceptance and the final milestone closeout are still outstanding.
+
+**Git baseline (verified):** branch `phase13-m9-integrated-workspace`; HEAD `842e3fd87a5aa081ff45eccef4362b437ea9955f` (equals origin; clean worktree). Progenitors: M9-C source `a6b0b7755d9f29c9114aacd58f6cce80bbcea9fa` (my reviewed 9-file patch committed verbatim, 235/10), M9-B `ab618ea3c5774bf7f57b220b34ec09ba19ad3a18`, M9-A `f531daebf19237061aab016e936bb2fcb9681af4`. Governing decision: D-P13-034.
+
+**New evidence executed in M10 (all offline, zero database contact, zero browser, zero provider):** E1 `m5-1` 62, `m5-2` 94, `m5-3` 30, `m6-1` 101, `m6-2` 65, `m7` 34 → **386/386 PASS**; E2 `m4-004` 61, `m4-006` 34, `m4-007` 34 → **129/129 PASS**, plus `m8-1` 40/41 and `m8-2` 45/46; E3 project isolation/cross-account/staff 112+14, document trust 68, review source-availability 33, staff/lawyer/staff-observation 32 → **259/259 PASS**. Net **859 pass / 2 fail across 861 executed assertions**, zero skips.
+
+**Two reproducible failures — stale test metadata, not a product defect.** `lib/db/m8-submission-package-migration-order.test.ts:104` and `lib/db/m8-2-authorization-migration-order.test.ts:217` still assert `0052` is the migration head, but `0053_phase13_m9_a_project_conversation_stage` has been the head since M9-A. Every substantive M8.1/M8.2 assertion in both files passes (40/41, 45/46). **Root cause of the blind spot:** both files are excluded from `test:unit` and are reachable only through `pnpm test:phase13:m8-1:offline` / `m8-2:offline`, which no M9 agent ran. Narrow remediation (2 assertions, review-order preserving rather than head-pinning) is **recommended but deliberately NOT applied** under M10's no-source-change rule; adding the two files to `test:unit` is a separate owner decision.
+
+**Verdicts:** E1 `PASS` (offline, limitations: no real Offer/CoE/school receipt; E2E-06 Offer lifecycle remains inherited FAIL/OPEN; E2E-07 PARTIAL). E2 self-service `PASS (offline)` with the metadata caveat; E2 managed `BLOCKED` — fail-closed by design, `unavailableHandoffAuthority`, no authentic M4 authority; offline suites confirm readiness never READY. E3 all eight points `PASS` for tested paths, with `STAFF_PRIVATE_PACKAGE_AUTHORIZATION_PENDING` carried. P1 professional pilot: two synthetic packets + eight-item rubric prepared; **`PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED`** (no reviewer).
+
+**Carried blockers (unchanged):** M8.2 staff-private-package independent security approval PENDING; M4 professional authority/credentials/agreement/payment unavailable; M2 document trust DENY (metadata-only); M6 legal-source coverage PARTIAL (`UNKNOWN`/`HUMAN_CHECK`, manifest `m6-legal-manifest-2026-11-04-r2`); Post-M5 `E2E_BLOCKED`; no real payment, contract, lawyer approval, Offer/CoE, receipt or external submission. Cross-account/direct-API behaviour is supported by offline negative tests only, not by a new adversarial campaign.
+
+**Non-goals honoured:** no new milestone or micro-milestone, no M2–M9 reopening, no migration or database access, no feature flag, no `.env.local` read/change, no paid model or provider call, no deployment, no commit/push. `CURRENT_MILESTONE.md`, `PROJECT_STATE.md` and `DECISIONS.md` were intentionally left unchanged so the owner can record M10 closeout after their own review. Deliverables: this checkpoint, `docs/agent-memory/PHASE13_M10_CONSOLIDATED_ACCEPTANCE_PROTOCOL_2026_11_10.md`, `~/phase13_m10_acceptance_report.md`, `~/phase13_m10_review.patch`.
+<!-- END PHASE13_M10_ACCEPTANCE_EVIDENCE_2026_11_10 -->
+
+
 <!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_HANDOFF -->
 ## Phase 13 M9 — final engineering closeout and M10 handoff (2026-11-10)
 

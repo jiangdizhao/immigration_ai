@@ -1,3 +1,21 @@
+<!-- BEGIN D_P13_035_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
+## D-P13-035 — Close M10 bounded engineering acceptance with limitations; keep professional pilot and release NO-GO
+
+**Date:** 2026-11-10 (Australia/Sydney). **Owner-directed disposition:** `M10_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED / LIVE_PRODUCTION_NO_GO`. M10 is the acceptance-only final engineering milestone after D-P13-034. The user's document-closeout instruction authorizes recording this engineering decision, **not** fabricating professional approval or granting release permission.
+
+**Frozen implementation:** `phase13-m9-integrated-workspace` @ `842e3fd87a5aa081ff45eccef4362b437ea9955f`. M10 produced a 169-line acceptance protocol, full 16-section acceptance report and handoff checkpoint, with no product/test-code, schema, migration, DB, browser, AWS, provider, flag or paid-model changes. This decision is based on the Cline execution report and targeted independent source/evidence review; reviewer did not rerun the offline suites.
+
+**Newly executed offline evidence (not a production E2E certification):** E1 **386/386 PASS**; E2 **214/216**, including **40/41** M8.1 and **45/46** M8.2, while M4-004/006/007 total **129/129**; E3 **259/259 PASS**. Total **861 executed, 859 PASS, 2 FAIL, 0 SKIP**. E1 school→Student 500 and E2 Self-Service pass within *offline contract* scope. E2 Managed remains correctly `BLOCKED` by unavailable authority; it is **not** an accepted positive professional submission. E3 eight scoped negative/security assertions pass offline, not a cross-account production security certification.
+
+**Do not conceal failures:** `lib/db/m8-submission-package-migration-order.test.ts:104` and `lib/db/m8-2-authorization-migration-order.test.ts:217` fail because both require migration `0052` to be the latest journal head, despite M9-A's legitimate additive `0053`. They are classified as two **stale test metadata FAIL**, not proven product failures, and remain unfixed under M10's no-code-change contract. A future narrow assertion update may check relative migration order instead of global head; it is deferred, not approved here. Prior Post-M5 E2E-06 Offer lifecycle `FAIL/OPEN`, E2E-07 `PARTIAL`, and M4/financial positive-path limits are likewise not reclassified.
+
+**Professional pilot:** two synthetic School and Student 500 review packets and an eight-item rubric are prepared, but no lawyer/education-agent actually reviewed or signed; `PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED`. The required external pilot/sign-off gate is **not** closed by this decision. No reviewer identity, opinion or signature is imputed.
+
+**Security/production:** M8.2 staff acting through a customer-scoped private-package observation lacks independent authorization approval (`STAFF_PRIVATE_PACKAGE_AUTHORIZATION_PENDING`); direct Staff M8.1 package read stays denied; M4 professional, engagement, signature and payment authority unavailable; M2 document trust DENY; M6 Student 500 legal-source coverage PARTIAL (`UNKNOWN/HUMAN_CHECK`); Post-M5 `E2E_BLOCKED`; real Offer/CoE, receipts and external submission unavailable. A versioned engineered UI and synthetic/offline pass count cannot clear these hard release gates. **`LIVE_PRODUCTION_NO_GO` remains binding.**
+
+**Evidence and next decision:** [M10 acceptance protocol](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_PROTOCOL_2026_11_10.md), [full report](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_REPORT_2026_11_10.md), [current handoff](./CURRENT_HANDOFF.md). Close bounded Phase 13 **engineering acceptance** only; commission separately authorized real professional pilot and security/release approval if/when the owner chooses. No new milestone, test rerun, automatic remediation, schema migration, AWS/provider call or deployment is authorized by D-P13-035.
+<!-- END D_P13_035_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
+
 <!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_DECISION -->
 ## D-P13-034 — Accept M9 integrated engineering UX with limitations and hand off to M10
 

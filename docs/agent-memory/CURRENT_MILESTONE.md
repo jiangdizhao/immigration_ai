@@ -1,3 +1,12 @@
+<!-- BEGIN PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10_MILESTONE -->
+## Current milestone — M10 engineering accepted with limitations; professional pilot and release remain gated (2026-11-10)
+
+- **Disposition:** `M10_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED / LIVE_PRODUCTION_NO_GO` under [D-P13-035](./DECISIONS.md). This closes the bounded Phase 13 engineering **acceptance activity**, not the real professional pilot or production release gate. M9 accepted baseline `842e3fd87a5aa081ff45eccef4362b437ea9955f` remains unchanged by M10; no M10 product-code changes.
+- **Evidence:** E1 386/386 offline PASS; E2 214/216 (two explicit FAIL in old migration-head assertions); E3 259/259 offline PASS; **859/861 total, 2 FAIL, zero skips**. Self-Service evidence passes at tested offline scope; Managed Service intentionally `BLOCKED`. No M10 PostgreSQL, browser, paid-model or provider execution.
+- **Carried gates:** lawyer/education-agent review prepared but **NOT VERIFIED**; M8.2 Staff-private-package approval PENDING; M9-B Staff positive browser NOT VERIFIED; M4 professional/engagement/payment blocked; M2 document trust DENY; M6 sources PARTIAL; Post-M5 `E2E_BLOCKED`, including E2E-06 FAIL/OPEN. Cross-account evidence mainly offline. Do not infer readiness for real customer files, lawyer review, government/school submissions or AWS release.
+- **Evidence artifacts:** [formal M10 protocol](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_PROTOCOL_2026_11_10.md) and [full M10 report](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_REPORT_2026_11_10.md). Two outdated assertions may be fixed later as narrow test hygiene, without reopening M10. No automatic new milestone or release authorization.
+<!-- END PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10_MILESTONE -->
+
 <!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_MILESTONE -->
 ## Current milestone — M9 engineering accepted with limitations; M10 next (2026-11-10)
 

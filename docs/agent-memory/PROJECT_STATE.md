@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10_STATE -->
+## Project state — Phase 13 bounded engineering acceptance closed, release NO-GO (2026-11-10)
+
+- **Code baseline:** `phase13-m9-integrated-workspace` @ `842e3fd87a5aa081ff45eccef4362b437ea9955f` (M9 closeout). M10 is documentation/evidence-only; no new product code, database migration, AWS/provider call or deployment. **Engineering disposition:** `M10_ENGINEERING_ACCEPTED_WITH_LIMITATIONS`; the professional pilot remains `PROFESSIONAL_PILOT_SIGNOFF_NOT_VERIFIED`, and **`LIVE_PRODUCTION_NO_GO`** remains.
+- **Fresh M10 tests (Cline reported, not reviewer-rerun):** E1 **386/386 PASS**; E2 **214/216**, including two real `FAIL` for head-pinned `0052` migration test assertions rendered stale by correctly added `0053`; E3 **259/259 PASS**. Overall **859/861, 2 FAIL, 0 SKIP**, all offline. Two test-maintenance failures remain open, not silently downgraded or marked green. M10 made no direct-API/browser/real-DB security claim.
+- **Evidence and deferrals:** E1 School→Student 500 at offline/synthetic scope, E2 Self-Service at offline scope, Managed fail-closed BLOCKED, E3 eight-point offline security matrix. Post-M5 E2E-06 historical FAIL/OPEN and E2E-07 PARTIAL survive; M8.2 Staff protected-package security review PENDING; M9-B B2 Staff positive browser NOT VERIFIED; M2 trusted file processing DENY; M6 legal sources PARTIAL/UNKNOWN/HUMAN_CHECK; M4 professional/credential/payment/engagement unavailable. Real payment, school receipts, Offer/CoE, professional approval and external submissions unverified.
+- **Pilot:** two synthetic case packets + eight-dimension rubric exist in the [version-controlled acceptance report](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_REPORT_2026_11_10.md); no lawyer/education-agent sign-off or actual pilot was performed. Protocol is [here](./PHASE13_M10_CONSOLIDATED_ACCEPTANCE_PROTOCOL_2026_11_10.md).
+- **Next:** any actual pilot, security sign-off, source/document-trust completion or commercial release is a separately approved decision. Closing the Phase 13 **engineering** acceptance does not authorize those operations.
+<!-- END PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10_STATE -->
+
 <!-- BEGIN PHASE13_M9_C_FINAL_OWNER_CLOSEOUT_2026_11_10_STATE -->
 ## Project state — Phase 13 M9 engineering closed with documented limits (2026-11-10)
 
