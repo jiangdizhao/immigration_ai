@@ -174,17 +174,17 @@ export function ProjectDocumentsCenter({
     >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-slate-950">
+          <h3 className="text-[15px] font-semibold text-slate-950">
             {centreCopy.documentsCenterTitle}
           </h3>
-          <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-600">
+          <p className="mt-1 max-w-xl text-sm leading-5 text-slate-600">
             {centreCopy.documentsCenterSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {onReturnToPrevious ? (
             <button
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-[11px] font-semibold text-slate-800 hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
               data-testid="project-documents-return-to-previous"
               onClick={onReturnToPrevious}
               type="button"
@@ -194,7 +194,7 @@ export function ProjectDocumentsCenter({
             </button>
           ) : null}
           <button
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-[11px] font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
             data-testid="project-documents-refresh"
             disabled={!enabled || loading}
             onClick={() => {
@@ -210,7 +210,7 @@ export function ProjectDocumentsCenter({
 
       {enabled ? null : (
         <div
-          className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-5 text-amber-900"
           data-testid="project-documents-centre-unavailable"
         >
           <p className="flex items-center gap-1 font-semibold">
@@ -230,7 +230,7 @@ export function ProjectDocumentsCenter({
           >
             <select
               aria-label={centreCopy.documentsFilterSource}
-              className="rounded border border-slate-200 px-1.5 py-1 text-[11px]"
+              className="rounded border border-slate-200 px-1.5 py-1 text-sm"
               data-testid="project-documents-filter-origin"
               onChange={(event) => {
                 setFilter((current) => ({
@@ -252,7 +252,7 @@ export function ProjectDocumentsCenter({
             </select>
             <select
               aria-label={centreCopy.documentsFilterState}
-              className="rounded border border-slate-200 px-1.5 py-1 text-[11px]"
+              className="rounded border border-slate-200 px-1.5 py-1 text-sm"
               data-testid="project-documents-filter-state"
               onChange={(event) => {
                 setFilter((current) => ({
@@ -268,7 +268,7 @@ export function ProjectDocumentsCenter({
             </select>
             <input
               aria-label={centreCopy.documentsSearch}
-              className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-[11px]"
+              className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-sm"
               data-testid="project-documents-search"
               onChange={(event) => {
                 setFilter((current) => ({
@@ -282,7 +282,7 @@ export function ProjectDocumentsCenter({
           </div>
 
           <p
-            className="text-[11px] text-slate-500"
+            className="text-sm text-slate-500"
             data-testid="project-documents-counts"
           >
             {centreCopy.openItems(rows.length)} ·{" "}
@@ -290,16 +290,16 @@ export function ProjectDocumentsCenter({
           </p>
 
           {loading ? (
-            <p className="text-[11px] text-slate-600">{copy.loading}</p>
+            <p className="text-sm text-slate-600">{copy.loading}</p>
           ) : failed ? (
             <p
-              className="text-[11px] font-semibold text-red-700"
+              className="text-sm font-semibold text-red-700"
               data-testid="project-documents-centre-failed"
             >
               {copy.loadFailed}
             </p>
           ) : visible.length === 0 ? (
-            <p className="text-[11px] text-slate-600">
+            <p className="text-sm text-slate-600">
               {rows.length === 0 ? copy.empty : centreCopy.documentsEmptyFilter}
             </p>
           ) : (
@@ -329,17 +329,17 @@ export function ProjectDocumentsCenter({
                       type="button"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-xs font-semibold text-slate-900">
+                        <span className="block truncate text-sm font-semibold text-slate-900">
                           {row.canonicalMime} ·{" "}
                           {centreCopy.documentsVersionLabel(row.versionNumber)}
                         </span>
-                        <span className="block text-[11px] text-slate-500">
+                        <span className="block text-sm text-slate-500">
                           {row.originKind === "direct_upload"
                             ? centreCopy.sourceDirectUpload
                             : centreCopy.sourceChatImport}
                         </span>
                       </span>
-                      <span className="text-[10px] font-semibold text-slate-600">
+                      <span className="text-[11px] font-semibold text-slate-600">
                         {row.lifecycle === "active"
                           ? centreCopy.lifecycleActive
                           : centreCopy.lifecycleWithdrawn}
@@ -363,11 +363,11 @@ export function ProjectDocumentsCenter({
             className="rounded-lg border border-slate-200 bg-slate-50 p-3"
             data-testid="project-documents-selected"
           >
-            <h4 className="text-xs font-semibold text-slate-900">
+            <h4 className="text-sm font-semibold text-slate-900">
               {centreCopy.documentsSelected}
             </h4>
             {selectedRow ? (
-              <dl className="mt-2 space-y-1 text-[11px] text-slate-700">
+              <dl className="mt-2 space-y-1 text-sm text-slate-700">
                 <div className="flex gap-2">
                   <dt className="font-semibold">
                     {centreCopy.documentsVersionHistory}
@@ -405,7 +405,7 @@ export function ProjectDocumentsCenter({
                 selectedRow.securityStatus === "clean" &&
                 selectedRow.lifecycle === "active" ? (
                   <a
-                    className="inline-block rounded-lg bg-[#001736] px-3 py-1.5 text-[11px] font-semibold text-white"
+                    className="inline-block rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white"
                     data-testid="project-documents-download"
                     href={projectDocumentDownloadUrl({
                       assetId: selectedRow.assetId,
@@ -425,7 +425,7 @@ export function ProjectDocumentsCenter({
                 )}
               </dl>
             ) : (
-              <p className="mt-1 text-[11px] text-slate-600">
+              <p className="mt-1 text-sm text-slate-600">
                 {centreCopy.documentsNoSelection}
               </p>
             )}
@@ -442,10 +442,10 @@ export function ProjectDocumentsCenter({
         className="space-y-2 border-t border-slate-100 pt-3"
         data-testid="project-artifacts"
       >
-        <h4 className="text-xs font-semibold text-slate-950">
+        <h4 className="text-sm font-semibold text-slate-950">
           {centreCopy.artifactsTitle}
         </h4>
-        <p className="text-[11px] leading-5 text-slate-600">
+        <p className="text-sm leading-5 text-slate-600">
           {centreCopy.artifactsSubtitle}
         </p>
         {artifactSourceState === "idle" || artifactSourceState === "loading" ? (
@@ -453,7 +453,7 @@ export function ProjectDocumentsCenter({
             M9-C: the summary is still being read, so "no artifact" is not yet a fact.
           */
           <p
-            className="text-[11px] text-slate-600"
+            className="text-sm text-slate-600"
             data-testid="project-artifacts-loading"
           >
             {copy.loading}
@@ -465,7 +465,7 @@ export function ProjectDocumentsCenter({
             references now do the same instead of claiming there is nothing to reference.
           */
           <p
-            className="text-[11px] font-semibold text-red-700"
+            className="text-sm font-semibold text-red-700"
             data-testid="project-artifacts-unavailable"
           >
             {centreCopy.artifactsUnavailable}
@@ -482,10 +482,10 @@ export function ProjectDocumentsCenter({
                 key={`${reference.kind}:${reference.referenceId}`}
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold text-slate-900">
+                  <span className="block truncate text-sm font-semibold text-slate-900">
                     {centreCopy[ARTIFACT_KIND_LABEL_KEYS[reference.kind]]}
                   </span>
-                  <span className="block text-[11px] text-slate-500">
+                  <span className="block text-sm text-slate-500">
                     {centreCopy.artifactVersion} {reference.version ?? "-"}
                     {reference.status ? ` · ${reference.status}` : null}
                     {reference.targetId
@@ -493,19 +493,19 @@ export function ProjectDocumentsCenter({
                       : null}
                   </span>
                   {reference.digest ? (
-                    <span className="block break-all font-mono text-[10px] text-slate-500">
+                    <span className="block break-all font-mono text-[11px] text-slate-500">
                       {reference.digest.slice(0, 16)}
                     </span>
                   ) : null}
                   {reference.stale ? (
-                    <span className="block text-[10px] font-semibold text-amber-800">
+                    <span className="block text-[11px] font-semibold text-amber-800">
                       {centreCopy.artifactStale}
                     </span>
                   ) : null}
                 </span>
                 {onOpenArtifactOwner ? (
                   <button
-                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-50"
+                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-sm font-semibold text-slate-800 hover:bg-slate-50"
                     data-testid={`project-artifact-open-${reference.kind}-${reference.referenceId}`}
                     onClick={() =>
                       onOpenArtifactOwner(
@@ -522,14 +522,14 @@ export function ProjectDocumentsCenter({
           </ul>
         ) : (
           <p
-            className="text-[11px] text-slate-600"
+            className="text-sm text-slate-600"
             data-testid="project-artifacts-empty"
           >
             {centreCopy.artifactsEmpty}
           </p>
         )}
         {artifacts?.truncated ? (
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[11px] text-slate-500">
             {centreCopy.artifactsTruncated}
           </p>
         ) : null}
@@ -538,7 +538,7 @@ export function ProjectDocumentsCenter({
               .filter(([, state]) => state !== "available")
               .map(([kind, state]) => (
                 <p
-                  className="text-[10px] leading-4 text-amber-800"
+                  className="text-[11px] leading-4 text-amber-800"
                   data-testid={`project-artifacts-kind-${kind}`}
                   key={kind}
                 >
@@ -556,7 +556,7 @@ export function ProjectDocumentsCenter({
                 </p>
               ))
           : null}
-        <p className="text-[10px] leading-4 text-slate-500">
+        <p className="text-[11px] leading-4 text-slate-500">
           {centreCopy.artifactsNoContent}
         </p>
       </section>

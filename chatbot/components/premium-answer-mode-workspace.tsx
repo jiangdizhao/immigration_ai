@@ -105,7 +105,7 @@ export function PremiumAnswerModeWorkspace({
 
   if (!accessPolicy || !modeHydrated) {
     return (
-      <section className="mx-auto w-full max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
+      <section className="w-full px-3 pt-2 sm:px-4 lg:px-6">
         <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           {copy.loading}
         </div>
@@ -127,9 +127,13 @@ export function PremiumAnswerModeWorkspace({
         Phase 12 Stage 2 compact toolbar: one row on every viewport. The mode
         description is kept as an accessible hint instead of a permanent block so
         the conversation area gets the space back.
+
+        Layout correction: the toolbar no longer sits in its own `max-w-[1600px]`
+        column (which mis-aligned it against the now full-width workspace) and its
+        vertical padding is reduced. Every mode, restriction and disclosure is kept.
       */}
-      <section className="mx-auto w-full shrink-0 max-w-[1600px] px-3 pt-2 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+      <section className="w-full shrink-0 px-3 pt-1.5 sm:px-4 lg:px-6">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-white/90 px-3 py-1.5 shadow-sm backdrop-blur">
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
             {copy.title}
           </span>

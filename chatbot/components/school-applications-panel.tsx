@@ -167,12 +167,12 @@ export function SchoolApplicationDraftFields({
     <div className="grid gap-2 sm:grid-cols-2">
       {fields.map((field) => (
         <label
-          className="block text-xs font-medium text-slate-600"
+          className="block text-sm font-medium text-slate-600"
           key={field.key}
         >
           {field.label}
           <input
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[15px] text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
             data-testid={`${idPrefix}-${field.key}`}
             maxLength={200}
             onChange={(event) =>
@@ -189,7 +189,7 @@ export function SchoolApplicationDraftFields({
           />
         </label>
       ))}
-      <p className="text-[11px] leading-4 text-slate-500 sm:col-span-2">
+      <p className="text-sm leading-4 text-slate-500 sm:col-span-2">
         {copy.optionalHint}
       </p>
     </div>
@@ -288,25 +288,25 @@ function SchoolApplicationsPanelInstance({
       data-testid="school-applications-panel"
     >
       <header className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
           <School aria-hidden="true" className="size-4" />
           {copy.title}
         </h3>
-        <p className="text-xs leading-5 text-slate-600">{copy.subtitle}</p>
-        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900">
+        <p className="text-sm leading-5 text-slate-600">{copy.subtitle}</p>
+        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900">
           {copy.notice}
         </p>
       </header>
 
       {message ? (
-        <p className="text-xs text-red-700" role="alert">
+        <p className="text-sm text-red-700" role="alert">
           {message}
         </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className="flex items-center gap-1 rounded-lg bg-[#001736] px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           data-testid="school-application-create-open"
           disabled={busy}
           onClick={() => setCreating((current) => !current)}
@@ -316,7 +316,7 @@ function SchoolApplicationsPanelInstance({
           {copy.create}
         </button>
         <button
-          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
           disabled={snapshot.loading}
           onClick={() => controller.load(projectId).catch(() => undefined)}
           type="button"
@@ -324,9 +324,7 @@ function SchoolApplicationsPanelInstance({
           <RefreshCw aria-hidden="true" className="size-3.5" />
           {snapshot.loading ? copy.loading : copy.retry}
         </button>
-        <span className="text-[11px] text-slate-500">
-          {copy.threeSchoolHint}
-        </span>
+        <span className="text-sm text-slate-500">{copy.threeSchoolHint}</span>
       </div>
 
       {creating ? (
@@ -334,10 +332,10 @@ function SchoolApplicationsPanelInstance({
           className="space-y-2 rounded-lg border border-blue-200 bg-white p-3"
           data-testid="school-application-create-form"
         >
-          <h4 className="text-xs font-semibold text-slate-900">
+          <h4 className="text-sm font-semibold text-slate-900">
             {copy.createTitle}
           </h4>
-          <p className="text-[11px] leading-4 text-slate-600">
+          <p className="text-sm leading-4 text-slate-600">
             {copy.createDescription}
           </p>
           <SchoolApplicationDraftFields
@@ -348,7 +346,7 @@ function SchoolApplicationsPanelInstance({
           />
           <div className="flex gap-2">
             <button
-              className="rounded-lg bg-[#001736] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               data-testid="school-application-create-submit"
               disabled={
                 busy ||
@@ -361,7 +359,7 @@ function SchoolApplicationsPanelInstance({
               {busy ? copy.creating : copy.confirm}
             </button>
             <button
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700"
               onClick={() => setCreating(false)}
               type="button"
             >
@@ -372,14 +370,14 @@ function SchoolApplicationsPanelInstance({
       ) : null}
 
       {snapshot.loading ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500">
+        <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           {copy.loading}
         </p>
       ) : null}
 
       {!snapshot.loading && snapshot.applications.length === 0 ? (
-        <p className="rounded-lg bg-white p-2.5 text-xs text-slate-600">
+        <p className="rounded-lg bg-white p-2.5 text-sm text-slate-600">
           {copy.empty}
         </p>
       ) : null}
@@ -401,18 +399,18 @@ function SchoolApplicationsPanelInstance({
                 type="button"
               >
                 <span className="flex flex-wrap items-center justify-between gap-1">
-                  <span className="text-xs font-semibold text-slate-950">
+                  <span className="text-sm font-semibold text-slate-950">
                     {application.institutionName} · {application.courseTitle}
                   </span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                     {statusLabel(application, copy)}
                   </span>
                 </span>
-                <span className="mt-1 block text-[11px] text-slate-600">
+                <span className="mt-1 block text-sm text-slate-600">
                   {application.intakeLabel ?? copy.missingIntake} ·{" "}
                   {copy.revisionLabel(application.revision)}
                 </span>
-                <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                <span className="mt-1 flex flex-wrap items-center gap-1 text-[11px]">
                   <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-amber-900">
                     <AlertTriangle aria-hidden="true" className="size-3" />
                     {sourceLabel(application, copy)}
@@ -441,7 +439,7 @@ function SchoolApplicationsPanelInstance({
       </ul>
 
       {snapshot.loadingDetail && !detail ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500">
+        <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           {copy.loading}
         </p>
@@ -470,20 +468,20 @@ function SchoolApplicationsPanelInstance({
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h4 className="text-xs font-semibold text-slate-950">
+              <h4 className="text-sm font-semibold text-slate-950">
                 {copy.detailTitle}
               </h4>
-              <p className="text-[11px] text-slate-600">
+              <p className="text-sm text-slate-600">
                 {detail.institutionName} · {detail.courseTitle}
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
               {statusLabel(detail, copy)} ·{" "}
               {copy.revisionLabel(detail.revision)}
             </span>
           </div>
 
-          <dl className="grid gap-1 text-[11px] text-slate-600 sm:grid-cols-2">
+          <dl className="grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
             <div>
               <dt className="font-semibold text-slate-800">
                 {copy.institutionLabel}
@@ -511,10 +509,10 @@ function SchoolApplicationsPanelInstance({
           </dl>
 
           <section aria-label={copy.missingDataHeading}>
-            <h5 className="text-[11px] font-semibold text-slate-800">
+            <h5 className="text-sm font-semibold text-slate-800">
               {copy.missingDataHeading}
             </h5>
-            <ul className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-700">
+            <ul className="mt-1 flex flex-wrap gap-1 text-[11px] text-slate-700">
               {detail.missingDataCodes
                 .map((code) => missingLabel(code, copy))
                 .filter((label): label is string => label !== null)
@@ -530,11 +528,11 @@ function SchoolApplicationsPanelInstance({
           </section>
 
           <section aria-label={copy.packageHeading} className="space-y-1">
-            <h5 className="text-[11px] font-semibold text-slate-800">
+            <h5 className="text-sm font-semibold text-slate-800">
               {copy.packageHeading}
             </h5>
             {detail.currentPackage ? (
-              <div className="space-y-0.5 text-[11px] text-slate-600">
+              <div className="space-y-0.5 text-sm text-slate-600">
                 <p className="font-semibold text-slate-800">
                   {copy.packageVersion(detail.currentPackage.version)}
                 </p>
@@ -554,26 +552,26 @@ function SchoolApplicationsPanelInstance({
                 </p>
               </div>
             ) : (
-              <p className="text-[11px] text-slate-600">{copy.noPackage}</p>
+              <p className="text-sm text-slate-600">{copy.noPackage}</p>
             )}
             {detail.packageStale ? (
-              <p className="rounded bg-red-50 px-2 py-1 text-[10px] text-red-900">
+              <p className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-900">
                 {packageNotice(detail, copy)}
               </p>
             ) : null}
             {detail.currentPackage?.usable ? (
-              <p className="rounded bg-emerald-50 px-2 py-1 text-[10px] text-emerald-900">
+              <p className="rounded bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
                 {copy.packageUsable}
               </p>
             ) : null}
             {detail.status === "archived" ? (
-              <p className="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-700">
+              <p className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-700">
                 {copy.archivedNotice}
               </p>
             ) : (
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
-                  className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                   data-testid="school-application-build-package"
                   disabled={busy}
                   onClick={() =>
@@ -588,7 +586,7 @@ function SchoolApplicationsPanelInstance({
                     : copy.buildPackage}
                 </button>
                 <button
-                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                   data-testid="school-application-edit-open"
                   disabled={busy}
                   onClick={() => {
@@ -600,7 +598,7 @@ function SchoolApplicationsPanelInstance({
                   {copy.edit}
                 </button>
                 <button
-                  className="rounded-lg border border-red-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-800 disabled:opacity-50"
+                  className="rounded-lg border border-red-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-red-800 disabled:opacity-50"
                   data-testid="school-application-archive"
                   disabled={busy}
                   onClick={() =>
@@ -629,7 +627,7 @@ function SchoolApplicationsPanelInstance({
               />
               <div className="flex gap-2">
                 <button
-                  className="rounded-lg bg-[#001736] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                   disabled={busy}
                   onClick={() => submitUpdate().catch(() => undefined)}
                   type="button"
@@ -639,7 +637,7 @@ function SchoolApplicationsPanelInstance({
                     : copy.save}
                 </button>
                 <button
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
                   onClick={() => setEditing(false)}
                   type="button"
                 >
@@ -650,15 +648,13 @@ function SchoolApplicationsPanelInstance({
           ) : null}
 
           <section aria-label={copy.referencesHeading} className="space-y-1">
-            <h5 className="text-[11px] font-semibold text-slate-800">
+            <h5 className="text-sm font-semibold text-slate-800">
               {copy.referencesHeading}
             </h5>
             {detail.references.length === 0 ? (
-              <p className="text-[11px] text-slate-600">
-                {copy.referencesEmpty}
-              </p>
+              <p className="text-sm text-slate-600">{copy.referencesEmpty}</p>
             ) : (
-              <ul className="space-y-1 text-[11px] text-slate-700">
+              <ul className="space-y-1 text-sm text-slate-700">
                 {detail.references.map((reference) => (
                   <li
                     className="flex flex-wrap items-center justify-between gap-1 rounded bg-slate-50 px-2 py-1"
@@ -691,7 +687,7 @@ function SchoolApplicationsPanelInstance({
                             </span>
                           ) : null}
                           <button
-                            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+                            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
                             disabled={busy}
                             onClick={() =>
                               controller
@@ -719,10 +715,10 @@ function SchoolApplicationsPanelInstance({
 
           {detail.status === "archived" ? null : (
             <div className="flex flex-wrap items-end gap-2 pt-1">
-              <label className="text-[10px] font-medium text-slate-600">
+              <label className="text-[11px] font-medium text-slate-600">
                 {copy.referenceKindLabel}
                 <select
-                  className="mt-0.5 block rounded-lg border border-slate-300 px-1.5 py-1 text-[11px] text-slate-900"
+                  className="mt-0.5 block rounded-lg border border-slate-300 px-1.5 py-1 text-sm text-slate-900"
                   onChange={(event) =>
                     setReferenceKind(
                       event.target.value as "fact" | "requirement" | "document"
@@ -737,17 +733,17 @@ function SchoolApplicationsPanelInstance({
                   <option value="document">{copy.referenceKindDocument}</option>
                 </select>
               </label>
-              <label className="min-w-40 flex-1 text-[10px] font-medium text-slate-600">
+              <label className="min-w-40 flex-1 text-[11px] font-medium text-slate-600">
                 {copy.referenceIdLabel}
                 <input
-                  className="mt-0.5 w-full rounded-lg border border-slate-300 px-1.5 py-1 text-[11px] text-slate-900"
+                  className="mt-0.5 w-full rounded-lg border border-slate-300 px-1.5 py-1 text-sm text-slate-900"
                   data-testid="school-application-reference-id"
                   onChange={(event) => setReferenceId(event.target.value)}
                   value={referenceId}
                 />
               </label>
               <button
-                className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                 data-testid="school-application-bind-reference"
                 disabled={busy || referenceId.trim().length < 8}
                 onClick={() => {
@@ -774,7 +770,7 @@ function SchoolApplicationsPanelInstance({
           )}
         </div>
       ) : (
-        <p className="text-[11px] text-slate-500">{copy.selectPrompt}</p>
+        <p className="text-sm text-slate-500">{copy.selectPrompt}</p>
       )}
     </section>
   );

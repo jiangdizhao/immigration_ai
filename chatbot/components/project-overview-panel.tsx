@@ -87,18 +87,18 @@ export function ProjectOverviewPanel({
     <div className="space-y-3" data-testid="project-overview">
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-950">
+          <h3 className="text-lg font-semibold text-slate-950">
             {copy.overviewPreparation}
           </h3>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(overview.preparation.state)}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusTone(overview.preparation.state)}`}
               data-testid="project-overview-preparation-state"
             >
               {copy[STATUS_LABEL_KEYS[overview.preparation.state]]}
             </span>
             <button
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-[11px] font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
               data-testid="project-overview-refresh"
               disabled={summaryState === "loading"}
               onClick={onRefresh}
@@ -110,30 +110,30 @@ export function ProjectOverviewPanel({
           </div>
         </div>
         {summaryState === "loading" ? (
-          <p aria-live="polite" className="mt-2 text-[11px] text-slate-600">
+          <p aria-live="polite" className="mt-2 text-[15px] text-slate-600">
             {copy.loading}
           </p>
         ) : summaryState === "failed" ? (
           <p
-            className="mt-2 text-[11px] font-semibold text-red-700"
+            className="mt-2 text-[15px] font-semibold text-red-700"
             data-testid="project-overview-load-failed"
           >
             {copy.loadFailed}
           </p>
         ) : null}
-        <p className="mt-2 text-[11px] leading-5 text-slate-600">
+        <p className="mt-2 text-[15px] leading-6 text-slate-600">
           {copy.coverage(
             overview.preparation.readableStages,
             overview.preparation.totalStages
           )}
         </p>
         {overview.preparation.openItems === null ? (
-          <p className="mt-1 text-[11px] leading-5 text-slate-600">
+          <p className="mt-1 text-[15px] leading-6 text-slate-600">
             {copy.progressUnavailable}
           </p>
         ) : (
           <p
-            className="mt-1 text-[11px] leading-5 text-slate-700"
+            className="mt-1 text-[15px] leading-6 text-slate-700"
             data-testid="project-overview-counts"
           >
             {copy.openItems(overview.preparation.openItems)}
@@ -145,88 +145,96 @@ export function ProjectOverviewPanel({
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-950">
-          {copy.overviewReadiness}
-        </h3>
-        <p
-          className="mt-1 text-[11px] leading-5 text-slate-600"
-          data-testid="project-overview-readiness"
-        >
-          {overview.readiness.reason === "submission_capability_disabled"
-            ? copy.readinessDisabled
-            : copy.readinessNotAssessed}
-        </p>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-950">
-          {copy.overviewNextAction}
-        </h3>
-        <p className="mt-1 text-[11px] leading-5 text-slate-700">
-          {next.kind === "open_stage"
-            ? next.reason === "needs_information"
-              ? copy.nextNeedsInformation
-              : next.reason === "in_progress"
-                ? copy.nextInProgress
-                : copy.nextNotStarted
-            : next.kind === "open_documents"
-              ? copy.nextDocuments
-              : copy.nextNone}
-        </p>
-        {next.kind === "open_stage" ? (
-          <button
-            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-[#001736] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#002b5b] disabled:opacity-50"
-            data-testid="project-overview-next-action"
-            disabled={navigationBusy}
-            onClick={() =>
-              onSelectView(
-                stages.find((stage) => stage.key === next.stageKey)?.view ??
-                  "home"
-              )
-            }
-            type="button"
-          >
-            {copy[STAGE_LABEL_KEYS[next.stageKey]]}
-            <ArrowRight aria-hidden="true" className="size-3.5" />
-          </button>
-        ) : null}
-        {next.kind === "open_documents" ? (
-          <button
-            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-[#001736] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#002b5b] disabled:opacity-50"
-            data-testid="project-overview-next-documents"
-            disabled={navigationBusy}
-            onClick={() => onSelectView("documents")}
-            type="button"
-          >
-            {copy.materialsOpenDocuments}
-            <ArrowRight aria-hidden="true" className="size-3.5" />
-          </button>
-        ) : null}
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-slate-950">
-          {copy.overviewBlockers}
-        </h3>
-        {overview.blockers.length === 0 ? (
+      {/*
+        Layout correction: the three secondary overview cards now use the reclaimed
+        width in a responsive grid (2 columns from `lg`, 3 from `xl`) instead of a
+        narrow single stack. The preparation card above stays full width because it
+        carries the stage coverage statement.
+      */}
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 className="text-lg font-semibold text-slate-950">
+            {copy.overviewReadiness}
+          </h3>
           <p
-            className="mt-1 text-[11px] leading-5 text-slate-600"
-            data-testid="project-overview-no-blockers"
+            className="mt-1 text-[15px] leading-6 text-slate-600"
+            data-testid="project-overview-readiness"
           >
-            {copy.overviewNoBlockers}
+            {overview.readiness.reason === "submission_capability_disabled"
+              ? copy.readinessDisabled
+              : copy.readinessNotAssessed}
           </p>
-        ) : (
-          <ul
-            className="mt-2 space-y-1 text-[11px] leading-5 text-amber-900"
-            data-testid="project-overview-blockers"
-          >
-            {overview.blockers.map((blocker) => (
-              <li key={blocker}>· {copy[BLOCKER_LABEL_KEYS[blocker]]}</li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 className="text-lg font-semibold text-slate-950">
+            {copy.overviewNextAction}
+          </h3>
+          <p className="mt-1 text-[15px] leading-6 text-slate-700">
+            {next.kind === "open_stage"
+              ? next.reason === "needs_information"
+                ? copy.nextNeedsInformation
+                : next.reason === "in_progress"
+                  ? copy.nextInProgress
+                  : copy.nextNotStarted
+              : next.kind === "open_documents"
+                ? copy.nextDocuments
+                : copy.nextNone}
+          </p>
+          {next.kind === "open_stage" ? (
+            <button
+              className="mt-3 inline-flex items-center gap-1 rounded-lg bg-[#001736] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#002b5b] disabled:opacity-50"
+              data-testid="project-overview-next-action"
+              disabled={navigationBusy}
+              onClick={() =>
+                onSelectView(
+                  stages.find((stage) => stage.key === next.stageKey)?.view ??
+                    "home"
+                )
+              }
+              type="button"
+            >
+              {copy[STAGE_LABEL_KEYS[next.stageKey]]}
+              <ArrowRight aria-hidden="true" className="size-3.5" />
+            </button>
+          ) : null}
+          {next.kind === "open_documents" ? (
+            <button
+              className="mt-3 inline-flex items-center gap-1 rounded-lg bg-[#001736] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#002b5b] disabled:opacity-50"
+              data-testid="project-overview-next-documents"
+              disabled={navigationBusy}
+              onClick={() => onSelectView("documents")}
+              type="button"
+            >
+              {copy.materialsOpenDocuments}
+              <ArrowRight aria-hidden="true" className="size-3.5" />
+            </button>
+          ) : null}
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 className="text-lg font-semibold text-slate-950">
+            {copy.overviewBlockers}
+          </h3>
+          {overview.blockers.length === 0 ? (
+            <p
+              className="mt-1 text-[15px] leading-6 text-slate-600"
+              data-testid="project-overview-no-blockers"
+            >
+              {copy.overviewNoBlockers}
+            </p>
+          ) : (
+            <ul
+              className="mt-2 space-y-1 text-[15px] leading-6 text-amber-900"
+              data-testid="project-overview-blockers"
+            >
+              {overview.blockers.map((blocker) => (
+                <li key={blocker}>· {copy[BLOCKER_LABEL_KEYS[blocker]]}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

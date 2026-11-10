@@ -166,7 +166,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
   ) {
     return (
       <div
-        className="rounded-lg border border-slate-200 bg-white p-2 text-xs"
+        className="rounded-lg border border-slate-200 bg-white p-2 text-sm"
         data-testid={`admissions-outcome-${outcome.kind}`}
         key={outcome.outcomeId}
       >
@@ -177,13 +177,13 @@ function SchoolAdmissionsWorkflowPanelInstance({
             outcome.state
           )}
         </p>
-        <p className="text-[11px] text-slate-600">
+        <p className="text-sm text-slate-600">
           {outcome.provenance}
           {outcome.independentlyVerified ? " · verified" : ""}
           {outcome.evidenceAttached ? " · evidence attached" : ""}
         </p>
         {outcome.kind === "offer" ? (
-          <p className="text-[11px] text-slate-600">
+          <p className="text-sm text-slate-600">
             {label(copy.expiryState, outcome.expiryState)}
             {outcome.expiresOn ? ` · ${outcome.expiresOn}` : ""}
           </p>
@@ -192,7 +192,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
           <div className="mt-1 flex flex-wrap gap-1">
             {actions.map((action) => (
               <button
-                className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                className="rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white disabled:opacity-50"
                 data-testid={`admissions-transition-${outcome.kind}-${action}`}
                 disabled={busy}
                 key={action}
@@ -219,25 +219,25 @@ function SchoolAdmissionsWorkflowPanelInstance({
       data-testid="school-admissions-panel"
     >
       <header className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
           <GraduationCap aria-hidden="true" className="size-4" />
           {copy.title}
         </h3>
-        <p className="text-xs leading-5 text-slate-600">{copy.subtitle}</p>
-        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900">
+        <p className="text-sm leading-5 text-slate-600">{copy.subtitle}</p>
+        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900">
           {copy.notice}
         </p>
       </header>
 
       {message ? (
-        <p className="text-xs text-red-700" role="alert">
+        <p className="text-sm text-red-700" role="alert">
           {message}
         </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           data-testid="admissions-create-open"
           disabled={busy}
           onClick={() => setCreating((value) => !value)}
@@ -246,7 +246,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
           {copy.createTitle}
         </button>
         <button
-          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
           disabled={busy}
           onClick={() => controller.load(projectId).catch(() => undefined)}
           type="button"
@@ -264,16 +264,16 @@ function SchoolAdmissionsWorkflowPanelInstance({
 
       {creating ? (
         <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
-          <p className="text-xs font-semibold text-slate-900">
+          <p className="text-sm font-semibold text-slate-900">
             {copy.createTitle}
           </p>
-          <p className="text-[11px] leading-4 text-slate-600">
+          <p className="text-sm leading-4 text-slate-600">
             {copy.createDescription}
           </p>
-          <label className="block text-[11px] font-medium text-slate-700">
+          <label className="block text-sm font-medium text-slate-700">
             {copy.originLabel}
             <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
               data-testid="admissions-origin"
               onChange={(event) => setOriginKind(event.target.value)}
               value={originKind}
@@ -287,10 +287,10 @@ function SchoolAdmissionsWorkflowPanelInstance({
           </label>
           {originKind === "school_application" ? (
             <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-slate-700">
+              <label className="block text-sm font-medium text-slate-700">
                 {copy.selectApplicationLabel}
                 <select
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
                   data-testid="admissions-application"
                   onChange={(event) =>
                     setSelectedApplicationId(event.target.value)
@@ -313,28 +313,28 @@ function SchoolAdmissionsWorkflowPanelInstance({
                   ))}
                 </select>
               </label>
-              <p className="text-[11px] text-slate-600">
+              <p className="text-sm text-slate-600">
                 {copy.createFromApplication}
               </p>
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-3">
               <input
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                 data-testid="admissions-institution"
                 onChange={(event) => setInstitutionName(event.target.value)}
                 placeholder={copy.institutionLabel}
                 value={institutionName}
               />
               <input
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                 data-testid="admissions-course"
                 onChange={(event) => setCourseTitle(event.target.value)}
                 placeholder={copy.courseLabel}
                 value={courseTitle}
               />
               <input
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                 onChange={(event) => setIntakeLabel(event.target.value)}
                 placeholder={copy.intakeLabel}
                 value={intakeLabel}
@@ -343,7 +343,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
           )}
           <div className="flex gap-2">
             <button
-              className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               data-testid="admissions-create-submit"
               disabled={busy}
               onClick={() => submitCreate().catch(() => undefined)}
@@ -352,7 +352,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
               {copy.createTitle}
             </button>
             <button
-              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-semibold text-slate-700"
               onClick={() => setCreating(false)}
               type="button"
             >
@@ -363,11 +363,11 @@ function SchoolAdmissionsWorkflowPanelInstance({
       ) : null}
 
       {snapshot.loading ? (
-        <p className="text-xs text-slate-500">{copy.loading}</p>
+        <p className="text-sm text-slate-500">{copy.loading}</p>
       ) : null}
 
       {snapshot.loading || snapshot.cases.length > 0 ? null : (
-        <p className="rounded-lg bg-white p-2 text-xs text-slate-500">
+        <p className="rounded-lg bg-white p-2 text-sm text-slate-500">
           {copy.empty}
         </p>
       )}
@@ -375,7 +375,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
       <div className="space-y-1">
         {snapshot.cases.map((entry) => (
           <button
-            className={`w-full rounded-lg border px-2 py-1.5 text-left text-xs ${
+            className={`w-full rounded-lg border px-2 py-1.5 text-left text-sm ${
               detail?.caseId === entry.caseId
                 ? "border-slate-900 bg-white"
                 : "border-slate-200 bg-white/60"
@@ -392,11 +392,11 @@ function SchoolAdmissionsWorkflowPanelInstance({
                 {entry.institutionName}
                 {entry.courseTitle ? ` · ${entry.courseTitle}` : ""}
               </span>
-              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
+              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
                 {label(copy.serviceMode, entry.serviceMode)}
               </span>
             </span>
-            <span className="mt-0.5 block text-[11px] text-slate-600">
+            <span className="mt-0.5 block text-sm text-slate-600">
               {label(copy.origin, entry.originKind)} ·{" "}
               {label(copy.offerState, entry.journey.offerState)} ·{" "}
               {label(copy.coeState, entry.journey.coeState)}
@@ -407,19 +407,19 @@ function SchoolAdmissionsWorkflowPanelInstance({
 
       {detail ? (
         <div className="space-y-2" data-testid="admissions-detail">
-          <div className="rounded-lg bg-white p-2 text-xs">
+          <div className="rounded-lg bg-white p-2 text-sm">
             <p className="font-semibold text-slate-900">
               {detail.institutionName}
               {detail.courseTitle ? ` · ${detail.courseTitle}` : ""}
             </p>
-            <p className="text-[11px] text-slate-600">
+            <p className="text-sm text-slate-600">
               {label(copy.origin, detail.originKind)} ·{" "}
               {detail.intakeLabel ?? "—"} · rev {detail.revision}
             </p>
             <div className="mt-1 flex flex-wrap gap-1">
               {(["self_service", "managed_service"] as const).map((mode) => (
                 <button
-                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                  className={`rounded-md px-2 py-1 text-sm font-semibold ${
                     detail.serviceMode === mode
                       ? "bg-slate-900 text-white"
                       : "border border-slate-300 bg-white text-slate-700"
@@ -438,7 +438,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[11px] leading-4 text-slate-600">
+            <p className="mt-1 text-sm leading-4 text-slate-600">
               {detail.serviceMode === "managed_service"
                 ? copy.managedNotice
                 : copy.selfNotice}
@@ -446,13 +446,13 @@ function SchoolAdmissionsWorkflowPanelInstance({
           </div>
 
           <div className="rounded-lg bg-white p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.checklistHeading}
             </p>
             <ul className="mt-1 space-y-1">
               {detail.requirements.map((requirement) => (
                 <li
-                  className="flex items-center justify-between gap-2 text-[11px]"
+                  className="flex items-center justify-between gap-2 text-sm"
                   key={requirement.code}
                 >
                   <span className="text-slate-700">
@@ -470,12 +470,12 @@ function SchoolAdmissionsWorkflowPanelInstance({
 
           <div className="rounded-lg bg-white p-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-slate-900">
                 {copy.draftHeading}
               </p>
               <div className="flex gap-1">
                 <button
-                  className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                  className="rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
                   data-testid="admissions-prepare"
                   disabled={busy}
                   onClick={() =>
@@ -486,7 +486,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
                   {copy.draftHeading}
                 </button>
                 <button
-                  className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white disabled:opacity-50"
                   data-testid="admissions-confirm"
                   disabled={
                     busy ||
@@ -505,7 +505,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
                 </button>
               </div>
             </div>
-            <p className="mt-1 text-[11px] leading-4 text-amber-900">
+            <p className="mt-1 text-sm leading-4 text-amber-900">
               {detail.preparationStale
                 ? copy.staleNotice
                 : detail.preparation?.confirmedAt
@@ -546,16 +546,16 @@ function SchoolAdmissionsWorkflowPanelInstance({
                   return (
                     <>
                       {view.notice ? (
-                        <p className="rounded bg-slate-50 px-2 py-1 text-[10px] leading-4 text-slate-600">
+                        <p className="rounded bg-slate-50 px-2 py-1 text-[11px] leading-4 text-slate-600">
                           {view.notice}
                         </p>
                       ) : null}
                       {view.sections.map((section) => (
                         <div key={section.code}>
-                          <p className="text-[11px] font-semibold text-slate-800">
+                          <p className="text-sm font-semibold text-slate-800">
                             {section.heading}
                           </p>
-                          <p className="text-[11px] leading-4 text-slate-600">
+                          <p className="text-sm leading-4 text-slate-600">
                             {section.body}
                           </p>
                           {section.code === "next_steps" &&
@@ -566,7 +566,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
                             >
                               {view.outstanding.map((item) => (
                                 <li
-                                  className="text-[11px] leading-4 text-slate-700"
+                                  className="text-sm leading-4 text-slate-700"
                                   data-testid={`admissions-draft-outstanding-${item.code}`}
                                   key={item.code}
                                   title={item.unknown ? item.code : undefined}
@@ -581,16 +581,16 @@ function SchoolAdmissionsWorkflowPanelInstance({
                           ) : null}
                           {section.code === "next_steps" &&
                           view.outstanding.length === 0 ? (
-                            <p className="text-[11px] text-slate-600">
+                            <p className="text-sm text-slate-600">
                               {view.outstandingEmpty}
                             </p>
                           ) : null}
                           {section.bodyDiffersFromStored ? (
                             <details className="mt-0.5">
-                              <summary className="cursor-pointer text-[10px] font-semibold text-slate-500">
+                              <summary className="cursor-pointer text-[11px] font-semibold text-slate-500">
                                 {view.storedOriginalLabel}
                               </summary>
-                              <p className="mt-0.5 text-[10px] leading-4 text-slate-500">
+                              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
                                 {section.storedText}
                               </p>
                             </details>
@@ -609,7 +609,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
       {detail ? (
         <div className="space-y-2">
           <div className="rounded-lg bg-white p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.offerHeading}
             </p>
             {detail.offer ? (
@@ -621,12 +621,12 @@ function SchoolAdmissionsWorkflowPanelInstance({
                 "expire",
               ])
             ) : (
-              <p className="text-[11px] text-slate-600">
+              <p className="text-sm text-slate-600">
                 {label(copy.offerState, detail.journey.offerState)}
               </p>
             )}
             <button
-              className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+              className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
               data-testid="admissions-record-offer"
               disabled={busy}
               onClick={() =>
@@ -638,7 +638,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
             </button>
             {snapshot.documents.length > 0 ? (
               <button
-                className="mt-1 ml-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                className="mt-1 ml-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="admissions-record-offer-document"
                 disabled={busy || selectedDocumentId.length === 0}
                 onClick={() =>
@@ -656,24 +656,24 @@ function SchoolAdmissionsWorkflowPanelInstance({
           </div>
 
           <div className="rounded-lg bg-white p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.coeHeading}
             </p>
             {detail.coe ? (
               renderOutcome(detail.coe, [])
             ) : (
-              <p className="text-[11px] text-slate-600">
+              <p className="text-sm text-slate-600">
                 {label(copy.coeState, detail.journey.coeState)}
               </p>
             )}
-            <p className="mt-1 text-[11px] leading-4 text-slate-600">
+            <p className="mt-1 text-sm leading-4 text-slate-600">
               {copy.evidenceNotice}
             </p>
             {snapshot.documents.length > 0 ? (
-              <label className="mt-1 block text-[11px] font-medium text-slate-700">
+              <label className="mt-1 block text-sm font-medium text-slate-700">
                 {copy.selectDocumentLabel}
                 <select
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-[11px]"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
                   data-testid="admissions-document"
                   onChange={(event) =>
                     setSelectedDocumentId(event.target.value)
@@ -689,14 +689,14 @@ function SchoolAdmissionsWorkflowPanelInstance({
                 </select>
               </label>
             ) : (
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-sm text-slate-500">
                 {snapshot.documentsUnavailable
                   ? copy.documentsUnavailable
                   : copy.documentsEmpty}
               </p>
             )}
             <button
-              className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+              className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
               data-testid="admissions-record-coe"
               disabled={busy}
               onClick={() =>
@@ -708,7 +708,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
             </button>
             {snapshot.documents.length > 0 ? (
               <button
-                className="mt-1 ml-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                className="mt-1 ml-1 rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="admissions-record-coe-document"
                 disabled={busy || selectedDocumentId.length === 0}
                 onClick={() =>
@@ -727,15 +727,15 @@ function SchoolAdmissionsWorkflowPanelInstance({
 
           {detail.serviceMode === "self_service" ? (
             <div className="rounded-lg bg-white p-2">
-              <p className="text-xs font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-slate-900">
                 {copy.externalActionHeading}
               </p>
-              <p className="mt-1 text-[11px] leading-4 text-slate-600">
+              <p className="mt-1 text-sm leading-4 text-slate-600">
                 {copy.externalActionNotice}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <select
-                  className="rounded-md border border-slate-300 px-2 py-1 text-[11px]"
+                  className="rounded-md border border-slate-300 px-2 py-1 text-sm"
                   data-testid="admissions-external-action-kind"
                   onChange={(event) => setExternalAction(event.target.value)}
                   value={externalAction}
@@ -747,7 +747,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
                   ))}
                 </select>
                 <button
-                  className="rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white disabled:opacity-50"
                   data-testid="admissions-external-action"
                   disabled={busy}
                   onClick={() =>
@@ -762,10 +762,7 @@ function SchoolAdmissionsWorkflowPanelInstance({
               </div>
               <ul className="mt-1 space-y-0.5">
                 {detail.externalActions.map((action) => (
-                  <li
-                    className="text-[11px] text-slate-600"
-                    key={action.actionId}
-                  >
+                  <li className="text-sm text-slate-600" key={action.actionId}>
                     {label(copy.externalAction, action.actionKind)} ·{" "}
                     {action.performedOn}
                   </li>
@@ -775,15 +772,15 @@ function SchoolAdmissionsWorkflowPanelInstance({
           ) : null}
 
           <div className="rounded-lg bg-white p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.exceptionHeading}
             </p>
-            <p className="mt-1 text-[11px] leading-4 text-slate-600">
+            <p className="mt-1 text-sm leading-4 text-slate-600">
               {copy.exceptionNotice}
             </p>
             {detail.exception ? (
               <p
-                className="text-[11px] text-slate-700"
+                className="text-sm text-slate-700"
                 data-testid="admissions-exception-state"
               >
                 {detail.exception.state}
@@ -794,14 +791,14 @@ function SchoolAdmissionsWorkflowPanelInstance({
             ) : null}
             <div className="mt-1 flex flex-col gap-1 sm:flex-row">
               <input
-                className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-[11px]"
+                className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
                 data-testid="admissions-exception-input"
                 onChange={(event) => setExceptionText(event.target.value)}
                 placeholder={copy.claimException}
                 value={exceptionText}
               />
               <button
-                className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="admissions-claim-exception"
                 disabled={busy || exceptionText.trim().length === 0}
                 onClick={() => {
@@ -823,11 +820,11 @@ function SchoolAdmissionsWorkflowPanelInstance({
 
           {detail.serviceMode === "managed_service" ? (
             <div className="rounded-lg bg-white p-2">
-              <p className="text-xs font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-slate-900">
                 {copy.readinessHeading}
               </p>
               <p
-                className="text-[11px] text-slate-700"
+                className="text-sm text-slate-700"
                 data-testid="admissions-readiness"
               >
                 {label(copy.readinessStatus, detail.managedReadiness.status)}
@@ -835,11 +832,11 @@ function SchoolAdmissionsWorkflowPanelInstance({
                   ? ` · ${detail.managedReadiness.reasonCodes.join(", ")}`
                   : ""}
               </p>
-              <p className="mt-1 text-[11px] leading-4 text-slate-600">
+              <p className="mt-1 text-sm leading-4 text-slate-600">
                 {copy.submissionNotice}
               </p>
               <button
-                className="mt-1 rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                className="mt-1 rounded-md bg-slate-900 px-2 py-1 text-sm font-semibold text-white disabled:opacity-50"
                 data-testid="admissions-evaluate-readiness"
                 disabled={busy}
                 onClick={() =>
@@ -855,12 +852,12 @@ function SchoolAdmissionsWorkflowPanelInstance({
           ) : null}
 
           <div className="rounded-lg bg-white p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.nextStepsHeading}
             </p>
             <ul className="mt-1 list-disc pl-4">
               {detail.nextStepCodes.map((step) => (
-                <li className="text-[11px] text-slate-700" key={step}>
+                <li className="text-sm text-slate-700" key={step}>
                   {label(copy.nextStep, step)}
                 </li>
               ))}
@@ -868,12 +865,12 @@ function SchoolAdmissionsWorkflowPanelInstance({
           </div>
 
           <div className="rounded-lg bg-slate-900/5 p-2">
-            <p className="text-xs font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-900">
               {copy.disclosuresHeading}
             </p>
             <ul className="mt-1 space-y-0.5">
               {detail.disclosures.map((code) => (
-                <li className="text-[11px] text-slate-700" key={code}>
+                <li className="text-sm text-slate-700" key={code}>
                   {label(copy.disclosure, code)}
                 </li>
               ))}

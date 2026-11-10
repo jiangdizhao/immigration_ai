@@ -1,3 +1,29 @@
+<!-- BEGIN PHASE13_WORKSPACE_LAYOUT_CORRECTION_2026_11_11 -->
+## Post-Phase-13 desktop Workspace layout and readability correction (implemented, pending owner visual acceptance)
+
+**Status:** `WORKSPACE_LAYOUT_CORRECTION_IMPLEMENTED_PENDING_OWNER_VISUAL_ACCEPTANCE`. This is a bounded **presentation-only** correction after M10. It is not M9-C/D, not M10, not a new milestone, and not a production/security/business change. `LIVE_PRODUCTION_NO_GO`, `STAFF_PRIVATE_PACKAGE_AUTHORIZATION_PENDING`, M2 trust DENY, M6 legal coverage PARTIAL and all other Phase 13 gates are untouched.
+
+**Git baseline (verified):** branch `phase13-m9-integrated-workspace`; HEAD `b39d8766be5ba9ef8bff3cea191b1f0621d386a6` (equals origin; clean worktree). D-P13-035 remains the accepted M10 closeout. Nothing committed, pushed, merged, rebased, reset or deployed for this correction.
+
+**Problem:** on a wide desktop the Project content (region E) was materially narrower and smaller-typed than the workspace allowed, because four independent constraints stacked: an outer `max-w-[1600px]` on the workspace section, a second `max-w-[1600px]` on the answer-mode toolbar, `xl:grid-cols-[250px_minmax(0,1fr)_290px]` rails, and — decisively — a nested `max-w-3xl` (768px) inside the Project home. The selected Project was also identified three times (outer strip h2, an ID badge, and the home header).
+
+**Corrections applied (8 components + 1 test assertion):**
+1. **Outer width** — `max-w-[1600px]` removed from the workspace section and from both answer-mode sections; gutters reduced to `px-3 sm:px-4 lg:px-6`. Public marketing pages are untouched.
+2. **Main-content width** — the Project home's `mx-auto w-full max-w-3xl` became `w-full min-w-0 max-w-none`; only long-form prose keeps a limit (`max-w-4xl` on the subtitle).
+3. **Desktop grid** — `250px/1fr/290px` → `210px/1fr/220px`, sidebar padding `p-4` → `p-3`. Breakpoints unchanged: one column below `xl`, three from `xl`.
+4. **Header overhead** — the dark AI-identity banner compacted (icon `size-9`→`size-7`, `py-3`→`py-2`, title+subtitle on one baseline, `rounded-2xl`→`rounded-xl`); the answer-mode toolbar lost its own max-width and some padding; and the duplicate centre strip is now **omitted in Project-home mode only** (Project Chat keeps it because it owns conversation status, read-only/legacy badges and the `return-to-project-home` control).
+5. **Typography** — main-content scale raised in the six customer-facing surfaces: metadata/badges `10–11px` → `11–12px`, body/UI `12px` → `14px`, principal body `14px` → `15px`, card titles → `18px`, Project page title `18px` → `24px`; line height `leading-5` → `leading-6` on body copy. Dense technical metadata (digest prefixes, counts) intentionally stays smaller.
+6. **Overview density** — the three secondary overview cards (readiness, next action, blockers) now use `lg:grid-cols-2 xl:grid-cols-3`; the preparation card stays full width because it carries the stage-coverage statement.
+7. **Test update** — `lib/workspace/project-entry.test.ts` pinned the literal old grid string; it now asserts the grid **contract** (`\d+px_minmax(0,1fr)_\d+px`) plus the new values, instead of hard-coding 250/290.
+
+**Computed geometry (analytic, NOT browser-measured):** at 1856px, usable E content goes from ~768px (the `max-w-3xl` cap) to ~1330px; Project-home vertical overhead drops by roughly 90px. Actual pixel geometry is **NOT MEASURED** — no browser was run; the owner performs visual acceptance.
+
+**Validation actually executed:** `pnpm test:unit` **1413/1413 pass, 0 fail, 0 skip**; focused layout/navigation/review suites **83/83**; `tsc --noEmit` **44 = historical baseline, 0 new**; Biome clean on all 10 changed files; `pnpm build` **PASS**; `git diff --check` clean. No database, migration, browser, Playwright, provider, AWS/Stripe, `.env.local` change or feature-flag change.
+
+**Not changed:** authentication, Project ownership, cross-Project isolation, Chat persistence, Student 500 eligibility, legal-source verification, school-application/admissions contracts, GS versioning, package freshness/integrity, customer confirmation, professional-review authorization, staff private-resource permissions, schema, API contracts, feature flags, payment/contract services. No disabled action was enabled for visual reasons. Deliverables: this checkpoint, `~/workspace_layout_correction_report.md`, `~/workspace_layout_correction_review.patch`.
+<!-- END PHASE13_WORKSPACE_LAYOUT_CORRECTION_2026_11_11 -->
+
+
 <!-- BEGIN PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
 ## Phase 13 M10 — bounded engineering acceptance closeout (2026-11-10)
 

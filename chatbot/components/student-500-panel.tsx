@@ -88,10 +88,10 @@ function SelectField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-xs font-medium text-slate-600">
+    <label className="block text-sm font-medium text-slate-600">
       {label}
       <select
-        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[15px] text-slate-900"
         data-testid={testId}
         onChange={(event) => onChange(event.target.value)}
         value={value}
@@ -171,10 +171,10 @@ export function SchoolApplicationLinkField({
       className="space-y-1 rounded-lg border border-slate-200 p-2 sm:col-span-2"
       data-testid={`${idPrefix}-school-application-field`}
     >
-      <label className="block text-xs font-medium text-slate-600">
+      <label className="block text-sm font-medium text-slate-600">
         {copy.schoolApplicationLabel}
         <select
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 disabled:bg-slate-100"
+          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[15px] text-slate-900 disabled:bg-slate-100"
           data-testid={`${idPrefix}-school-application`}
           disabled={linkState === "loading" || links.length === 0}
           onChange={(event) =>
@@ -203,7 +203,7 @@ export function SchoolApplicationLinkField({
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 disabled:opacity-50"
           data-testid={`${idPrefix}-school-application-load`}
           disabled={linkState === "loading"}
           onClick={onLoadLinks}
@@ -211,21 +211,21 @@ export function SchoolApplicationLinkField({
         >
           {linkState === "loading" ? copy.linkLoading : copy.linkLoad}
         </button>
-        <span className="text-[10px] leading-4 text-slate-500">
+        <span className="text-[11px] leading-4 text-slate-500">
           {copy.schoolApplicationHint}
         </span>
       </div>
       {linkState === "error" ? (
-        <p className="text-[10px] text-red-700" role="alert">
+        <p className="text-[11px] text-red-700" role="alert">
           {copy.linkError}
         </p>
       ) : null}
       {linkState === "loaded" && links.length === 0 ? (
-        <p className="text-[10px] text-amber-900">{copy.linkEmpty}</p>
+        <p className="text-[11px] text-amber-900">{copy.linkEmpty}</p>
       ) : null}
       {draft.entryRoute === "school_application_in_progress" &&
       draft.schoolApplicationId === null ? (
-        <p className="text-[10px] text-amber-900">{copy.linkRequired}</p>
+        <p className="text-[11px] text-amber-900">{copy.linkRequired}</p>
       ) : null}
     </div>
   );
@@ -381,10 +381,10 @@ export function Student500DraftForm({
         testId={`${idPrefix}-oshc`}
         value={draft.oshcEvidence}
       />
-      <label className="block text-xs font-medium text-slate-600">
+      <label className="block text-sm font-medium text-slate-600">
         {copy.asOfDateLabel}
         <input
-          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[15px] text-slate-900"
           data-testid={`${idPrefix}-as-of-date`}
           onChange={(event) =>
             onChange({ ...draft, asOfDate: event.target.value || null })
@@ -392,14 +392,14 @@ export function Student500DraftForm({
           type="date"
           value={draft.asOfDate ?? ""}
         />
-        <span className="mt-1 block text-[11px] text-slate-500">
+        <span className="mt-1 block text-sm text-slate-500">
           {copy.asOfDateHint}
         </span>
       </label>
-      <label className="block text-xs font-medium text-slate-600">
+      <label className="block text-sm font-medium text-slate-600">
         {copy.currentVisaLabel}
         <input
-          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[15px] text-slate-900"
           data-testid={`${idPrefix}-current-visa`}
           maxLength={128}
           onChange={(event) =>
@@ -410,7 +410,7 @@ export function Student500DraftForm({
           }
           value={draft.currentVisaSubclass ?? ""}
         />
-        <span className="mt-1 block text-[11px] text-slate-500">
+        <span className="mt-1 block text-sm text-slate-500">
           {copy.currentVisaHint}
         </span>
       </label>
@@ -431,13 +431,13 @@ export function Student500DraftForm({
         />
         {draft.historyDeclaration === "declared_some" ? (
           <fieldset className="mt-1">
-            <legend className="text-[11px] font-medium text-slate-600">
+            <legend className="text-sm font-medium text-slate-600">
               {copy.historyFlagsLabel}
             </legend>
             <div className="mt-1 flex flex-wrap gap-2">
               {Object.entries(copy.historyFlag).map(([flag, label]) => (
                 <label
-                  className="flex items-center gap-1 text-[11px] text-slate-700"
+                  className="flex items-center gap-1 text-sm text-slate-700"
                   key={flag}
                 >
                   <input
@@ -472,14 +472,14 @@ function RequirementRow({
       data-testid={`student500-requirement-${requirement.requirementKey}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-1">
-        <span className="text-[11px] font-semibold text-slate-900">
+        <span className="text-sm font-semibold text-slate-900">
           {lookup(
             copy.requirementLabels,
             requirement.requirementKey,
             requirement.requirementKey
           )}
         </span>
-        <span className="flex flex-wrap gap-1 text-[10px]">
+        <span className="flex flex-wrap gap-1 text-[11px]">
           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
             {lookup(
               copy.requirementStatus,
@@ -511,7 +511,7 @@ function RequirementRow({
           ) : null}
         </span>
       </div>
-      <ul className="mt-1 space-y-0.5 text-[10px] leading-4 text-slate-600">
+      <ul className="mt-1 space-y-0.5 text-[11px] leading-4 text-slate-600">
         {requirement.sources.map((source) => (
           <li key={source.sourceId}>
             <span className="font-medium text-slate-700">
@@ -541,7 +541,7 @@ function RequirementRow({
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[11px] text-slate-500">
         {copy.sourcePendingNotice}
       </p>
     </li>
@@ -558,7 +558,7 @@ function ScreeningView({
   const screening = detail.screening;
   return (
     <section className="space-y-2" data-testid="student500-screening">
-      <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-700">
+      <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-700">
         <span className="rounded bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-900">
           {lookup(
             copy.preparationState,
@@ -581,7 +581,7 @@ function ScreeningView({
       </div>
 
       <p
-        className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px] font-medium text-blue-950"
+        className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-sm font-medium text-blue-950"
         data-testid="student500-next-action"
       >
         {copy.nextActionHeading}:{" "}
@@ -590,10 +590,10 @@ function ScreeningView({
 
       <section
         aria-label={copy.legalSourceHeading}
-        className="space-y-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700"
+        className="space-y-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700"
         data-testid="student500-legal-source-status"
       >
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.legalSourceHeading}
         </h5>
         <p data-testid="student500-legal-source-revision">
@@ -617,13 +617,13 @@ function ScreeningView({
           className="space-y-1 border-t border-slate-100 pt-1"
           data-testid="student500-official-checklist"
         >
-          <h6 className="text-[10px] font-semibold text-slate-800">
+          <h6 className="text-[11px] font-semibold text-slate-800">
             {copy.checklistHeading}
           </h6>
           <p>{copy.checklistNote}</p>
           <p>{screening.officialChecklist.missingToolInputs.join(", ")}</p>
           <a
-            className="text-[10px] font-semibold text-blue-800 underline"
+            className="text-[11px] font-semibold text-blue-800 underline"
             href={screening.officialChecklist.toolUrl}
             rel="noreferrer noopener"
             target="_blank"
@@ -637,10 +637,10 @@ function ScreeningView({
         aria-label={copy.missingHeading}
         data-testid="student500-missing"
       >
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.missingHeading}
         </h5>
-        <ul className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-700">
+        <ul className="mt-1 flex flex-wrap gap-1 text-[11px] text-slate-700">
           {screening.missingFactCodes.length === 0 ? (
             <li className="rounded bg-slate-100 px-1.5 py-0.5">
               {copy.preparationState.screening_complete_pending_review}
@@ -659,10 +659,10 @@ function ScreeningView({
         aria-label={copy.humanReviewHeading}
         data-testid="student500-review"
       >
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.humanReviewHeading}
         </h5>
-        <ul className="mt-1 flex flex-wrap gap-1 text-[10px] text-amber-900">
+        <ul className="mt-1 flex flex-wrap gap-1 text-[11px] text-amber-900">
           {screening.humanReviewReasons.map((reason) => (
             <li className="rounded bg-amber-50 px-1.5 py-0.5" key={reason}>
               {lookup(copy.humanReview, reason, reason)}
@@ -672,11 +672,11 @@ function ScreeningView({
       </section>
 
       <section aria-label={copy.linkedSchoolHeading}>
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.linkedSchoolHeading}
         </h5>
         {screening.studyEvidence.linkedSchoolApplication ? (
-          <p className="mt-1 text-[10px] text-slate-600">
+          <p className="mt-1 text-[11px] text-slate-600">
             {screening.studyEvidence.linkedSchoolApplication.available
               ? copy.linkedSchoolStatus(
                   screening.studyEvidence.linkedSchoolApplication.status
@@ -684,12 +684,12 @@ function ScreeningView({
               : copy.linkedSchoolUnavailable}
           </p>
         ) : (
-          <p className="mt-1 text-[10px] text-slate-500">{copy.optionalHint}</p>
+          <p className="mt-1 text-[11px] text-slate-500">{copy.optionalHint}</p>
         )}
       </section>
 
       <section aria-label={copy.requirementsHeading}>
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.requirementsHeading}
         </h5>
         <ul className="mt-1 space-y-1" data-testid="student500-requirements">
@@ -704,10 +704,10 @@ function ScreeningView({
       </section>
 
       <section aria-label={copy.disclosuresHeading}>
-        <h5 className="text-[11px] font-semibold text-slate-800">
+        <h5 className="text-sm font-semibold text-slate-800">
           {copy.disclosuresHeading}
         </h5>
-        <ul className="mt-1 space-y-0.5 text-[10px] leading-4 text-amber-900">
+        <ul className="mt-1 space-y-0.5 text-[11px] leading-4 text-amber-900">
           {screening.disclosures.map((code) => (
             <li key={code}>{lookup(copy.disclosure, code, code)}</li>
           ))}
@@ -857,28 +857,28 @@ function Student500PanelInstance({
       data-testid="student500-panel"
     >
       <header className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
           <BookOpenCheck aria-hidden="true" className="size-4" />
           {copy.title}
         </h3>
-        <p className="text-xs leading-5 text-slate-600">{copy.subtitle}</p>
-        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900">
+        <p className="text-sm leading-5 text-slate-600">{copy.subtitle}</p>
+        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900">
           {copy.notice}
         </p>
-        <p className="rounded-lg bg-slate-100 px-2 py-1.5 text-[11px] leading-4 text-slate-700">
+        <p className="rounded-lg bg-slate-100 px-2 py-1.5 text-sm leading-4 text-slate-700">
           {copy.sourceNotice}
         </p>
       </header>
 
       {message ? (
-        <p className="text-xs text-red-700" role="alert">
+        <p className="text-sm text-red-700" role="alert">
           {message}
         </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
-          className="flex items-center gap-1 rounded-lg bg-[#001736] px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg bg-[#001736] px-2.5 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           data-testid="student500-create-open"
           disabled={busy}
           onClick={() => setCreating((current) => !current)}
@@ -888,7 +888,7 @@ function Student500PanelInstance({
           {copy.create}
         </button>
         <button
-          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
           disabled={snapshot.loading}
           onClick={() => controller.load(projectId).catch(() => undefined)}
           type="button"
@@ -903,10 +903,10 @@ function Student500PanelInstance({
           className="space-y-2 rounded-lg border border-blue-200 bg-white p-3"
           data-testid="student500-create-form"
         >
-          <h4 className="text-xs font-semibold text-slate-900">
+          <h4 className="text-sm font-semibold text-slate-900">
             {copy.createTitle}
           </h4>
-          <p className="text-[11px] leading-4 text-slate-600">
+          <p className="text-sm leading-4 text-slate-600">
             {copy.createDescription}
           </p>
           <Student500DraftForm
@@ -920,7 +920,7 @@ function Student500PanelInstance({
           />
           <div className="flex gap-2">
             <button
-              className="rounded-lg bg-[#001736] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               data-testid="student500-create-submit"
               disabled={busy}
               onClick={() => submitCreate().catch(() => undefined)}
@@ -929,7 +929,7 @@ function Student500PanelInstance({
               {busy ? copy.creating : copy.confirm}
             </button>
             <button
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700"
               onClick={() => setCreating(false)}
               type="button"
             >
@@ -944,7 +944,7 @@ function Student500PanelInstance({
           className="space-y-2 rounded-lg border border-blue-200 bg-white p-3"
           data-testid="student500-edit-form"
         >
-          <h4 className="text-xs font-semibold text-slate-900">{copy.edit}</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{copy.edit}</h4>
           <Student500DraftForm
             copy={copy}
             draft={editDraft}
@@ -956,7 +956,7 @@ function Student500PanelInstance({
           />
           <div className="flex gap-2">
             <button
-              className="rounded-lg bg-[#001736] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               data-testid="student500-edit-submit"
               disabled={busy}
               onClick={() => submitUpdate().catch(() => undefined)}
@@ -965,7 +965,7 @@ function Student500PanelInstance({
               {busy ? copy.saving : copy.save}
             </button>
             <button
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700"
               onClick={() => setEditing(false)}
               type="button"
             >
@@ -976,14 +976,14 @@ function Student500PanelInstance({
       ) : null}
 
       {snapshot.loading ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500">
+        <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           {copy.loading}
         </p>
       ) : null}
 
       {snapshot.applications.length === 0 && !snapshot.loading ? (
-        <p className="text-xs text-slate-600" data-testid="student500-empty">
+        <p className="text-sm text-slate-600" data-testid="student500-empty">
           {copy.empty}
         </p>
       ) : null}
@@ -1002,7 +1002,7 @@ function Student500PanelInstance({
                 onClick={() => openApplication(application.applicationId)}
                 type="button"
               >
-                <span className="flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
+                <span className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800">
                     {copy.revisionLabel(application.revision)}
                   </span>
@@ -1035,7 +1035,7 @@ function Student500PanelInstance({
       ) : null}
 
       {snapshot.loadingDetail && !detail ? (
-        <p className="flex items-center gap-2 text-xs text-slate-500">
+        <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           {copy.loading}
         </p>
@@ -1079,11 +1079,11 @@ function Student500PanelInstance({
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h4 className="flex items-center gap-2 text-xs font-semibold text-slate-950">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
                 <ClipboardList aria-hidden="true" className="size-3.5" />
                 {copy.detailTitle}
               </h4>
-              <p className="text-[11px] text-slate-600">
+              <p className="text-sm text-slate-600">
                 {lookup(
                   copy.entryRoute,
                   detail.context.entryRoute,
@@ -1097,18 +1097,18 @@ function Student500PanelInstance({
                 )}
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
               {copy.revisionLabel(detail.revision)}
             </span>
           </div>
 
           {archived ? (
-            <p className="rounded-lg bg-slate-100 px-2 py-1.5 text-[11px] text-slate-700">
+            <p className="rounded-lg bg-slate-100 px-2 py-1.5 text-sm text-slate-700">
               {copy.archivedNotice}
             </p>
           ) : null}
 
-          <dl className="grid gap-1 text-[11px] text-slate-600 sm:grid-cols-2">
+          <dl className="grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
             <div>
               <dt className="font-semibold text-slate-800">
                 {copy.coeStatusLabel}
@@ -1189,14 +1189,14 @@ function Student500PanelInstance({
 
           <ScreeningView copy={copy} detail={detail} />
 
-          <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900">
+          <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900">
             {copy.submissionNotice}
           </p>
 
           {archived ? null : (
             <div className="flex flex-wrap gap-2">
               <button
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="student500-edit-open"
                 disabled={busy}
                 onClick={() => beginEdit(detail)}
@@ -1205,7 +1205,7 @@ function Student500PanelInstance({
                 {copy.edit}
               </button>
               <button
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="student500-archive"
                 disabled={busy}
                 onClick={() =>

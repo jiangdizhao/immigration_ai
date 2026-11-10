@@ -125,24 +125,29 @@ export function ProjectWorkspaceHome({
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-5 sm:px-6"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-6"
       data-testid="project-workspace-home"
     >
-      <div className="mx-auto w-full max-w-3xl space-y-4">
+      {/*
+        Layout correction: this container used to stop at `max-w-3xl` (768px), so the
+        Project content stayed narrow even when the centre column was much wider. It now
+        fills the available width; only genuinely long-form prose keeps a reading limit.
+      */}
+      <div className="w-full min-w-0 max-w-none space-y-4">
         <header className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {copy.selectedProject}
           </p>
           <h2
-            className="break-words text-lg font-semibold text-slate-950"
+            className="break-words text-2xl font-semibold text-slate-950"
             data-testid="project-home-title"
           >
             {label}
           </h2>
-          <p className="break-all font-mono text-[11px] text-slate-500">
+          <p className="break-all font-mono text-xs text-slate-500">
             {copy.projectId}: {project.id}
           </p>
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
             <span
               className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-900"
               data-testid="project-home-status"
@@ -153,14 +158,14 @@ export function ProjectWorkspaceHome({
               {copy.projectCreatedOn} {created}
             </span>
           </div>
-          <p className="pt-1 text-xs leading-5 text-slate-600">
+          <p className="max-w-4xl pt-1 text-[15px] leading-6 text-slate-600">
             {copy.projectHomeSubtitle}
           </p>
         </header>
 
         {temporaryGuestProject ? (
           <p
-            className="rounded-xl border border-slate-200 bg-white p-3 text-[11px] leading-5 text-slate-600"
+            className="rounded-xl border border-slate-200 bg-white p-3 text-[15px] leading-6 text-slate-600"
             data-testid="project-home-guest-notice"
             role="note"
           >
@@ -179,8 +184,8 @@ export function ProjectWorkspaceHome({
               aria-selected={view === tab}
               className={
                 view === tab
-                  ? "rounded-t-lg border-b-2 border-blue-800 px-3 py-2 text-xs font-semibold text-blue-950"
-                  : "rounded-t-lg border-b-2 border-transparent px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  ? "rounded-t-lg border-b-2 border-blue-800 px-3.5 py-2 text-sm font-semibold text-blue-950"
+                  : "rounded-t-lg border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
               }
               data-testid={`project-view-tab-${tab}`}
               disabled={navigationBusy}
@@ -230,7 +235,7 @@ export function ProjectWorkspaceHome({
               summaryState={summaryState}
             />
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-slate-950">
+              <h3 className="text-lg font-semibold text-slate-950">
                 {copy.projectHomeNextSteps}
               </h3>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -241,14 +246,14 @@ export function ProjectWorkspaceHome({
                   onClick={() => onSelectView("applications")}
                   type="button"
                 >
-                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
                     <School
                       aria-hidden="true"
                       className="size-4 text-slate-500"
                     />
                     {copy.projectSchoolApplicationsTab}
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-600">
+                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
                     {applicationsReady
                       ? copy.projectHomeOpenApplications
                       : schoolPreparationRestricted
@@ -263,14 +268,14 @@ export function ProjectWorkspaceHome({
                   onClick={() => onSelectView("admissions")}
                   type="button"
                 >
-                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
                     <GraduationCap
                       aria-hidden="true"
                       className="size-4 text-slate-500"
                     />
                     {copy.projectSchoolAdmissionsTab}
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-600">
+                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
                     {admissionsReady
                       ? copy.projectHomeOpenAdmissions
                       : schoolPreparationRestricted
@@ -285,14 +290,14 @@ export function ProjectWorkspaceHome({
                   onClick={() => onSelectView("student500")}
                   type="button"
                 >
-                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
                     <BookOpenCheck
                       aria-hidden="true"
                       className="size-4 text-slate-500"
                     />
                     {copy.projectStudent500Tab}
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-600">
+                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
                     {student500Ready
                       ? copy.projectHomeOpenStudent500
                       : schoolPreparationRestricted
@@ -309,7 +314,7 @@ export function ProjectWorkspaceHome({
             >
               {copy.projectHomeLimits}
             </p>
-            <p className="text-[11px] leading-5 text-slate-600">
+            <p className="text-xs leading-5 text-slate-600">
               {copy.projectHomeChatsHint}
             </p>
           </div>
@@ -324,7 +329,7 @@ export function ProjectWorkspaceHome({
                 projectId={project.id}
               />
             ) : (
-              <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">
+              <p className="rounded-xl border border-slate-200 bg-white p-4 text-[15px] leading-6 text-slate-600">
                 <FolderLock
                   aria-hidden="true"
                   className="mr-1 inline size-3.5 text-slate-500"
@@ -346,7 +351,7 @@ export function ProjectWorkspaceHome({
                 projectId={project.id}
               />
             ) : (
-              <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">
+              <p className="rounded-xl border border-slate-200 bg-white p-4 text-[15px] leading-6 text-slate-600">
                 <FolderLock
                   aria-hidden="true"
                   className="mr-1 inline size-3.5 text-slate-500"
@@ -369,7 +374,7 @@ export function ProjectWorkspaceHome({
                 projectId={project.id}
               />
             ) : (
-              <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs leading-5 text-slate-600">
+              <p className="rounded-xl border border-slate-200 bg-white p-4 text-[15px] leading-6 text-slate-600">
                 <FolderLock
                   aria-hidden="true"
                   className="mr-1 inline size-3.5 text-slate-500"

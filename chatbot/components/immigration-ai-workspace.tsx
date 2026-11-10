@@ -2201,26 +2201,32 @@ export function ImmigrationAIWorkspace({
 
   return (
     <section
-      className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-col px-3 pb-4 pt-3 sm:px-6 lg:px-8 xl:h-full"
+      className="flex min-h-0 w-full flex-col px-3 pb-3 pt-2 sm:px-4 lg:px-6 xl:h-full"
       id="ai-workspace"
     >
-      <header className="mb-3 flex flex-col gap-3 rounded-2xl bg-[#001736] px-4 py-3 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-cyan-200">
-            <Bot className="size-4" />
+      {/*
+        Layout correction: the AI Workspace previously sat inside `mx-auto max-w-[1600px]`,
+        which left large unused gutters on wide desktop displays. It is now a full-width
+        surface with modest gutters so the Project content (region E) can actually use the
+        screen. Public marketing pages keep their own max-widths and are unaffected.
+      */}
+      <header className="mb-2 flex flex-col gap-2 rounded-xl bg-[#001736] px-3 py-2 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-cyan-200">
+            <Bot className="size-3.5" />
           </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+            <h1 className="truncate text-sm font-semibold">
               {copy.identity.title}
             </h1>
-            <p className="truncate text-xs text-slate-300">
+            <p className="truncate text-[11px] text-slate-300">
               {copy.identity.subtitle}
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-200">
-          <span aria-live="polite" className="inline-flex items-center gap-2">
-            <span className="size-2 rounded-full bg-emerald-300" />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-200">
+          <span aria-live="polite" className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-300" />
             <span>
               {copy.status.label} · {statusText(status, copy)}
             </span>
@@ -2287,10 +2293,17 @@ export function ImmigrationAIWorkspace({
         </div>
       )}
 
-      <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[250px_minmax(0,1fr)_290px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
+      {/*
+        Layout correction: main-content priority. The left rail and the right materials
+        panel previously took 250px + 290px of a 1600px viewport before any padding. They
+        are now narrower (210px + 220px) so the centre column — where the Project workspace
+        actually lives — receives substantially more width. Breakpoint behaviour is
+        unchanged: a single column below `xl`, three columns from `xl`.
+      */}
+      <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[210px_minmax(0,1fr)_220px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
         <aside
           className={cn(
-            "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4",
+            "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
             isWideViewport || activePanel === "history" ? "block" : "hidden",
             isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
           )}
@@ -2499,87 +2512,96 @@ export function ImmigrationAIWorkspace({
               : "h-[min(66dvh,620px)] min-h-[320px]"
           )}
         >
-          <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="inline-flex items-center gap-2 text-xs text-slate-500">
-                  <span className="inline-flex size-2 rounded-full bg-emerald-400" />
-                  {isNeutralProjectSelection
-                    ? copy.projectEntry.selectedProject
-                    : copy.consultation.status}
-                </p>
-                <h2 className="mt-1 text-base font-semibold text-slate-950">
-                  {isNeutralProjectSelection && selectedProjectId
-                    ? `${copy.projectEntry.selectedProject} · #${selectedProjectId.slice(0, 8)}`
-                    : copy.consultation.title}
-                </h2>
-                {conversationOrigin === "project" && selectedProjectId ? (
-                  <button
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-900 underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
-                    data-testid="return-to-project-home"
-                    disabled={projectNavigationBusy}
-                    onClick={returnToProjectHome}
-                    title={
-                      projectNavigationBusy
-                        ? copy.projectEntry.openingChat
-                        : copy.projectEntry.returnToProjectHome
-                    }
-                    type="button"
-                  >
-                    <ArrowLeft aria-hidden="true" className="size-3.5" />
-                    {copy.projectEntry.returnToProjectHome}
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {isNeutralProjectSelection && selectedProjectId ? (
+          {/*
+            Layout correction: in Project-home mode the workspace home renders its own
+            complete Project header (title, id, status, created date), so this strip is
+            omitted instead of repeating the same Project identity a third time. Project
+            Chat keeps it, because there the strip owns the conversation status, the
+            read-only/legacy badges and the explicit return-to-project-home control.
+          */}
+          {isNeutralProjectSelection && selectedProject ? null : (
+            <div className="border-b border-slate-100 px-4 py-2 sm:px-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="inline-flex items-center gap-2 text-xs text-slate-500">
+                    <span className="inline-flex size-2 rounded-full bg-emerald-400" />
+                    {isNeutralProjectSelection
+                      ? copy.projectEntry.selectedProject
+                      : copy.consultation.status}
+                  </p>
+                  <h2 className="mt-1 text-base font-semibold text-slate-950">
+                    {isNeutralProjectSelection && selectedProjectId
+                      ? `${copy.projectEntry.selectedProject} · #${selectedProjectId.slice(0, 8)}`
+                      : copy.consultation.title}
+                  </h2>
+                  {conversationOrigin === "project" && selectedProjectId ? (
+                    <button
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-900 underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+                      data-testid="return-to-project-home"
+                      disabled={projectNavigationBusy}
+                      onClick={returnToProjectHome}
+                      title={
+                        projectNavigationBusy
+                          ? copy.projectEntry.openingChat
+                          : copy.projectEntry.returnToProjectHome
+                      }
+                      type="button"
+                    >
+                      <ArrowLeft aria-hidden="true" className="size-3.5" />
+                      {copy.projectEntry.returnToProjectHome}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {isNeutralProjectSelection && selectedProjectId ? (
+                    <Badge
+                      className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
+                      data-testid="selected-project-header-badge"
+                      title={`${copy.projectEntry.projectId}: ${selectedProjectId}`}
+                      variant="secondary"
+                    >
+                      {copy.projectEntry.projectId} #
+                      {selectedProjectId.slice(0, 8)}
+                    </Badge>
+                  ) : isReadOnlyConversation ? (
+                    <Badge
+                      className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
+                      data-testid={
+                        conversationOrigin === "project"
+                          ? "project-chat-read-only-header-badge"
+                          : "legacy-conversation-header-badge"
+                      }
+                      variant="secondary"
+                    >
+                      {conversationOrigin === "project"
+                        ? copy.projectChat.readOnlyBadge
+                        : copy.legacy.badge}
+                    </Badge>
+                  ) : conversationOrigin === "project" ? (
+                    <Badge
+                      className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
+                      data-testid="project-chat-header-badge"
+                      variant="secondary"
+                    >
+                      {copy.projectChat.badge}
+                    </Badge>
+                  ) : null}
                   <Badge
-                    className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
-                    data-testid="selected-project-header-badge"
-                    title={`${copy.projectEntry.projectId}: ${selectedProjectId}`}
+                    className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
                     variant="secondary"
                   >
-                    {copy.projectEntry.projectId} #
-                    {selectedProjectId.slice(0, 8)}
+                    {copy.consultation.generalInformation}
                   </Badge>
-                ) : isReadOnlyConversation ? (
                   <Badge
-                    className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
-                    data-testid={
-                      conversationOrigin === "project"
-                        ? "project-chat-read-only-header-badge"
-                        : "legacy-conversation-header-badge"
-                    }
+                    className="rounded-full bg-cyan-50 text-[10px] text-cyan-800 hover:bg-cyan-50"
                     variant="secondary"
                   >
-                    {conversationOrigin === "project"
-                      ? copy.projectChat.readOnlyBadge
-                      : copy.legacy.badge}
+                    {copy.consultation.australiaFocus}
                   </Badge>
-                ) : conversationOrigin === "project" ? (
-                  <Badge
-                    className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
-                    data-testid="project-chat-header-badge"
-                    variant="secondary"
-                  >
-                    {copy.projectChat.badge}
-                  </Badge>
-                ) : null}
-                <Badge
-                  className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
-                  variant="secondary"
-                >
-                  {copy.consultation.generalInformation}
-                </Badge>
-                <Badge
-                  className="rounded-full bg-cyan-50 text-[10px] text-cyan-800 hover:bg-cyan-50"
-                  variant="secondary"
-                >
-                  {copy.consultation.australiaFocus}
-                </Badge>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {isNeutralProjectSelection ? (
             selectedProject ? (
@@ -3179,7 +3201,7 @@ export function ImmigrationAIWorkspace({
         {isNeutralProjectSelection ? (
           <aside
             className={cn(
-              "order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4",
+              "order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
               isWideViewport || activePanel === "caseSummary"
                 ? "block"
                 : "hidden",
@@ -3212,7 +3234,7 @@ export function ImmigrationAIWorkspace({
         ) : (
           <aside
             className={cn(
-              "order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-4 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-4",
+              "order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
               isWideViewport ||
                 activePanel === "conversationFiles" ||
                 activePanel === "accountFiles" ||

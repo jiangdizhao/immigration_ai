@@ -137,9 +137,21 @@ test("Back navigation is a visible, keyboard-accessible full-width button above 
     /disabled=\{projectEntryButtonDisabled\(navigationBusy\)\}/u
   );
   assert.match(projectPanelSource, /break-all font-mono/u);
+  /*
+    Layout correction (post-Phase-13 desktop workspace task): the desktop grid keeps
+    the same three-region contract — a bounded left rail, a flexible centre column and
+    a bounded right rail — but the rails were narrowed (250/290 → 210/220) so the
+    centre, where the Project workspace lives, receives substantially more width. The
+    assertion pins the *contract* (fixed rails + `minmax(0,1fr)` centre), not the old
+    pixel values.
+  */
   assert.match(
     workspaceSource,
-    /xl:grid-cols-\[250px_minmax\(0,1fr\)_290px\]/u
+    /xl:grid-cols-\[\d+px_minmax\(0,1fr\)_\d+px\]/u
+  );
+  assert.match(
+    workspaceSource,
+    /xl:grid-cols-\[210px_minmax\(0,1fr\)_220px\]/u
   );
   assert.match(workspaceSource, /grid min-w-0 grid-cols-1/u);
   assert.match(projectPanelSource, /min-w-0 flex-1 text-left leading-4/u);

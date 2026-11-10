@@ -44,15 +44,13 @@ function DimensionRow({
       data-testid={testId}
     >
       <div className="flex flex-wrap items-center justify-between gap-1">
-        <span className="text-[11px] font-semibold text-slate-800">
-          {heading}
-        </span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+        <span className="text-sm font-semibold text-slate-800">{heading}</span>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
           {label(labels, dimension.state, dimension.state)}
         </span>
       </div>
       {dimension.reasonCode ? (
-        <p className="mt-1 text-[10px] leading-4 text-slate-600">
+        <p className="mt-1 text-[11px] leading-4 text-slate-600">
           {label(copy.reason, dimension.reasonCode, dimension.reasonCode)}
         </p>
       ) : null}
@@ -143,21 +141,21 @@ export function ProjectReviewPanel({
       data-testid="project-review-panel"
     >
       <header className="space-y-1">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-slate-950">
           <Scale aria-hidden="true" className="size-4" />
           {copy.heading}
         </h3>
-        <p className="text-xs leading-5 text-slate-600">{copy.subtitle}</p>
-        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900">
+        <p className="text-sm leading-5 text-slate-600">{copy.subtitle}</p>
+        <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900">
           {copy.notice}
         </p>
       </header>
 
       {snapshot.loading ? (
-        <p className="text-xs text-slate-500">{copy.loading}</p>
+        <p className="text-sm text-slate-500">{copy.loading}</p>
       ) : null}
       {snapshot.error ? (
-        <p className="text-xs text-red-700" role="alert">
+        <p className="text-sm text-red-700" role="alert">
           {copy.error}
         </p>
       ) : null}
@@ -169,7 +167,7 @@ export function ProjectReviewPanel({
           Project. The reason is the server's own stable code.
         */
         <p
-          className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-900"
+          className="rounded-lg bg-amber-50 px-2 py-1.5 text-sm leading-4 text-amber-900"
           data-state={review.artifactSource.state}
           data-testid="project-review-source-state"
         >
@@ -196,7 +194,7 @@ export function ProjectReviewPanel({
           the notice above already says so, and claiming the Project is empty next to it
           would contradict it.
         */
-        <p className="rounded-lg bg-white p-3 text-xs leading-5 text-slate-600">
+        <p className="rounded-lg bg-white p-3 text-sm leading-5 text-slate-600">
           {copy.empty}
         </p>
       ) : null}
@@ -205,11 +203,11 @@ export function ProjectReviewPanel({
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-slate-900">
+              <h4 className="text-sm font-semibold text-slate-900">
                 {copy.selectedHeading}
               </h4>
               <button
-                className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+                className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
                 data-testid="project-review-retry"
                 disabled={snapshot.loading}
                 onClick={() => {
@@ -251,18 +249,18 @@ export function ProjectReviewPanel({
                       type="button"
                     >
                       <span className="flex flex-wrap items-center justify-between gap-1">
-                        <span className="text-[11px] font-semibold text-slate-900">
+                        <span className="text-sm font-semibold text-slate-900">
                           {label(
                             copy.kindLabel,
                             item.artifactKind,
                             item.artifactKind
                           )}
                         </span>
-                        <span className="font-mono text-[10px] text-slate-500">
+                        <span className="font-mono text-[11px] text-slate-500">
                           v{item.exactVersion.targetVersion}
                         </span>
                       </span>
-                      <span className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      <span className="mt-1 flex flex-wrap gap-1 text-[11px]">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
                           {copy.aiCheckLabel}:{" "}
                           {label(
@@ -289,7 +287,7 @@ export function ProjectReviewPanel({
                         </span>
                       </span>
                       {item.stale ? (
-                        <span className="mt-1 block text-[10px] text-amber-900">
+                        <span className="mt-1 block text-[11px] text-amber-900">
                           {copy.staleNote}
                         </span>
                       ) : null}
@@ -299,7 +297,7 @@ export function ProjectReviewPanel({
               })}
             </ul>
             {review.truncated ? (
-              <p className="text-[10px] text-slate-500">{copy.truncatedNote}</p>
+              <p className="text-[11px] text-slate-500">{copy.truncatedNote}</p>
             ) : null}
           </div>
 
@@ -307,14 +305,14 @@ export function ProjectReviewPanel({
             {selected ? (
               <>
                 <div className="rounded-lg border border-slate-200 bg-white p-2">
-                  <p className="text-[11px] font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900">
                     {label(
                       copy.kindLabel,
                       selected.artifactKind,
                       selected.artifactKind
                     )}
                   </p>
-                  <dl className="mt-1 space-y-0.5 text-[10px] text-slate-600">
+                  <dl className="mt-1 space-y-0.5 text-[11px] text-slate-600">
                     <div className="flex justify-between gap-2">
                       <dt>{copy.versionLabel}</dt>
                       <dd className="font-mono">
@@ -346,7 +344,7 @@ export function ProjectReviewPanel({
                   className="space-y-1"
                   data-testid="project-review-dimensions"
                 >
-                  <p className="text-[11px] font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900">
                     {copy.dimensionsHeading}
                   </p>
                   <DimensionRow
@@ -374,7 +372,7 @@ export function ProjectReviewPanel({
 
                 <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <button
-                    className="w-full rounded-lg bg-[#001736] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="w-full rounded-lg bg-[#001736] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                     data-testid="project-review-request"
                     disabled={
                       requestBusy || !selected.requestEligibility.allowed
@@ -388,7 +386,7 @@ export function ProjectReviewPanel({
                   </button>
                   {selected.requestEligibility.allowed ? null : (
                     <p
-                      className="mt-1 flex items-start gap-1 text-[10px] leading-4 text-amber-900"
+                      className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-amber-900"
                       data-testid="project-review-request-blocked"
                     >
                       <ShieldAlert
@@ -407,18 +405,18 @@ export function ProjectReviewPanel({
                   )}
                   {snapshot.request.status === "recorded" ? (
                     <>
-                      <p className="mt-1 text-[10px] leading-4 text-emerald-800">
+                      <p className="mt-1 text-[11px] leading-4 text-emerald-800">
                         {copy.requestRecorded} ·{" "}
                         {snapshot.request.reviewRequestId.slice(0, 8)}…
                       </p>
-                      <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                      <p className="mt-1 text-[11px] leading-4 text-slate-500">
                         {copy.requestHistoryNote}
                       </p>
                     </>
                   ) : null}
                   {snapshot.request.status === "blocked" ? (
                     <p
-                      className="mt-1 text-[10px] leading-4 text-amber-900"
+                      className="mt-1 text-[11px] leading-4 text-amber-900"
                       data-testid="project-review-request-state"
                     >
                       {copy.requestBlocked}:{" "}
@@ -430,22 +428,22 @@ export function ProjectReviewPanel({
                     </p>
                   ) : null}
                   {snapshot.request.status === "failed" ? (
-                    <p className="mt-1 text-[10px] leading-4 text-red-700">
+                    <p className="mt-1 text-[11px] leading-4 text-red-700">
                       {copy.error}
                     </p>
                   ) : null}
                 </div>
 
-                <p className="flex items-start gap-1 text-[10px] leading-4 text-slate-500">
+                <p className="flex items-start gap-1 text-[11px] leading-4 text-slate-500">
                   <ShieldCheck aria-hidden="true" className="mt-0.5 size-3" />
                   <span>{copy.approvalsAreExactVersion}</span>
                 </p>
-                <p className="text-[10px] leading-4 text-slate-500">
+                <p className="text-[11px] leading-4 text-slate-500">
                   {copy.notLegalAdvice}
                 </p>
                 {onOpenOwnerView ? (
                   <button
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700"
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
                     onClick={() => onOpenOwnerView(selected.ownerView)}
                     type="button"
                   >
@@ -454,7 +452,7 @@ export function ProjectReviewPanel({
                 ) : null}
               </>
             ) : (
-              <p className="rounded-lg bg-white p-3 text-[11px] leading-5 text-slate-600">
+              <p className="rounded-lg bg-white p-3 text-sm leading-5 text-slate-600">
                 {copy.subtitle}
               </p>
             )}
