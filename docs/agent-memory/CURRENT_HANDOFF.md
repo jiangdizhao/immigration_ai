@@ -1,3 +1,22 @@
+<!-- BEGIN PHASE13_AWS_FRIENDS_PREVIEW_PREFLIGHT_2026_11_10 -->
+## Phase 13 AWS Friends Preview preflight — read-only audit complete, deployment NOT authorized
+
+**Status:** `PHASE13_AWS_FRIENDS_PREVIEW_PREFLIGHT_COMPLETE_DEPLOYMENT_NOT_AUTHORIZED`. **Zero AWS mutations** were performed: every call was a read-only `describe`/`list`/`get-*`. No task, service, image, database, migration, networking, DNS, TLS, secret, Stripe, scheduler or IAM change occurred, and no secret/parameter value or CloudWatch log event was read. `M10_ENGINEERING_ACCEPTED_WITH_LIMITATIONS` and **`LIVE_PRODUCTION_NO_GO`** are unchanged; deployment authorization was **not** granted and this checkpoint does not imply it.
+
+**Source baseline (verified):** branch `phase13-m9-integrated-workspace`, HEAD `404849c37b753544e243c82804d1e6e1f1caaa39` (owner-accepted layout correction), clean worktree, HEAD == origin.
+
+**AWS identity (verified read-only):** account `747452892291`, principal `arn:aws:iam::747452892291:user/immigration-ai-deployer`, region `ap-southeast-2`, profile `aulawyers-staging` — matches the historical record.
+
+**The staging environment is healthy but is NOT running Phase 13.** One cluster `immigration-ai-staging` hosts `immigration-ai-staging-web` (TD **:48**, 1/1, rollout COMPLETED, circuit breaker + rollback on) and `immigration-ai-staging-malware-reconciler` (TD :1, 1/1). The web task's `chatbot` image is digest `sha256:63d11ab6…`, tagged `phase13-chatbot-ed39eef-20261101` ⇒ commit `ed39eef`, **17 commits behind HEAD**, whose migration journal head is **0047**. Current source requires **six additive migrations (0048–0053)**; the actual AWS ledger head is **`AWS_DATABASE_MIGRATION_HEAD_NOT_VERIFIED`** because no authorized read-only SQL path exists.
+
+**Critical blockers recorded:** (1) **`PAYMENT_ISOLATION_NOT_VERIFIED`** — the running staging task binds `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` to `/immigration-ai/**production**/chatbot/*` SSM paths, matching the October live-mode incident, while dedicated `staging/chatbot/stripe-*` parameters exist unused; (2) no preview database/role exists, and the app DB and `immigration_legal` corpus share the encrypted instance `immigration-ai-staging-postgres-secure` (PG **18.3**); (3) **no Route53 hosted zone in this account** and no certificate for a preview host; (4) **no WAF**, so an obscure hostname is not an access control; (5) daily Policy Sync (`cron(0 6 * * ? *)` Australia/Sydney, ENABLED, TD `policy-sync:11`) and the malware reconciler both share `POSTGRES_URL` and must not be duplicated for the preview. Secondary observations: one RDS instance is `PubliclyAccessible=true` and unencrypted; both ECR repos have MUTABLE tags (task definitions are digest-pinned); 20 SSM parameters and no Secrets Manager entries; all 17 `PHASE13_*` feature gates are absent from the task definition, i.e. OFF.
+
+**Recommended architecture:** Option A — reuse the cluster and the existing internet-facing ALB (`immigration-ai-staging-alb`, 443 + ACM `staging.aulawyers.au`, single default rule) and add **one preview ECS service + new target group + host rule**, a **new `chatbot_preview` database with a least-privilege role** on the existing encrypted instance, preview-only SSM parameters, **no Stripe bindings**, no scheduler, no reconciler, no document pipeline. Option B (separate RDS instance) is the stricter alternative. Option C (reuse the staging `chatbot` DB) is rejected.
+
+**Deliverables:** `~/phase13_aws_friends_preview_preflight_report.md` (15 sections incl. the 14-category readiness matrix and 8 blockers) and `~/phase13_aws_friends_preview_deployment_plan.md` (11 steps, every state-changing action labelled `NOT EXECUTED — REQUIRES OWNER APPROVAL`, 12 approval checkpoints). `CURRENT_MILESTONE.md`, `PROJECT_STATE.md` and `DECISIONS.md` were deliberately left unchanged so no deployment approval is implied.
+<!-- END PHASE13_AWS_FRIENDS_PREVIEW_PREFLIGHT_2026_11_10 -->
+
+
 <!-- BEGIN PHASE13_WORKSPACE_LAYOUT_CORRECTION_2026_11_11 -->
 ## Post-Phase-13 desktop Workspace layout and readability correction (implemented, pending owner visual acceptance)
 
