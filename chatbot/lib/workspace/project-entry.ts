@@ -57,7 +57,7 @@ type FetchLike = (
 ) => Promise<Response> | Response;
 
 type ProjectListResponse = { projects?: unknown };
-type ProjectRefreshResult =
+export type ProjectRefreshResult =
   | { kind: "success"; projects: ProjectEntryProject[] }
   | { kind: "authorization_denied" }
   | { kind: "transient_failure" }
@@ -204,6 +204,133 @@ export async function openSelectedProjectChat(input: {
   }
   await input.onOpen(input.chatId);
   return true;
+}
+
+/**
+ * Phase 14-A: the mobile navigation Sheet mounts `ProjectEntryPanel` afresh each
+ * time it opens, so its controller starts with no selection. The Workspace's
+ * selected Project remains the source of truth; publishing that empty initial
+ * snapshot would clear the Project and drop its Project Chat. This decides what a
+ * fresh panel may do once the authorized project list has been read:
+ *
+ * - `seed` — the Workspace's Project is still offered, so adopt it silently.
+ * - `settled` — the read was authorized and no longer offers it, so the panel may
+ *   publish its (genuinely) empty selection.
+ * - `unresolved` — the list could not be read. That is not proof that the Project
+ *   was withdrawn, so the panel keeps the Workspace's selection and publishes
+ *   nothing until the actor picks a Project explicitly.
+ */
+export function resolveProjectEntrySelectionSeed(input: {
+  initialSelectedProjectId: string | null;
+  projectListResult: ProjectRefreshResult | null;
+  projects: readonly ProjectEntryProject[];
+}): "seed" | "settled" | "unresolved" {
+  const initial = input.initialSelectedProjectId;
+  if (initial === null) {
+    return "settled";
+  }
+  if (input.projects.some((project) => project.id === initial)) {
+    return "seed";
+  }
+  const kind =
+    input.projectListResult === null ? null : input.projectListResult.kind;
+  if (kind === null || kind === "transient_failure" || kind === "superseded") {
+    return "unresolved";
+  }
+  return "settled";
+}
+
+/** The outcome of resolving a fresh panel's selection (see the resolver above). */
+export type ProjectEntrySelectionOutcome = "seed" | "settled" | "unresolved";
+
+/**
+ * The small part of the Project entry controller the reconciliation needs. Kept
+ * structural so the decision can be exercised without a React tree or a network.
+ */
+type ProjectEntrySelectionController = {
+  getSnapshot: () => Pick<ProjectEntryState, "projects">;
+  refreshProjects: () => Promise<ProjectRefreshResult>;
+  selectProject: (projectId: string | null) => Promise<void>;
+};
+
+/**
+ * Phase 14-A R1-01: resolve a freshly mounted panel's selection against the
+ * authorized project list.
+ *
+ * The consumer is a React effect that may be cleaned up and re-run while the first
+ * attempt is still in flight (StrictMode double-invocation, or a dependency
+ * change). A one-shot "already started" latch is therefore wrong: the cancelled
+ * attempt could leave the panel permanently unresolved. This is a single-flight
+ * instead —
+ *
+ * - repeated/concurrent calls share one attempt, so a re-run neither duplicates the
+ *   read nor loses the result;
+ * - only a *definitive* outcome (`seed`/`settled`) is remembered, so a cancelled
+ *   attempt can never suppress reconciliation;
+ * - an unreadable list stays `unresolved` and is retried by the next call instead
+ *   of being cached as "nothing is selected".
+ */
+export function createProjectEntrySelectionReconciler(input: {
+  controller: ProjectEntrySelectionController;
+  initialSelectedProjectId: string | null;
+  /**
+   * Phase 14-A R1-01: the panel reports that the actor has already decided the
+   * selection (an explicit pick or an explicit clear) while this attempt was in
+   * flight. Such a decision always wins over the mount-time seed, otherwise a slow
+   * project read could re-select a Project the customer just left.
+   */
+  isSelectionDecided?: () => boolean;
+}): { reconcile: () => Promise<ProjectEntrySelectionOutcome> } {
+  let inflight: Promise<ProjectEntrySelectionOutcome> | null = null;
+  let settled: ProjectEntrySelectionOutcome | null = null;
+
+  const reconcileOnce = async (): Promise<ProjectEntrySelectionOutcome> => {
+    const result = await input.controller.refreshProjects().catch(() => null);
+    const outcome = resolveProjectEntrySelectionSeed({
+      initialSelectedProjectId: input.initialSelectedProjectId,
+      projectListResult: result,
+      projects: input.controller.getSnapshot().projects,
+    });
+    const selectionDecided = input.isSelectionDecided?.() ?? false;
+    if (
+      outcome === "seed" &&
+      input.initialSelectedProjectId &&
+      !selectionDecided
+    ) {
+      // Adopt the Workspace's Project silently: it is the same Project, so no
+      // section reset and no Project Chat drop.
+      await input.controller
+        .selectProject(input.initialSelectedProjectId)
+        .catch(() => undefined);
+    }
+    return outcome;
+  };
+
+  return {
+    reconcile() {
+      if (settled !== null) {
+        return Promise.resolve(settled);
+      }
+      if (inflight) {
+        return inflight;
+      }
+      const attempt = reconcileOnce().then(
+        (outcome) => {
+          inflight = null;
+          if (outcome !== "unresolved") {
+            settled = outcome;
+          }
+          return outcome;
+        },
+        (error: unknown) => {
+          inflight = null;
+          throw error;
+        }
+      );
+      inflight = attempt;
+      return attempt;
+    },
+  };
 }
 
 export function createProjectEntryController(input: {

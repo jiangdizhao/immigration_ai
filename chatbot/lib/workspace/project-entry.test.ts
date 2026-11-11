@@ -12,12 +12,16 @@ import { shouldApplyConversationDetail } from "./conversation-origin";
 import {
   buildStandaloneConversationRequest,
   createProjectEntryController,
+  createProjectEntrySelectionReconciler,
   isProjectNavigationBusy,
   openSelectedProjectChat,
   type ProjectEntryCopy,
+  type ProjectEntryProject,
+  type ProjectRefreshResult,
   projectEntryButtonDisabled,
   projectEntryControlsEnabled,
   projectEntryErrorMessage,
+  resolveProjectEntrySelectionSeed,
   runProjectNavigationAction,
   shouldApplyProjectChatResponse,
   shouldShowNeutralProjectSelection,
@@ -1054,5 +1058,290 @@ test("a delayed conversation response cannot repaint after a Project reset", () 
       loadedChatId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     }),
     true
+  );
+});
+
+test("a freshly mounted Project panel adopts the Workspace selection instead of clearing it", () => {
+  /**
+   * Phase 14-A: the mobile navigation Sheet mounts ProjectEntryPanel each time it
+   * opens, so its controller starts with no selection. The Workspace's Project is
+   * still the source of truth: publishing that empty snapshot would clear the
+   * Project and drop its Project Chat.
+   */
+  const listed = [project(projectA)] as ProjectEntryProject[];
+  assert.equal(
+    resolveProjectEntrySelectionSeed({
+      initialSelectedProjectId: projectA,
+      projectListResult: { kind: "success", projects: listed },
+      projects: listed,
+    }),
+    "seed",
+    "an authorized Project must be re-adopted, not cleared"
+  );
+  assert.equal(
+    resolveProjectEntrySelectionSeed({
+      initialSelectedProjectId: null,
+      projectListResult: { kind: "success", projects: listed },
+      projects: listed,
+    }),
+    "settled",
+    "a panel with no Workspace selection settles immediately"
+  );
+  const otherList = [project(projectB)] as ProjectEntryProject[];
+  assert.equal(
+    resolveProjectEntrySelectionSeed({
+      initialSelectedProjectId: projectA,
+      projectListResult: { kind: "success", projects: otherList },
+      projects: otherList,
+    }),
+    "settled",
+    "a Project the authorized list no longer offers is genuinely gone"
+  );
+  assert.equal(
+    resolveProjectEntrySelectionSeed({
+      initialSelectedProjectId: projectA,
+      projectListResult: { kind: "authorization_denied" },
+      projects: [],
+    }),
+    "settled",
+    "a denied read is a real answer: that selection cannot stand"
+  );
+  for (const projectListResult of [
+    null,
+    { kind: "transient_failure" as const },
+    { kind: "superseded" as const },
+  ]) {
+    assert.equal(
+      resolveProjectEntrySelectionSeed({
+        initialSelectedProjectId: projectA,
+        projectListResult,
+        projects: [],
+      }),
+      "unresolved",
+      "an unreadable list is not proof that the Project was withdrawn"
+    );
+  }
+  // The panel stays silent until it is ready, and the Sheet hands it the
+  // Workspace's selection instead of letting a fresh controller invent one.
+  assert.match(
+    projectPanelSource,
+    /selectedProjectId: initialSelectedProjectId = null/u
+  );
+  assert.match(
+    projectPanelSource,
+    /const \[selectionReady, setSelectionReady\] = useState\(/u
+  );
+  assert.match(projectPanelSource, /if \(!selectionReady\) \{\s*return;/u);
+  assert.match(workspaceSource, /selectedProjectId=\{selectedProjectId\}/u);
+});
+
+/**
+ * Phase 14-A R1-01: a structural fake of the Project entry controller, so the
+ * reconciliation can be exercised without React, a network or a database.
+ */
+function fakeSelectionController(input: {
+  refresh: () => Promise<ProjectRefreshResult>;
+}) {
+  const selections: (string | null)[] = [];
+  // Mirrors the real controller: the visible project list is whatever the last
+  // authorized read produced, so a failed read leaves it unchanged.
+  let projects: ProjectEntryProject[] = [];
+  return {
+    controller: {
+      getSnapshot: () => ({ projects }),
+      refreshProjects: async () => {
+        const result = await input.refresh();
+        if (result.kind === "success") {
+          projects = result.projects;
+        }
+        return result;
+      },
+      selectProject: (projectId: string | null) => {
+        selections.push(projectId);
+        return Promise.resolve();
+      },
+    },
+    selections,
+  };
+}
+
+test("an interrupted first reconciliation still resolves the panel", async () => {
+  const listed = [project(projectA)] as ProjectEntryProject[];
+  let refreshCalls = 0;
+  const { controller, selections } = fakeSelectionController({
+    refresh: () => {
+      refreshCalls += 1;
+      return Promise.resolve<ProjectRefreshResult>({
+        kind: "success",
+        projects: listed,
+      });
+    },
+  });
+  const reconciler = createProjectEntrySelectionReconciler({
+    controller,
+    initialSelectedProjectId: projectA,
+  });
+
+  // The first effect run starts the read; the cleanup that follows abandons its
+  // result, and the re-run asks again before the first attempt has settled.
+  const firstRun = reconciler.reconcile();
+  const secondRun = reconciler.reconcile();
+
+  assert.equal(await firstRun, "seed");
+  assert.equal(await secondRun, "seed");
+  assert.equal(refreshCalls, 1, "one read serves both effect runs");
+  assert.deepEqual(
+    selections,
+    [projectA],
+    "the Workspace Project is adopted exactly once"
+  );
+});
+
+test("a settled reconciliation is not repeated", async () => {
+  const listed = [project(projectA)] as ProjectEntryProject[];
+  let refreshCalls = 0;
+  const { controller, selections } = fakeSelectionController({
+    refresh: () => {
+      refreshCalls += 1;
+      return Promise.resolve<ProjectRefreshResult>({
+        kind: "success",
+        projects: listed,
+      });
+    },
+  });
+  const reconciler = createProjectEntrySelectionReconciler({
+    controller,
+    initialSelectedProjectId: projectA,
+  });
+
+  assert.equal(await reconciler.reconcile(), "seed");
+  assert.equal(await reconciler.reconcile(), "seed");
+  assert.equal(refreshCalls, 1, "a definitive outcome is not re-attempted");
+  assert.deepEqual(selections, [projectA]);
+});
+
+test("an unreadable project list is retried instead of cached as empty", async () => {
+  const listed = [project(projectA)] as ProjectEntryProject[];
+  let refreshCalls = 0;
+  const { controller, selections } = fakeSelectionController({
+    refresh: () => {
+      refreshCalls += 1;
+      return Promise.resolve<ProjectRefreshResult>(
+        refreshCalls === 1
+          ? { kind: "transient_failure" }
+          : { kind: "success", projects: listed }
+      );
+    },
+  });
+  const reconciler = createProjectEntrySelectionReconciler({
+    controller,
+    initialSelectedProjectId: projectA,
+  });
+
+  assert.equal(await reconciler.reconcile(), "unresolved");
+  assert.deepEqual(
+    selections,
+    [],
+    "an unreadable list never clears the Project"
+  );
+  assert.equal(await reconciler.reconcile(), "seed");
+  assert.equal(refreshCalls, 2, "the retry performs a real second read");
+  assert.deepEqual(selections, [projectA]);
+});
+
+test("a Project the authorized list no longer offers settles instead of re-adopting", async () => {
+  const otherList = [project(projectB)] as ProjectEntryProject[];
+  const { controller, selections } = fakeSelectionController({
+    refresh: () =>
+      Promise.resolve<ProjectRefreshResult>({
+        kind: "success",
+        projects: otherList,
+      }),
+  });
+  const reconciler = createProjectEntrySelectionReconciler({
+    controller,
+    initialSelectedProjectId: projectA,
+  });
+
+  assert.equal(await reconciler.reconcile(), "settled");
+  assert.deepEqual(selections, [], "a withdrawn Project is not re-selected");
+});
+
+test("opening the Create Project dialog is not a Project selection", () => {
+  const dialogHandler = projectPanelSource.match(
+    /function openCreateProjectDialog\(\) \{[\s\S]*?\n {2}\}/u
+  )?.[0];
+  assert.ok(dialogHandler, "the dialog handler must exist");
+  assert.doesNotMatch(
+    dialogHandler,
+    /setSelectionReady/u,
+    "opening a dialog must never settle the selection"
+  );
+  // A real creation does settle it, because the server creates and selects it.
+  const createHandler = projectPanelSource.match(
+    /async function createProject\(\) \{[\s\S]*?\n {2}\}/u
+  )?.[0];
+  assert.ok(createHandler, "the create handler must exist");
+  assert.match(createHandler, /controller\.createProject\(\)/u);
+  assert.match(
+    createHandler,
+    /if \(project\) \{\s*selectionDecidedRef\.current = true;\s*setSelectionReady\(true\);/u,
+    "only a Project the server actually created settles the selection"
+  );
+});
+
+test("the panel reconciles through the single-flight reconciler", () => {
+  assert.match(
+    projectPanelSource,
+    /createProjectEntrySelectionReconciler\(\{/u,
+    "the panel must use the reconciler"
+  );
+  assert.doesNotMatch(
+    projectPanelSource,
+    /seedReconciledRef/u,
+    "the cancellable one-shot latch must be gone"
+  );
+  assert.match(
+    projectPanelSource,
+    /if \(!active \|\| outcome === "unresolved"\)/u,
+    "a cancelled or unresolved attempt must not settle the panel"
+  );
+  assert.match(
+    projectPanelSource,
+    /if \(!selectionReady\) \{\s*return;/u,
+    "an unresolved controller must never publish a selection"
+  );
+});
+
+test("an explicit decision made while the list is in flight is not overwritten by the seed", async () => {
+  const listed = [project(projectA)] as ProjectEntryProject[];
+  let resolveRefresh: ((value: ProjectRefreshResult) => void) | null = null;
+  const { controller, selections } = fakeSelectionController({
+    refresh: () =>
+      new Promise<ProjectRefreshResult>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+  });
+  let decided = false;
+  const reconciler = createProjectEntrySelectionReconciler({
+    controller,
+    initialSelectedProjectId: projectA,
+    isSelectionDecided: () => decided,
+  });
+
+  const pending = reconciler.reconcile();
+  // The actor clears or changes the Project while the read is still running.
+  decided = true;
+  const resolve = resolveRefresh as
+    | ((value: ProjectRefreshResult) => void)
+    | null;
+  assert.ok(resolve, "the refresh must be pending");
+  resolve({ kind: "success", projects: listed });
+
+  assert.equal(await pending, "seed");
+  assert.deepEqual(
+    selections,
+    [],
+    "the stale seed must not re-select the Project the actor just left"
   );
 });

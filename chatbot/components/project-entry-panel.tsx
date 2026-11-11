@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   createProjectEntryController,
+  createProjectEntrySelectionReconciler,
   openSelectedProjectChat,
   type ProjectEntryAvailability,
   type ProjectEntryChat,
@@ -92,6 +93,7 @@ export function ProjectEntryPanel({
   schoolPreparationRestricted = false,
   projectView = "home",
   onSelectProjectView,
+  selectedProjectId: initialSelectedProjectId = null,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
@@ -101,6 +103,12 @@ export function ProjectEntryPanel({
     projectId: string | null,
     project?: ProjectEntryProject | null
   ) => void;
+  /**
+   * Phase 14-A: the Workspace's current Project. The mobile navigation Sheet
+   * mounts this panel afresh each time it opens, so the panel adopts this
+   * selection instead of publishing an empty one that would clear the Project.
+   */
+  selectedProjectId?: string | null;
   /** Changed when global history or the Standalone action takes focus. */
   clearSelectionSignal: number;
   /** Mirrors the Workspace's conversation load and active-turn state. */
@@ -135,6 +143,33 @@ export function ProjectEntryPanel({
   const openingChatRef = useRef(false);
   const navigationBusyRef = useRef(navigationBusy);
   navigationBusyRef.current = navigationBusy;
+  /**
+   * Phase 14-A R1-01: set once the actor has genuinely decided the selection (an
+   * explicit pick, a Project the server created and selected, or an explicit clear
+   * from the Workspace). A pending reconciliation must never overwrite that
+   * decision with the mount-time seed.
+   */
+  const selectionDecidedRef = useRef(false);
+  /**
+   * Phase 14-A: the panel only publishes a selection once it knows one. A fresh
+   * mount (the mobile navigation Sheet) has no controller selection yet, and
+   * forwarding that empty snapshot would clear the Workspace's Project and drop
+   * its Project Chat.
+   *
+   * Phase 14-A R1-01: the reconciliation is a single-flight, not a one-shot latch,
+   * because the effect below may be cleaned up and re-run while the first attempt
+   * is still in flight. Only a definitive outcome settles this panel.
+   */
+  const [selectionReconciler] = useState(() =>
+    createProjectEntrySelectionReconciler({
+      controller,
+      initialSelectedProjectId,
+      isSelectionDecided: () => selectionDecidedRef.current,
+    })
+  );
+  const [selectionReady, setSelectionReady] = useState(
+    initialSelectedProjectId === null
+  );
   const controlsEnabled = projectEntryControlsEnabled(availability);
   const availabilityMessage = controlsEnabled
     ? null
@@ -150,6 +185,10 @@ export function ProjectEntryPanel({
   }
 
   function selectProject(projectId: string | null) {
+    // An explicit choice is always a real decision, even while the seed above is
+    // still unresolved.
+    selectionDecidedRef.current = true;
+    setSelectionReady(true);
     runWhenIdle(() =>
       controller.selectProject(projectId).catch(() => undefined)
     );
@@ -159,7 +198,32 @@ export function ProjectEntryPanel({
     if (!controlsEnabled) {
       return;
     }
+    /**
+     * Phase 14-A R1-01: opening the dialog is *not* a Project selection. Settling
+     * the reconciliation here would publish the controller's still-empty snapshot
+     * and could clear the Workspace's active Project or Project Chat. Only a real
+     * selection (an explicit pick, or a Project the server created and selected)
+     * settles it.
+     */
     runWhenIdle(() => controller.openCreateDialog());
+  }
+
+  /**
+   * Phase 14-A R1-01: creating a Project is a genuine selection change — the
+   * server creates it and the controller selects it — so it settles a still-pending
+   * reconciliation and may be published. A failed creation settles nothing.
+   */
+  async function createProject() {
+    const navigation = runWhenIdle(() => controller.createProject());
+    if (!navigation.allowed) {
+      return null;
+    }
+    const project = await navigation.result.catch(() => null);
+    if (project) {
+      selectionDecidedRef.current = true;
+      setSelectionReady(true);
+    }
+    return project;
   }
 
   useEffect(() => {
@@ -172,22 +236,50 @@ export function ProjectEntryPanel({
     if (!controlsEnabled) {
       return;
     }
-    controller.refreshProjects().catch(() => undefined);
-  }, [controller, controlsEnabled]);
+    /**
+     * Phase 14-A R1-01: this effect may be cleaned up and re-run while the first
+     * attempt is in flight. The reconciler is single-flight, so a re-run awaits the
+     * same attempt instead of starting a second read, and a cancelled attempt can
+     * never permanently suppress reconciliation.
+     */
+    let active = true;
+    selectionReconciler
+      .reconcile()
+      .then((outcome) => {
+        if (!active || outcome === "unresolved") {
+          return;
+        }
+        setSelectionReady(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [controlsEnabled, selectionReconciler]);
 
   const selectedProject = state.projects.find(
     (project) => project.id === state.selectedProjectId
   );
 
   useEffect(() => {
+    if (!selectionReady) {
+      return;
+    }
     onSelectedProjectChange(state.selectedProjectId, selectedProject ?? null);
-  }, [onSelectedProjectChange, selectedProject, state.selectedProjectId]);
+  }, [
+    onSelectedProjectChange,
+    selectedProject,
+    selectionReady,
+    state.selectedProjectId,
+  ]);
 
   useEffect(() => {
     if (appliedClearSignal.current === clearSelectionSignal) {
       return;
     }
     appliedClearSignal.current = clearSelectionSignal;
+    // An explicit Workspace-side clear is a real decision too.
+    selectionDecidedRef.current = true;
     controller.selectProject(null).catch(() => undefined);
   }, [clearSelectionSignal, controller]);
 
@@ -517,11 +609,11 @@ export function ProjectEntryPanel({
                 navigationBusy,
                 state.creatingProject
               )}
-              onClick={() =>
-                runWhenIdle(() =>
-                  controller.createProject().catch(() => undefined)
-                )
-              }
+              onClick={() => {
+                // Settles the reconciliation only when the server really created
+                // and selected the Project (see `createProject`).
+                createProject().catch(() => undefined);
+              }}
               type="button"
             >
               {state.creatingProject

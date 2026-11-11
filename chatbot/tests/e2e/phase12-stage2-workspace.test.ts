@@ -70,18 +70,20 @@ test("the message list keeps the primary reading area", async ({ page }) => {
   }
 });
 
-test("narrow viewports get labelled panels instead of a hidden context column", async ({
+test("narrow viewports reach the panels through the shared mobile navigation Sheet", async ({
   page,
 }) => {
   await openWorkspace(page);
   const viewport = page.viewportSize();
-  const tabs = page.getByTestId("workspace-panel-tabs");
   if ((viewport?.width ?? 0) < 1280) {
-    await expect(tabs).toBeVisible();
-    await expect(
-      page.getByTestId("workspace-panel-tab-conversationFiles")
-    ).toBeVisible();
-    await page.getByTestId("workspace-panel-tab-conversationFiles").click();
+    /**
+     * Phase 14-A: the cramped top tab strip is gone. The bottom bar opens the one
+     * shared Sheet, where the existing context panels are reachable.
+     */
+    const navigation = page.getByTestId("mobile-nav-navigation");
+    await expect(navigation).toBeVisible();
+    await navigation.click();
+    await expect(page.getByTestId("mobile-workspace-sheet")).toBeVisible();
     await expect(
       page.getByTestId("workspace-conversation-files")
     ).toBeVisible();
@@ -97,7 +99,8 @@ test("a guest sees an honest file hint instead of an authorisation error", async
   await openWorkspace(page);
   const viewport = page.viewportSize();
   if ((viewport?.width ?? 0) < 1280) {
-    await page.getByTestId("workspace-panel-tab-conversationFiles").click();
+    await page.getByTestId("mobile-nav-navigation").click();
+    await expect(page.getByTestId("mobile-workspace-sheet")).toBeVisible();
   }
   const guestHint = page
     .getByTestId("matter-documents-guest-hint")

@@ -26,6 +26,13 @@ function readSource(relativePath: string) {
 }
 
 const workspace = readSource("../../components/immigration-ai-workspace.tsx");
+const mobileNav = readSource(
+  "../../components/mobile-workspace-navigation.tsx"
+);
+const sheetPrimitive = readSource("../../components/ui/sheet.tsx");
+const projectWorkspaceHome = readSource(
+  "../../components/project-workspace-home.tsx"
+);
 const composerPanel = readSource("../../components/matter-documents-panel.tsx");
 const historyPanel = readSource(
   "../../components/user-document-history-panel.tsx"
@@ -163,29 +170,53 @@ test("the right context panel separates conversation files from account files", 
   assert.match(historyPanel, /labels\.extractionFinished/u);
 });
 
-test("narrow viewports get labelled panels instead of a forced side column", () => {
-  assert.match(workspace, /data-testid="workspace-panel-tabs"/u);
-  assert.match(workspace, /role="tablist"/u);
-  assert.match(workspace, /aria-selected=\{activePanel === panelId\}/u);
-  assert.match(workspace, /role="tab"/u);
+test("narrow viewports reach the panels through one shared mobile Sheet", () => {
+  /**
+   * Phase 14-A replaced the cramped top tab strip with one bottom navigation bar
+   * and one shared Sheet. The rails now render only at `xl`; below it the same
+   * existing components are reached through the Sheet, so no panel is stacked
+   * beneath the chat and no second Project controller exists.
+   */
+  assert.match(
+    mobileNav,
+    /data-testid="mobile-workspace-nav"/u,
+    "the mobile bottom bar must be the persistent surface"
+  );
+  for (const entry of ["conversations", "projectHome", "steps", "navigation"]) {
+    assert.match(
+      mobileNav,
+      new RegExp(`^  "${entry}",$`, "mu"),
+      `the bottom bar must offer exactly the approved "${entry}" entry`
+    );
+  }
+  assert.match(mobileNav, /aria-label=\{copy\.label\}/u);
+  assert.match(workspace, /<MobileWorkspaceNavigation/u);
+  assert.match(
+    workspace,
+    /<Sheet onOpenChange=\{setMobileSheetOpen\} open=\{mobileSheetOpen\}>/u,
+    "exactly one shared Sheet must drive the mobile navigation"
+  );
+  assert.match(workspace, /data-testid="mobile-workspace-sheet"/u);
+  assert.match(workspace, /data-testid="mobile-sheet-steps"/u);
+  assert.match(workspace, /data-testid="mobile-sheet-navigation"/u);
   assert.match(
     workspace,
     /matchMedia\("\(min-width: 1280px\)"\)/u,
     "the layout must switch on a real viewport query"
   );
-  for (const panelId of [
-    "history",
-    "conversationFiles",
-    "accountFiles",
-    "caseSummary",
-  ]) {
-    assert.match(
-      workspace,
-      new RegExp(`\\["${panelId}", copy\\.panels\\.`, "u")
-    );
-  }
-  // The chat column stays the primary reading area on narrow viewports.
-  assert.match(workspace, /h-\[min\(66dvh,620px\)\]/u);
+  // A Project home/section is one natural page scroll; only a conversation keeps
+  // its own bounded, independently scrolling message area.
+  assert.doesNotMatch(
+    workspace,
+    /h-\[min\(66dvh,620px\)\]/u,
+    "the fixed viewport-fraction centre height must be gone"
+  );
+  assert.match(workspace, /h-\[calc\(100dvh_-_16rem\)\] min-h-\[320px\]/u);
+  assert.match(
+    projectWorkspaceHome,
+    /xl:overflow-y-auto xl:overscroll-contain/u,
+    "Project content may only scroll inside itself at the desktop breakpoint"
+  );
 });
 
 test("upload, delete and reprocess tell the workspace to refresh", () => {
@@ -422,4 +453,52 @@ test("a pending Standalone document response is discarded after switching to Pro
     }),
     /Document or conversation not found\./u
   );
+});
+
+test("the shared mobile Sheet offers an explicit localized back control", () => {
+  /**
+   * Phase 14-A UX: the inconspicuous corner `×` is replaced by a prominent back
+   * control that only dismisses the navigation overlay and returns to the Workspace
+   * underneath. The shared Sheet keeps its default close button everywhere else.
+   */
+  const backIndex = workspace.indexOf('data-testid="mobile-sheet-back"');
+  assert.ok(backIndex > 0, "the Sheet must render an explicit back control");
+  const backStart = workspace.lastIndexOf("<button", backIndex);
+  const backEnd = workspace.indexOf("</button>", backIndex);
+  const backControl = workspace.slice(backStart, backEnd);
+
+  assert.match(
+    backControl,
+    /min-h-11/u,
+    "the control must be at least 44px tall"
+  );
+  assert.match(backControl, /ArrowLeft/u, "it must show a left-arrow icon");
+  assert.match(backControl, /copy\.mobileNav\.backToWorkspace/u);
+  assert.match(
+    backControl,
+    /onClick=\{\(\) => setMobileSheetOpen\(false\)\}/u,
+    "Back must only dismiss the overlay"
+  );
+  // Back is not navigation: no history entry and no Project/Chat mutation.
+  assert.doesNotMatch(
+    backControl,
+    /route|history|createConversation|resetProjectConversation|clearProjectSelection/u
+  );
+
+  // The Phase 14-A Sheet suppresses the primitive's corner close locally ...
+  const sheetContent = workspace.match(/<SheetContent\b[\s\S]*?\n\s*>/u)?.[0];
+  assert.ok(sheetContent, "the workspace must still use one shared Sheet");
+  assert.match(sheetContent, /\[&>button\]:hidden/u);
+  // ... while the shared primitive keeps its default close for other surfaces.
+  assert.match(sheetPrimitive, /\{children\}\s*<SheetPrimitive\.Close/u);
+  assert.doesNotMatch(workspace, /showCloseButton/u);
+
+  // Bilingual, readable labels rather than a hard-coded one-language string.
+  const zh = getWorkspaceCopy("zh-CN").mobileNav.backToWorkspace;
+  const en = getWorkspaceCopy("en").mobileNav.backToWorkspace;
+  assert.equal(zh, "返回上一级");
+  assert.equal(en, "Back");
+  assert.notEqual(zh, en);
+  assert.doesNotMatch(zh, /Close|关闭/u);
+  assert.doesNotMatch(en, /close/iu);
 });

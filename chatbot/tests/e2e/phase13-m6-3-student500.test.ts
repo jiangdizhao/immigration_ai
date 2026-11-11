@@ -68,9 +68,14 @@ async function openProjectStudent500(page: Page) {
     if (await entryPanel.isVisible()) {
       return;
     }
-    const historyTab = page.getByTestId("workspace-panel-tab-history");
-    if ((await historyTab.count()) > 0 && (await historyTab.isVisible())) {
-      await historyTab.click();
+    // Phase 14-A: below the desktop breakpoint the rail lives inside the shared
+    // mobile navigation Sheet, so open it before selecting a Project.
+    const mobileNavigation = page.getByTestId("mobile-nav-navigation");
+    if (
+      (await mobileNavigation.count()) > 0 &&
+      (await mobileNavigation.isVisible())
+    ) {
+      await mobileNavigation.click();
     }
     expect(await entryPanel.isVisible()).toBe(true);
   }).toPass({ timeout: 20_000 });

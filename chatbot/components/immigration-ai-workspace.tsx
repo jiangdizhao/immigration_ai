@@ -51,6 +51,7 @@ import {
   shouldApplyConversationDetail,
   shouldApplyOlderMessages,
 } from "@/lib/workspace/conversation-origin";
+import { createMobileSheetActionCloser } from "@/lib/workspace/mobile-sheet-actions";
 import {
   clearPolicyLaunchId,
   decodePolicyLaunchFailure,
@@ -110,6 +111,11 @@ import {
   LegacyConversationNotice,
 } from "./legacy-conversation-notice";
 import { MatterDocumentsPanel } from "./matter-documents-panel";
+import {
+  MobileWorkspaceNavigation,
+  type MobileWorkspaceNavKey,
+  type MobileWorkspaceSheetMode,
+} from "./mobile-workspace-navigation";
 import { ProjectEntryPanel } from "./project-entry-panel";
 import { ProjectStepMaterialsPanel } from "./project-step-materials-panel";
 import { ProjectWorkspaceHome } from "./project-workspace-home";
@@ -118,6 +124,13 @@ import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "./ui/sheet";
 import { UserDocumentHistoryPanel } from "./user-document-history-panel";
 
 const TYPEWRITER_TICK_MS = 38;
@@ -745,9 +758,20 @@ export function ImmigrationAIWorkspace({
    * instead of waiting for a manual reload.
    */
   const [documentsRevision, setDocumentsRevision] = useState(0);
-  const [activePanel, setActivePanel] = useState<
-    "none" | "history" | "conversationFiles" | "accountFiles" | "caseSummary"
-  >("none");
+  /**
+   * Phase 14-A: below the `xl` breakpoint the Workspace offers exactly one bottom
+   * navigation bar and exactly one shared Sheet. The Sheet mode is presentation
+   * only: everything behind it reuses the existing navigation, ownership and
+   * authorization contracts, so it cannot widen access.
+   */
+  const [mobileSheetMode, setMobileSheetMode] =
+    useState<MobileWorkspaceSheetMode>("navigation");
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  /**
+   * The soft keyboard owns the viewport while the composer has focus, so the
+   * bottom bar steps aside instead of covering the input or the safe area.
+   */
+  const [composerFocused, setComposerFocused] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -892,6 +916,62 @@ export function ImmigrationAIWorkspace({
       return;
     }
   }, []);
+
+  /**
+   * Phase 14-A mobile navigation. The four entries delegate to the existing
+   * guarded actions, so the bottom bar cannot create, delete or re-origin a Chat,
+   * cannot abandon an in-flight turn and cannot widen any authorization.
+   */
+  const openMobileSheet = useCallback((mode: MobileWorkspaceSheetMode) => {
+    setMobileSheetMode(mode);
+    setMobileSheetOpen(true);
+  }, []);
+
+  const handleMobileAllConversations = useCallback(() => {
+    const navigation = runProjectNavigationAction({
+      isBusy: () => projectNavigationBusyRef.current,
+      action: () => {
+        clearProjectSelection();
+        if (conversationOriginRef.current === "project") {
+          // Leaving a Project Chat is the existing reset, which also drops its
+          // `chatId` from the URL. It never archives or deletes the Chat itself.
+          resetProjectConversation();
+        }
+      },
+    });
+    if (!navigation.allowed) {
+      return;
+    }
+    openMobileSheet("navigation");
+  }, [clearProjectSelection, openMobileSheet, resetProjectConversation]);
+
+  const handleMobileProjectHome = useCallback(() => {
+    if (!selectedProjectIdRef.current) {
+      // Nothing to return to: expose the existing Project selection path in the
+      // shared Sheet instead of fabricating a Project.
+      openMobileSheet("navigation");
+      return;
+    }
+    // The existing section change also leaves an open Project Chat through
+    // `resetProjectConversation`, exactly like the desktop return control.
+    handleSelectProjectView("home");
+    setMobileSheetOpen(false);
+  }, [handleSelectProjectView, openMobileSheet]);
+
+  const handleMobileNavigationSelect = useCallback(
+    (key: MobileWorkspaceNavKey) => {
+      if (key === "conversations") {
+        handleMobileAllConversations();
+        return;
+      }
+      if (key === "projectHome") {
+        handleMobileProjectHome();
+        return;
+      }
+      openMobileSheet(key);
+    },
+    [handleMobileAllConversations, handleMobileProjectHome, openMobileSheet]
+  );
 
   /**
    * Phase 13 M9-A: the Project overview projection, the actor's own step-conversation
@@ -1326,14 +1406,14 @@ export function ImmigrationAIWorkspace({
     async (stageKey: ProjectConversationStageKey) => {
       const projectId = selectedProjectIdRef.current;
       if (!projectId || projectNavigationBusyRef.current) {
-        return;
+        return false;
       }
       setPendingStageChatKey(stageKey);
       setStageChatError(null);
       try {
         const result = await openProjectStageChat({ projectId, stageKey });
         if (selectedProjectIdRef.current !== projectId) {
-          return;
+          return false;
         }
         if (!result.ok) {
           setStageChatError(
@@ -1341,18 +1421,66 @@ export function ImmigrationAIWorkspace({
               ? copy.projectEntry.projectWorkspace.stepChatUnavailable
               : copy.projectEntry.projectWorkspace.loadFailed
           );
-          return;
+          return false;
         }
         await loadConversation(result.chatId);
+        return true;
       } catch {
         if (selectedProjectIdRef.current === projectId) {
           setStageChatError(copy.projectEntry.projectWorkspace.loadFailed);
         }
+        return false;
       } finally {
         setPendingStageChatKey(null);
       }
     },
     [copy.projectEntry.projectWorkspace, loadConversation]
+  );
+
+  /**
+   * Phase 14-A: the shared rail and panel contents are reachable from the mobile
+   * Sheet, so the navigation they trigger closes it — but only after the action
+   * actually succeeded. A refused, pending or failed navigation keeps the Sheet
+   * open, so it can never look like a successful move.
+   */
+  const handleSheetAwareSelectProjectView = useCallback(
+    (view: ProjectWorkspaceView) => {
+      if (projectNavigationBusyRef.current) {
+        return;
+      }
+      handleSelectProjectView(view);
+      setMobileSheetOpen(false);
+    },
+    [handleSelectProjectView]
+  );
+
+  const handleSheetAwareOpenStageChat = useCallback(
+    (stageKey: ProjectConversationStageKey) => {
+      handleOpenStageConversation(stageKey)
+        .then((opened) => {
+          if (opened) {
+            setMobileSheetOpen(false);
+          }
+        })
+        .catch(() => undefined);
+    },
+    [handleOpenStageConversation]
+  );
+
+  const handleSheetAwareOpenConversation = useCallback(
+    (chatId: string) => {
+      const navigation = runProjectNavigationAction({
+        isBusy: () => projectNavigationBusyRef.current,
+        action: () => loadConversation(chatId),
+      });
+      if (!navigation.allowed) {
+        return;
+      }
+      navigation.result
+        .then(() => setMobileSheetOpen(false))
+        .catch(() => undefined);
+    },
+    [loadConversation]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -1910,7 +2038,15 @@ export function ImmigrationAIWorkspace({
 
   const submitMessage = async (
     messageText: string,
-    answerPreference: AnswerPreference = "answer_first"
+    answerPreference: AnswerPreference = "answer_first",
+    /**
+     * Phase 14-A R1-02: reports that this submission produced its workspace
+     * outcome — a rendered blocked response, or a dispatched turn. The promise
+     * itself resolves only when a whole turn has finished, so the mobile Sheet
+     * relies on this signal to reveal the chat at the right moment. Guard
+     * rejections (empty, busy, read-only) and request failures never call it.
+     */
+    onAccepted?: () => void
   ) => {
     const trimmed = messageText.trim();
     if (!trimmed || status !== "ready") {
@@ -1951,6 +2087,9 @@ export function ImmigrationAIWorkspace({
     if (submissionDecision.decision === "block") {
       await appendBlockedResponse(submissionDecision);
       setStatus("ready");
+      // The refusal is rendered as a real response, so the view can be revealed
+      // (and a second tap cannot append a duplicate block card behind the Sheet).
+      onAccepted?.();
       return;
     }
 
@@ -1980,6 +2119,9 @@ export function ImmigrationAIWorkspace({
         conversationId: activeConversationId,
         messages: nextMessages,
       };
+      // Phase 14-A R1-02: the turn is recorded and about to be dispatched, which
+      // is the point at which the chat has genuinely become the active view.
+      onAccepted?.();
       const data = await sendToWidgetRoute(
         nextMessages,
         intakeFacts,
@@ -2021,6 +2163,46 @@ export function ImmigrationAIWorkspace({
       setStatus("ready");
       setSubmittedAt(null);
     }
+  };
+
+  /**
+   * Phase 14-A R1-02: the two rail actions that live inside the shared mobile
+   * Sheet. Both reuse the existing conversation lifecycle — no second creation or
+   * submission path — and only reveal the Workspace once the action really
+   * produced its outcome:
+   *
+   * - a new standalone Chat closes the Sheet once `createConversation` has applied
+   *   the new Chat (its promise resolves only after that), and a failed creation
+   *   keeps the Sheet open with the existing error toast;
+   * - a quick question closes the Sheet on `submitMessage`'s acceptance signal
+   *   (a dispatched turn or a rendered blocked response), never on a guard
+   *   rejection or a failed request, and it is submitted exactly once.
+   */
+  const startStandaloneConversation = () => {
+    const closer = createMobileSheetActionCloser(() =>
+      setMobileSheetOpen(false)
+    );
+    createConversation()
+      .then(() => {
+        closer.settle("accepted");
+      })
+      .catch((conversationError) => {
+        closer.settle("rejected");
+        const message =
+          conversationError instanceof Error
+            ? conversationError.message
+            : "Unable to create a new conversation.";
+        toast.error(message);
+      });
+  };
+
+  const submitMessageFromRail = (question: string) => {
+    const closer = createMobileSheetActionCloser(() =>
+      setMobileSheetOpen(false)
+    );
+    submitMessage(question, "answer_first", () => {
+      closer.settle("accepted");
+    }).catch(() => undefined);
   };
 
   /**
@@ -2199,9 +2381,404 @@ export function ImmigrationAIWorkspace({
       ? looksChineseText(latestUserMessage.text)
       : false;
 
+  /**
+   * Phase 14-A: each rail body is rendered exactly once — inside the desktop
+   * asides at `xl`, or inside the single shared mobile Sheet below it — so there
+   * is never a second Project controller or a duplicated panel instance.
+   */
+  const sidebarRailContent = (
+    <>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-950">
+            {copy.history.title}
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {copy.history.quickQuestions}
+          </p>
+        </div>
+        <button
+          className="shrink-0 rounded-xl bg-[#001736] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
+          disabled={status !== "ready" || conversationLoading}
+          onClick={startStandaloneConversation}
+          type="button"
+        >
+          +
+          {selectedProjectId
+            ? copy.projectEntry.standaloneConversation
+            : copy.history.newConversation}
+        </button>
+      </div>
+
+      <ProjectEntryPanel
+        availability={projectAvailability}
+        clearSelectionSignal={projectSelectionReset}
+        copy={copy.projectEntry}
+        locale={locale}
+        navigationBusy={projectNavigationBusy}
+        onOpenProjectChat={handleSheetAwareOpenConversation}
+        onSelectedProjectChange={handleSelectedProjectChange}
+        onSelectProjectView={handleSheetAwareSelectProjectView}
+        projectView={projectView}
+        schoolPreparationRestricted={schoolPreparationRestricted}
+        selectedProjectId={selectedProjectId}
+        temporaryGuestProject={temporaryGuestProject}
+      />
+
+      {/*
+        Phase 13 M9-A: real step navigation with real status. It is only rendered
+        for a selected Project, and every stage behind it re-checks authorization.
+      */}
+      {selectedProjectId ? (
+        <ProjectWorkspaceNav
+          activeStageChatKey={activeStageChatKey}
+          copy={copy.projectEntry.projectWorkspace}
+          navigationBusy={projectNavigationBusy}
+          onOpenStageChat={handleSheetAwareOpenStageChat}
+          onSelectView={handleSheetAwareSelectProjectView}
+          pendingStageChatKey={pendingStageChatKey}
+          stageChatError={stageChatError}
+          stages={projectStages}
+          view={projectView}
+        />
+      ) : null}
+
+      {selectedProjectId ? null : (
+        <>
+          <div className="space-y-2">
+            {conversationLoading ? (
+              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+                {copy.history.loading}
+              </p>
+            ) : null}
+            {conversations.map((conversation) => (
+              <button
+                className={cn(
+                  "w-full rounded-xl p-3 text-left text-xs leading-5 transition",
+                  conversation.chatId === conversationId
+                    ? "bg-[#001736] text-white"
+                    : "bg-white text-slate-700 hover:bg-slate-100"
+                )}
+                disabled={status !== "ready" || conversationLoading}
+                key={conversation.chatId}
+                onClick={() => {
+                  clearProjectSelection();
+                  handleSheetAwareOpenConversation(conversation.chatId);
+                }}
+                type="button"
+              >
+                <span className="block truncate font-semibold">
+                  {conversation.title || copy.history.unnamed}
+                  {conversation.origin === "legacy_chat" ? (
+                    <LegacyConversationBadge copy={copy} />
+                  ) : conversation.origin === "project" ? (
+                    <span
+                      className="ml-2 inline-flex shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-900"
+                      data-testid="project-chat-history-badge"
+                    >
+                      {conversation.readOnly
+                        ? copy.projectChat.readOnlyBadge
+                        : copy.projectChat.badge}
+                    </span>
+                  ) : null}
+                  {conversation.policyBinding ? (
+                    <span
+                      className="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900"
+                      data-testid="conversation-policy-badge"
+                      title={
+                        conversation.policyBinding.title[locale] ||
+                        copy.history.policyTopicBadge
+                      }
+                    >
+                      {copy.history.policyTopicBadge}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="mt-1 block text-[11px] opacity-75">
+                  {formatConversationUpdatedAt(
+                    conversation.updatedAt,
+                    conversation.createdAt,
+                    locale,
+                    copy.history.updatedUnavailable
+                  )}
+                </span>
+                <span className="mt-1 block break-all font-mono text-[10px] opacity-75">
+                  {copy.history.chat} {conversation.chatId.slice(0, 8)} ·{" "}
+                  {copy.history.matter}{" "}
+                  {conversation.legalMatterId
+                    ? conversation.legalMatterId.slice(0, 8)
+                    : copy.status.noMatter}
+                </span>
+                {conversation.origin === "legacy_chat" ? (
+                  <span className="mt-1 block text-[11px] opacity-75">
+                    {copy.legacy.listHint}
+                  </span>
+                ) : conversation.origin === "project" &&
+                  conversation.readOnly ? (
+                  <span className="mt-1 block text-[11px] opacity-75">
+                    {copy.projectChat.listHint}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+            {!conversationLoading && conversations.length === 0 ? (
+              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+                {copy.history.empty}
+              </p>
+            ) : null}
+            {conversationLoadFailed ? (
+              <p
+                className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
+                role="alert"
+              >
+                {copy.history.loadFailed}
+              </p>
+            ) : null}
+            {conversationHasMore ? (
+              <button
+                className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                data-testid="load-older-conversations"
+                disabled={status !== "ready" || loadingOlderConversations}
+                onClick={() => loadOlderConversations()}
+                type="button"
+              >
+                {loadingOlderConversations
+                  ? copy.history.loading
+                  : copy.history.loadOlder}
+              </button>
+            ) : conversations.length > 0 ? (
+              <p className="px-1 text-[11px] text-slate-400">
+                {copy.history.allLoaded}
+                {conversationTotalCount === null
+                  ? ""
+                  : ` (${conversationTotalCount})`}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold text-slate-500">
+              {copy.history.quickQuestions}
+            </p>
+            {quickQuestions.map((question) => (
+              <button
+                className="w-full rounded-xl bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
+                disabled={!interaction.canUseSuggestedQuestions}
+                key={question}
+                onClick={() => submitMessageFromRail(question)}
+                type="button"
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const projectContextRailContent = (
+    <>
+      {/*
+        Phase 13 M9-A: the right rail is scoped to the selected step, so switching
+        Project or section cannot leave stale detail behind. The component is keyed
+        by Project + section for exactly that reason.
+      */}
+      <ProjectStepMaterialsPanel
+        activeStageChatKey={activeStageChatKey}
+        copy={copy.projectEntry.projectWorkspace}
+        key={`project-step-materials:${selectedProjectId ?? "none"}:${projectView}`}
+        navigationBusy={projectNavigationBusy}
+        onOpenStageChat={handleSheetAwareOpenStageChat}
+        onSelectView={handleSheetAwareSelectProjectView}
+        overview={projectOverview}
+        pendingStageChatKey={pendingStageChatKey}
+        stageChatError={stageChatError}
+        stages={projectStages}
+        view={projectView}
+      />
+      <p className="mt-2 rounded-xl bg-white p-3 text-[11px] leading-5 text-slate-600">
+        {copy.projectEntry.projectContextUnavailable}
+      </p>
+    </>
+  );
+
+  const conversationContextRailContent = (
+    <>
+      {/*
+      This conversation's own files are the AI evidence scope. They are
+      managed here, next to the composer, instead of growing under it.
+    */}
+      <section
+        className="rounded-xl bg-white"
+        data-testid="workspace-conversation-files"
+      >
+        <MatterDocumentsPanel
+          accountAccess={canUseDocuments}
+          chatId={conversationId}
+          conversationDocumentsAvailable={conversationDocumentsAvailableForOrigin(
+            conversationOrigin
+          )}
+          copy={copy}
+          disabled={!interaction.canUploadDocuments}
+          key={`conversation-documents:${conversationOrigin}:${conversationId ?? "new"}`}
+          onDocumentsChanged={notifyDocumentsChanged}
+        />
+        <p className="px-4 pb-3 text-[11px] leading-4 text-slate-500">
+          {copy.panels.conversationFilesHint}
+        </p>
+      </section>
+
+      <div data-testid="workspace-account-files">
+        <UserDocumentHistoryPanel
+          accountAccess={canUseDocuments}
+          copy={copy}
+          refreshToken={documentsRevision}
+        />
+      </div>
+
+      <div className="space-y-3" data-testid="workspace-case-summary">
+        <section className="rounded-xl bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="mt-1 font-semibold text-slate-950">
+                {copy.matter.knownFacts}
+              </h3>
+            </div>
+            <Badge
+              className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
+              variant="secondary"
+            >
+              {copy.matter.factsCount(
+                latestWorkspaceCaseSummary.knownFacts.length
+              )}
+            </Badge>
+          </div>
+          {latestWorkspaceCaseSummary.knownFacts.length ? (
+            <div className="space-y-2">
+              {latestWorkspaceCaseSummary.knownFacts.map((fact) => (
+                <div
+                  className="rounded-lg bg-slate-50 p-3 text-sm"
+                  key={fact.key}
+                >
+                  <p className="text-xs text-slate-500">{fact.label}</p>
+                  <p className="mt-1 font-medium text-slate-800">
+                    {fact.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-slate-500">
+              {copy.matter.noFacts}
+            </p>
+          )}
+          <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {copy.matter.toConfirm}
+          </h4>
+          {latestWorkspaceCaseSummary.requestedFacts.length ? (
+            <div className="space-y-2">
+              {latestWorkspaceCaseSummary.requestedFacts.map((fact) => (
+                <div
+                  className="rounded-lg bg-cyan-50 p-3 text-sm"
+                  key={fact.key}
+                >
+                  <p className="font-medium text-cyan-950">{fact.prompt}</p>
+                  {fact.prompt !== fact.label ? (
+                    <p className="mt-1 text-xs text-cyan-900">{fact.label}</p>
+                  ) : null}
+                  {fact.whyNeeded ? (
+                    <p className="mt-2 text-xs leading-5 text-cyan-900">
+                      <span className="font-medium">
+                        {copy.matter.whyNeeded}:{" "}
+                      </span>
+                      {fact.whyNeeded}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-slate-500">
+              {copy.matter.noRequestedFacts}
+            </p>
+          )}
+          <Button
+            className="mt-4 w-full"
+            onClick={() => setCaseSummarySnapshot(latestWorkspaceCaseSummary)}
+            type="button"
+            variant="outline"
+          >
+            {caseSummarySnapshot
+              ? copy.matter.regenerateSummary
+              : copy.matter.generateSummary}
+          </Button>
+        </section>
+
+        {caseSummarySnapshot ? (
+          <section
+            className="rounded-xl border border-slate-200 bg-white p-4"
+            data-testid="workspace-case-summary-snapshot"
+          >
+            <h3 className="text-sm font-semibold text-slate-950">
+              {copy.matter.summaryGenerated}
+            </h3>
+            <div className="mt-3 space-y-3 text-sm">
+              <div>
+                <h4 className="font-medium text-slate-700">
+                  {copy.matter.knownFacts}
+                </h4>
+                {caseSummarySnapshot.knownFacts.length ? (
+                  <dl className="mt-2 space-y-2">
+                    {caseSummarySnapshot.knownFacts.map((fact) => (
+                      <div key={fact.key}>
+                        <dt className="text-xs text-slate-500">{fact.label}</dt>
+                        <dd className="text-slate-800">{fact.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="mt-1 text-slate-500">{copy.matter.noFacts}</p>
+                )}
+              </div>
+              <div>
+                <h4 className="font-medium text-slate-700">
+                  {copy.matter.toConfirm}
+                </h4>
+                {caseSummarySnapshot.requestedFacts.length ? (
+                  <ul className="mt-2 space-y-2">
+                    {caseSummarySnapshot.requestedFacts.map((fact) => (
+                      <li key={fact.key}>
+                        <p className="font-medium text-slate-800">
+                          {fact.prompt}
+                        </p>
+                        {fact.prompt !== fact.label ? (
+                          <p className="text-xs text-slate-500">{fact.label}</p>
+                        ) : null}
+                        {fact.whyNeeded ? (
+                          <p className="mt-1 text-xs text-slate-600">
+                            {copy.matter.whyNeeded}: {fact.whyNeeded}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-slate-500">
+                    {copy.matter.noRequestedFacts}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </>
+  );
+
   return (
     <section
-      className="flex min-h-0 w-full flex-col px-3 pb-3 pt-2 sm:px-4 lg:px-6 xl:h-full"
+      className="flex min-h-0 w-full flex-col px-3 pt-2 pb-[calc(4.75rem_+_env(safe-area-inset-bottom))] sm:px-4 lg:px-6 xl:h-full xl:pb-3"
       id="ai-workspace"
     >
       {/*
@@ -2249,49 +2826,12 @@ export function ImmigrationAIWorkspace({
       </header>
 
       {/*
-        Phase 12 Stage 2: below the desktop breakpoint the chat keeps the whole
-        width and one labelled panel is available at a time, instead of forcing a
-        narrow right-hand column. The panel components stay mounted, so switching
-        tabs never refetches or loses state.
+        Phase 14-A: the cramped top panel strip is gone. Below `xl` the four
+        persistent bottom entries (All conversations, Project home, Work steps,
+        Navigation) drive ONE shared Sheet, whose content mode decides what it
+        shows. The chat therefore keeps the full width and no panel is stacked
+        underneath it; the rail and panel components are still the existing ones.
       */}
-      {isWideViewport ? null : (
-        <div
-          aria-label={copy.panels.label}
-          className="mb-2 flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-sm"
-          data-testid="workspace-panel-tabs"
-          role="tablist"
-        >
-          {(
-            [
-              ["history", copy.panels.history],
-              ["conversationFiles", copy.panels.conversationFiles],
-              ["accountFiles", copy.panels.accountFiles],
-              ["caseSummary", copy.panels.caseSummary],
-            ] as const
-          ).map(([panelId, label]) => (
-            <button
-              aria-selected={activePanel === panelId}
-              className={cn(
-                "shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-                activePanel === panelId
-                  ? "bg-[#001736] text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              )}
-              data-testid={`workspace-panel-tab-${panelId}`}
-              key={panelId}
-              onClick={() =>
-                setActivePanel((current) =>
-                  current === panelId ? "none" : panelId
-                )
-              }
-              role="tab"
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/*
         Layout correction: main-content priority. The left rail and the right materials
@@ -2301,215 +2841,35 @@ export function ImmigrationAIWorkspace({
         unchanged: a single column below `xl`, three columns from `xl`.
       */}
       <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[210px_minmax(0,1fr)_220px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
-        <aside
-          className={cn(
-            "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
-            isWideViewport || activePanel === "history" ? "block" : "hidden",
-            isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
-          )}
-          data-testid="workspace-history-panel"
-        >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-950">
-                {copy.history.title}
-              </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                {copy.history.quickQuestions}
-              </p>
-            </div>
-            <button
-              className="shrink-0 rounded-xl bg-[#001736] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
-              disabled={status !== "ready" || conversationLoading}
-              onClick={() => {
-                createConversation().catch((conversationError) => {
-                  const message =
-                    conversationError instanceof Error
-                      ? conversationError.message
-                      : "Unable to create a new conversation.";
-                  toast.error(message);
-                });
-              }}
-              type="button"
-            >
-              +
-              {selectedProjectId
-                ? copy.projectEntry.standaloneConversation
-                : copy.history.newConversation}
-            </button>
-          </div>
-
-          <ProjectEntryPanel
-            availability={projectAvailability}
-            clearSelectionSignal={projectSelectionReset}
-            copy={copy.projectEntry}
-            locale={locale}
-            navigationBusy={projectNavigationBusy}
-            onOpenProjectChat={loadConversation}
-            onSelectedProjectChange={handleSelectedProjectChange}
-            onSelectProjectView={handleSelectProjectView}
-            projectView={projectView}
-            schoolPreparationRestricted={schoolPreparationRestricted}
-            temporaryGuestProject={temporaryGuestProject}
-          />
-
-          {/*
-            Phase 13 M9-A: real step navigation with real status. It is only rendered
-            for a selected Project, and every stage behind it re-checks authorization.
-          */}
-          {selectedProjectId ? (
-            <ProjectWorkspaceNav
-              activeStageChatKey={activeStageChatKey}
-              copy={copy.projectEntry.projectWorkspace}
-              navigationBusy={projectNavigationBusy}
-              onOpenStageChat={handleOpenStageConversation}
-              onSelectView={handleSelectProjectView}
-              pendingStageChatKey={pendingStageChatKey}
-              stageChatError={stageChatError}
-              stages={projectStages}
-              view={projectView}
-            />
-          ) : null}
-
-          {selectedProjectId ? null : (
-            <>
-              <div className="space-y-2">
-                {conversationLoading ? (
-                  <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
-                    {copy.history.loading}
-                  </p>
-                ) : null}
-                {conversations.map((conversation) => (
-                  <button
-                    className={cn(
-                      "w-full rounded-xl p-3 text-left text-xs leading-5 transition",
-                      conversation.chatId === conversationId
-                        ? "bg-[#001736] text-white"
-                        : "bg-white text-slate-700 hover:bg-slate-100"
-                    )}
-                    disabled={status !== "ready" || conversationLoading}
-                    key={conversation.chatId}
-                    onClick={() => {
-                      clearProjectSelection();
-                      loadConversation(conversation.chatId);
-                    }}
-                    type="button"
-                  >
-                    <span className="block truncate font-semibold">
-                      {conversation.title || copy.history.unnamed}
-                      {conversation.origin === "legacy_chat" ? (
-                        <LegacyConversationBadge copy={copy} />
-                      ) : conversation.origin === "project" ? (
-                        <span
-                          className="ml-2 inline-flex shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-900"
-                          data-testid="project-chat-history-badge"
-                        >
-                          {conversation.readOnly
-                            ? copy.projectChat.readOnlyBadge
-                            : copy.projectChat.badge}
-                        </span>
-                      ) : null}
-                      {conversation.policyBinding ? (
-                        <span
-                          className="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900"
-                          data-testid="conversation-policy-badge"
-                          title={
-                            conversation.policyBinding.title[locale] ||
-                            copy.history.policyTopicBadge
-                          }
-                        >
-                          {copy.history.policyTopicBadge}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-1 block text-[11px] opacity-75">
-                      {formatConversationUpdatedAt(
-                        conversation.updatedAt,
-                        conversation.createdAt,
-                        locale,
-                        copy.history.updatedUnavailable
-                      )}
-                    </span>
-                    <span className="mt-1 block break-all font-mono text-[10px] opacity-75">
-                      {copy.history.chat} {conversation.chatId.slice(0, 8)} ·{" "}
-                      {copy.history.matter}{" "}
-                      {conversation.legalMatterId
-                        ? conversation.legalMatterId.slice(0, 8)
-                        : copy.status.noMatter}
-                    </span>
-                    {conversation.origin === "legacy_chat" ? (
-                      <span className="mt-1 block text-[11px] opacity-75">
-                        {copy.legacy.listHint}
-                      </span>
-                    ) : conversation.origin === "project" &&
-                      conversation.readOnly ? (
-                      <span className="mt-1 block text-[11px] opacity-75">
-                        {copy.projectChat.listHint}
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
-                {!conversationLoading && conversations.length === 0 ? (
-                  <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
-                    {copy.history.empty}
-                  </p>
-                ) : null}
-                {conversationLoadFailed ? (
-                  <p
-                    className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
-                    role="alert"
-                  >
-                    {copy.history.loadFailed}
-                  </p>
-                ) : null}
-                {conversationHasMore ? (
-                  <button
-                    className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                    data-testid="load-older-conversations"
-                    disabled={status !== "ready" || loadingOlderConversations}
-                    onClick={() => loadOlderConversations()}
-                    type="button"
-                  >
-                    {loadingOlderConversations
-                      ? copy.history.loading
-                      : copy.history.loadOlder}
-                  </button>
-                ) : conversations.length > 0 ? (
-                  <p className="px-1 text-[11px] text-slate-400">
-                    {copy.history.allLoaded}
-                    {conversationTotalCount === null
-                      ? ""
-                      : ` (${conversationTotalCount})`}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold text-slate-500">
-                  {copy.history.quickQuestions}
-                </p>
-                {quickQuestions.map((question) => (
-                  <button
-                    className="w-full rounded-xl bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
-                    disabled={!interaction.canUseSuggestedQuestions}
-                    key={question}
-                    onClick={() => submitMessage(question)}
-                    type="button"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </aside>
+        {/*
+          Phase 14-A: the rails are the desktop (`xl`) presentation only. Below
+          that breakpoint the same content renders inside the single shared Sheet,
+          so the chat is never squeezed or stacked between two sidebars.
+        */}
+        {isWideViewport ? (
+          <aside
+            className="order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+            data-testid="workspace-history-panel"
+          >
+            {sidebarRailContent}
+          </aside>
+        ) : null}
 
         <div
           className={cn(
             "order-1 flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:order-2 xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
             isWideViewport
               ? "h-auto min-h-[560px] xl:h-full"
-              : "h-[min(66dvh,620px)] min-h-[320px]"
+              : /*
+                  Phase 14-A: a Project home/section is one natural page scroll, so
+                  the centre column must not impose a viewport-fraction height. A
+                  conversation keeps its own bounded area so only the message list
+                  scrolls. `4.75rem`/`16rem` reserve room for the chrome, the bottom
+                  navigation bar and the safe area instead of overhanging them.
+                */
+                isNeutralProjectSelection
+                ? "min-h-[320px]"
+                : "h-[calc(100dvh_-_16rem)] min-h-[320px]"
           )}
         >
           {/*
@@ -3141,10 +3501,12 @@ export function ImmigrationAIWorkspace({
                         className="max-h-[120px] min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-2 py-2 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 focus-visible:ring-0"
                         data-testid="workspace-input"
                         disabled={!interaction.canSubmitMessage}
+                        onBlur={() => setComposerFocused(false)}
                         onChange={(event) => {
                           setInput(event.target.value);
                           resizeComposer();
                         }}
+                        onFocus={() => setComposerFocused(true)}
                         onKeyDown={(event) => {
                           // Enter sends; Shift+Enter adds a line. IME composition
                           // (Chinese input) never submits a half-composed character.
@@ -3198,255 +3560,162 @@ export function ImmigrationAIWorkspace({
           )}
         </div>
 
-        {isNeutralProjectSelection ? (
-          <aside
-            className={cn(
-              "order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
-              isWideViewport || activePanel === "caseSummary"
-                ? "block"
-                : "hidden",
-              isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
-            )}
-            data-testid="workspace-project-context-notice"
-          >
-            {/*
-              Phase 13 M9-A: the right rail is scoped to the selected step, so switching
-              Project or section cannot leave stale detail behind. The component is keyed
-              by Project + section for exactly that reason.
-            */}
-            <ProjectStepMaterialsPanel
-              activeStageChatKey={activeStageChatKey}
-              copy={copy.projectEntry.projectWorkspace}
-              key={`project-step-materials:${selectedProjectId ?? "none"}:${projectView}`}
-              navigationBusy={projectNavigationBusy}
-              onOpenStageChat={handleOpenStageConversation}
-              onSelectView={handleSelectProjectView}
-              overview={projectOverview}
-              pendingStageChatKey={pendingStageChatKey}
-              stageChatError={stageChatError}
-              stages={projectStages}
-              view={projectView}
-            />
-            <p className="mt-2 rounded-xl bg-white p-3 text-[11px] leading-5 text-slate-600">
-              {copy.projectEntry.projectContextUnavailable}
-            </p>
-          </aside>
-        ) : (
-          <aside
-            className={cn(
-              "order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
-              isWideViewport ||
-                activePanel === "conversationFiles" ||
-                activePanel === "accountFiles" ||
-                activePanel === "caseSummary"
-                ? "block"
-                : "hidden",
-              isWideViewport ? "" : "max-h-[38dvh] overflow-y-auto"
-            )}
-            data-testid="workspace-context-panel"
-          >
-            {/*
-            This conversation's own files are the AI evidence scope. They are
-            managed here, next to the composer, instead of growing under it.
-          */}
-            <section
-              className={cn(
-                "rounded-xl bg-white",
-                isWideViewport || activePanel === "conversationFiles"
-                  ? ""
-                  : "hidden"
-              )}
-              data-testid="workspace-conversation-files"
+        {isWideViewport ? (
+          isNeutralProjectSelection ? (
+            <aside
+              className="order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+              data-testid="workspace-project-context-notice"
             >
-              <MatterDocumentsPanel
-                accountAccess={canUseDocuments}
-                chatId={conversationId}
-                conversationDocumentsAvailable={conversationDocumentsAvailableForOrigin(
-                  conversationOrigin
-                )}
-                copy={copy}
-                disabled={!interaction.canUploadDocuments}
-                key={`conversation-documents:${conversationOrigin}:${conversationId ?? "new"}`}
-                onDocumentsChanged={notifyDocumentsChanged}
-              />
-              <p className="px-4 pb-3 text-[11px] leading-4 text-slate-500">
-                {copy.panels.conversationFilesHint}
-              </p>
-            </section>
-
-            <div
-              className={cn(
-                isWideViewport || activePanel === "accountFiles" ? "" : "hidden"
-              )}
-              data-testid="workspace-account-files"
+              {projectContextRailContent}
+            </aside>
+          ) : (
+            <aside
+              className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+              data-testid="workspace-context-panel"
             >
-              <UserDocumentHistoryPanel
-                accountAccess={canUseDocuments}
-                copy={copy}
-                refreshToken={documentsRevision}
-              />
-            </div>
-
-            <div
-              className={cn(
-                "space-y-3",
-                isWideViewport || activePanel === "caseSummary" ? "" : "hidden"
-              )}
-              data-testid="workspace-case-summary"
-            >
-              <section className="rounded-xl bg-white p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="mt-1 font-semibold text-slate-950">
-                      {copy.matter.knownFacts}
-                    </h3>
-                  </div>
-                  <Badge
-                    className="rounded-full bg-slate-100 text-[10px] text-slate-600 hover:bg-slate-100"
-                    variant="secondary"
-                  >
-                    {copy.matter.factsCount(
-                      latestWorkspaceCaseSummary.knownFacts.length
-                    )}
-                  </Badge>
-                </div>
-                {latestWorkspaceCaseSummary.knownFacts.length ? (
-                  <div className="space-y-2">
-                    {latestWorkspaceCaseSummary.knownFacts.map((fact) => (
-                      <div
-                        className="rounded-lg bg-slate-50 p-3 text-sm"
-                        key={fact.key}
-                      >
-                        <p className="text-xs text-slate-500">{fact.label}</p>
-                        <p className="mt-1 font-medium text-slate-800">
-                          {fact.value}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm leading-6 text-slate-500">
-                    {copy.matter.noFacts}
-                  </p>
-                )}
-                <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {copy.matter.toConfirm}
-                </h4>
-                {latestWorkspaceCaseSummary.requestedFacts.length ? (
-                  <div className="space-y-2">
-                    {latestWorkspaceCaseSummary.requestedFacts.map((fact) => (
-                      <div
-                        className="rounded-lg bg-cyan-50 p-3 text-sm"
-                        key={fact.key}
-                      >
-                        <p className="font-medium text-cyan-950">
-                          {fact.prompt}
-                        </p>
-                        {fact.prompt !== fact.label ? (
-                          <p className="mt-1 text-xs text-cyan-900">
-                            {fact.label}
-                          </p>
-                        ) : null}
-                        {fact.whyNeeded ? (
-                          <p className="mt-2 text-xs leading-5 text-cyan-900">
-                            <span className="font-medium">
-                              {copy.matter.whyNeeded}:{" "}
-                            </span>
-                            {fact.whyNeeded}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm leading-6 text-slate-500">
-                    {copy.matter.noRequestedFacts}
-                  </p>
-                )}
-                <Button
-                  className="mt-4 w-full"
-                  onClick={() =>
-                    setCaseSummarySnapshot(latestWorkspaceCaseSummary)
-                  }
-                  type="button"
-                  variant="outline"
-                >
-                  {caseSummarySnapshot
-                    ? copy.matter.regenerateSummary
-                    : copy.matter.generateSummary}
-                </Button>
-              </section>
-
-              {caseSummarySnapshot ? (
-                <section
-                  className="rounded-xl border border-slate-200 bg-white p-4"
-                  data-testid="workspace-case-summary-snapshot"
-                >
-                  <h3 className="text-sm font-semibold text-slate-950">
-                    {copy.matter.summaryGenerated}
-                  </h3>
-                  <div className="mt-3 space-y-3 text-sm">
-                    <div>
-                      <h4 className="font-medium text-slate-700">
-                        {copy.matter.knownFacts}
-                      </h4>
-                      {caseSummarySnapshot.knownFacts.length ? (
-                        <dl className="mt-2 space-y-2">
-                          {caseSummarySnapshot.knownFacts.map((fact) => (
-                            <div key={fact.key}>
-                              <dt className="text-xs text-slate-500">
-                                {fact.label}
-                              </dt>
-                              <dd className="text-slate-800">{fact.value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      ) : (
-                        <p className="mt-1 text-slate-500">
-                          {copy.matter.noFacts}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-slate-700">
-                        {copy.matter.toConfirm}
-                      </h4>
-                      {caseSummarySnapshot.requestedFacts.length ? (
-                        <ul className="mt-2 space-y-2">
-                          {caseSummarySnapshot.requestedFacts.map((fact) => (
-                            <li key={fact.key}>
-                              <p className="font-medium text-slate-800">
-                                {fact.prompt}
-                              </p>
-                              {fact.prompt !== fact.label ? (
-                                <p className="text-xs text-slate-500">
-                                  {fact.label}
-                                </p>
-                              ) : null}
-                              {fact.whyNeeded ? (
-                                <p className="mt-1 text-xs text-slate-600">
-                                  {copy.matter.whyNeeded}: {fact.whyNeeded}
-                                </p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-slate-500">
-                          {copy.matter.noRequestedFacts}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          </aside>
-        )}
+              {conversationContextRailContent}
+            </aside>
+          )
+        ) : null}
       </div>
       <p className="mt-3 px-1 text-xs leading-5 text-slate-500">
         {copy.legalDisclaimer}
       </p>
+
+      {/*
+        Phase 14-A mobile Workspace. One bottom bar and one Sheet: the Sheet's mode
+        decides whether it shows the authorized work steps or the existing
+        project/conversation/context navigation, and only one mode is mounted at a
+        time, so no panel or Project controller is ever duplicated.
+      */}
+      {isWideViewport ? null : (
+        <>
+          <MobileWorkspaceNavigation
+            copy={copy.mobileNav}
+            disabledEntries={
+              projectNavigationBusy
+                ? ["conversations", "projectHome"]
+                : undefined
+            }
+            hidden={composerFocused || mobileSheetOpen}
+            onSelect={handleMobileNavigationSelect}
+            openSheetMode={mobileSheetOpen ? mobileSheetMode : null}
+          />
+          <Sheet onOpenChange={setMobileSheetOpen} open={mobileSheetOpen}>
+            {/*
+              Phase 14-A UX: the shared primitive's unobtrusive corner `×` is suppressed
+              for this Sheet only (it is the only direct child button), and replaced by
+              the explicit localized "Back" control in the header below. The shared
+              `ui/sheet.tsx` is untouched, so every other Sheet keeps its default.
+            */}
+            <SheetContent
+              className="[&>button]:hidden flex h-[100dvh] w-full max-w-none flex-col gap-0 border-l border-slate-200 bg-white p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-md"
+              data-testid="mobile-workspace-sheet"
+              side="right"
+            >
+              <SheetHeader className="flex shrink-0 flex-row items-start justify-between gap-3 space-y-0 border-b border-slate-200 bg-[#001736] px-3 pt-3 pb-3 text-left">
+                <div className="min-w-0 space-y-1">
+                  <SheetTitle className="text-base font-semibold text-white">
+                    {mobileSheetMode === "steps"
+                      ? copy.mobileNav.sheetStepsTitle
+                      : copy.mobileNav.sheetNavigationTitle}
+                  </SheetTitle>
+                  <SheetDescription className="text-[11px] leading-5 text-slate-300">
+                    {mobileSheetMode === "steps"
+                      ? copy.mobileNav.sheetStepsDescription
+                      : copy.mobileNav.sheetNavigationDescription}
+                  </SheetDescription>
+                </div>
+                {/*
+                  Phase 14-A UX: "Back" returns from the navigation overlay to the
+                  Workspace underneath. It only closes the Sheet — no history entry, no
+                  Project/Chat/section reset — and replaces the inconspicuous corner ×.
+                */}
+                <button
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-3 text-sm font-semibold text-white transition hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                  data-testid="mobile-sheet-back"
+                  onClick={() => setMobileSheetOpen(false)}
+                  type="button"
+                >
+                  <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
+                  {copy.mobileNav.backToWorkspace}
+                </button>
+              </SheetHeader>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+                {mobileSheetMode === "steps" ? (
+                  <div className="space-y-3" data-testid="mobile-sheet-steps">
+                    {selectedProjectId ? (
+                      projectStages.length > 0 ? (
+                        <ProjectWorkspaceNav
+                          activeStageChatKey={activeStageChatKey}
+                          copy={copy.projectEntry.projectWorkspace}
+                          navigationBusy={projectNavigationBusy}
+                          onOpenStageChat={handleSheetAwareOpenStageChat}
+                          onSelectView={handleSheetAwareSelectProjectView}
+                          pendingStageChatKey={pendingStageChatKey}
+                          stageChatError={stageChatError}
+                          stages={projectStages}
+                          view={projectView}
+                        />
+                      ) : (
+                        <p
+                          className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-600"
+                          data-testid="mobile-sheet-steps-state"
+                        >
+                          {workspaceSummaryState === "failed"
+                            ? copy.projectEntry.projectServiceUnavailable
+                            : copy.history.loading}
+                        </p>
+                      )
+                    ) : (
+                      <div
+                        className="space-y-2 rounded-xl bg-[#f3f4f5] p-3"
+                        data-testid="mobile-sheet-steps-empty"
+                      >
+                        <h3 className="text-sm font-semibold text-slate-950">
+                          {copy.mobileNav.stepsEmptyTitle}
+                        </h3>
+                        <p className="text-xs leading-5 text-slate-600">
+                          {copy.mobileNav.stepsEmptyDescription}
+                        </p>
+                        <button
+                          className="w-full rounded-lg bg-[#001736] px-3 py-2 text-xs font-semibold text-white"
+                          data-testid="mobile-sheet-choose-project"
+                          onClick={() => setMobileSheetMode("navigation")}
+                          type="button"
+                        >
+                          {copy.mobileNav.chooseProject}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className="space-y-4"
+                    data-testid="mobile-sheet-navigation"
+                  >
+                    <div data-testid="mobile-sheet-rail">
+                      {sidebarRailContent}
+                    </div>
+                    <div
+                      className="space-y-3"
+                      data-testid="mobile-sheet-context"
+                    >
+                      <h3 className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                        {copy.panels.label}
+                      </h3>
+                      {isNeutralProjectSelection
+                        ? projectContextRailContent
+                        : conversationContextRailContent}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
     </section>
   );
 }

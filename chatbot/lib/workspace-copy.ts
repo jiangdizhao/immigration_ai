@@ -717,6 +717,30 @@ export type WorkspaceCopy = {
     conversationFilesEmpty: string;
     conversationFilesHint: string;
   };
+  /**
+   * Phase 14-A mobile Workspace: the four persistent bottom-navigation entries and
+   * the one shared Sheet they open. The entries only expose navigation the existing
+   * Workspace actions already authorize; no label here promises progress,
+   * documents or outcomes.
+   */
+  mobileNav: {
+    label: string;
+    conversations: string;
+    projectHome: string;
+    steps: string;
+    navigation: string;
+    sheetStepsTitle: string;
+    sheetStepsDescription: string;
+    sheetNavigationTitle: string;
+    sheetNavigationDescription: string;
+    stepsEmptyTitle: string;
+    stepsEmptyDescription: string;
+    chooseProject: string;
+    navigationBusyHint: string;
+    closeSheet: string;
+    /** Phase 14-A: the explicit "return to the Workspace" control in the Sheet header. */
+    backToWorkspace: string;
+  };
   policy: {
     /** The card is a topic reference, not verified current law. */
     snapshotNotice: string;
@@ -1877,6 +1901,26 @@ const zh: WorkspaceCopy = {
     conversationFilesEmpty: "本对话还没有文件。",
     conversationFilesHint:
       "在此管理本对话的文件。只有本对话的文件会提供给 AI；账号历史文件仅用于您自己查看与下载。",
+  },
+  mobileNav: {
+    label: "工作区导航",
+    conversations: "全部对话",
+    projectHome: "项目主页",
+    steps: "工作步骤",
+    navigation: "导航",
+    sheetStepsTitle: "工作步骤",
+    sheetStepsDescription:
+      "这里列出当前项目已授权的工作步骤及其步骤对话。没有可读状态时不会显示模拟进度。",
+    sheetNavigationTitle: "导航",
+    sheetNavigationDescription:
+      "在这里选择项目、打开历史对话，并查看已有的上下文面板。",
+    stepsEmptyTitle: "尚未选择项目",
+    stepsEmptyDescription:
+      "请先选择一个项目，才能查看它的工作步骤。此处不会虚构步骤、进度或审批状态。",
+    chooseProject: "选择项目",
+    navigationBusyHint: "正在处理中，暂时无法切换。",
+    closeSheet: "关闭导航",
+    backToWorkspace: "返回上一级",
   },
   policy: {
     snapshotNotice:
@@ -3251,6 +3295,26 @@ const en: WorkspaceCopy = {
     conversationFilesEmpty: "No files in this conversation yet.",
     conversationFilesHint:
       "Manage this conversation's files here. Only this conversation's files are supplied to the AI; your account-wide files are for your own review and download.",
+  },
+  mobileNav: {
+    label: "Workspace navigation",
+    conversations: "All conversations",
+    projectHome: "Project home",
+    steps: "Work steps",
+    navigation: "Navigation",
+    sheetStepsTitle: "Work steps",
+    sheetStepsDescription:
+      "The work steps and step conversations authorized for the current Project. No simulated progress is shown when no state can be read.",
+    sheetNavigationTitle: "Navigation",
+    sheetNavigationDescription:
+      "Choose a Project, open a past conversation and review the existing context panels here.",
+    stepsEmptyTitle: "No Project selected",
+    stepsEmptyDescription:
+      "Select a Project before opening its work steps. No steps, progress or approval states are invented here.",
+    chooseProject: "Select a Project",
+    navigationBusyHint: "A response is in progress; navigation is unavailable.",
+    closeSheet: "Close navigation",
+    backToWorkspace: "Back",
   },
   policy: {
     snapshotNotice:

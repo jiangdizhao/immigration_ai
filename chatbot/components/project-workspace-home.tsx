@@ -125,7 +125,7 @@ export function ProjectWorkspaceHome({
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-6"
+      className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-6 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"
       data-testid="project-workspace-home"
     >
       {/*
