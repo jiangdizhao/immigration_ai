@@ -10,7 +10,26 @@ const UUID = z.string().regex(UUID_PATTERN);
 const OperationId = z.string().min(1).max(128).regex(OPERATION_ID_PATTERN);
 const ExpectedRevision = z.number().int().positive().safe();
 
-const createProjectBody = z.object({ operationId: OperationId }).strict();
+/**
+ * Phase 14 Project naming. The name is optional at creation (legacy unnamed
+ * Projects keep the generated label); the server normalizes and validates it.
+ * The generous pre-check only bounds the body; the authoritative rule lives in
+ * `lib/projects/project-display-name.ts`.
+ */
+const ProjectDisplayName = z.string().max(1000);
+const createProjectBody = z
+  .object({
+    operationId: OperationId,
+    displayName: ProjectDisplayName.optional(),
+  })
+  .strict();
+const renameProjectBody = z
+  .object({
+    operationId: OperationId,
+    expectedRevision: ExpectedRevision,
+    displayName: ProjectDisplayName,
+  })
+  .strict();
 const closeProjectBody = z
   .object({ operationId: OperationId, expectedRevision: ExpectedRevision })
   .strict();
@@ -31,6 +50,7 @@ type Repository = Pick<
   | "createProject"
   | "getProjectForActor"
   | "closeProject"
+  | "renameProject"
   | "listProjectMembers"
   | "inviteProjectMember"
   | "listPendingInvitations"
@@ -274,13 +294,26 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
           const outcome = await deps.repository.createProject({
             actorUserId,
             operationId: body.value.operationId,
+            // Only a supplied name joins the repository request, so a legacy
+            // (unnamed) creation keeps its exact previous payload and hash.
+            ...(body.value.displayName === undefined
+              ? {}
+              : { displayName: body.value.displayName }),
           });
-          const { id, status, revision, createdAt, updatedAt, closedAt } =
-            outcome.project;
+          const {
+            id,
+            displayName,
+            status,
+            revision,
+            createdAt,
+            updatedAt,
+            closedAt,
+          } = outcome.project;
           return jsonResponse(
             {
               project: {
                 id,
+                displayName,
                 status,
                 revision,
                 createdAt,
@@ -304,6 +337,51 @@ export function createProjectFoundationHandlers(deps: HttpDependencies) {
           projectId,
         });
         return jsonResponse({ project });
+      });
+    },
+
+    /**
+     * Phase 14: owner-authorized rename. Optimistic concurrency (`expectedRevision`)
+     * and operation-id idempotency are enforced by the repository transaction; the
+     * response is the authoritative updated Project so the client never guesses the
+     * new revision or name.
+     */
+    renameProject(request: Request, projectId: string) {
+      return invoke(request, { write: true }, async (actorUserId) => {
+        if (!UUID_PATTERN.test(projectId)) {
+          return errorResponse("Invalid project request.", 400);
+        }
+        const body = await parsedBody(request, renameProjectBody);
+        if ("response" in body) {
+          return body.response;
+        }
+        const outcome = await deps.repository.renameProject({
+          actorUserId,
+          projectId,
+          operationId: body.value.operationId,
+          expectedRevision: body.value.expectedRevision,
+          displayName: body.value.displayName,
+        });
+        const {
+          id,
+          displayName,
+          status,
+          revision,
+          createdAt,
+          updatedAt,
+          closedAt,
+        } = outcome.project;
+        return jsonResponse({
+          project: {
+            id,
+            displayName,
+            status,
+            revision,
+            createdAt,
+            updatedAt,
+            closedAt,
+          },
+        });
       });
     },
 

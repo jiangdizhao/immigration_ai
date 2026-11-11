@@ -32,6 +32,7 @@ function harness(
           project: {
             id: projectId,
             ownerUserId: actorUserId,
+            displayName: null,
             status: "active" as const,
             revision: 2,
             createdAt: at,

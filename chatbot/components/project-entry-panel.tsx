@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   type ProjectEntryAvailability,
   type ProjectEntryChat,
   type ProjectEntryProject,
+  projectDisplayLabel,
   projectEntryButtonDisabled,
   projectEntryControlsEnabled,
   runProjectNavigationAction,
@@ -67,19 +68,6 @@ type ProjectPanelView = Exclude<ProjectWorkspaceView, "documents" | "review">;
 const PANEL_VIEWS: readonly ProjectPanelView[] = PROJECT_WORKSPACE_VIEWS.filter(
   (view): view is ProjectPanelView => view !== "documents" && view !== "review"
 );
-
-function projectLabel(
-  project: ProjectEntryProject,
-  locale: string,
-  copy: ProjectEntryCopy
-) {
-  const date = new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(project.createdAt));
-  return copy.projectLabel(date, project.id.slice(0, 8));
-}
 
 export function ProjectEntryPanel({
   copy,
@@ -139,6 +127,9 @@ export function ProjectEntryPanel({
   );
   const [projectsExpanded, setProjectsExpanded] = useState(false);
   const [openingChatId, setOpeningChatId] = useState<string | null>(null);
+  /** Phase 14 naming: the create-dialog draft and the rename-dialog draft. */
+  const [createName, setCreateName] = useState("");
+  const [renameName, setRenameName] = useState("");
   const appliedClearSignal = useRef(clearSelectionSignal);
   const openingChatRef = useRef(false);
   const navigationBusyRef = useRef(navigationBusy);
@@ -198,6 +189,7 @@ export function ProjectEntryPanel({
     if (!controlsEnabled) {
       return;
     }
+    setCreateName("");
     /**
      * Phase 14-A R1-01: opening the dialog is *not* a Project selection. Settling
      * the reconciliation here would publish the controller's still-empty snapshot
@@ -213,8 +205,8 @@ export function ProjectEntryPanel({
    * server creates it and the controller selects it — so it settles a still-pending
    * reconciliation and may be published. A failed creation settles nothing.
    */
-  async function createProject() {
-    const navigation = runWhenIdle(() => controller.createProject());
+  async function createProject(displayName?: string) {
+    const navigation = runWhenIdle(() => controller.createProject(displayName));
     if (!navigation.allowed) {
       return null;
     }
@@ -408,7 +400,7 @@ export function ProjectEntryPanel({
           ) : null}
           {state.projects.map((project) => (
             <button
-              aria-label={`${projectLabel(project, locale, copy)} · ${copy.projectId} ${project.id}`}
+              aria-label={`${projectDisplayLabel(project, locale, copy)} · ${copy.projectId} ${project.id}`}
               className={`block w-full rounded-lg px-2.5 py-2 text-left text-xs leading-5 transition ${
                 project.id === state.selectedProjectId
                   ? "bg-blue-50 font-semibold text-blue-950"
@@ -422,7 +414,7 @@ export function ProjectEntryPanel({
               type="button"
             >
               <span className="block break-words">
-                {projectLabel(project, locale, copy)}
+                {projectDisplayLabel(project, locale, copy)}
               </span>
             </button>
           ))}
@@ -460,12 +452,26 @@ export function ProjectEntryPanel({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="break-words text-xs font-semibold text-blue-950">
-                {projectLabel(selectedProject, locale, copy)}
+                {projectDisplayLabel(selectedProject, locale, copy)}
               </h3>
               <p className="mt-1 break-all font-mono text-[10px] text-slate-500">
                 {copy.projectId}: {selectedProject.id}
               </p>
             </div>
+            {/* Phase 14: an obvious rename action beside the selected name. */}
+            <button
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-blue-300 bg-white px-2 py-1 text-[11px] font-semibold text-blue-900 transition enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="rename-project"
+              disabled={projectEntryButtonDisabled(navigationBusy)}
+              onClick={() => {
+                setRenameName(selectedProject.displayName ?? "");
+                controller.openRenameDialog();
+              }}
+              type="button"
+            >
+              <Pencil aria-hidden="true" className="size-3" />
+              {copy.renameProject}
+            </button>
           </div>
           <p className="text-[11px] leading-4 text-slate-600">
             {copy.projectChatHistoryScope}
@@ -588,6 +594,31 @@ export function ProjectEntryPanel({
           <DialogDescription className="text-sm leading-6 text-slate-600">
             {copy.createDialogDescription}
           </DialogDescription>
+          {/*
+            Phase 14 naming. Optional for backward compatibility: an empty name keeps
+            the existing generated date + short-ID label, and the server is the
+            authority for trimming and the 100-character bound.
+          */}
+          <div className="mt-3 space-y-1">
+            <label
+              className="block text-sm font-semibold text-slate-800"
+              htmlFor="create-project-name"
+            >
+              {copy.projectNameLabel}
+            </label>
+            <input
+              autoComplete="off"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2"
+              data-testid="create-project-name"
+              id="create-project-name"
+              onChange={(event) => setCreateName(event.target.value)}
+              placeholder={copy.projectNamePlaceholder}
+              value={createName}
+            />
+            <p className="text-xs leading-5 text-slate-500">
+              {copy.projectNameOptionalHint}
+            </p>
+          </div>
           {state.error ? (
             <p className="mt-3 text-sm text-red-700" role="alert">
               {state.error}
@@ -612,13 +643,88 @@ export function ProjectEntryPanel({
               onClick={() => {
                 // Settles the reconciliation only when the server really created
                 // and selected the Project (see `createProject`).
-                createProject().catch(() => undefined);
+                createProject(createName).catch(() => undefined);
               }}
               type="button"
             >
               {state.creatingProject
                 ? copy.creatingProject
                 : copy.createDialogConfirm}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Phase 14: rename dialog. Cancel performs no write; Save sends one CAS-bound,
+        idempotent PATCH and the stored name is only replaced by the server's answer.
+        It renders in the same rail/Sheet placement as the create dialog, so mobile
+        and desktop keep the Phase 14-A navigation structure unchanged.
+      */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            controller.closeRenameDialog();
+          }
+        }}
+        open={state.renameDialogOpen}
+      >
+        <DialogContent
+          className="w-[calc(100vw-2rem)] max-w-md rounded-2xl bg-white p-5 text-slate-950"
+          data-testid="rename-project-dialog"
+        >
+          <DialogTitle className="text-base font-semibold">
+            {copy.renameDialogTitle}
+          </DialogTitle>
+          <DialogDescription className="text-sm leading-6 text-slate-600">
+            {copy.renameDialogDescription}
+          </DialogDescription>
+          <div className="mt-3 space-y-1">
+            <label
+              className="block text-sm font-semibold text-slate-800"
+              htmlFor="rename-project-name"
+            >
+              {copy.projectNameLabel}
+            </label>
+            <input
+              autoComplete="off"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2"
+              data-testid="rename-project-name"
+              id="rename-project-name"
+              onChange={(event) => setRenameName(event.target.value)}
+              placeholder={copy.projectNamePlaceholder}
+              value={renameName}
+            />
+          </div>
+          {state.renameError ? (
+            <p className="mt-3 text-sm text-red-700" role="alert">
+              {state.renameError}
+            </p>
+          ) : null}
+          <DialogFooter className="mt-2 flex-col-reverse gap-2 sm:flex-row">
+            <button
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+              disabled={state.renamingProject}
+              onClick={() => controller.closeRenameDialog()}
+              type="button"
+            >
+              {copy.renameDialogCancel}
+            </button>
+            <button
+              className="rounded-xl bg-[#001736] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              data-testid="rename-project-save"
+              disabled={projectEntryButtonDisabled(
+                navigationBusy,
+                state.renamingProject
+              )}
+              onClick={() => {
+                controller.renameProject(renameName).catch(() => undefined);
+              }}
+              type="button"
+            >
+              {state.renamingProject
+                ? copy.renamingProject
+                : copy.renameDialogSave}
             </button>
           </DialogFooter>
         </DialogContent>

@@ -646,6 +646,13 @@ export const studyJourneyProject = pgTable(
     ownerUserId: uuid("ownerUserId")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
+    /**
+     * Phase 14: the customer's own Project name. NULL keeps the legacy
+     * localized date + short-ID label. The server normalizes and validates
+     * (trimmed, 1-100 Unicode characters, no control characters or line
+     * breaks); this table check is defence in depth, never the only gate.
+     */
+    displayName: varchar("displayName", { length: 100 }),
     status: varchar("status", { enum: ["active", "closed"] })
       .notNull()
       .default("active"),
@@ -670,6 +677,10 @@ export const studyJourneyProject = pgTable(
     statusAllowed: check(
       "StudyJourneyProject_status_check",
       sql`${table.status} in ('active', 'closed')`
+    ),
+    displayNameFormat: check(
+      "StudyJourneyProject_display_name_check",
+      sql`${table.displayName} is null or (char_length(${table.displayName}) between 1 and 100 and ${table.displayName} = btrim(${table.displayName}) and ${table.displayName} !~ '[[:cntrl:]]')`
     ),
   })
 );
@@ -862,6 +873,7 @@ export const PROJECT_OPERATION_TYPES = [
   "service_payment_evidence_submit",
   "service_payment_evidence_verify",
   "service_payment_resolution_record",
+  "project_rename",
 ] as const;
 
 export const PROJECT_OPERATION_RESULT_KINDS = [
@@ -930,6 +942,7 @@ export const PROJECT_EVENT_TYPES = [
   "service_payment_evidence_verified",
   "service_payment_evidence_rejected",
   "service_payment_resolution_recorded",
+  "project_renamed",
 ] as const;
 
 export const PROJECT_EVENT_SUBJECT_KINDS = [
@@ -1006,7 +1019,7 @@ export const projectOperation = pgTable(
     operationTypeAllowed: check(
       "ProjectOperation_type_check",
       sql`${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_storage_finalize', 'project_document_storage_fail', 'project_document_scan_finalize', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke',
-      'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record')`
+      'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record', 'project_rename')`
     ),
     resultKindAllowed: check(
       "ProjectOperation_result_kind_check",
@@ -1019,7 +1032,7 @@ export const projectOperation = pgTable(
     ),
     actorTypeValid: check(
       "ProjectOperation_actor_type_check",
-      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke', 'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
+      sql`(${table.operationType} in ('project_create', 'project_close', 'membership_invite', 'membership_accept', 'membership_revoke', 'project_chat_create', 'project_document_upload_intent', 'project_document_import_intent', 'project_document_grant_create', 'project_document_grant_revoke', 'project_document_withdraw', 'project_requirement_state_change', 'project_evidence_extract', 'project_fact_mutation', 'project_staff_assignment_propose', 'project_staff_assignment_owner_approve', 'project_staff_assignment_owner_decline', 'project_staff_assignment_lawyer_accept', 'project_staff_assignment_lawyer_decline', 'project_staff_assignment_owner_revoke', 'project_staff_assignment_lawyer_resign', 'project_staff_assignment_admin_withdraw', 'project_staff_assignment_admin_revoke', 'project_thread_participation_consent_create', 'project_thread_participation_consent_withdraw', 'project_human_message_send', 'service_engagement_create', 'service_engagement_agreement_draft', 'service_engagement_agreement_issue', 'service_engagement_agreement_accept', 'service_engagement_signature_submit', 'service_engagement_signature_verify', 'service_engagement_activate', 'service_engagement_suspend', 'service_engagement_resume', 'service_engagement_terminate', 'project_resource_disclosure_grant_create', 'project_resource_disclosure_grant_revoke', 'service_payment_condition_record', 'service_payment_evidence_submit', 'service_payment_evidence_verify', 'service_payment_resolution_record', 'project_rename') and ${table.actorKind} = 'user') or (${table.operationType} in ('project_document_storage_finalize', 'project_document_storage_fail') and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_storage_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$') or (${table.operationType} = 'project_document_scan_finalize' and ${table.actorKind} = 'service' and ${table.servicePrincipalCode} = 'project_document_scan_worker' and ${table.operationId} ~ '^[0-9a-f]{64}$')`
     ),
   })
 );
@@ -1068,7 +1081,7 @@ export const projectEvent = pgTable(
     eventTypeAllowed: check(
       "ProjectEvent_type_check",
       sql`${table.eventType} in ('project_created', 'membership_state_changed', 'project_chat_created', 'project_closed', 'project_document_intent_created', 'project_document_storage_changed', 'project_document_security_changed', 'project_document_grant_changed', 'project_document_withdrawn', 'project_requirement_state_changed', 'project_evidence_extraction_completed', 'project_fact_changed', 'project_staff_assignment_proposed', 'project_staff_assignment_owner_approved', 'project_staff_assignment_owner_declined', 'project_staff_assignment_lawyer_accepted', 'project_staff_assignment_lawyer_declined', 'project_staff_assignment_owner_revoked', 'project_staff_assignment_lawyer_resigned', 'project_staff_assignment_admin_withdrawn', 'project_staff_assignment_admin_revoked', 'project_thread_participation_consent_created', 'project_thread_participation_consent_withdrawn', 'service_engagement_created', 'service_engagement_agreement_version_drafted', 'service_engagement_agreement_version_issued', 'service_engagement_agreement_accepted', 'service_engagement_signature_evidence_recorded', 'service_engagement_signature_evidence_verified', 'service_engagement_signature_evidence_rejected', 'service_engagement_activated', 'service_engagement_suspended', 'service_engagement_resumed', 'service_engagement_terminated', 'project_resource_disclosure_granted', 'project_resource_disclosure_revoked',
-      'service_payment_condition_recorded', 'service_payment_evidence_recorded', 'service_payment_evidence_verified', 'service_payment_evidence_rejected', 'service_payment_resolution_recorded')`
+      'service_payment_condition_recorded', 'service_payment_evidence_recorded', 'service_payment_evidence_verified', 'service_payment_evidence_rejected', 'service_payment_resolution_recorded', 'project_renamed')`
     ),
     subjectConsistent: check(
       "ProjectEvent_subject_check",

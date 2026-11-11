@@ -47,6 +47,7 @@ function testHandlers(
           createdAt: new Date("2026-10-01T00:00:00.000Z"),
           updatedAt: new Date("2026-10-01T00:00:00.000Z"),
           closedAt: null,
+          displayName: null,
         },
       };
     },
@@ -64,6 +65,22 @@ function testHandlers(
     closeProject: (input: unknown) => {
       calls.push({ name: "closeProject", input });
       return { replayed: false, project: {} };
+    },
+    renameProject: (input: unknown) => {
+      calls.push({ name: "renameProject", input });
+      return {
+        replayed: false,
+        project: {
+          id: projectId,
+          ownerUserId: actorId,
+          displayName: "Renamed Project",
+          status: "active",
+          revision: 2,
+          createdAt: new Date("2026-10-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-10-02T00:00:00.000Z"),
+          closedAt: null,
+        },
+      };
     },
     listProjectMembers: (input: unknown) => {
       calls.push({ name: "listProjectMembers", input });
@@ -372,4 +389,170 @@ test("closed, unauthorized, and cross-Project resources map to generic errors", 
     await response.text(),
     '{"error":"Project or membership not found."}'
   );
+});
+
+function patchRequest(body: unknown) {
+  return new Request(`https://example.test/api/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+test("a named Project creation forwards the optional name while an unnamed one keeps the legacy payload", async () => {
+  const named = testHandlers();
+  const namedResponse = await named.handlers.createProject(
+    jsonRequest({
+      operationId: "create-named",
+      displayName: "  2027 Application  ",
+    })
+  );
+  assert.equal(namedResponse.status, 201);
+  assert.deepEqual(named.calls[0], {
+    name: "createProject",
+    input: {
+      actorUserId: actorId,
+      operationId: "create-named",
+      displayName: "  2027 Application  ",
+    },
+  });
+  const namedBody = (await namedResponse.json()) as {
+    project: Record<string, unknown>;
+  };
+  // The response always carries the authoritative field, even for a legacy row.
+  assert.equal("displayName" in namedBody.project, true);
+
+  const unnamed = testHandlers();
+  await unnamed.handlers.createProject(
+    jsonRequest({ operationId: "create-unnamed" })
+  );
+  const unnamedInput = unnamed.calls[0]?.input as Record<string, unknown>;
+  // Phase 14 backward compatibility: the key is absent, exactly as before.
+  assert.equal("displayName" in unnamedInput, false);
+  assert.equal(unnamedInput.operationId, "create-unnamed");
+});
+
+test("Project rename is an authenticated, write-gated CAS request that returns the stored Project", async () => {
+  const { handlers, calls } = testHandlers();
+  const response = await handlers.renameProject(
+    patchRequest({
+      operationId: "rename-1",
+      expectedRevision: 1,
+      displayName: "2027 Student 500 Application",
+    }),
+    projectId
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(calls, [
+    {
+      name: "renameProject",
+      input: {
+        actorUserId: actorId,
+        projectId,
+        operationId: "rename-1",
+        expectedRevision: 1,
+        displayName: "2027 Student 500 Application",
+      },
+    },
+  ]);
+  const body = (await response.json()) as {
+    project: { id: string; displayName: string; revision: number };
+  };
+  assert.equal(body.project.id, projectId);
+  assert.equal(body.project.displayName, "Renamed Project");
+  assert.equal(body.project.revision, 2);
+});
+
+test("Project rename rejects malformed requests before any repository call", async () => {
+  const missingName = testHandlers();
+  const missingResponse = await missingName.handlers.renameProject(
+    patchRequest({ operationId: "rename-1", expectedRevision: 1 }),
+    projectId
+  );
+  assert.equal(missingResponse.status, 400);
+  assert.deepEqual(missingName.calls, []);
+
+  const badRevision = testHandlers();
+  const badRevisionResponse = await badRevision.handlers.renameProject(
+    patchRequest({
+      operationId: "rename-1",
+      expectedRevision: 0,
+      displayName: "X",
+    }),
+    projectId
+  );
+  assert.equal(badRevisionResponse.status, 400);
+  assert.deepEqual(badRevision.calls, []);
+
+  const badId = testHandlers();
+  const badIdResponse = await badId.handlers.renameProject(
+    patchRequest({
+      operationId: "rename-1",
+      expectedRevision: 1,
+      displayName: "X",
+    }),
+    "not-a-uuid"
+  );
+  assert.equal(badIdResponse.status, 400);
+  assert.deepEqual(badId.calls, []);
+
+  const anonymous = testHandlers({ session: null });
+  const anonymousResponse = await anonymous.handlers.renameProject(
+    patchRequest({
+      operationId: "rename-1",
+      expectedRevision: 1,
+      displayName: "X",
+    }),
+    projectId
+  );
+  assert.equal(anonymousResponse.status, 401);
+
+  const disabled = testHandlers({ writesEnabled: false });
+  const disabledResponse = await disabled.handlers.renameProject(
+    patchRequest({
+      operationId: "rename-1",
+      expectedRevision: 1,
+      displayName: "X",
+    }),
+    projectId
+  );
+  assert.equal(disabledResponse.status, 503);
+  assert.deepEqual(disabled.calls, []);
+});
+
+test("Project rename surfaces truthful conflict, forbidden and validation responses", async () => {
+  const cases: Array<[string, number]> = [
+    ["revision_conflict", 409],
+    ["idempotency_conflict", 409],
+    ["project_closed", 409],
+    ["project_forbidden", 404],
+    ["project_not_found", 404],
+    ["invalid_request", 400],
+    ["invalid_operation_id", 400],
+  ];
+  for (const [code, status] of cases) {
+    const { handlers } = testHandlers({
+      repository: {
+        renameProject: () => {
+          throw new ProjectFoundationError(
+            code as ConstructorParameters<typeof ProjectFoundationError>[0]
+          );
+        },
+      },
+    });
+    const response = await handlers.renameProject(
+      patchRequest({
+        operationId: "rename-1",
+        expectedRevision: 1,
+        displayName: "X",
+      }),
+      projectId
+    );
+    assert.equal(response.status, status, code);
+    assert.match(
+      ((await response.json()) as { error: string }).error,
+      /project/iu
+    );
+  }
 });

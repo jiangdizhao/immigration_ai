@@ -66,6 +66,19 @@ export type WorkspaceCopy = {
     projectLabel: (date: string, shortId: string) => string;
     selectedProject: string;
     projectId: string;
+    /** Phase 14 naming: field label, placeholder and optional hint. */
+    projectNameLabel: string;
+    projectNamePlaceholder: string;
+    projectNameOptionalHint: string;
+    /** Phase 14 rename action, dialog and truthful validation messages. */
+    renameProject: string;
+    renameDialogTitle: string;
+    renameDialogDescription: string;
+    renameDialogCancel: string;
+    renameDialogSave: string;
+    renamingProject: string;
+    projectNameRequired: string;
+    projectNameInvalid: string;
     createDialogTitle: string;
     createDialogDescription: string;
     createDialogCancel: string;
@@ -975,6 +988,17 @@ const zh: WorkspaceCopy = {
     projectLabel: (date, shortId) => `项目 · ${date} · #${shortId}`,
     selectedProject: "已选择项目",
     projectId: "项目编号",
+    projectNameLabel: "项目名称",
+    projectNamePlaceholder: "例如：2027 年 Student 500 签证申请",
+    projectNameOptionalHint: "可选：留空将使用日期与编号作为项目名称。",
+    renameProject: "重命名",
+    renameDialogTitle: "重命名项目",
+    renameDialogDescription: "为这个项目设置一个容易识别的名称。",
+    renameDialogCancel: "取消",
+    renameDialogSave: "保存名称",
+    renamingProject: "正在保存名称…",
+    projectNameRequired: "请输入项目名称。",
+    projectNameInvalid: "名称最多 100 个字符，且不能包含换行或控制字符。",
     createDialogTitle: "新建项目",
     createDialogDescription:
       "这会创建一个空项目容器，用于保存您自己的项目对话。项目文件、共享事实和学习流程尚未开放。",
@@ -2327,6 +2351,19 @@ const en: WorkspaceCopy = {
     projectLabel: (date, shortId) => `Project · ${date} · #${shortId}`,
     selectedProject: "Selected Project",
     projectId: "Project ID",
+    projectNameLabel: "Project name",
+    projectNamePlaceholder: "e.g. 2027 Student 500 Application",
+    projectNameOptionalHint:
+      "Optional: leave blank to use the date and short ID as the name.",
+    renameProject: "Rename",
+    renameDialogTitle: "Rename Project",
+    renameDialogDescription: "Give this Project a recognisable name.",
+    renameDialogCancel: "Cancel",
+    renameDialogSave: "Save name",
+    renamingProject: "Saving name…",
+    projectNameRequired: "Enter a Project name.",
+    projectNameInvalid:
+      "Names are at most 100 characters and must not contain line breaks or control characters.",
     createDialogTitle: "Create Project",
     createDialogDescription:
       "This creates an empty Project container for your own Project Chats. Project files, shared facts and study workflows are not available yet.",

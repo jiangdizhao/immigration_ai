@@ -4,6 +4,11 @@ export type { ProjectEntryAvailability } from "@/lib/projects/personal-project-c
 
 export type ProjectEntryProject = {
   id: string;
+  /**
+   * Phase 14: the customer's own Project name. `null` for legacy Projects, which
+   * keep the localized date + short-ID label.
+   */
+  displayName: string | null;
   status: "active";
   revision: number;
   createdAt: string;
@@ -29,6 +34,9 @@ export type ProjectEntryCopy = {
   accessDenied: string;
   notFound: string;
   stateChanged: string;
+  /** Phase 14 rename validation (also used for a create-time name). */
+  projectNameRequired: string;
+  projectNameInvalid: string;
   /** Bounded creation: the actor owns the maximum active Projects. */
   limitReached: string;
   unavailable: string;
@@ -48,6 +56,10 @@ export type ProjectEntryState = {
   creatingProject: boolean;
   creatingChat: boolean;
   createDialogOpen: boolean;
+  /** Phase 14: rename dialog state, kept separate from the list error surface. */
+  renameDialogOpen: boolean;
+  renamingProject: boolean;
+  renameError: string | null;
   error: string | null;
 };
 
@@ -72,15 +84,62 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isProject(value: unknown): value is ProjectEntryProject {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    value.status === "active" &&
-    typeof value.revision === "number" &&
-    typeof value.createdAt === "string" &&
-    typeof value.updatedAt === "string"
-  );
+/**
+ * Phase 14: parse an authorized Project projection.
+ *
+ * `displayName` is accepted as a string or null/absent (a legacy server response or
+ * a legacy row) and normalized to `null`, so no caller branches on the wire shape.
+ * Every other field keeps the previous strict contract.
+ */
+function toProjectEntryProject(value: unknown): ProjectEntryProject | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    value.status !== "active" ||
+    typeof value.revision !== "number" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  const displayName = value.displayName;
+  if (
+    displayName !== undefined &&
+    displayName !== null &&
+    typeof displayName !== "string"
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    displayName: typeof displayName === "string" ? displayName : null,
+    status: "active",
+    revision: value.revision,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+/**
+ * Phase 14: ONE display label for the Project list, the selected Project area and
+ * Project Home. A non-empty customer name wins; otherwise the existing localized
+ * date + short-ID label is used unchanged.
+ */
+export function projectDisplayLabel(
+  project: Pick<ProjectEntryProject, "displayName" | "id" | "createdAt">,
+  locale: string,
+  copy: { projectLabel: (date: string, shortId: string) => string }
+): string {
+  const name = project.displayName?.trim();
+  if (name) {
+    return name;
+  }
+  const date = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(project.createdAt));
+  return copy.projectLabel(date, project.id.slice(0, 8));
 }
 
 function isProjectChat(value: unknown): value is ProjectEntryChat {
@@ -344,8 +403,15 @@ export function createProjectEntryController(input: {
   const listeners = new Set<() => void>();
   let projectsRequestSequence = 0;
   let chatsRequestSequence = 0;
-  let projectOperationId: string | null = null;
+  let projectOperationId: { name: string; operationId: string } | null = null;
   const chatOperationIds = new Map<string, string>();
+  /**
+   * Phase 14: one operation id per distinct rename request. An identical retry (same
+   * Project, revision and name) replays safely; editing the name or reacting to a
+   * new revision creates a new operation id, so a changed payload never masquerades
+   * as an idempotent replay.
+   */
+  let renameAttempt: { key: string; operationId: string } | null = null;
   let disposed = false;
   let state: ProjectEntryState = {
     projects: [],
@@ -359,6 +425,9 @@ export function createProjectEntryController(input: {
     creatingProject: false,
     creatingChat: false,
     createDialogOpen: false,
+    renameDialogOpen: false,
+    renamingProject: false,
+    renameError: null,
     error: null,
   };
 
@@ -402,7 +471,9 @@ export function createProjectEntryController(input: {
         return { kind: "superseded" };
       }
       const projects = Array.isArray(data.projects)
-        ? data.projects.filter(isProject)
+        ? data.projects
+            .map(toProjectEntryProject)
+            .filter((row): row is ProjectEntryProject => row !== null)
         : [];
       const selectionStillAvailable = projects.some(
         (project) => project.id === state.selectedProjectId
@@ -594,26 +665,54 @@ export function createProjectEntryController(input: {
         publish({ createDialogOpen: false });
       }
     },
-    async createProject() {
+    async createProject(inputName?: string) {
       if (state.creatingProject) {
         return null;
       }
-      projectOperationId ??= makeOperationId();
+      /**
+       * Phase 14 naming: a blank name is omitted from the body entirely, so a
+       * legacy creation keeps its exact request identity (and generated label).
+       */
+      const trimmedName = typeof inputName === "string" ? inputName.trim() : "";
+      if (
+        trimmedName.length > 0 &&
+        (Array.from(trimmedName).length > 100 ||
+          /[\u0000-\u001F\u007F\u2028\u2029]/u.test(trimmedName))
+      ) {
+        publish({ error: copy.projectNameInvalid });
+        return null;
+      }
+      /**
+       * Phase 14 R1-03: the pending creation operation id belongs to ONE requested
+       * name. An identical retry (the same normalized name, including the blank /
+       * unnamed payload) replays safely; changing the name creates a new operation,
+       * because the request payload identity changed and the server would (correctly)
+       * answer idempotency_conflict for a reused id.
+       */
+      if (projectOperationId?.name !== trimmedName) {
+        projectOperationId = {
+          name: trimmedName,
+          operationId: makeOperationId(),
+        };
+      }
       publish({ creatingProject: true, error: null });
       try {
         const response = await fetcher("/api/projects", {
           method: "POST",
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ operationId: projectOperationId }),
+          body: JSON.stringify({
+            operationId: projectOperationId.operationId,
+            ...(trimmedName.length > 0 ? { displayName: trimmedName } : {}),
+          }),
         });
         const data = await readResponse<{
           project?: unknown;
         }>(response);
-        if (!isProject(data.project)) {
+        const project = toProjectEntryProject(data.project);
+        if (!project) {
           throw new TypeError("invalid project response");
         }
-        const project = data.project;
         projectOperationId = null;
         const refreshResult = await refreshProjects();
         if (
@@ -706,6 +805,101 @@ export function createProjectEntryController(input: {
               ? projectEntryErrorMessage(error.status, copy)
               : errorFor(error),
         });
+        return null;
+      }
+    },
+    /**
+     * Phase 14 rename. Cancel never writes; a failed save keeps the previous name and
+     * reports a localized error; success replaces exactly one list record (selection,
+     * Project Chat list, current section and conversation history are untouched).
+     */
+    openRenameDialog() {
+      if (!state.selectedProjectId) {
+        return;
+      }
+      publish({ renameDialogOpen: true, renameError: null });
+    },
+    closeRenameDialog() {
+      if (!state.renamingProject) {
+        publish({ renameDialogOpen: false, renameError: null });
+      }
+    },
+    async renameProject(
+      inputName: string
+    ): Promise<ProjectEntryProject | null> {
+      const project = state.projects.find(
+        (row) => row.id === state.selectedProjectId
+      );
+      if (!project || state.renamingProject) {
+        return null;
+      }
+      const name = inputName.trim();
+      if (name.length === 0) {
+        publish({ renameError: copy.projectNameRequired });
+        return null;
+      }
+      if (
+        Array.from(name).length > 100 ||
+        /[\u0000-\u001F\u007F\u2028\u2029]/u.test(name)
+      ) {
+        publish({ renameError: copy.projectNameInvalid });
+        return null;
+      }
+      const attemptKey = `${project.id}:${project.revision}:${name}`;
+      if (renameAttempt?.key !== attemptKey) {
+        renameAttempt = { key: attemptKey, operationId: makeOperationId() };
+      }
+      const operationId = renameAttempt.operationId;
+      publish({ renamingProject: true, renameError: null });
+      try {
+        const response = await fetcher(
+          `/api/projects/${encodeURIComponent(project.id)}`,
+          {
+            method: "PATCH",
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              operationId,
+              expectedRevision: project.revision,
+              displayName: name,
+            }),
+          }
+        );
+        const data = await readResponse<{ project?: unknown }>(response);
+        const updated = toProjectEntryProject(data.project);
+        if (!updated || updated.id !== project.id) {
+          throw new TypeError("invalid project response");
+        }
+        renameAttempt = null;
+        publish({
+          projects: state.projects.map((row) =>
+            row.id === updated.id ? updated : row
+          ),
+          renamingProject: false,
+          renameDialogOpen: false,
+          renameError: null,
+          error: null,
+        });
+        return updated;
+      } catch (error) {
+        const status =
+          error instanceof ProjectEntryHttpError ? error.status : null;
+        publish({
+          renamingProject: false,
+          renameError:
+            status === null
+              ? errorFor(error)
+              : status === 400
+                ? copy.projectNameInvalid
+                : projectEntryErrorMessage(status, copy),
+        });
+        if (status === 409) {
+          // The Project moved on (revision or name). Re-read the authoritative list
+          // so the next attempt targets the real revision; the displayed name is
+          // only replaced by what the server reports.
+          renameAttempt = null;
+          await refreshProjects().catch(() => null);
+        }
         return null;
       }
     },

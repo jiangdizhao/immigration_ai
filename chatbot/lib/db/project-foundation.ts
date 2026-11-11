@@ -7,6 +7,10 @@ import type { PaginationCursor } from "@/lib/conversations/pagination";
 import { projectChatWritesEnabled } from "@/lib/projects/chat-policy";
 import { projectCreateLimitDecision } from "@/lib/projects/create-limit";
 import {
+  normalizeOptionalProjectDisplayName,
+  requireProjectDisplayName,
+} from "@/lib/projects/project-display-name";
+import {
   hashProjectOperationRequest,
   ProjectFoundationError,
   resolveProjectOperationReplay,
@@ -77,6 +81,7 @@ export type ProjectFoundationProject = Pick<
   ProjectRow,
   | "id"
   | "ownerUserId"
+  | "displayName"
   | "status"
   | "revision"
   | "createdAt"
@@ -396,6 +401,7 @@ export function createProjectFoundationRepository(
     createProject(input: {
       actorUserId: string;
       operationId: string;
+      displayName?: string | null;
       now?: Date;
     }): Promise<ProjectOperationOutcome> {
       const operationId = validateProjectOperationId(input.operationId);
@@ -403,7 +409,17 @@ export function createProjectFoundationRepository(
       assertOperationType(operationType);
       const projectId = randomUUID();
       const now = input.now ?? new Date();
-      const requestHash = hashProjectOperationRequest({});
+      const displayName = normalizeOptionalProjectDisplayName(
+        input.displayName
+      );
+      /**
+       * Phase 14: the name joins the semantic idempotency identity only when it is
+       * supplied. A legacy (unnamed) creation therefore keeps the exact request
+       * hash it always had, so pre-existing operation replays are unaffected.
+       */
+      const requestHash = hashProjectOperationRequest(
+        displayName === null ? {} : { displayName }
+      );
 
       return database.transaction(async (tx) => {
         const operation = await claimOperation(
@@ -438,6 +454,7 @@ export function createProjectFoundationRepository(
           .values({
             id: operation.resultId,
             ownerUserId: input.actorUserId,
+            displayName,
             status: "active",
             revision: 1,
             createdAt: now,
@@ -551,6 +568,101 @@ export function createProjectFoundationRepository(
     },
 
     /**
+     * Phase 14: owner-only rename of an active Project.
+     *
+     * CAS, idempotency and audit follow the established Project mutation contract:
+     * the operation is claimed first (a replay returns the current Project without a
+     * second write), the Project row is locked, ownership and ACTIVE status are
+     * re-checked inside the transaction, `expectedRevision` must match, the revision
+     * advances exactly once, and one `project_renamed` event is appended atomically.
+     * Members can never rename: authorization is ownership, not membership.
+     */
+    renameProject(input: {
+      actorUserId: string;
+      projectId: string;
+      expectedRevision: number;
+      operationId: string;
+      displayName: string;
+      now?: Date;
+    }): Promise<ProjectOperationOutcome> {
+      const operationId = validateProjectOperationId(input.operationId);
+      if (
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 1
+      ) {
+        throw new ProjectFoundationError("invalid_request");
+      }
+      const displayName = requireProjectDisplayName(input.displayName);
+      const operationType = "project_rename" as const;
+      assertOperationType(operationType);
+      const now = input.now ?? new Date();
+      const requestHash = hashProjectOperationRequest({
+        expectedRevision: input.expectedRevision,
+        projectId: input.projectId,
+        displayName,
+      });
+
+      return database.transaction(async (tx) => {
+        const operation = await claimOperation(
+          tx,
+          {
+            actorUserId: input.actorUserId,
+            operationId,
+            operationType,
+            requestHash,
+            resultId: input.projectId,
+            resultKind: "project",
+          },
+          hooks
+        );
+        await assertPersonalProjectActor(tx, input.actorUserId);
+        assertProjectWritesEnabled();
+        const project = await lockProject(tx, operation.resultId);
+        if (project.ownerUserId !== input.actorUserId) {
+          throw new ProjectFoundationError("project_forbidden");
+        }
+        if (operation.replayed) {
+          return { replayed: true, project };
+        }
+        if (project.status !== "active") {
+          throw new ProjectFoundationError("project_closed");
+        }
+        if (project.revision !== input.expectedRevision) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+
+        const revision = project.revision + 1;
+        const [renamed] = await tx
+          .update(studyJourneyProject)
+          .set({ displayName, revision, updatedAt: now })
+          .where(
+            and(
+              eq(studyJourneyProject.id, project.id),
+              eq(studyJourneyProject.revision, project.revision),
+              eq(studyJourneyProject.status, "active")
+            )
+          )
+          .returning();
+        if (!renamed) {
+          throw new ProjectFoundationError("revision_conflict");
+        }
+        await afterWrite(hooks, "project_revised");
+        await appendEvent(tx, {
+          projectId: project.id,
+          actorUserId: input.actorUserId,
+          projectRevision: revision,
+          eventType: "project_renamed",
+          subjectKind: "project",
+          subjectId: project.id,
+          operationRecordId: operation.id,
+          hooks,
+          createdAt: now,
+        });
+        return { replayed: false, project: renamed };
+      });
+    },
+
+    /**
      * Registered, non-guest `user` account = eligible for outbound Project
      * invitations and M2 document surfaces.
      *
@@ -573,6 +685,7 @@ export function createProjectFoundationRepository(
       return database
         .select({
           id: studyJourneyProject.id,
+          displayName: studyJourneyProject.displayName,
           status: studyJourneyProject.status,
           revision: studyJourneyProject.revision,
           createdAt: studyJourneyProject.createdAt,
@@ -610,6 +723,7 @@ export function createProjectFoundationRepository(
       const [project] = await database
         .select({
           id: studyJourneyProject.id,
+          displayName: studyJourneyProject.displayName,
           status: studyJourneyProject.status,
           revision: studyJourneyProject.revision,
           createdAt: studyJourneyProject.createdAt,

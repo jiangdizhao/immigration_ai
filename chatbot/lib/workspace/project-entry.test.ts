@@ -18,6 +18,7 @@ import {
   type ProjectEntryCopy,
   type ProjectEntryProject,
   type ProjectRefreshResult,
+  projectDisplayLabel,
   projectEntryButtonDisabled,
   projectEntryControlsEnabled,
   projectEntryErrorMessage,
@@ -41,9 +42,14 @@ const workspaceSource = readFileSync(
   "utf8"
 );
 
-function project(id: string, status = "active") {
+function project(
+  id: string,
+  status = "active",
+  displayName: string | null = null
+) {
   return {
     id,
+    displayName,
     status,
     revision: 1,
     createdAt: timestamp,
@@ -1279,10 +1285,11 @@ test("opening the Create Project dialog is not a Project selection", () => {
   );
   // A real creation does settle it, because the server creates and selects it.
   const createHandler = projectPanelSource.match(
-    /async function createProject\(\) \{[\s\S]*?\n {2}\}/u
+    /async function createProject\(displayName\?: string\) \{[\s\S]*?\n {2}\}/u
   )?.[0];
   assert.ok(createHandler, "the create handler must exist");
-  assert.match(createHandler, /controller\.createProject\(\)/u);
+  // Phase 14: the optional name is forwarded, never invented client-side.
+  assert.match(createHandler, /controller\.createProject\(displayName\)/u);
   assert.match(
     createHandler,
     /if \(project\) \{\s*selectionDecidedRef\.current = true;\s*setSelectionReady\(true\);/u,
@@ -1344,4 +1351,399 @@ test("an explicit decision made while the list is in flight is not overwritten b
     [],
     "the stale seed must not re-select the Project the actor just left"
   );
+});
+
+const projectC = "33333333-3333-4333-8333-333333333333";
+
+test("the Project parser normalizes the optional name and the shared label prefers it", async () => {
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    fetcher: () =>
+      json({
+        projects: [
+          { ...project(projectA), displayName: "2027 Application" },
+          { ...project(projectB), displayName: null },
+          // A legacy server response that predates the naming column.
+          {
+            id: projectC,
+            status: "active",
+            revision: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      }),
+  });
+  await client.refreshProjects();
+  const projects = client.getSnapshot().projects;
+  assert.equal(projects[0]?.displayName, "2027 Application");
+  assert.equal(projects[1]?.displayName, null);
+  assert.equal(projects[2]?.displayName, null);
+  client.dispose();
+
+  const zh = getWorkspaceCopy("zh-CN").projectEntry;
+  const en = getWorkspaceCopy("en").projectEntry;
+  assert.equal(
+    projectDisplayLabel(
+      { ...project(projectA), displayName: "  2027 申请  " },
+      "zh-CN",
+      zh
+    ),
+    "2027 申请"
+  );
+  assert.equal(
+    projectDisplayLabel(project(projectB), "zh-CN", zh),
+    zh.projectLabel(
+      new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(timestamp)),
+      projectB.slice(0, 8)
+    )
+  );
+  assert.equal(
+    projectDisplayLabel(project(projectB), "en", en),
+    en.projectLabel(
+      new Intl.DateTimeFormat("en", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(timestamp)),
+      projectB.slice(0, 8)
+    )
+  );
+});
+
+test("Project creation sends an optional name and omits the field for a legacy blank name", async () => {
+  const bodies: unknown[] = [];
+  const buildClient = (name: string | undefined) => {
+    const client = createProjectEntryController({
+      copy: controllerCopy(),
+      operationId: () => "create-naming-operation",
+      fetcher: (url, init) => {
+        const path = String(url);
+        if (path === "/api/projects" && init?.method === "POST") {
+          bodies.push(JSON.parse(String(init.body)));
+          return json(
+            {
+              project: {
+                ...project(projectB),
+                displayName: "My 2027 Application",
+              },
+            },
+            201
+          );
+        }
+        if (path === "/api/projects") {
+          return json({
+            projects: [
+              { ...project(projectB), displayName: "My 2027 Application" },
+            ],
+          });
+        }
+        return json({ conversations: [], hasMore: false, nextCursor: null });
+      },
+    });
+    return { client, name };
+  };
+
+  const named = buildClient("  My 2027 Application  ");
+  const created = await named.client.createProject(named.name);
+  assert.deepEqual(bodies[0], {
+    operationId: "create-naming-operation",
+    displayName: "My 2027 Application",
+  });
+  assert.equal(created?.displayName, "My 2027 Application");
+  named.client.dispose();
+
+  const blank = buildClient("   ");
+  const legacy = await blank.client.createProject(blank.name);
+  const legacyBody = bodies[1] as Record<string, unknown>;
+  assert.equal("displayName" in legacyBody, false);
+  assert.equal(legacyBody.operationId, "create-naming-operation");
+  assert.equal(legacy?.displayName, "My 2027 Application");
+  blank.client.dispose();
+});
+
+test("renaming updates exactly one Project record and preserves selection, Chats and section", async () => {
+  const requests: Array<{ method?: string; body?: unknown }> = [];
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    operationId: () => "rename-naming-operation",
+    fetcher: (url, init) => {
+      const path = String(url);
+      if (path.startsWith(`/api/projects/${projectA}/chats?`)) {
+        return json({
+          conversations: [projectChat(chatA, projectA)],
+          hasMore: false,
+          nextCursor: null,
+        });
+      }
+      if (path === `/api/projects/${projectA}` && init?.method === "PATCH") {
+        requests.push({
+          method: init.method,
+          body: JSON.parse(String(init.body)),
+        });
+        return json({
+          project: {
+            ...project(projectA, "active", "Renamed Project A"),
+            revision: 2,
+          },
+        });
+      }
+      if (path === "/api/projects") {
+        return json({
+          projects: [project(projectA, "active", "Renamed Project A")],
+        });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    },
+  });
+  await client.refreshProjects();
+  await client.selectProject(projectA);
+  const chatsBefore = client.getSnapshot().chats.map((chat) => chat.chatId);
+  client.openRenameDialog();
+  assert.equal(client.getSnapshot().renameDialogOpen, true);
+
+  const updated = await client.renameProject("  Renamed Project A  ");
+  assert.deepEqual(requests, [
+    {
+      method: "PATCH",
+      body: {
+        operationId: "rename-naming-operation",
+        expectedRevision: 1,
+        displayName: "Renamed Project A",
+      },
+    },
+  ]);
+  assert.equal(updated?.displayName, "Renamed Project A");
+  const after = client.getSnapshot();
+  assert.equal(after.projects.length, 1);
+  assert.equal(after.projects[0]?.displayName, "Renamed Project A");
+  assert.equal(after.projects[0]?.revision, 2);
+  assert.equal(after.selectedProjectId, projectA);
+  assert.deepEqual(
+    after.chats.map((chat) => chat.chatId),
+    chatsBefore,
+    "the open Project Chat must survive a rename"
+  );
+  assert.equal(after.renameDialogOpen, false);
+  assert.equal(after.renameError, null);
+  client.dispose();
+});
+
+test("renaming can be cancelled and invalid names never reach the API", async () => {
+  let patchCalls = 0;
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    fetcher: (url, init) => {
+      const path = String(url);
+      if (init?.method === "PATCH") {
+        patchCalls += 1;
+        return json({ project: project(projectA) });
+      }
+      if (path === "/api/projects") {
+        return json({ projects: [project(projectA)] });
+      }
+      return json({ conversations: [], hasMore: false, nextCursor: null });
+    },
+  });
+  await client.refreshProjects();
+  await client.selectProject(projectA);
+
+  client.openRenameDialog();
+  client.closeRenameDialog();
+  assert.equal(client.getSnapshot().renameDialogOpen, false);
+  assert.equal(patchCalls, 0, "cancel must never write");
+
+  await client.renameProject("   ");
+  assert.equal(
+    client.getSnapshot().renameError,
+    controllerCopy().projectNameRequired
+  );
+  await client.renameProject("x".repeat(101));
+  assert.equal(
+    client.getSnapshot().renameError,
+    controllerCopy().projectNameInvalid
+  );
+  await client.renameProject("line\nbreak");
+  assert.equal(
+    client.getSnapshot().renameError,
+    controllerCopy().projectNameInvalid
+  );
+  assert.equal(patchCalls, 0);
+  assert.equal(client.getSnapshot().projects[0]?.displayName, null);
+  client.dispose();
+});
+
+test("a conflicting rename reports state change, keeps the stored name and re-reads the list", async () => {
+  let listCalls = 0;
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    operationId: () => "rename-conflict-operation",
+    fetcher: (url, init) => {
+      const path = String(url);
+      if (path === "/api/projects") {
+        listCalls += 1;
+        return json({
+          projects: [project(projectA, "active", "Original Name")],
+        });
+      }
+      if (init?.method === "PATCH") {
+        return json({ error: "revision conflict" }, 409);
+      }
+      return json({ conversations: [], hasMore: false, nextCursor: null });
+    },
+  });
+  await client.refreshProjects();
+  await client.selectProject(projectA);
+  client.openRenameDialog();
+  const result = await client.renameProject("Attempted Name");
+  assert.equal(result, null);
+  const state = client.getSnapshot();
+  assert.equal(state.renameError, controllerCopy().stateChanged);
+  assert.equal(state.renamingProject, false);
+  assert.equal(state.selectedProjectId, projectA);
+  // Only the server's authoritative name is displayed; a failed edit never wins.
+  assert.equal(state.projects[0]?.displayName, "Original Name");
+  assert.equal(
+    listCalls,
+    2,
+    "a conflict triggers one authoritative list re-read"
+  );
+  client.dispose();
+});
+
+test("rename retries reuse the operation id only for an identical request", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  let failRemaining = 2;
+  let operationSequence = 0;
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    operationId: () => {
+      operationSequence += 1;
+      return `rename-op-${operationSequence}`;
+    },
+    fetcher: (url, init) => {
+      const path = String(url);
+      if (path === "/api/projects") {
+        return json({ projects: [project(projectA)] });
+      }
+      if (init?.method === "PATCH") {
+        bodies.push(JSON.parse(String(init.body)));
+        if (failRemaining > 0) {
+          failRemaining -= 1;
+          return json({ error: "unavailable" }, 503);
+        }
+        return json({
+          project: {
+            ...project(projectA, "active", "Final Name"),
+            revision: 2,
+          },
+        });
+      }
+      return json({ conversations: [], hasMore: false, nextCursor: null });
+    },
+  });
+  await client.refreshProjects();
+  await client.selectProject(projectA);
+
+  await client.renameProject("Same Name");
+  await client.renameProject("Same Name");
+  assert.equal(
+    bodies[0]?.operationId,
+    bodies[1]?.operationId,
+    "an identical retry replays the same operation"
+  );
+  const renamed = await client.renameProject("Other Name");
+  assert.equal(renamed?.displayName, "Final Name");
+  assert.notEqual(
+    bodies[2]?.operationId,
+    bodies[0]?.operationId,
+    "a changed payload must never reuse an operation id"
+  );
+  assert.equal(client.getSnapshot().projects[0]?.displayName, "Final Name");
+  client.dispose();
+});
+
+test("the panel exposes the bilingual name field and one obvious rename action", () => {
+  const zh = getWorkspaceCopy("zh-CN").projectEntry;
+  const en = getWorkspaceCopy("en").projectEntry;
+  assert.equal(zh.projectNameLabel, "项目名称");
+  assert.equal(en.projectNameLabel, "Project name");
+  assert.equal(zh.projectNamePlaceholder, "例如：2027 年 Student 500 签证申请");
+  assert.equal(en.projectNamePlaceholder, "e.g. 2027 Student 500 Application");
+  assert.equal(zh.renameProject, "重命名");
+  assert.equal(en.renameProject, "Rename");
+  assert.match(projectPanelSource, /data-testid="create-project-name"/u);
+  assert.match(projectPanelSource, /copy.projectNamePlaceholder/u);
+  assert.match(projectPanelSource, /data-testid="rename-project"/u);
+  assert.match(projectPanelSource, /data-testid="rename-project-dialog"/u);
+  assert.match(projectPanelSource, /data-testid="rename-project-save"/u);
+  assert.match(projectPanelSource, /controller.openRenameDialog\(\)/u);
+  assert.match(projectPanelSource, /controller.closeRenameDialog\(\)/u);
+  assert.match(projectPanelSource, /controller.renameProject\(renameName\)/u);
+});
+
+test("creation retries reuse the operation id only for the same requested name", async () => {
+  const posts: Array<Record<string, unknown>> = [];
+  let failRemaining = 2;
+  let sequence = 0;
+  const client = createProjectEntryController({
+    copy: controllerCopy(),
+    operationId: () => {
+      sequence += 1;
+      return `create-name-op-${sequence}`;
+    },
+    fetcher: (url, init) => {
+      const path = String(url);
+      if (path === "/api/projects" && init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        if (failRemaining > 0) {
+          failRemaining -= 1;
+          return json({ error: "unavailable" }, 503);
+        }
+        return json(
+          { project: { ...project(projectB), displayName: "Name B" } },
+          201
+        );
+      }
+      if (path === "/api/projects") {
+        return json({
+          projects: [{ ...project(projectB), displayName: "Name B" }],
+        });
+      }
+      return json({ conversations: [], hasMore: false, nextCursor: null });
+    },
+  });
+
+  // 1. A create with name A fails.
+  assert.equal(await client.createProject("Name A"), null);
+  // 2. Retrying name A reuses the operation id (identical payload).
+  assert.equal(await client.createProject("Name A"), null);
+  assert.equal(
+    posts[0]?.operationId,
+    posts[1]?.operationId,
+    "an identical named retry must replay the same operation"
+  );
+  // 3. Changing the name starts a new operation (new payload identity).
+  const created = await client.createProject("Name B");
+  assert.notEqual(
+    posts[2]?.operationId,
+    posts[0]?.operationId,
+    "a changed name must never reuse the previous operation id"
+  );
+  assert.equal(posts[2]?.displayName, "Name B");
+  assert.equal(created?.displayName, "Name B");
+
+  // 4. A blank name keeps the legacy unnamed contract: no displayName key, and it is
+  // its own request identity rather than a reuse of the named attempt.
+  await client.createProject("   ");
+  const blank = posts[3] as Record<string, unknown>;
+  assert.equal("displayName" in blank, false);
+  // op-1 served A (twice), op-2 served B, so the blank payload is the third operation.
+  assert.equal(blank.operationId, "create-name-op-3");
+  assert.notEqual(blank.operationId, posts[2]?.operationId);
+  client.dispose();
 });

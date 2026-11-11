@@ -3,6 +3,7 @@
 import { BookOpenCheck, FolderLock, GraduationCap, School } from "lucide-react";
 import type { SiteLocale } from "@/lib/site-locale";
 import type { ProjectArtifactsSummary } from "@/lib/workspace/project-artifacts";
+import { projectDisplayLabel } from "@/lib/workspace/project-entry";
 import type { ProjectOverview } from "@/lib/workspace/project-overview";
 import type { ProjectStage } from "@/lib/workspace/project-stages";
 import {
@@ -69,7 +70,14 @@ export function ProjectWorkspaceHome({
 }: {
   copy: ProjectHomeCopy;
   locale: string;
-  project: { id: string; createdAt: string; revision: number; status: string };
+  project: {
+    id: string;
+    /** Phase 14: null keeps the legacy localized date + short-ID label. */
+    displayName: string | null;
+    createdAt: string;
+    revision: number;
+    status: string;
+  };
   view: ProjectWorkspaceView;
   onSelectView: (view: ProjectWorkspaceView) => void;
   /**
@@ -118,7 +126,7 @@ export function ProjectWorkspaceHome({
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(project.createdAt));
-  const label = copy.projectLabel(created, project.id.slice(0, 8));
+  const label = projectDisplayLabel(project, locale, copy);
   const statusLabel =
     project.status === "closed"
       ? copy.projectStatusClosed

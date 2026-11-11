@@ -9,6 +9,7 @@ import { getWorkspaceCopy } from "@/lib/workspace-copy";
 const projectId = "11111111-1111-4111-8111-111111111111";
 const project = {
   id: projectId,
+  displayName: null as string | null,
   createdAt: "2026-11-01T00:00:00.000Z",
   revision: 1,
   status: "active",
@@ -27,6 +28,8 @@ function render(
     student500Enabled?: boolean;
     /** Phase 13 M9-C: the workspace summary read state that carries artifact references. */
     summaryState?: "idle" | "loading" | "ready" | "failed";
+    /** Phase 14: the stored Project name, or null for the legacy label. */
+    displayName?: string | null;
   } = {}
 ) {
   const copy = getWorkspaceCopy(input.locale ?? "en");
@@ -36,7 +39,11 @@ function render(
       locale: input.locale ?? "en",
       navigationBusy: input.navigationBusy ?? false,
       onSelectView: () => undefined,
-      project: { ...project, status: input.projectStatus ?? project.status },
+      project: {
+        ...project,
+        displayName: input.displayName ?? project.displayName,
+        status: input.projectStatus ?? project.status,
+      },
       projectDocumentsEnabled: false,
       projectReviewCopy: copy.projectReview,
       schoolAdmissionsCopy: copy.schoolAdmissions,
@@ -228,4 +235,25 @@ test("the Project home does not offer section changes while navigation is busy",
     idle,
     /<button[^>]*data-testid="project-home-open-applications"(?![^>]*disabled)[^>]*>/u
   );
+});
+
+test("the Project home shows the stored name and falls back to the legacy label", () => {
+  // A stored name replaces the generated date + short-ID label in the header.
+  const named = render({ displayName: "2027 Student 500 Application" });
+  assert.match(named, /data-testid="project-home-title"/u);
+  assert.match(named, /2027 Student 500 Application/u);
+  assert.doesNotMatch(named, /#11111111/u);
+
+  // A legacy Project (null name) keeps exactly the previous localized label.
+  const legacy = render({ displayName: null });
+  assert.match(legacy, /Project · 11\/01\/2026 · #11111111/u);
+
+  // The Chinese surface renders the same name and its localized fallback.
+  const zhNamed = render({
+    displayName: "2027 年学生签证申请",
+    locale: "zh-CN",
+  });
+  assert.match(zhNamed, /2027 年学生签证申请/u);
+  const zhLegacy = render({ displayName: null, locale: "zh-CN" });
+  assert.match(zhLegacy, /项目 · 2026\/11\/01 · #11111111/u);
 });
