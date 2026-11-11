@@ -4,10 +4,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
-import {
-  hashProjectOperationRequest,
-  validateProjectOperationId,
-} from "@/lib/db/project-foundation-utils";
+import { validateProjectOperationId } from "@/lib/db/project-foundation-utils";
 import type { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
   projectEvent,
@@ -30,9 +27,14 @@ import type {
 } from "./facts";
 import { ProjectFactError, validateProjectFactValue } from "./facts";
 
+import {
+  factGrantRequestHash,
+  factMutationRequestHash,
+  factTransitionRequestHash,
+} from "./request-identity";
+
 type Database = ReturnType<typeof getLazyDatabase>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-type OperationType = "project_fact_mutation";
 
 function fail(code: ConstructorParameters<typeof ProjectFactError>[0]): never {
   throw new ProjectFactError(code);
@@ -87,10 +89,6 @@ async function assertActor(
     }
   }
   return project;
-}
-
-function requestHash(type: OperationType, input: Record<string, unknown>) {
-  return hashProjectOperationRequest({ operationType: type, ...input });
 }
 
 function cleanOperationId(value: string) {
@@ -328,7 +326,7 @@ export class PostgresProjectFactRepository implements ProjectFactRepository {
       observedAt: input.observedAt,
       supersedesAssertionId: input.supersedesAssertionId,
     };
-    const hash = requestHash("project_fact_mutation", base);
+    const hash = factMutationRequestHash(base);
     return this.database.transaction(async (tx) => {
       const project = await assertActor(
         tx,
@@ -496,9 +494,8 @@ export class PostgresProjectFactRepository implements ProjectFactRepository {
     ) {
       fail("invalid_request");
     }
-    const hash = requestHash("project_fact_mutation", {
+    const hash = factTransitionRequestHash({
       ...input,
-      operationType: input.to,
     });
     return this.database.transaction(async (tx) => {
       const project = await assertActor(
@@ -699,10 +696,7 @@ export class PostgresProjectFactRepository implements ProjectFactRepository {
     kind: "publish" | "grant" | "revoke"
   ): Promise<any> {
     const operationId = cleanOperationId(input.operationId);
-    const hash = requestHash("project_fact_mutation", {
-      ...input,
-      operationType: kind,
-    });
+    const hash = factGrantRequestHash({ ...input, kind });
     return this.database.transaction(async (tx) => {
       const project = await assertActor(
         tx,

@@ -615,6 +615,7 @@ export function ImmigrationAIWorkspace({
   schoolPreparationRestricted = false,
   schoolApplicationsEnabled = false,
   schoolAdmissionsEnabled = false,
+  projectFactsEnabled = false,
   projectReviewEnabled = false,
   student500Enabled = false,
   submissionCapabilityEnabled = false,
@@ -646,6 +647,7 @@ export function ImmigrationAIWorkspace({
   /** Phase 13 M5.2 school admissions: enabled by capability + eligibility. */
   schoolAdmissionsEnabled?: boolean;
   /** Phase 13 M9-B exact-version review surface (server keeps the real gate). */
+  projectFactsEnabled?: boolean;
   projectReviewEnabled?: boolean;
   /** Phase 13 M6.1 Student 500 preparation: capability + eligibility. */
   student500Enabled?: boolean;
@@ -2979,6 +2981,7 @@ export function ImmigrationAIWorkspace({
                 overview={projectOverview}
                 project={selectedProject}
                 projectDocumentsEnabled={false}
+                projectFactsEnabled={projectFactsEnabled}
                 projectReviewCopy={copy.projectReview}
                 projectReviewEnabled={projectReviewEnabled}
                 returnToPreviousViewLabel={

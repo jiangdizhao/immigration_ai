@@ -1,15 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  extractCsv,
-  extractJson,
-  extractTextDocument,
-} from "@/lib/matter-documents/processing/text";
 import type { SourceLocator } from "@/lib/matter-documents/processing/types";
+import {
+  parseProjectEvidenceDocument,
+  projectEvidenceMaxBytes,
+} from "./evidence-formats";
 
 export type ProjectEvidenceLocator =
   | { kind: "line"; start: number; end: number }
   | { kind: "row"; start: number; end: number }
   | { kind: "json_path"; path: string }
+  | { kind: "page"; page: number }
+  | { kind: "block"; start: number; end: number }
+  | { kind: "sheet_row"; sheet: string; start: number; end: number }
+  | { kind: "image"; image: number }
   | { kind: "unsupported" };
 
 export type ProjectEvidenceCandidate = {
@@ -142,8 +145,8 @@ export class ProjectEvidenceError extends Error {
   }
 }
 
-const PARSER_VERSION = "native_text_json_csv_v1";
-const MAX_BYTES = 2 * 1024 * 1024;
+const PARSER_VERSION = "native_pdf_docx_text_v1";
+const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const MAX_CANDIDATES = 500;
 const MAX_EXCERPT_CHARS = 2000;
 
@@ -161,20 +164,28 @@ function mapLocator(locator: SourceLocator): ProjectEvidenceLocator {
   if (locator.kind === "json_path") {
     return { kind: "json_path", path: locator.path };
   }
+  if (locator.kind === "page") {
+    return { kind: "page", page: locator.pageNumber };
+  }
+  if (locator.kind === "document_block") {
+    return {
+      kind: "block",
+      start: locator.paragraphStart,
+      end: locator.paragraphEnd,
+    };
+  }
+  if (locator.kind === "sheet_rows") {
+    return {
+      kind: "sheet_row",
+      sheet: locator.sheetName,
+      start: locator.rowStart,
+      end: locator.rowEnd,
+    };
+  }
+  if (locator.kind === "image") {
+    return { kind: "image", image: locator.imageNumber };
+  }
   return { kind: "unsupported" };
-}
-
-function parse(bytes: Uint8Array, mime: string) {
-  if (mime === "text/plain" || mime === "text/markdown") {
-    return extractTextDocument(bytes);
-  }
-  if (mime === "application/json") {
-    return extractJson(bytes);
-  }
-  if (mime === "text/csv") {
-    return extractCsv(bytes);
-  }
-  return null;
 }
 
 function isAttestationForSource(
@@ -267,7 +278,9 @@ export function createProjectDocumentEvidenceService(input: {
       }
       if (
         source.byteSize < 1 ||
-        source.byteSize > MAX_BYTES ||
+        source.byteSize >
+          (projectEvidenceMaxBytes(source.canonicalMime) ??
+            DEFAULT_MAX_BYTES) ||
         !/^[0-9a-f]{64}$/u.test(source.sha256)
       ) {
         throw new ProjectEvidenceError("source_unavailable");
@@ -312,10 +325,14 @@ export function createProjectDocumentEvidenceService(input: {
         throw new ProjectEvidenceError("scan_unverified");
       }
 
-      let parsed: ReturnType<typeof parse> = null;
+      let parsed: Awaited<ReturnType<typeof parseProjectEvidenceDocument>> =
+        null;
       let errorCode: string | null = null;
       try {
-        parsed = parse(bytes, source.canonicalMime);
+        parsed = await parseProjectEvidenceDocument({
+          bytes,
+          canonicalMime: source.canonicalMime,
+        });
       } catch (error) {
         errorCode =
           error instanceof Error && error.message === "malformed_document"

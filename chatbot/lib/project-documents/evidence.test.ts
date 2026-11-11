@@ -182,7 +182,8 @@ test("requires a distinct extraction permission and exact byte hash/size", async
 
 test("unsupported input yields an explicit unsupported run without fabricated units", async () => {
   const { persistence, service } = setup();
-  persistence.source = { ...source, canonicalMime: "application/pdf" };
+  // Phase 14-B supports PDF/DOCX/TXT natively, so an image format is the unsupported case.
+  persistence.source = { ...source, canonicalMime: "image/png" };
   const run = await service.extract(request);
   assert.equal(run.status, "unsupported");
   assert.deepEqual(run.candidates, []);

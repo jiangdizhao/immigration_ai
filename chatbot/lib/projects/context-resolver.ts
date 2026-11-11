@@ -3,6 +3,7 @@ import "server-only";
 import { projectFoundationRepository } from "@/lib/db/project-foundation";
 import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
+import { createDatabaseProjectFactEvidenceVerifier } from "@/lib/project-documents/fact-capabilities";
 import { createProjectFactManagementService } from "@/lib/project-facts/facts";
 import { PostgresProjectFactRepository } from "@/lib/project-facts/postgres-repository";
 import { projectChatWritesEnabled } from "./chat-policy";
@@ -12,6 +13,10 @@ import {
   mapProjectFactAssertion,
   type ProjectContextPacket,
 } from "./project-context";
+import {
+  collectVerifiedFactEvidenceRefs,
+  type ProjectEvidenceRefValidator,
+} from "./project-fact-evidence";
 
 export class ProjectContextResolutionError extends Error {
   readonly code = "project_context_unavailable";
@@ -43,6 +48,12 @@ type Dependencies = {
     authorizedForAI: ReturnType<typeof mapProjectFactAssertion>[];
     available: boolean;
   }>;
+  /**
+   * Phase 14-B: independently re-validates a Project Fact's source evidence reference for
+   * this request. Absent from a composition means every document-extracted fact is
+   * excluded (fail closed) rather than trusted on the strength of a stored string.
+   */
+  verifyEvidenceRef?: ProjectEvidenceRefValidator;
   /** Explicit trust capability; absent from production composition until an accepted issuer exists. */
   resolveTrustedAIContextEvidence?: (input: {
     actorUserId: string;
@@ -51,9 +62,29 @@ type Dependencies = {
 };
 
 const productionDependencies = (): Dependencies => {
-  const factService = createProjectFactManagementService({
-    repository: new PostgresProjectFactRepository(getLazyDatabase()),
+  /**
+   * R1 (composition): the SQL repository enforces its own evidence gate during candidate
+   * creation/confirmation, and `stableProjection` filters on it too. Both layers therefore
+   * get the same deterministic, proof-checked verifier; without an approved scan-attestation
+   * provider it fails closed for every document-derived fact.
+   */
+  const database = getLazyDatabase();
+  const verifyEvidence = createDatabaseProjectFactEvidenceVerifier({
+    database,
   });
+  const factService = createProjectFactManagementService({
+    repository: new PostgresProjectFactRepository(database, verifyEvidence),
+    verifyEvidence,
+  });
+  /**
+   * Phase 14-B: Project Fact source verification is injected, never imported here, so the
+   * Project Document trust boundary stays encapsulated in `lib/project-documents` (an
+   * existing architectural guard enforces that). While no composition supplies
+   * `verifyEvidenceRef`, every `document_extracted` fact is excluded from the provider
+   * packet (fail closed), which is the current production state: the Project Document
+   * runtime is `application: null` / `trustedLiveReadiness: false`, so no Project
+   * document evidence is producible at all. Customer-stated facts are unaffected.
+   */
   return {
     schemaStatus: projectFoundationSchemaStatus,
     getOrigin: projectFoundationRepository.getProjectChatOrigin.bind(
@@ -74,6 +105,12 @@ const productionDependencies = (): Dependencies => {
         ),
       };
     },
+    /**
+     * R1 (composition gap): the packet-level revalidation must use the same proof-checked
+     * capability. This field was previously missing here, so document-derived facts were
+     * dropped before the packet builder ever saw them.
+     */
+    verifyEvidenceRef: verifyEvidence,
   };
 };
 
@@ -186,10 +223,30 @@ export async function resolveProjectContext(input: {
             projectId: origin.projectId,
           })
         : [];
+      /**
+       * Phase 14-B: a confirmed fact is validated against its own evidence reference,
+       * independently of which excerpts fit into this turn's prompt budget. Previously a
+       * document-extracted fact disappeared whenever its excerpt was not one of the ≤4
+       * selected snippets, so the same fact was "known" in one Chat and lost in the next.
+       *
+       * R1: the verifier comes from the injected dependencies (production composes the
+       * proof-checked Project Document capability) — never from an ambient registry. When it
+       * is absent the set stays empty and document-extracted facts remain excluded.
+       */
+      const validator = deps.verifyEvidenceRef;
+      const verifiedEvidenceRefs = validator
+        ? await collectVerifiedFactEvidenceRefs({
+            actorUserId: input.actorUserId,
+            projectId: origin.projectId,
+            refs: facts.authorizedForAI.map((fact) => fact.sourceEvidenceRef),
+            validate: validator,
+          })
+        : new Set<string>();
       packet = buildProjectContextPacket({
         projectId: origin.projectId,
         facts: facts.authorizedForAI,
         documentEvidence,
+        verifiedEvidenceRefs,
       });
       // Facts can be present while Project document evidence remains blocked.
       // Keep this typed diagnostic internal to the server resolver.

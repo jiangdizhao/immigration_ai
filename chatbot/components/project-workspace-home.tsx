@@ -12,6 +12,7 @@ import {
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsCenter } from "./project-documents-center";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
+import { ProjectFactsPanel } from "./project-facts-panel";
 import { ProjectOverviewPanel } from "./project-overview-panel";
 import { ProjectReviewPanel } from "./project-review-panel";
 import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
@@ -54,6 +55,7 @@ export function ProjectWorkspaceHome({
   student500Enabled = false,
   student500Copy,
   projectDocumentsEnabled = false,
+  projectFactsEnabled = false,
   projectReviewEnabled = false,
   projectReviewCopy,
   stages = [],
@@ -86,6 +88,8 @@ export function ProjectWorkspaceHome({
   student500Copy: WorkspaceCopy["student500"];
   /** Remains false until the separate document privacy/scan gates open. */
   projectDocumentsEnabled?: boolean;
+  /** Phase 14-B: Project basic information (candidate facts + AI-use authorization). */
+  projectFactsEnabled?: boolean;
   /** Phase 13 M9-B exact-version review surface (server keeps the real gate). */
   projectReviewEnabled?: boolean;
   projectReviewCopy: WorkspaceCopy["projectReview"];
@@ -430,6 +434,19 @@ export function ProjectWorkspaceHome({
                 enabled={projectDocumentsEnabled}
                 projectId={project.id}
                 projectRevision={project.revision}
+              />
+            ) : null}
+            {/*
+              Phase 14-B Project basic information. It lives beside the document
+              library because that is where the candidates come from, and it is only
+              mounted when the capability is open, so a closed gate adds no noise to
+              the existing Phase 13/14-A surface.
+            */}
+            {projectFactsEnabled ? (
+              <ProjectFactsPanel
+                copy={copy.facts}
+                enabled={projectFactsEnabled}
+                projectId={project.id}
               />
             ) : null}
           </div>

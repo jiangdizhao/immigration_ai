@@ -120,6 +120,41 @@ export type WorkspaceCopy = {
     projectStudent500Tab: string;
     /** Phase 13 M9-A: the Project-level document centre section label. */
     projectDocumentsTab: string;
+    /**
+     * Phase 14-B Project basic information: reviewable candidate facts, explicit
+     * confirmation, and a *separate* authorization for Project AI use.
+     */
+    facts: {
+      title: string;
+      subtitle: string;
+      loading: string;
+      empty: string;
+      disabled: string;
+      unavailable: string;
+      candidatesTitle: string;
+      confirmedAiTitle: string;
+      noConfirmedAi: string;
+      conflictsWarning: (count: number) => string;
+      sourceFromDocument: string;
+      sourceCustomerStated: string;
+      verificationLabel: string;
+      confirm: string;
+      reject: string;
+      correct: string;
+      saveCorrection: string;
+      cancelCorrection: string;
+      authorize: string;
+      revoke: string;
+      confirmAll: string;
+      authorizeAll: string;
+      stateProposed: string;
+      stateConfirmed: string;
+      stateRejected: string;
+      stateSuperseded: string;
+      keyLabels: Readonly<Record<string, string>>;
+      saved: string;
+      actionError: string;
+    };
     projectReviewTab: string;
     projectHomeNextSteps: string;
     projectHomeOpenApplications: string;
@@ -988,6 +1023,53 @@ const zh: WorkspaceCopy = {
     projectSchoolAdmissionsTab: "入学流程",
     projectStudent500Tab: "学生签证 500",
     projectDocumentsTab: "项目文件",
+    facts: {
+      title: "项目基本信息",
+      subtitle:
+        "从你上传的文件中提取的候选信息。确认后仍需单独授权，项目 AI 才会在对话中使用。",
+      loading: "正在读取项目基本信息…",
+      empty: "暂无可审核的基本信息。上传 CoE、OSHC 或签证文件后会生成候选项。",
+      disabled: "项目基本信息功能当前未开启。",
+      unavailable: "暂时无法读取项目基本信息，请稍后重试。",
+      candidatesTitle: "待确认（来自你的文件）",
+      confirmedAiTitle: "已授权项目 AI 使用",
+      noConfirmedAi: "尚未授权任何信息供项目 AI 使用。",
+      conflictsWarning: (count: number) =>
+        `有 ${count} 处信息与你之前确认的内容不一致，旧值不会被自动覆盖。`,
+      sourceFromDocument: "来源：你上传的项目文件",
+      sourceCustomerStated: "来源：你的手动更正",
+      verificationLabel: "由你确认；未经官方或律师独立核实",
+      confirm: "确认",
+      reject: "不采用",
+      correct: "更正",
+      saveCorrection: "保存更正",
+      cancelCorrection: "取消",
+      authorize: "授权项目 AI 使用",
+      revoke: "撤销授权",
+      confirmAll: "全部确认",
+      authorizeAll: "全部授权",
+      stateProposed: "待确认",
+      stateConfirmed: "已确认",
+      stateRejected: "已不采用",
+      stateSuperseded: "已被替换",
+      keyLabels: {
+        "applicant.full_name": "申请人姓名",
+        "applicant.date_of_birth": "出生日期",
+        "study.school": "学校",
+        "study.course": "课程",
+        "study.campus": "校区",
+        "study.course_start_date": "课程开始日期",
+        "study.course_end_date": "课程结束日期",
+        "study.coe_reference": "CoE 编号",
+        "insurance.oshc_start_date": "OSHC 开始日期",
+        "insurance.oshc_expiry_date": "OSHC 到期日期",
+        "visa.category": "签证类别",
+        "visa.conditions": "签证条款",
+        "visa.expiry_date": "签证到期日期",
+      },
+      saved: "已保存。",
+      actionError: "操作未完成，请重试。",
+    },
     projectReviewTab: "律师审核",
     projectHomeNextSteps: "下一步",
     projectHomeOpenApplications: "查看或新建学校申请草稿。",
@@ -2298,6 +2380,55 @@ const en: WorkspaceCopy = {
     projectSchoolAdmissionsTab: "Admissions workflow",
     projectStudent500Tab: "Student 500 visa",
     projectDocumentsTab: "Project documents",
+    facts: {
+      title: "Project basic information",
+      subtitle:
+        "Candidate details extracted from the files you uploaded. Confirming a detail does not by itself allow Project AI to use it.",
+      loading: "Loading project basic information…",
+      empty:
+        "No basic information to review yet. Upload a CoE, OSHC or visa document to generate candidates.",
+      disabled: "Project basic information is currently switched off.",
+      unavailable:
+        "Project basic information is unavailable right now. Please try again.",
+      candidatesTitle: "Needs your review (from your files)",
+      confirmedAiTitle: "Authorized for Project AI",
+      noConfirmedAi: "Nothing is authorized for Project AI yet.",
+      conflictsWarning: (count: number) =>
+        `${count} detail(s) differ from what you confirmed earlier. Earlier values are never overwritten automatically.`,
+      sourceFromDocument: "Source: a Project document you uploaded",
+      sourceCustomerStated: "Source: your own correction",
+      verificationLabel: "Confirmed by you; not independently verified",
+      confirm: "Confirm",
+      reject: "Reject",
+      correct: "Correct",
+      saveCorrection: "Save correction",
+      cancelCorrection: "Cancel",
+      authorize: "Authorize for Project AI",
+      revoke: "Revoke authorization",
+      confirmAll: "Confirm all",
+      authorizeAll: "Authorize all",
+      stateProposed: "Needs review",
+      stateConfirmed: "Confirmed",
+      stateRejected: "Rejected",
+      stateSuperseded: "Replaced",
+      keyLabels: {
+        "applicant.full_name": "Applicant name",
+        "applicant.date_of_birth": "Date of birth",
+        "study.school": "School",
+        "study.course": "Course",
+        "study.campus": "Campus",
+        "study.course_start_date": "Course start date",
+        "study.course_end_date": "Course end date",
+        "study.coe_reference": "CoE reference",
+        "insurance.oshc_start_date": "OSHC start date",
+        "insurance.oshc_expiry_date": "OSHC expiry date",
+        "visa.category": "Visa category",
+        "visa.conditions": "Visa conditions",
+        "visa.expiry_date": "Visa expiry date",
+      },
+      saved: "Saved.",
+      actionError: "That action did not complete. Please try again.",
+    },
     projectReviewTab: "Lawyer review",
     projectHomeNextSteps: "Next steps",
     projectHomeOpenApplications: "Review or create a school application draft.",

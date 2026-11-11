@@ -152,6 +152,25 @@ export interface ProjectDocumentCustomerApplication {
     projectRevision: number;
     replayed: boolean;
   }>;
+  /**
+   * Phase 14-B R1-03: extract verified evidence for one stored, clean, exact version. The
+   * composition performs the byte read, re-checks the authenticated scan attestation and
+   * the extraction permission, then records the immutable run.
+   */
+  extractEvidence?(input: {
+    actorUserId: string;
+    projectId: string;
+    assetId: string;
+    versionId: string;
+    operationId: string;
+    expectedProjectRevision: number;
+  }): Promise<{
+    runId: string;
+    status: "complete" | "partial" | "unsupported" | "failed";
+    candidateCount: number;
+    generation: number;
+    projectRevision: number;
+  }>;
   revokeCreatorGrant(input: {
     actorUserId: string;
     projectId: string;
@@ -174,10 +193,29 @@ export type ProjectDocumentHttpDependencies = {
   /** Independent readiness gate. Production currently has no trusted provider. */
   trustedLiveReadiness: () => Promise<boolean>;
   application: ProjectDocumentCustomerApplication | null;
+  /**
+   * Phase 14-B R1-03: invoked after a successful evidence extraction so the Project Facts
+   * candidates are proposed. Optional and best effort: a failure here never turns a
+   * successful extraction into an error, and nothing is ever auto-confirmed.
+   */
+  onEvidenceRunCompleted?: (input: {
+    actorUserId: string;
+    projectId: string;
+    runId: string;
+    expectedProjectRevision: number;
+    operationId: string;
+  }) => Promise<unknown>;
   rateLimit?: (input: {
     actorUserId: string;
     projectId: string;
-    action: "list" | "upload" | "import" | "read" | "download" | "withdraw";
+    action:
+      | "list"
+      | "upload"
+      | "import"
+      | "read"
+      | "download"
+      | "withdraw"
+      | "extract";
   }) => Promise<boolean>;
 };
 type ProjectDocumentHttpAction =
@@ -186,7 +224,9 @@ type ProjectDocumentHttpAction =
   | "import"
   | "read"
   | "download"
-  | "withdraw";
+  | "withdraw"
+  /** Phase 14-B: explicit, authorised evidence extraction for a stored exact version. */
+  | "extract";
 
 const uploadHeadersSchema = z.object({
   operationId: OPERATION_ID,
@@ -214,6 +254,14 @@ const withdrawBodySchema = z
   .object({
     operationId: OPERATION_ID,
     expectedProjectRevision: EXPECTED_REVISION,
+  })
+  .strict();
+/** Phase 14-B: evidence extraction is bound to one exact, stored version. */
+const extractBodySchema = z
+  .object({
+    operationId: OPERATION_ID,
+    expectedProjectRevision: EXPECTED_REVISION,
+    versionId: UUID,
   })
   .strict();
 const publicOperationResponseSchema = z.object({
@@ -794,6 +842,94 @@ export function createProjectDocumentHandlers(
           "Document withdrawal is unavailable."
         );
       }
+    },
+
+    /**
+     * Phase 14-B R1-03: the explicit processing action that completes the
+     * Document → Evidence → proposed-Facts path. It is gated by exactly the same
+     * authentication, feature flag, trusted-readiness, schema and rate-limit checks as the
+     * rest of the customer document surface, so it is unreachable while the documents
+     * runtime is closed.
+     */
+    async extractEvidence(
+      request: Request,
+      projectId: string,
+      assetId: string
+    ): Promise<Response> {
+      const auth = await access(request, projectId, "extract");
+      if ("response" in auth) {
+        return auth.response;
+      }
+      if (!UUID.safeParse(assetId).success) {
+        return error("Document not found.", 404);
+      }
+      let raw: unknown;
+      try {
+        raw = await boundedJson(request);
+      } catch (cause) {
+        return error(
+          "Invalid document request.",
+          cause instanceof RangeError ? 413 : 400
+        );
+      }
+      const body = extractBodySchema.safeParse(raw);
+      if (!body.success) {
+        return error("Invalid document request.", 400);
+      }
+      // Evidence extraction exists only where the runtime composes it (storage + scan).
+      if (!auth.application.extractEvidence) {
+        return error("Document processing is unavailable.", 503);
+      }
+      let result: Awaited<
+        ReturnType<
+          NonNullable<ProjectDocumentCustomerApplication["extractEvidence"]>
+        >
+      >;
+      try {
+        result = await auth.application.extractEvidence({
+          actorUserId: auth.actorUserId,
+          projectId,
+          assetId,
+          versionId: body.data.versionId,
+          operationId: body.data.operationId,
+          expectedProjectRevision: body.data.expectedProjectRevision,
+        });
+      } catch (cause) {
+        return applicationFailureResponse(
+          cause,
+          "Document processing is unavailable."
+        );
+      }
+      // Proposed Project Facts are a follow-on effect: a failure here is reported to the
+      // caller but never turns a successful extraction into an error, and nothing is
+      // auto-confirmed.
+      let facts: { proposedCount: number } | null = null;
+      if (
+        deps.onEvidenceRunCompleted &&
+        (result.status === "complete" || result.status === "partial")
+      ) {
+        try {
+          const hookResult = (await deps.onEvidenceRunCompleted({
+            actorUserId: auth.actorUserId,
+            projectId,
+            runId: result.runId,
+            expectedProjectRevision: result.projectRevision,
+            operationId: `${body.data.operationId}:propose-facts`,
+          })) as { proposedCount?: number } | null;
+          facts = { proposedCount: hookResult?.proposedCount ?? 0 };
+        } catch {
+          facts = null;
+        }
+      }
+      return json({
+        evidence: {
+          runId: result.runId,
+          status: result.status,
+          candidateCount: result.candidateCount,
+          generation: result.generation,
+        },
+        proposedFacts: facts,
+      });
     },
 
     async revokeGrant(

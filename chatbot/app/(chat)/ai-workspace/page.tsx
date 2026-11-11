@@ -122,6 +122,12 @@ export default async function AIWorkspacePage({
           policyLaunchState={policyLaunchState}
           policyReference={policyReference}
           projectAvailability={personalProject.availability}
+          projectFactsEnabled={
+            // Phase 14-B: basic information stays off unless the owner enables it, but the
+            // panel is now reachable (previously nothing supplied this capability).
+            process.env.PHASE14_PROJECT_FACTS_ENABLED?.trim().toLowerCase() ===
+            "true"
+          }
           projectReviewEnabled={
             process.env.PHASE13_PROJECT_REVIEW_ENABLED?.trim().toLowerCase() ===
             "true"

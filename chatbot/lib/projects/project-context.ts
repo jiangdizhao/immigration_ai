@@ -47,6 +47,18 @@ export type ProjectContextPacket = {
     observedAt: string | null;
     sourceEvidenceRef: string | null;
     verificationLabel: "customer-confirmed; not independently verified";
+    /**
+     * Phase 14-B: the fact's own source evidence was re-validated server-side for this
+     * request (permission, exact version, clean-scan attestation, completed run).
+     * `not_applicable` means the fact was stated by the customer and cites no document.
+     */
+    sourceEvidenceStatus: "verified" | "not_applicable";
+    /**
+     * True only when the cited excerpt also happens to be one of the selected
+     * question-relevant excerpts sent for this turn. It is **informational**: a fact is
+     * never dropped merely because its excerpt was not selected for the prompt.
+     */
+    sourceExcerptIncluded: boolean;
   }>;
   documentEvidence: AuthorizedProjectDocumentEvidence[];
 };
@@ -104,6 +116,13 @@ export function buildProjectContextPacket(input: {
   projectId: string;
   facts: readonly AuthorizedProjectFact[];
   documentEvidence: readonly AuthorizedProjectDocumentEvidence[];
+  /**
+   * Evidence references the server independently re-validated for this exact request
+   * (permission + exact version + clean-scan attestation + completed run). Facts citing
+   * an unlisted reference are dropped; facts citing a listed one are kept **even when**
+   * their excerpt is not among the selected snippets.
+   */
+  verifiedEvidenceRefs?: ReadonlySet<string>;
 }): ProjectContextPacket {
   const evidence = input.documentEvidence
     .filter(
@@ -123,6 +142,7 @@ export function buildProjectContextPacket(input: {
     .slice(0, MAX_PROJECT_DOCUMENT_EVIDENCE)
     .map((item) => ({ ...item }));
   const evidenceRefs = new Set(evidence.map((item) => item.evidenceRef));
+  const verifiedEvidenceRefs = input.verifiedEvidenceRefs ?? new Set<string>();
   const facts: ProjectContextPacket["confirmedProjectFacts"] = [];
   const seen = new Set<string>();
   const orderedFacts = [...input.facts].sort(
@@ -132,6 +152,9 @@ export function buildProjectContextPacket(input: {
   );
 
   for (const fact of orderedFacts) {
+    const sourceEvidenceVerified =
+      fact.sourceEvidenceRef !== null &&
+      verifiedEvidenceRefs.has(fact.sourceEvidenceRef);
     if (
       fact.state !== "customer_confirmed" ||
       fact.stale ||
@@ -141,8 +164,11 @@ export function buildProjectContextPacket(input: {
       !Number.isSafeInteger(fact.assertionVersion) ||
       fact.assertionVersion < 1 ||
       seen.has(fact.assertionId) ||
-      (fact.sourceEvidenceRef !== null &&
-        !evidenceRefs.has(fact.sourceEvidenceRef))
+      // A document-extracted fact must cite an independently verified source, but its
+      // excerpt does NOT have to be one of the ≤4 selected snippets: including only the
+      // excerpts that fit the prompt must never silently delete a confirmed fact.
+      (fact.sourceEvidenceRef !== null && !sourceEvidenceVerified) ||
+      (fact.originKind === "document_extracted" && !sourceEvidenceVerified)
     ) {
       continue;
     }
@@ -159,6 +185,12 @@ export function buildProjectContextPacket(input: {
       observedAt: fact.observedAt,
       sourceEvidenceRef: fact.sourceEvidenceRef,
       verificationLabel: "customer-confirmed; not independently verified",
+      sourceEvidenceStatus: sourceEvidenceVerified
+        ? "verified"
+        : "not_applicable",
+      sourceExcerptIncluded:
+        fact.sourceEvidenceRef !== null &&
+        evidenceRefs.has(fact.sourceEvidenceRef),
     };
     if (
       serializedSize(candidate) > MAX_PROJECT_FACT_BYTES ||

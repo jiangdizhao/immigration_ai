@@ -553,6 +553,12 @@ test("synthetic two-Chat extraction, fact authorization, revocation and conflict
     authorize: async () => ({ id: "project-a", status: "active" }),
     projectChatEnabled: () => true,
     contextEnabled: () => true,
+    // Phase 14-B: the fact's own source must pass independent server-side validation.
+    verifyEvidenceRef: async (input: {
+      actorUserId: string;
+      projectId: string;
+      evidenceRef: string;
+    }) => Boolean(await evidenceService.resolveEvidenceRef(input)),
     stableFacts: async (input: { actorUserId: string; projectId: string }) => {
       const projection = await factService.stableProjection(input);
       return {

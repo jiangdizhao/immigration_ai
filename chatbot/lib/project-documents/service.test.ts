@@ -1163,6 +1163,10 @@ test("Project document HTTP routes remain isolated behind the unavailable truste
         return false;
       }
     });
+  const PHASE14B_FACT_CAPABILITY_CONSUMERS = new Set([
+    path.join(appRoot, "lib/project-facts/runtime.ts"),
+    path.join(appRoot, "lib/projects/context-resolver.ts"),
+  ]);
   const externalFiles = consumerRoots
     .flatMap(listSourceFiles)
     .filter(
@@ -1188,6 +1192,25 @@ test("Project document HTTP routes remain isolated behind the unavailable truste
       assert.doesNotMatch(
         source,
         /@\/lib\/project-documents\/(?:service|runtime|postgres-repository)/u,
+        file
+      );
+      continue;
+    }
+    /**
+     * Phase 14-B R1: Project Facts and the Project context resolver compose the
+     * proof-checked fact-evidence capability directly (deterministic per runtime, no global
+     * registry). They may reference **only** that one capability module and must never reach
+     * the document runtime, service, repository or byte-read paths.
+     */
+    if (PHASE14B_FACT_CAPABILITY_CONSUMERS.has(file)) {
+      assert.match(
+        source,
+        /@\/lib\/project-documents\/fact-capabilities/u,
+        file
+      );
+      assert.doesNotMatch(
+        source,
+        /@\/lib\/project-documents\/(?!fact-capabilities)/u,
         file
       );
       continue;
