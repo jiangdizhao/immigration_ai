@@ -1,3 +1,17 @@
+<!-- BEGIN PHASE14_A_OWNER_CLOSEOUT_2026_11_11 -->
+## Phase 14-A — mobile Workspace engineering closeout (2026-11-11)
+
+**Decision:** `PHASE14_A_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / OWNER_SCOPED_BROWSER_PASS / PHASE14_B_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. This closes the single bounded Phase 14-A mobile UI task after independent patch reviews and owner-observed navigation/back-button checks. It does **not** assert that every A1–A5 viewport/browser case was executed as a formal separate matrix, and it does not authorize a release.
+
+**Git source:** branch `phase14-a-mobile-workspace-navigation` @ `6082bdd4f13702409737f16401831db2e9db4eed`, independently checked against the remote branch and the 17-path commit list. Source commit added the four-entry mobile bottom bar, one shared Radix Sheet, mobile Project natural scrolling/Chat bounded scrolling, preserved desktop rails and Project/Chat authority, R1 selection reconciliation and Sheet action-close fixes, and the localized Chinese/English `← 返回上一级` / `← Back` button. Prior planning HEAD was `2d136c45872516a1057598980acaa87f94b54f72` based on `7b9a64c`.
+
+**Validation provenance:** Cline reported focused tests **90/90 PASS**, full build PASS, changed-file Biome PASS, `git diff --check` PASS, and TypeScript **44 historical/0 new**. The wider `lib/workspace/*.test.*` glob retained one out-of-scope pre-existing stale `project-workspace-view.test.ts` assertion (still expects five Project views although `review` is a sixth), **204 PASS / 1 FAIL**; do not silently mark it green. ChatGPT independently reviewed initial, R1, and final localized UX patches; owner shared phone-sized browser screenshots of navigation and Project view and confirmed the new back button works with no issue. Other formal A1–A5 cases are **not all explicitly evidenced**.
+
+**Local artifacts:** owner retains untracked `phase14_a_review.patch`, `phase14_a_report.md`, `phase14_a_R1_review.patch`, and `phase14_a_R1_report.md` in repository root. These are review artifacts, not source/commit changes; leave them intact unless owner separately approves cleanup.
+
+**Preservation and next:** No AWS, database migration, Stripe, backend, legal model, or deployment action was performed for Phase 14-A. Phase 13 limitations persist: M2 trusted Project Documents remain DENY, M4 professional authority unavailable, M6 legal coverage PARTIAL, and staff-private-package approval PENDING; `LIVE_PRODUCTION_NO_GO` stays binding. Phase 14-B (real trusted Project Document cross-Chat friends preview) requires a separate scoped plan/approval and must not be assumed implemented or authorized by this closeout.
+<!-- END PHASE14_A_OWNER_CLOSEOUT_2026_11_11 -->
+
 <!-- BEGIN PHASE13_M10_ENGINEERING_CLOSEOUT_2026_11_10_MILESTONE -->
 ## Current milestone — M10 engineering accepted with limitations; professional pilot and release remain gated (2026-11-10)
 
