@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+## Phase 15 kickoff — five-milestone plan recorded; no implementation started (2026-11-21)
+
+**Branch:** phase15-guided-project-workflows. **Created from:** phase14-b-project-document-cross-chat @ f23094b3dda90d304db81f99401a44dfc3e3e8ac. **Current work:** documentation-only kickoff; separate source/implementation SHA does not exist.
+
+**Owner-approved plan:** [PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md](./PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md). Five integrated milestones: M1 Durable Project State; M2 Global Project AI Assistant and current official sources; M3 central guided canvas + preview/confirmed edits; M4 DIY versus signed service, first-tier/direct agency, domestic intake, exact stamped forms and external receipts; M5 domestic staff copilot and three end-to-end user journeys. M1 backend state must not be mistaken for a UI-only feature; M2 must answer open-ended whole-project questions, not just form fields.
+
+**Explicitly not done:** no Phase-15 coding, Codex prompt/task packet, schema/migration, real database changes, paid model, AWS/S3/Stripe operation, live integration test, feature-flag changes or deployment. Owner requested branch + records only, then local inspection, then later a separately commissioned first Codex prompt. Phase 13/14 constraints remain including M2 trusted document DENY, M4 professional authority gaps, M6 legal coverage PARTIAL, M8 staff private-package approval PENDING, LIVE_PRODUCTION_NO_GO.
+
+**Review handoff:** owner should first verify local worktree has no unrelated changes, fetch origin and switch to the new branch without force/reset/clean; then inspect this newest section, CURRENT_MILESTONE, PROJECT_STATE, D-P15-001, and the Phase-15 roadmap. Confirm local HEAD equals origin/phase15-guided-project-workflows. If a local branch with this name already exists, stop and compare rather than forcibly overwriting it. No Codex dispatch until owner signs off on branch contents.
+<!-- END PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+
 <!-- BEGIN PHASE14_PROJECT_NAMING_2026_11_11 -->
 ## Phase 14 — Project naming and renaming (IMPLEMENTED, pending owner review, NOT committed)
 

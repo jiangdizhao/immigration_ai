@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+## Current milestone — Phase 15 plan approved, M1 implementation NOT dispatched (2026-11-21)
+
+- **Branch:** phase15-guided-project-workflows, newly based on phase14-b-project-document-cross-chat @ f23094b3dda90d304db81f99401a44dfc3e3e8ac.
+- **Owner decision:** Approve the **five-milestone** Phase-15 sequence **M1 Durable Project State → M2 Global Project AI Assistant → M3 Central Guided Workspace / Confirmed AI Actions → M4 DIY/Engagement/Partner Routes → M5 Domestic Staff Copilot & Integrated Acceptance**.
+- **Authority:** [Phase 15 roadmap](./PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md) and [D-P15-001](./DECISIONS.md). The roadmap is planning authority only, not a Codex execution packet.
+- **Status:** PHASE15_PLAN_APPROVED / BRANCH_AND_DOCS_ONLY / M1_NOT_STARTED / IMPLEMENTATION_NOT_AUTHORIZED. Do not generate or dispatch M1 Codex prompt before the owner explicitly asks after reviewing the branch.
+- **Hard separation:** M1 backend project state is not merely a visual progress bar; M2 open-ended project-wide assistant is not merely search/form-filling; M3 makes the central journey and safe confirmed writes user-visible. M4 and M5 layer business routes and workforce assistance onto that foundation.
+- **Carried risk:** Phase 14-B offline code is not a certified live Project Document pipeline; trusted live intake stays DENY. Existing M4 professional authority gaps, M6 migration source PARTIAL, M8 staff package approval PENDING, E2E/Managed limitations and LIVE_PRODUCTION_NO_GO remain. No source, migration, AWS, paid provider, feature flag or sensitive data action authorized by the documentation kickoff.
+- **Next action:** owner fetches/switches to this branch locally and checks the five documentation paths and remote HEAD. Only after that review may the owner request the first M1 task specification/prompt.
+<!-- END PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+
 <!-- BEGIN PHASE14_A_OWNER_CLOSEOUT_2026_11_11 -->
 ## Phase 14-A — mobile Workspace engineering closeout (2026-11-11)
 

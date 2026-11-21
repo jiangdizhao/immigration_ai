@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+## Project state — Phase 15 Guided Project Workflows planning checkpoint (2026-11-21)
+
+- **Status:** Owner approved a 5-milestone Phase-15 product/engineering plan, **not** its execution. New branch: phase15-guided-project-workflows from Phase 14-B @ f23094b3dda90d304db81f99401a44dfc3e3e8ac. M1/M2/M3/M4/M5 have no Phase-15 implementation, tests, migrations or deployment evidence yet. First Codex prompt deferred until owner reviews the branch.
+- **Product direction:** Durable per-project/per-application state owned by backend, then a global open-question Project AI assistant with authorized on-demand context and current official source checks, then a large central guided graph and confirmed draft actions, then DIY/contracted partner routes and receipts, finally domestic-staff assistance + E2E acceptance. See [canonical Phase-15 roadmap](./PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md).
+- **Existing engineering baseline:** Phase 13 M1–M10 accepted at varying *engineering* scope; Phase 14-A responsive mobile work closed with limitations, Phase 14-B Git branch contains Project Facts/Cross-Chat implementation and Project naming (7276cc6, f23094b), but that does not prove runtime trusted Project Document intake or full Project/application-wide conversational awareness.
+- **Still binding:** Project Document trusted live readiness DENY (runtime application:null / trustedLiveReadiness:false); M4 engagement/professional authority gaps; Student 500 official-source PARTIAL; M8 staff-private-package review pending; Post-M5 external E2E blocked/partial; LIVE_PRODUCTION_NO_GO. Do not describe these as closed by approval of the roadmap.
+- **Authority and next:** [D-P15-001](./DECISIONS.md) is the owner planning decision. The current human task is local branch/doc verification, not coding. Preserve Phase 13/14 baseline, permissions, independent Fast/Legal Check/Premium engines, and existing S3/AWS/customer data safety boundaries.
+<!-- END PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+
 <!-- BEGIN PHASE14_A_OWNER_CLOSEOUT_2026_11_11 -->
 ## Phase 14-A — mobile Workspace engineering closeout (2026-11-11)
 

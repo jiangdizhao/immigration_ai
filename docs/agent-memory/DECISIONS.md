@@ -1,3 +1,20 @@
+<!-- BEGIN D_P15_001_2026_11_21 -->
+## D-P15-001 — Adopt five integrated Phase-15 milestones; documentation kickoff only
+
+**Date:** 2026-11-21 (Australia/Sydney)  
+**Status:** ACCEPTED FOR PRODUCT PLAN + NEW BRANCH/PROJECT RECORDS ONLY; IMPLEMENTATION NOT AUTHORIZED.
+
+**Decision.** Accept the redesigned Phase 15 with **five** cumulative milestones: M1 durable backend Project State, M2 open-ended Global Project AI Assistant, M3 central responsive journey/confirmed AI-assisted draft actions, M4 DIY/engagement/partner routing + accurate school handoffs, M5 domestic staff copilot + consolidated acceptance. Source authority: [Phase 15 roadmap](./PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md).
+
+**Reason.** Owner screenshot/feedback showed a confusing central workspace and unusable new project conversation. The earlier Phase-15 draft under-emphasized ongoing state maintenance and the assistant's need to answer arbitrary project questions from all authorized current business information. These two are separate foundational deliverables, not incidental UI or document-search subfeatures. Business owner/lawyer clarified that contracted first-tier school-agent stamped forms and handoff are not available to all DIY users; direct-agent schools and domestic referral/intake partners require separate role/channel semantics; ordinary school draft creation is allowed, without an invented generic double-lawyer/partner approval.
+
+**Engineering consequence.** Use the Phase 14-B branch's actual accepted code as the branch starting point, preserve all prior security/permission and legal-mode boundaries, and plan M1 and M2 before M3's visual/action workflows. Do not add a second mutable AI-owned source of project truth or promise that live Project Documents work without independently authenticated scan proof. No auto-approved external/legal submission, per-school intermediary receipt or professional authorization. The business owner's remaining specific form/approval rules are deferred until actual examples are supplied.
+
+**Scope authorised now.** Creation of phase15-guided-project-workflows and documentation updates. The owner will inspect and sync locally before separately requesting the first Codex execution prompt. There is **no authorisation** for coding, migrations (source or run), database mutation, AWS, production flags, paid provider calls, partner operations, real client materials, deployment or release. Production remains LIVE_PRODUCTION_NO_GO.
+
+**Supersedes:** the *planning priority* of the earlier four-milestone Phase-15 proposal; does not supersede Phase 13/14 architecture/security invariants or historical engineering acceptance records.
+<!-- END D_P15_001_2026_11_21 -->
+
 <!-- BEGIN D_P13_035_M10_ENGINEERING_CLOSEOUT_2026_11_10 -->
 ## D-P13-035 — Close M10 bounded engineering acceptance with limitations; keep professional pilot and release NO-GO
 
