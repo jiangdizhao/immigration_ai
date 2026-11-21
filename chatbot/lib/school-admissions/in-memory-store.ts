@@ -363,7 +363,7 @@ export function createInMemorySchoolAdmissionsStore(
     },
 
     async listCases(input) {
-      return [...cases.values()]
+      const rows = [...cases.values()]
         .filter(
           (entry) =>
             entry.projectId === input.projectId &&
@@ -372,6 +372,7 @@ export function createInMemorySchoolAdmissionsStore(
         .sort(
           (left, right) => left.createdAt.getTime() - right.createdAt.getTime()
         );
+      return input.maxRows === undefined ? rows : rows.slice(0, input.maxRows);
     },
 
     async getCase(input) {
@@ -406,9 +407,14 @@ export function createInMemorySchoolAdmissionsStore(
     },
 
     async listPreparations(input) {
-      return [...preparations.values()]
+      const rows = [...preparations.values()]
         .filter((entry) => entry.caseId === input.caseId)
         .sort((left, right) => left.version - right.version);
+      const bounded =
+        input.maxRows === undefined ? rows : rows.slice(0, input.maxRows);
+      return input.metadataOnly
+        ? bounded.map((row) => ({ ...row, sections: [], requirements: [] }))
+        : bounded;
     },
 
     async listOutcomes(input) {
@@ -436,11 +442,22 @@ export function createInMemorySchoolAdmissionsStore(
     },
 
     async listEvents(input) {
-      return events
+      const rows = events
         .filter((entry) => entry.caseId === input.caseId)
         .sort(
           (left, right) => left.createdAt.getTime() - right.createdAt.getTime()
         );
+      if (input.recentLimit === undefined) {
+        return rows;
+      }
+      return [...rows]
+        .sort(
+          (left, right) =>
+            left.createdAt.getTime() - right.createdAt.getTime() ||
+            left.caseRevision - right.caseRevision ||
+            left.id.localeCompare(right.id)
+        )
+        .slice(-input.recentLimit);
     },
 
     createCase(input) {

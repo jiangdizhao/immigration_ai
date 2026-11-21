@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
   projectMembership,
@@ -306,7 +306,7 @@ export function createPostgresPreparationStore(): Student500PreparationStore {
     },
 
     async listFactReferences(input) {
-      const rows = await db()
+      const query = db()
         .select()
         .from(student500FactReference)
         .where(eq(student500FactReference.applicationId, input.applicationId))
@@ -314,6 +314,10 @@ export function createPostgresPreparationStore(): Student500PreparationStore {
           asc(student500FactReference.createdAt),
           asc(student500FactReference.id)
         );
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toFactReferenceRecord);
     },
 
@@ -524,11 +528,20 @@ export function createPostgresPreparationStore(): Student500PreparationStore {
     },
 
     async listDrafts(input) {
-      const rows = await db()
-        .select()
+      const columns = getTableColumns(student500GsDraft);
+      const query = db()
+        .select(
+          input.metadataOnly
+            ? { ...columns, sections: sql<unknown>`'[]'::jsonb` }
+            : columns
+        )
         .from(student500GsDraft)
         .where(eq(student500GsDraft.applicationId, input.applicationId))
         .orderBy(asc(student500GsDraft.version));
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toDraftRecord);
     },
 
@@ -610,13 +623,23 @@ export function createPostgresPreparationStore(): Student500PreparationStore {
     },
 
     async listSnapshots(input) {
-      const rows = await db()
-        .select()
+      const columns = getTableColumns(student500PreparationSnapshot);
+      // Preserve the exact dependency keys (including explicit nulls) needed
+      // for freshness; omit narrative and other content in the state-only read.
+      const metadata = sql<unknown>`case when jsonb_typeof(${student500PreparationSnapshot.content}) = 'object' then coalesce((select jsonb_object_agg(key, value) from jsonb_each(${student500PreparationSnapshot.content}) where key in ('applicationRevision','inputDigest','legalSourceRevision','schoolContextDigest','factDigests','factReferenceIds')), '{}'::jsonb) else 'null'::jsonb end`;
+      const query = db()
+        .select(
+          input.metadataOnly ? { ...columns, content: metadata } : columns
+        )
         .from(student500PreparationSnapshot)
         .where(
           eq(student500PreparationSnapshot.applicationId, input.applicationId)
         )
         .orderBy(asc(student500PreparationSnapshot.version));
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toSnapshotRecord);
     },
 

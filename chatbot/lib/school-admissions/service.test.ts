@@ -1580,3 +1580,103 @@ test("a selected document backs a CoE without becoming verified", async () => {
     true
   );
 });
+
+test("Project State case reads bound history and fail closed when the event store fails", async () => {
+  const { harness, ownerUserId, projectId, caseId } = await boundCase();
+  let detail = (
+    await harness.service.get({ actorUserId: ownerUserId, projectId, caseId })
+  ).case;
+  for (let i = 0; i < 15; i++) {
+    detail = (
+      await harness.service.recordExternalAction({
+        actorUserId: ownerUserId,
+        projectId,
+        caseId,
+        expectedRevision: detail.revision,
+        actionKind: "phone_follow_up",
+        performedOn: "2026-10-20",
+        acknowledged: true,
+        operationId: operationId(),
+      })
+    ).case;
+  }
+  const input = { actorUserId: ownerUserId, projectId, caseId };
+  const full = await harness.service.get(input);
+  const bounded = await harness.service.getProjectStateCase({
+    ...input,
+    applicationDataAvailable: true,
+  });
+  assert.ok(full.case.events.length > 13);
+  assert.equal(bounded.case.events.length, 13);
+  assert.equal(bounded.case.events.at(-1)?.caseRevision, detail.revision);
+  const original = harness.store.listEvents;
+  harness.store.listEvents = () =>
+    Promise.reject(new Error("synthetic source unavailable"));
+  try {
+    await assert.rejects(
+      harness.service.getProjectStateCase({
+        ...input,
+        applicationDataAvailable: true,
+      }),
+      /synthetic source unavailable/
+    );
+  } finally {
+    harness.store.listEvents = original;
+  }
+});
+
+test("Project State Admissions index rejects overflow", async () => {
+  const { harness, ownerUserId, projectId } = await boundCase();
+  const original = harness.store.listCases;
+  let requested = 0;
+  harness.store.listCases = async (input) => {
+    requested = input.maxRows ?? 0;
+    const rows = await original(input);
+    return Array.from({ length: 17 }, () => rows[0]);
+  };
+  try {
+    await assert.rejects(
+      harness.service.listProjectStateCases({
+        actorUserId: ownerUserId,
+        projectId,
+      }),
+      (error: unknown) => (error as { code?: string }).code === "limit_exceeded"
+    );
+    assert.equal(requested, 17);
+  } finally {
+    harness.store.listCases = original;
+  }
+});
+
+test("Project State Admissions omits preparation content without changing freshness or requirements", async () => {
+  const { harness, ownerUserId, projectId, caseId } = await boundCase();
+  const before = await harness.service.get({
+    actorUserId: ownerUserId,
+    projectId,
+    caseId,
+  });
+  await harness.service.prepare({
+    actorUserId: ownerUserId,
+    projectId,
+    caseId,
+    expectedRevision: before.case.revision,
+    operationId: operationId(),
+  });
+  const full = (
+    await harness.service.get({ actorUserId: ownerUserId, projectId, caseId })
+  ).case;
+  const bounded = (
+    await harness.service.getProjectStateCase({
+      actorUserId: ownerUserId,
+      projectId,
+      caseId,
+      applicationDataAvailable: true,
+    })
+  ).case;
+  assert.ok(full.preparation?.sections.length);
+  assert.equal(bounded.preparationContentOmitted, true);
+  assert.deepEqual(bounded.preparation?.sections, []);
+  assert.equal(bounded.preparationStale, full.preparationStale);
+  assert.deepEqual(bounded.staleReasonCodes, full.staleReasonCodes);
+  assert.deepEqual(bounded.requirements, full.requirements);
+});

@@ -116,6 +116,7 @@ export type Student500ApplicationStore = {
   listApplications(input: {
     readonly projectId: string;
     readonly ownerUserId: string;
+    readonly maxRows?: number;
   }): Promise<readonly Student500ApplicationRecord[]>;
 
   getApplication(input: {
@@ -126,6 +127,7 @@ export type Student500ApplicationStore = {
 
   listEvents(input: {
     readonly applicationId: string;
+    readonly recentLimit?: number;
   }): Promise<readonly Student500EventRecord[]>;
 
   countApplications(input: {

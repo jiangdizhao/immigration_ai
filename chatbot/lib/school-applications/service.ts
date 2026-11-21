@@ -8,6 +8,7 @@ import {
   planSchoolApplicationPackageBuild,
   resolveSchoolApplicationTarget,
   SCHOOL_APPLICATION_DISCLOSURE_CODES,
+  SCHOOL_APPLICATION_MAX_APPLICATIONS_PER_PROJECT,
   SCHOOL_APPLICATION_MAX_LABEL,
   SCHOOL_APPLICATION_MAX_REFERENCES,
   SCHOOL_APPLICATION_MAX_TEXT,
@@ -117,6 +118,8 @@ export type SchoolApplicationView = {
 };
 
 export type SchoolApplicationDetailView = SchoolApplicationView & {
+  /** State-only package candidates are explicitly marked when history is omitted. */
+  readonly packageHistoryTruncated?: boolean;
   readonly events: readonly {
     readonly eventType: string;
     readonly subjectKind: string;
@@ -465,15 +468,30 @@ export function createSchoolApplicationService(
     readonly actorUserId: string;
     readonly projectId: string;
     readonly application: SchoolApplicationRecord;
+    readonly projectStateRead?: boolean;
   }): Promise<SchoolApplicationDetailView> {
     const references = await store.listReferences({
       applicationId: input.application.id,
+      ...(input.projectStateRead
+        ? { maxRows: SCHOOL_APPLICATION_MAX_REFERENCES + 1 }
+        : {}),
     });
-    const packages = await store.listPackages({
+    if (
+      input.projectStateRead &&
+      references.length > SCHOOL_APPLICATION_MAX_REFERENCES
+    ) {
+      throw new SchoolApplicationError("limit_exceeded");
+    }
+    const packageCandidates = await store.listPackages({
       applicationId: input.application.id,
+      ...(input.projectStateRead ? { projectStateCandidates: true } : {}),
     });
+    const packages = input.projectStateRead
+      ? packageCandidates.slice(0, 2)
+      : packageCandidates;
     const events = await store.listEvents({
       applicationId: input.application.id,
+      ...(input.projectStateRead ? { recentLimit: 13 } : {}),
     });
     const resolved = await resolveReferences({
       actorUserId: input.actorUserId,
@@ -481,6 +499,9 @@ export function createSchoolApplicationService(
       references,
     });
     return {
+      ...(input.projectStateRead
+        ? { packageHistoryTruncated: packageCandidates.length > 2 }
+        : {}),
       ...assembleView({
         application: input.application,
         packages,
@@ -612,6 +633,34 @@ export function createSchoolApplicationService(
         application,
         projectId: input.projectId,
       });
+    },
+
+    /** Complete owner-scoped index or explicit overflow, without summary expansion. */
+    async listProjectState(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+    }) {
+      await authorize(input);
+      const records = await store.listApplications({
+        ownerUserId: input.actorUserId,
+        projectId: input.projectId,
+        maxRows: SCHOOL_APPLICATION_MAX_APPLICATIONS_PER_PROJECT + 1,
+      });
+      if (records.length > SCHOOL_APPLICATION_MAX_APPLICATIONS_PER_PROJECT) {
+        throw new SchoolApplicationError("limit_exceeded");
+      }
+      return records.map((record) => ({ applicationId: record.id }));
+    },
+
+    /** Authorized Project State detail: 12 visible events plus overflow sentinel. */
+    async getProjectState(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly applicationId: string;
+    }): Promise<SchoolApplicationDetailView> {
+      await authorize(input);
+      const application = await requireApplication(input);
+      return loadDetail({ ...input, application, projectStateRead: true });
     },
 
     async create(

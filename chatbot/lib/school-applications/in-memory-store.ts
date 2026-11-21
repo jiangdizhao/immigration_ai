@@ -399,7 +399,7 @@ export function createInMemorySchoolApplicationStore(
     },
 
     async listApplications(input) {
-      return [...applications.values()]
+      const rows = [...applications.values()]
         .filter(
           (entry) =>
             entry.projectId === input.projectId &&
@@ -410,6 +410,7 @@ export function createInMemorySchoolApplicationStore(
             left.createdAt.getTime() - right.createdAt.getTime() ||
             left.id.localeCompare(right.id)
         );
+      return input.maxRows === undefined ? rows : rows.slice(0, input.maxRows);
     },
 
     async getApplication(input) {
@@ -425,27 +426,48 @@ export function createInMemorySchoolApplicationStore(
     },
 
     async listReferences(input) {
-      return referencesFor(input.applicationId).sort(
+      const rows = referencesFor(input.applicationId).sort(
         (left, right) =>
           left.createdAt.getTime() - right.createdAt.getTime() ||
           left.id.localeCompare(right.id)
       );
+      return input.maxRows === undefined ? rows : rows.slice(0, input.maxRows);
     },
 
     async listPackages(input) {
-      return packagesFor(input.applicationId).sort(
-        (left, right) => left.version - right.version
-      );
+      const rows = packagesFor(input.applicationId);
+      if (input.projectStateCandidates) {
+        return rows
+          .sort(
+            (left, right) =>
+              Number(right.status === "current") -
+                Number(left.status === "current") ||
+              right.version - left.version
+          )
+          .slice(0, 3);
+      }
+      return rows.sort((left, right) => left.version - right.version);
     },
 
     async listEvents(input) {
-      return events
+      const rows = events
         .filter((event) => event.applicationId === input.applicationId)
         .sort(
           (left, right) =>
             left.createdAt.getTime() - right.createdAt.getTime() ||
             left.id.localeCompare(right.id)
         );
+      if (input.recentLimit === undefined) {
+        return rows;
+      }
+      return [...rows]
+        .sort(
+          (left, right) =>
+            left.createdAt.getTime() - right.createdAt.getTime() ||
+            left.applicationRevision - right.applicationRevision ||
+            left.id.localeCompare(right.id)
+        )
+        .slice(-input.recentLimit);
     },
 
     async countApplications(input) {

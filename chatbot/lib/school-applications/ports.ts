@@ -156,6 +156,7 @@ export type SchoolApplicationStore = {
   listApplications(input: {
     readonly projectId: string;
     readonly ownerUserId: string;
+    readonly maxRows?: number;
   }): Promise<readonly SchoolApplicationRecord[]>;
 
   getApplication(input: {
@@ -166,14 +167,17 @@ export type SchoolApplicationStore = {
 
   listReferences(input: {
     readonly applicationId: string;
+    readonly maxRows?: number;
   }): Promise<readonly SchoolApplicationReferenceRecord[]>;
 
   listPackages(input: {
     readonly applicationId: string;
+    readonly projectStateCandidates?: boolean;
   }): Promise<readonly SchoolApplicationPackageRecord[]>;
 
   listEvents(input: {
     readonly applicationId: string;
+    readonly recentLimit?: number;
   }): Promise<readonly SchoolApplicationEventRecord[]>;
 
   countApplications(input: {

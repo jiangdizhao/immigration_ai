@@ -112,12 +112,27 @@ export interface ProjectFactRepository {
     assertionId: string;
     assertionVersion: number;
   }): Promise<ProjectFactUseGrant>;
-  projection(input: { actorUserId: string; projectId: string }): Promise<{
+  projection(input: {
+    actorUserId: string;
+    projectId: string;
+    maxSourceRows?: number;
+    metadataOnly?: boolean;
+  }): Promise<{
     assertions: ProjectFactAssertion[];
     publications: ProjectFactPublication[];
     grants: ProjectFactUseGrant[];
     conflicts: ProjectFactConflict[];
   } | null>;
+}
+
+/** Conservative state-only source cap: match the existing 100-fact output bound.
+ * Each contributing source must fit completely; otherwise state is unavailable. */
+export const PROJECT_STATE_FACT_SOURCE_MAX = 100;
+export class ProjectFactSourceOverflow extends Error {
+  readonly code = "project_fact_source_overflow";
+  constructor() {
+    super("project_fact_source_overflow");
+  }
 }
 
 export class ProjectFactError extends Error {
@@ -324,10 +339,26 @@ export function createProjectFactManagementService(input: {
     async stableProjection(inputValue: {
       actorUserId: string;
       projectId: string;
+      maxSourceRows?: number;
+      metadataOnly?: boolean;
     }) {
       const source = await input.repository.projection(inputValue);
+      const sourceLimit = inputValue.maxSourceRows;
+      if (
+        source &&
+        sourceLimit !== undefined &&
+        [
+          source.assertions,
+          source.publications,
+          source.grants,
+          source.conflicts,
+        ].some((rows) => rows.length > sourceLimit)
+      ) {
+        throw new ProjectFactSourceOverflow();
+      }
       if (!source) {
         return {
+          ...(inputValue.metadataOnly ? { valuesRedacted: true as const } : {}),
           authorizedForAI: [],
           unresolvedCandidates: [],
           conflicts: [],
@@ -412,11 +443,16 @@ export function createProjectFactManagementService(input: {
         })
         .map(({ assertion }) => assertion);
       const authorizedIds = new Set(authorizedForAI.map((row) => row.id));
+      const redact = (row: ProjectFactAssertion) =>
+        inputValue.metadataOnly
+          ? { ...row, value: null, normalizedComparison: "" }
+          : row;
       return {
-        authorizedForAI,
-        unresolvedCandidates: visible.filter(
-          (row) => !authorizedIds.has(row.id)
-        ),
+        ...(inputValue.metadataOnly ? { valuesRedacted: true as const } : {}),
+        authorizedForAI: authorizedForAI.map(redact),
+        unresolvedCandidates: visible
+          .filter((row) => !authorizedIds.has(row.id))
+          .map(redact),
         conflicts: visibleConflicts,
         available: true as const,
       };

@@ -247,11 +247,12 @@ export function createInMemoryStudent500Store(): InMemoryStudent500Store {
     },
 
     async listApplications(input) {
-      return [...applications.values()]
+      const rows = [...applications.values()]
         .filter((application) => ownedBy(application, input))
         .sort(
           (left, right) => left.createdAt.getTime() - right.createdAt.getTime()
         );
+      return input.maxRows === undefined ? rows : rows.slice(0, input.maxRows);
     },
 
     async getApplication(input) {
@@ -260,7 +261,18 @@ export function createInMemoryStudent500Store(): InMemoryStudent500Store {
     },
 
     async listEvents(input) {
-      return [...(events.get(input.applicationId) ?? [])];
+      const rows = [...(events.get(input.applicationId) ?? [])];
+      if (input.recentLimit === undefined) {
+        return rows;
+      }
+      return [...rows]
+        .sort(
+          (left, right) =>
+            left.createdAt.getTime() - right.createdAt.getTime() ||
+            left.applicationRevision - right.applicationRevision ||
+            left.id.localeCompare(right.id)
+        )
+        .slice(-input.recentLimit);
     },
 
     async countApplications(input) {

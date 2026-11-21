@@ -534,7 +534,7 @@ export function createPostgresSchoolApplicationStore(): SchoolApplicationStore {
     },
 
     async listApplications(input) {
-      const rows = await db
+      const query = db
         .select()
         .from(schoolApplication)
         .where(
@@ -544,6 +544,10 @@ export function createPostgresSchoolApplicationStore(): SchoolApplicationStore {
           )
         )
         .orderBy(asc(schoolApplication.createdAt), asc(schoolApplication.id));
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toApplicationRecord);
     },
 
@@ -557,7 +561,7 @@ export function createPostgresSchoolApplicationStore(): SchoolApplicationStore {
     },
 
     async listReferences(input) {
-      const rows = await db
+      const query = db
         .select()
         .from(schoolApplicationReference)
         .where(
@@ -567,28 +571,52 @@ export function createPostgresSchoolApplicationStore(): SchoolApplicationStore {
           asc(schoolApplicationReference.createdAt),
           asc(schoolApplicationReference.id)
         );
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toReferenceRecord);
     },
 
     async listPackages(input) {
-      const rows = await db
+      const base = db
         .select()
         .from(schoolApplicationPackage)
-        .where(eq(schoolApplicationPackage.applicationId, input.applicationId))
-        .orderBy(asc(schoolApplicationPackage.version));
+        .where(eq(schoolApplicationPackage.applicationId, input.applicationId));
+      const rows = input.projectStateCandidates
+        ? await base
+            .orderBy(
+              sql`case when ${schoolApplicationPackage.status} = 'current' then 0 else 1 end`,
+              desc(schoolApplicationPackage.version)
+            )
+            .limit(3)
+        : await base.orderBy(asc(schoolApplicationPackage.version));
       return rows.map(toPackageRecord);
     },
 
     async listEvents(input) {
-      const rows = await db
+      const base = db
         .select()
         .from(schoolApplicationEvent)
-        .where(eq(schoolApplicationEvent.applicationId, input.applicationId))
-        .orderBy(
-          asc(schoolApplicationEvent.applicationRevision),
-          asc(schoolApplicationEvent.createdAt),
-          asc(schoolApplicationEvent.id)
-        );
+        .where(eq(schoolApplicationEvent.applicationId, input.applicationId));
+      const rows =
+        input.recentLimit === undefined
+          ? await base.orderBy(
+              asc(schoolApplicationEvent.applicationRevision),
+              asc(schoolApplicationEvent.createdAt),
+              asc(schoolApplicationEvent.id)
+            )
+          : (
+              await base
+                .orderBy(
+                  desc(
+                    sql`date_trunc('milliseconds', ${schoolApplicationEvent.createdAt})`
+                  ),
+                  desc(schoolApplicationEvent.applicationRevision),
+                  desc(schoolApplicationEvent.id)
+                )
+                .limit(input.recentLimit)
+            ).reverse();
       return rows.map(toEventRecord);
     },
 

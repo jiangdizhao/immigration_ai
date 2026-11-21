@@ -2,7 +2,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
@@ -527,7 +527,7 @@ export function createPostgresStudent500Store(): Student500ApplicationStore {
     },
 
     async listApplications(input) {
-      const rows = await db
+      const query = db
         .select()
         .from(student500Application)
         .where(
@@ -540,6 +540,10 @@ export function createPostgresStudent500Store(): Student500ApplicationStore {
           asc(student500Application.createdAt),
           asc(student500Application.id)
         );
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toRecord);
     },
 
@@ -559,16 +563,29 @@ export function createPostgresStudent500Store(): Student500ApplicationStore {
     },
 
     async listEvents(input) {
-      const rows = await db
+      const base = db
         .select()
         .from(student500ApplicationEvent)
         .where(
           eq(student500ApplicationEvent.applicationId, input.applicationId)
-        )
-        .orderBy(
-          asc(student500ApplicationEvent.applicationRevision),
-          asc(student500ApplicationEvent.createdAt)
         );
+      const rows =
+        input.recentLimit === undefined
+          ? await base.orderBy(
+              asc(student500ApplicationEvent.applicationRevision),
+              asc(student500ApplicationEvent.createdAt)
+            )
+          : (
+              await base
+                .orderBy(
+                  desc(
+                    sql`date_trunc('milliseconds', ${student500ApplicationEvent.createdAt})`
+                  ),
+                  desc(student500ApplicationEvent.applicationRevision),
+                  desc(student500ApplicationEvent.id)
+                )
+                .limit(input.recentLimit)
+            ).reverse();
       return rows.map<Student500EventRecord>((row) => ({
         actorUserId: row.actorUserId,
         applicationId: row.applicationId,

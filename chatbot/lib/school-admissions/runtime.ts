@@ -75,7 +75,9 @@ const applicationPort: SchoolAdmissionsApplicationPort = {
   async load(input) {
     let detail: Awaited<ReturnType<typeof schoolApplicationService.get>>;
     try {
-      detail = await schoolApplicationService.get({
+      detail = await (input.projectStateRead
+        ? schoolApplicationService.getProjectState
+        : schoolApplicationService.get)({
         actorUserId: input.actorUserId,
         applicationId: input.applicationId,
         projectId: input.projectId,

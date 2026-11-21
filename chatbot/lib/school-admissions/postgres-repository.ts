@@ -2,7 +2,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
 import {
@@ -507,7 +507,7 @@ export function createPostgresSchoolAdmissionsStore(): SchoolAdmissionsStore {
     },
 
     async listCases(input) {
-      const rows = await db
+      const query = db
         .select()
         .from(schoolAdmissionCase)
         .where(
@@ -517,6 +517,10 @@ export function createPostgresSchoolAdmissionsStore(): SchoolAdmissionsStore {
           )
         )
         .orderBy(asc(schoolAdmissionCase.createdAt));
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toCaseRecord);
     },
 
@@ -559,11 +563,24 @@ export function createPostgresSchoolAdmissionsStore(): SchoolAdmissionsStore {
     },
 
     async listPreparations(input) {
-      const rows = await db
-        .select()
+      const columns = getTableColumns(schoolAdmissionPreparation);
+      const query = db
+        .select(
+          input.metadataOnly
+            ? {
+                ...columns,
+                sections: sql<unknown>`'[]'::jsonb`,
+                requirements: sql<unknown>`'[]'::jsonb`,
+              }
+            : columns
+        )
         .from(schoolAdmissionPreparation)
         .where(eq(schoolAdmissionPreparation.caseId, input.caseId))
         .orderBy(asc(schoolAdmissionPreparation.version));
+      const rows =
+        input.maxRows === undefined
+          ? await query
+          : await query.limit(input.maxRows);
       return rows.map(toPreparationRecord);
     },
 
@@ -595,11 +612,24 @@ export function createPostgresSchoolAdmissionsStore(): SchoolAdmissionsStore {
     },
 
     async listEvents(input) {
-      const rows = await db
+      const base = db
         .select()
         .from(schoolAdmissionEvent)
-        .where(eq(schoolAdmissionEvent.caseId, input.caseId))
-        .orderBy(asc(schoolAdmissionEvent.createdAt));
+        .where(eq(schoolAdmissionEvent.caseId, input.caseId));
+      const rows =
+        input.recentLimit === undefined
+          ? await base.orderBy(asc(schoolAdmissionEvent.createdAt))
+          : (
+              await base
+                .orderBy(
+                  desc(
+                    sql`date_trunc('milliseconds', ${schoolAdmissionEvent.createdAt})`
+                  ),
+                  desc(schoolAdmissionEvent.caseRevision),
+                  desc(schoolAdmissionEvent.id)
+                )
+                .limit(input.recentLimit)
+            ).reverse();
       return rows.map(toEventRecord);
     },
 

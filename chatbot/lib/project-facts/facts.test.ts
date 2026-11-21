@@ -372,6 +372,24 @@ test("a hidden member conflict suppresses AI eligibility without disclosing priv
   assert.equal(serialized.includes("document_extracted"), false);
   assert.equal(serialized.includes("private-evidence-ref"), false);
   assert.equal(serialized.includes("customer-b"), false);
+  const bounded = await service.stableProjection({
+    actorUserId: base.actorUserId,
+    projectId: base.projectId,
+    maxSourceRows: 100,
+  });
+  assert.deepEqual(bounded, projection);
+  const metadata = await service.stableProjection({
+    actorUserId: base.actorUserId,
+    projectId: base.projectId,
+    maxSourceRows: 100,
+    metadataOnly: true,
+  });
+  assert.equal(metadata.valuesRedacted, true);
+  assert.deepEqual(
+    metadata.unresolvedCandidates.map((row) => row.id),
+    projection.unresolvedCandidates.map((row) => row.id)
+  );
+  assert.equal(metadata.unresolvedCandidates[0]?.value, null);
 });
 
 test("synthetic two-Chat extraction, fact authorization, revocation and conflict invalidation", async () => {
@@ -692,4 +710,29 @@ test("synthetic two-Chat extraction, fact authorization, revocation and conflict
     dependencies: dependencies as never,
   });
   assert.equal(afterConflict.packet?.confirmedProjectFacts.length, 0);
+});
+
+test("Project State fact source overflow rejects the entire projection", async () => {
+  const { service } = setup();
+  for (let i = 0; i < 101; i++) {
+    await service.propose({
+      ...base,
+      key: `synthetic.fact_${i}`,
+      operationId: `a4-fact-${i}`,
+      expectedProjectRevision: i + 1,
+    });
+  }
+  await assert.rejects(
+    service.stableProjection({
+      actorUserId: base.actorUserId,
+      projectId: base.projectId,
+      maxSourceRows: 100,
+    }),
+    { code: "project_fact_source_overflow" }
+  );
+  const complete = await service.stableProjection({
+    actorUserId: base.actorUserId,
+    projectId: base.projectId,
+  });
+  assert.equal(complete.unresolvedCandidates.length, 101);
 });

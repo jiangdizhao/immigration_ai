@@ -1,6 +1,7 @@
 import {
   isStudent500Uuid,
   normalizeStudent500Context,
+  STUDENT_500_MAX_APPLICATIONS_PER_PROJECT,
   type Student500ApplicationStatus,
   type Student500Context,
   type Student500ContextInput,
@@ -372,6 +373,49 @@ export function createStudent500Service(options: Student500ServiceOptions) {
         },
         events
       );
+    },
+
+    /** Complete owner-scoped index or explicit overflow. */
+    async listProjectState(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+    }) {
+      await authorize(input);
+      const records = await store.listApplications({
+        ownerUserId: input.actorUserId,
+        projectId: input.projectId,
+        maxRows: STUDENT_500_MAX_APPLICATIONS_PER_PROJECT + 1,
+      });
+      if (records.length > STUDENT_500_MAX_APPLICATIONS_PER_PROJECT) {
+        throw new Student500Error("limit_exceeded");
+      }
+      return records.map((record) => ({ applicationId: record.id }));
+    },
+
+    /** Authorized Project State read: bounded history with overflow sentinel. */
+    async getProjectState(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly applicationId: string;
+    }): Promise<Student500ApplicationDetailView> {
+      await authorize(input);
+      const application = await requireApplication(input);
+      const events = await store.listEvents({
+        applicationId: application.id,
+        recentLimit: 13,
+      });
+      return buildView({ ...input, application }, events);
+    },
+
+    /** The preparation adapter consumes screening only, not event history. */
+    async getScreening(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly applicationId: string;
+    }): Promise<Student500Screening> {
+      await authorize(input);
+      const application = await requireApplication(input);
+      return (await buildView({ ...input, application })).screening;
     },
 
     async create(input: {

@@ -1,12 +1,84 @@
-<!-- BEGIN PHASE15_PLANNING_KICKOFF_2026_11_21 -->
-## Project state — Phase 15 Guided Project Workflows planning checkpoint (2026-11-21)
+<!-- BEGIN PHASE15_M1_OWNER_ACCEPTANCE_2026_11_21 -->
+## Phase 15 M1 — Owner engineering acceptance with limitations
 
-- **Status:** Owner approved a 5-milestone Phase-15 product/engineering plan, **not** its execution. New branch: phase15-guided-project-workflows from Phase 14-B @ f23094b3dda90d304db81f99401a44dfc3e3e8ac. M1/M2/M3/M4/M5 have no Phase-15 implementation, tests, migrations or deployment evidence yet. First Codex prompt deferred until owner reviews the branch.
-- **Product direction:** Durable per-project/per-application state owned by backend, then a global open-question Project AI assistant with authorized on-demand context and current official source checks, then a large central guided graph and confirmed draft actions, then DIY/contracted partner routes and receipts, finally domestic-staff assistance + E2E acceptance. See [canonical Phase-15 roadmap](./PHASE15_GUIDED_PROJECT_WORKFLOWS_ROADMAP_2026_11_21.md).
-- **Existing engineering baseline:** Phase 13 M1–M10 accepted at varying *engineering* scope; Phase 14-A responsive mobile work closed with limitations, Phase 14-B Git branch contains Project Facts/Cross-Chat implementation and Project naming (7276cc6, f23094b), but that does not prove runtime trusted Project Document intake or full Project/application-wide conversational awareness.
-- **Still binding:** Project Document trusted live readiness DENY (runtime application:null / trustedLiveReadiness:false); M4 engagement/professional authority gaps; Student 500 official-source PARTIAL; M8 staff-private-package review pending; Post-M5 external E2E blocked/partial; LIVE_PRODUCTION_NO_GO. Do not describe these as closed by approval of the roadmap.
-- **Authority and next:** [D-P15-001](./DECISIONS.md) is the owner planning decision. The current human task is local branch/doc verification, not coding. Preserve Phase 13/14 baseline, permissions, independent Fast/Legal Check/Premium engines, and existing S3/AWS/customer data safety boundaries.
-<!-- END PHASE15_PLANNING_KICKOFF_2026_11_21 -->
+**Current status:** `PHASE15_M1_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. The owner has closed M1 engineering under [D-P15-002](./DECISIONS.md), following M1 and R1–R4 independent corrective reviews, PG-A2 persistence/authorization, PG-A3 event-history bounding, and PG-A4 remaining source-history bounding. M1 includes durable versioned backend-owned state, per-request authorized service composition and read-only API, independent School/Admissions/Student 500 matters including Offer/CoE and visa-only paths, provenance and events, package freshness/invalidation, isolation and lifecycle-safe action targets. Isolated PostgreSQL verified persistence, replay and cross-process readback; no M1 schema or migration was needed.
+
+PG-A4 measured about 143 shared-runtime SQL statements per read and 39.6 ms median on the local five-school/five-Admissions fixture; this is not a production SLA. Focused tests and the production build passed; standalone TypeScript retains 44 historical diagnostics, none in the changed implementation areas. The 100-row-per-Fact-source, 40-row School reference history and 200-row Student 500 reference history caps fail closed on overflow and can make legitimate data unavailable; N+1 query growth remains. Real authenticated Next.js HTTP E2E is not verified and remains a deployment gate. A genuinely trusted scanned-document-linked Fact has not been tested in PostgreSQL; AWS/production traffic, scan/sort costs and production-scale performance remain unverified. Existing professional authorization and Project Document trust restrictions continue.
+
+M2 — Global Project AI Assistant & Official Intelligence — is the next milestone, pending separate owner authorization for planning and implementation. It must respect the M1 caps, unavailable semantics, privacy and legal research/evidence contracts. Acceptance does not authorize deployment, production flags, real customer documents, external submissions or professional-service release. If intended M2 or production use exceeds the caps, first harden and validate the authorized source reads.
+
+**Reviewed checkpoint:** branch `phase15-guided-project-workflows`, committed base HEAD `d3979fca825055ddd965ad5020d7892ffb473c49`; cumulative PG-A4 review patch SHA-256 `37017e24c676ee12141b1e0b1ee058a9ffd561518737ad0c849a92346974377e`. Implementation remains uncommitted; no deployment has occurred. The reviewed patch predates this documentation closeout. Historical sections below retain their original status as of their dates.
+<!-- END PHASE15_M1_OWNER_ACCEPTANCE_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_PG_A4_2026_11_21 -->
+## Phase 15 M1 PG-A4 — IMPLEMENTED_PENDING_OWNER_ACCEPTANCE
+
+Project State now uses service-authorized, metadata-only bounded Project Fact reads (100 per source set plus an overflow sentinel), bounded School reference history (40 plus sentinel) and up to three package candidates, and bounded Student 500 preparation reads with draft/snapshot content omitted. Admissions preparation state reads omit narrative content; other Admissions histories have transactional business caps. Existing full-history interfaces remain. Overflow makes the affected state unavailable rather than incomplete; historical rows remain persisted. These conservative bounds include revoked/private history and can make a source unavailable before 100 visible facts or 40 active references.
+
+Guarded isolated PostgreSQL tests passed for fact visibility, actor isolation, revoked grants, conflict, metadata redaction and overflow; School package freshness, authorization and reference overflow; Admissions and Student 500 metadata/freshness; controlled-auth handler, lifecycle and normalized state regressions. On the 1/3/5-school fixtures the latest shared-runtime reads used 79/93/143 statements and median 40.70/26.82/39.615 ms; schema-probe statements and database scan/sort work were not measured. These are local measurements, not production latency guarantees. Focused tests and build passed; TypeScript retains 44 pre-existing diagnostics. Genuine linked-document Fact provenance and real-session Next.js HTTP E2E were not verified in this pass; the latter remains a deployment gate.
+
+Engineering recommendation: `M1_ACCEPT_WITH_LIMITATIONS`, subject to owner review and the explicit usage/release restrictions in `phase15_m1_PG_A4_report.md`. M1 remains pending owner acceptance; no M2 work, production enablement, migration or deployment is authorized by this recommendation. Review the cumulative `phase15_m1_PG_A4_review.patch` and report.
+<!-- END PHASE15_M1_PG_A4_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_PG_A3_2026_11_21 -->
+## Phase 15 M1 PG-A3 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+Project State now uses authorized 13-row event reads (12 visible plus a truncation sentinel) and bounded complete-or-unavailable School, Admissions and Student 500 indexes. The existing full-history business APIs remain. Linked Admissions and Student 500 preparation no longer reload full event histories on this path. Offline service/overflow/fault tests passed; guarded read-only PostgreSQL checks matched independently ordered latest events, preserved older rows and produced identical timestamp-neutral fingerprints across separate processes. No new PG fixtures or writes were made.
+
+Existing PG-A2 small fixture has since gained a second Admissions case and a Student 500 application, so it is not directly comparable with its earlier single-case baseline. At 3/3 and 5/5 schools/cases, warm shared-runtime reads measured 93 and 143 statements (PG-A2: about 99 and 153); separate schema-probe statements remain unmeasured. Event rows returned per selected school were 5/13/13 for 5/30/100 stored events; SQL-side sorting work and memory were not measured. School reference/package history and Project Fact source projection still have unbounded reads, so recommendation is `M1_REQUIRES_CORRECTION` pending a scoped bound or evidence of safety for approved usage. `REAL_SESSION_HTTP_E2E_NOT_VERIFIED` remains a deployment gate; the controlled-auth real-loader handler passed. M1 remains pending owner acceptance and M2 has not started. See `phase15_m1_PG_A3_report.md` and `phase15_m1_PG_A3_review.patch`.
+<!-- END PHASE15_M1_PG_A3_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_PG_A2_2026_11_21 -->
+## Phase 15 M1 PG-A2 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+The hostless test URL with PGHOST resolved to the approved private Unix socket in the actual shared runtime; identity, non-superuser role, version, schema and 0054 ledger hash were verified before writes in every test process. Production database wiring was unchanged. Real multi-school invalidation/replay, separate-process Project State readback, member/revoked and private-matter isolation, archived/closed state, Offer/CoE, Student 500 draft and controlled-auth HTTP handler checks passed. Real Next.js session E2E and an actual failed/unavailable source were not tested; a controlled guest actor produced restricted source semantics. Synthetic fixtures remain in the isolated database.
+
+The 1/3/5-school performance matrix with 5/30/100 events per school recorded 45–47, 99–100 and 153–154 shared-runtime statements per read, excluding unmeasured schema-probe statements; observed local read maxima were 56.72, 29.10 and 27.37 ms. Full source histories remain unbounded beyond the tested range. Recommendation `M1_REQUIRES_CORRECTION` pending owner review of that operational risk and the remaining real-session/source-failure gates; M1 is not accepted and M2 has not started. Details and review patch: `phase15_m1_PG_A2_report.md`, `phase15_m1_PG_A2_review.patch`.
+<!-- END PHASE15_M1_PG_A2_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_PG_2026_11_21 -->
+## Phase 15 M1 PostgreSQL acceptance — BLOCKED; IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+The approved socket identity and migration guard passed on PostgreSQL 17.12, the isolated database/role on port 55432, with Unix peer, non-superuser role, 55 ledger entries, matching 0054 migration hash and 111 public tables. A guarded limited Project Foundation check created two synthetic users/Projects and verified operation replay and cross-owner denial; fixtures remain. This is not Project State acceptance.
+
+The real Project State loader and School/Admissions/Student 500 adapters depend on the shared POSTGRES_URL-only runtime client and have no socket-backed dependency injection seam. Under the owner-approved socket-only restriction, the real Project State persistence, restart, HTTP and performance measurements remain NOT VERIFIED. The guard harness does not use a URL or modify production wiring. The unbounded list/history risk remains. Recommendation `M1_REQUIRES_CORRECTION` for the missing acceptance capability/evidence; M1 remains not accepted and M2 not started. See `phase15_m1_PG_acceptance_report.md` and `phase15_m1_PG_review.patch`.
+<!-- END PHASE15_M1_PG_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_R4_2026_11_21 -->
+## Phase 15 M1 R4 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+Admissions-derived actions for updating School Application details, binding references and building the preparation package now target the authorized linked School Application. Admissions-owned actions retain their case target. Unreadable or absent School links cannot create executable School Application actions or reveal the hidden ID; archived and closed lifecycle restrictions remain. Case requirements and issues retain case provenance. M1 remains not accepted and PostgreSQL acceptance is not run.
+
+Detail-read concurrency remains four; source list and event-history database reads can still be unbounded. The separate PostgreSQL persistence, restart, isolation and query-volume acceptance gates remain pending before frequent retrieval or broader deployment. No M2 work has started. Review `phase15_m1_R4_review.patch` and `phase15_m1_R4_report.md` in the repository root.
+<!-- END PHASE15_M1_R4_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_R3_2026_11_21 -->
+## Phase 15 M1 R3 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+R3 separates School Application source verification uncertainty from missing customer data and distinguishes Admissions preparation deficiencies from catalog and professional authority gaps. Source disclosures, professional requirements, managed readiness, history and authorization remain visible; unverified source review is advisory. Regression tests use the School Application missing-data contract and Admissions checklist builder. M1 remains not accepted; PostgreSQL acceptance is not run and M2 is not started.
+
+Four concurrent detail reads do not bound source list or event history SQL. School Applications and Student 500 list/get and Admissions Project State list/detail continue to load potentially unbounded rows; authorized state-specific limit-plus-one lists and recent-event reads with explicit has-more are a separate follow-up needed before frequent M2 retrieval or broader deployment, unless an owner accepts a measured operational risk. See `phase15_m1_R3_report.md` and the cumulative `phase15_m1_R3_review.patch` for validation and review.
+The R2 review patch and report were present at the initial checkpoint but were absent at the final check; cause is unconfirmed. The R3 patch remains cumulative.
+<!-- END PHASE15_M1_R3_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_R2_2026_11_21 -->
+## Phase 15 M1 R2 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+R2 corrects active issue and action semantics while preserving the existing read-only Project State architecture. Archived Student 500 and Admissions cases linked to archived School Applications retain their record-level history and deficiencies without global outstanding issues. Closed Projects retain record-level history and expose no current unresolved issues or actions. Unavailable School Application linkage yields unknown progress with an explicit source-unavailable reason. Self-service Managed Handoff is NOT_APPLICABLE. Admissions next steps use a conservative operation mapping; unavailable professional verification/support and unproven steps are advisory. Source authorization and the concurrency limit of four remain in place.
+
+Underlying list and event queries may still fetch unbounded rows before projection; a service-owned authorized max-plus-one read and recent-event query with explicit has-more state is the narrow follow-up. PostgreSQL acceptance remains pending. M1 is not accepted; no M2 work is authorized. Review `phase15_m1_R2_review.patch` and `phase15_m1_R2_report.md` in the repository root for exact validation and risks.
+<!-- END PHASE15_M1_R2_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M1_STATE_2026_11_21 -->
+## Project state — Phase 15 M1 R1 corrections implemented; independent review pending (2026-11-21)
+
+- **Status:** `R1_CORRECTIONS_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`; M1 is **not accepted**. Branch `phase15-guided-project-workflows`, committed base `d3979fca825055ddd965ad5020d7892ffb473c49`; all changes remain uncommitted. The owner-approved five-milestone roadmap remains the authority; M2–M5 have not started.
+- **M1 capability/corrections:** authenticated read-only `phase15.project-state.v1`; R1 fixes action lifecycle, unresolved Admission linkage, duplicate case advice, Managed handoff readiness separation, institutional waiting uncertainty, purpose prompt removal, and unreadable Service Engagement semantics. Closed Project history remains readable through Project Foundation read authority. M5.2 adds Project State-only reads that preserve case-owned history while withholding M5.1-derived fields when that source is unavailable. No duplicate state store, migration, schema, AI feature, UI change or submission authority.
+- **Resource limit:** no more than four concurrent per-record detail reads; output/history projection remains bounded and fail-closed on record caps. Underlying business service event reads remain unbounded before projection truncation; a scoped SQL recent-event adapter is a documented follow-up risk, not implemented here.
+- **Validation:** Project State tests **21/21**; focused source/UI tests **26 files passed** across the correct two runtime conditions; `db:check`, changed-file Biome, build and `git diff --check` PASS. TypeScript exits 2 with **44 diagnostics / 9 untouched files / 0 changed-file diagnostics**. Full suite: **187 pass / 7 fail / 0 skip**; a clean committed-HEAD archive comparison reproduced the exact same counts and failure files. PostgreSQL acceptance NOT RUN; no database was contacted or changed.
+- **Still binding:** Project Document trusted live readiness DENY, M4 professional authority gaps, M6 source PARTIAL, M8 staff-private-package review pending, Post-M5 E2E blocked/partial, and `LIVE_PRODUCTION_NO_GO`.
+- **Next:** independent review of `~/phase15_m1_R1_review.patch` and `~/phase15_m1_R1_report.md`, then owner acceptance. No M2 work is authorized by this correction pass.
+<!-- END PHASE15_M1_STATE_2026_11_21 -->
 
 <!-- BEGIN PHASE14_A_OWNER_CLOSEOUT_2026_11_11 -->
 ## Phase 14-A — mobile Workspace engineering closeout (2026-11-11)

@@ -533,3 +533,68 @@ test("no view ever claims verification, approval or submission readiness", async
     assert.equal(serialized.includes(forbidden), false, forbidden);
   }
 });
+
+test("Project State Student 500 reads retain full history separately and enforce ownership", async () => {
+  const { service } = harness();
+  let current = (
+    await service.create({
+      actorUserId: OWNER,
+      projectId: PROJECT_A,
+      operationId: "bounded-visa-create",
+      context: { entryRoute: "no_school_application" },
+    })
+  ).application;
+  for (let i = 0; i < 15; i++) {
+    current = (
+      await service.update({
+        actorUserId: OWNER,
+        projectId: PROJECT_A,
+        applicationId: current.applicationId,
+        expectedRevision: current.revision,
+        operationId: `bounded-visa-${i}`,
+        context: {
+          entryRoute: "no_school_application",
+          applicationPlace: i % 2 === 0 ? "onshore" : "offshore",
+        },
+      })
+    ).application;
+  }
+  const input = {
+    actorUserId: OWNER,
+    projectId: PROJECT_A,
+    applicationId: current.applicationId,
+  };
+  const full = await service.get(input);
+  const bounded = await service.getProjectState(input);
+  assert.equal(full.events.length, 16);
+  assert.equal(bounded.events.length, 13);
+  assert.equal(bounded.events.at(-1)?.applicationRevision, current.revision);
+  await assert.rejects(
+    service.getProjectState({ ...input, actorUserId: MEMBER })
+  );
+});
+
+test("Project State Student 500 index rejects overflow", async () => {
+  const { service, store } = harness();
+  await service.create({
+    actorUserId: OWNER,
+    projectId: PROJECT_A,
+    operationId: "bounded-visa-list-create",
+  });
+  const original = store.listApplications;
+  let requested = 0;
+  store.listApplications = async (input) => {
+    requested = input.maxRows ?? 0;
+    const rows = await original(input);
+    return Array.from({ length: 7 }, () => rows[0]);
+  };
+  try {
+    await assert.rejects(
+      service.listProjectState({ actorUserId: OWNER, projectId: PROJECT_A }),
+      (error: unknown) => (error as { code?: string }).code === "limit_exceeded"
+    );
+    assert.equal(requested, 7);
+  } finally {
+    store.listApplications = original;
+  }
+});

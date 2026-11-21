@@ -272,6 +272,7 @@ export type SchoolAdmissionsStore = {
   listCases(input: {
     readonly projectId: string;
     readonly ownerUserId: string;
+    readonly maxRows?: number;
   }): Promise<SchoolAdmissionCaseRecord[]>;
   getCase(input: {
     readonly projectId: string;
@@ -287,6 +288,8 @@ export type SchoolAdmissionsStore = {
 
   listPreparations(input: {
     readonly caseId: string;
+    readonly maxRows?: number;
+    readonly metadataOnly?: boolean;
   }): Promise<SchoolAdmissionPreparationRecord[]>;
   listOutcomes(input: {
     readonly caseId: string;
@@ -299,6 +302,7 @@ export type SchoolAdmissionsStore = {
   }): Promise<SchoolAdmissionExceptionRecord[]>;
   listEvents(input: {
     readonly caseId: string;
+    readonly recentLimit?: number;
   }): Promise<SchoolAdmissionEventRecord[]>;
 
   createCase(input: {
@@ -409,6 +413,7 @@ export type SchoolAdmissionsApplicationPort = {
     readonly actorUserId: string;
     readonly projectId: string;
     readonly applicationId: string;
+    readonly projectStateRead?: boolean;
   }): Promise<SchoolAdmissionsApplicationRead>;
   /**
    * Selectable M5.1 applications for this actor inside this Project.

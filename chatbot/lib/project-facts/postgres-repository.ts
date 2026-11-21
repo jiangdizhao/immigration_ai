@@ -2,7 +2,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull, or, sql } from "drizzle-orm";
 import { guestRegex } from "@/lib/constants";
 import { validateProjectOperationId } from "@/lib/db/project-foundation-utils";
 import type { getLazyDatabase } from "@/lib/db/runtime-client";
@@ -25,7 +25,12 @@ import type {
   ProjectFactPublication as Publication,
   ProjectFactUseGrant as UseGrant,
 } from "./facts";
-import { ProjectFactError, validateProjectFactValue } from "./facts";
+import {
+  PROJECT_STATE_FACT_SOURCE_MAX,
+  ProjectFactError,
+  ProjectFactSourceOverflow,
+  validateProjectFactValue,
+} from "./facts";
 
 import {
   factGrantRequestHash,
@@ -866,37 +871,81 @@ export class PostgresProjectFactRepository implements ProjectFactRepository {
     });
   }
 
-  async projection(input: { actorUserId: string; projectId: string }) {
+  async projection(input: {
+    actorUserId: string;
+    projectId: string;
+    maxSourceRows?: number;
+    metadataOnly?: boolean;
+  }) {
+    if (
+      input.maxSourceRows !== undefined &&
+      input.maxSourceRows !== PROJECT_STATE_FACT_SOURCE_MAX
+    ) {
+      throw new Error("invalid_fact_source_bound");
+    }
+    if (
+      input.metadataOnly &&
+      input.maxSourceRows !== PROJECT_STATE_FACT_SOURCE_MAX
+    ) {
+      throw new Error("metadata_projection_requires_state_bound");
+    }
     return this.database.transaction(async (tx) => {
       try {
         await assertActor(tx, input.projectId, input.actorUserId, false);
       } catch {
         return null;
       }
+      const assertionColumns = getTableColumns(projectFactAssertion);
+      const assertionsQuery = tx
+        .select(
+          input.metadataOnly
+            ? {
+                ...assertionColumns,
+                value: sql<unknown>`'null'::json`,
+                normalizedComparison: sql<string>`''::varchar`,
+              }
+            : assertionColumns
+        )
+        .from(projectFactAssertion)
+        .where(eq(projectFactAssertion.projectId, input.projectId))
+        .orderBy(asc(projectFactAssertion.createdAt));
+      const publicationsQuery = tx
+        .select()
+        .from(projectFactPublication)
+        .where(eq(projectFactPublication.projectId, input.projectId));
+      const grantsQuery = tx
+        .select()
+        .from(projectFactUseGrant)
+        .where(eq(projectFactUseGrant.projectId, input.projectId));
+      const conflictsQuery = tx
+        .select()
+        .from(projectFactConflict)
+        .where(eq(projectFactConflict.projectId, input.projectId));
+      const linksQuery = tx
+        .select()
+        .from(projectFactAssertionEvidence)
+        .where(eq(projectFactAssertionEvidence.projectId, input.projectId));
+      const limit =
+        input.maxSourceRows === undefined ? undefined : input.maxSourceRows + 1;
       const [assertions, publications, grants, conflicts, evidenceLinks] =
         await Promise.all([
-          tx
-            .select()
-            .from(projectFactAssertion)
-            .where(eq(projectFactAssertion.projectId, input.projectId))
-            .orderBy(asc(projectFactAssertion.createdAt)),
-          tx
-            .select()
-            .from(projectFactPublication)
-            .where(eq(projectFactPublication.projectId, input.projectId)),
-          tx
-            .select()
-            .from(projectFactUseGrant)
-            .where(eq(projectFactUseGrant.projectId, input.projectId)),
-          tx
-            .select()
-            .from(projectFactConflict)
-            .where(eq(projectFactConflict.projectId, input.projectId)),
-          tx
-            .select()
-            .from(projectFactAssertionEvidence)
-            .where(eq(projectFactAssertionEvidence.projectId, input.projectId)),
+          limit === undefined ? assertionsQuery : assertionsQuery.limit(limit),
+          limit === undefined
+            ? publicationsQuery
+            : publicationsQuery.limit(limit),
+          limit === undefined ? grantsQuery : grantsQuery.limit(limit),
+          limit === undefined ? conflictsQuery : conflictsQuery.limit(limit),
+          limit === undefined ? linksQuery : linksQuery.limit(limit),
         ]);
+      const maxRows = input.maxSourceRows;
+      if (
+        maxRows !== undefined &&
+        [assertions, publications, grants, conflicts, evidenceLinks].some(
+          (rows) => rows.length > maxRows
+        )
+      ) {
+        throw new ProjectFactSourceOverflow();
+      }
       const evidenceByAssertion = new Map<string, string>();
       for (const link of evidenceLinks) {
         if (!evidenceByAssertion.has(link.assertionId)) {

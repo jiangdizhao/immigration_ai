@@ -23,6 +23,7 @@ import {
   SCHOOL_ADMISSIONS_MAX_EXTERNAL_ACTIONS,
   SCHOOL_ADMISSIONS_MAX_LABEL,
   SCHOOL_ADMISSIONS_MAX_NOTE,
+  SCHOOL_ADMISSIONS_MAX_PREPARATIONS,
   SCHOOL_ADMISSIONS_MAX_TEXT,
   SCHOOL_ADMISSIONS_POLICY_VERSION,
   SCHOOL_ADMISSIONS_PREPARATION_SCHEMA,
@@ -188,6 +189,8 @@ export type SchoolAdmissionsCaseSummary = {
 };
 
 export type SchoolAdmissionsCaseDetail = SchoolAdmissionsCaseSummary & {
+  /** State-only detail omits preparation narrative and stored checklist content. */
+  readonly preparationContentOmitted?: boolean;
   readonly application: {
     readonly applicationId: string;
     readonly revision: number;
@@ -389,6 +392,7 @@ export function createSchoolAdmissionsService(
     readonly actorUserId: string;
     readonly projectId: string;
     readonly applicationId: string | null;
+    readonly projectStateRead?: boolean;
   }): Promise<SchoolAdmissionsApplicationSnapshot | null> {
     if (!input.applicationId) {
       return null;
@@ -397,6 +401,7 @@ export function createSchoolAdmissionsService(
       actorUserId: input.actorUserId,
       applicationId: input.applicationId,
       projectId: input.projectId,
+      projectStateRead: input.projectStateRead,
     });
     if (read.status === "not_found") {
       throw new SchoolAdmissionsError("application_not_found");
@@ -705,20 +710,44 @@ export function createSchoolAdmissionsService(
     };
   }
 
-  async function loadDetail(input: {
-    readonly actorUserId: string;
-    readonly projectId: string;
-    readonly record: SchoolAdmissionCaseRecord;
-  }): Promise<SchoolAdmissionsCaseDetail> {
+  async function loadDetail(
+    input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly record: SchoolAdmissionCaseRecord;
+    },
+    options: {
+      readonly applicationDataAvailable?: boolean;
+      readonly projectStateRead?: boolean;
+    } = {}
+  ): Promise<SchoolAdmissionsCaseDetail> {
     const at = now();
-    const application = await loadApplication({
-      actorUserId: input.actorUserId,
-      applicationId: input.record.applicationId,
-      projectId: input.projectId,
-    });
+    const linkedApplicationUnavailable =
+      input.record.applicationId !== null &&
+      options.applicationDataAvailable === false;
+    const application = linkedApplicationUnavailable
+      ? null
+      : await loadApplication({
+          actorUserId: input.actorUserId,
+          applicationId: input.record.applicationId,
+          projectId: input.projectId,
+          projectStateRead: options.projectStateRead,
+        });
     const preparations = await store.listPreparations({
       caseId: input.record.id,
+      ...(options.projectStateRead
+        ? {
+            metadataOnly: true,
+            maxRows: SCHOOL_ADMISSIONS_MAX_PREPARATIONS + 1,
+          }
+        : {}),
     });
+    if (
+      options.projectStateRead &&
+      preparations.length > SCHOOL_ADMISSIONS_MAX_PREPARATIONS
+    ) {
+      throw new SchoolAdmissionsError("limit_exceeded");
+    }
     const latest = [...preparations].sort(
       (left, right) => right.version - left.version
     )[0];
@@ -815,7 +844,10 @@ export function createSchoolAdmissionsService(
     const externalActions = await store.listExternalActions({
       caseId: input.record.id,
     });
-    const events = await store.listEvents({ caseId: input.record.id });
+    const events = await store.listEvents({
+      caseId: input.record.id,
+      ...(options.projectStateRead ? { recentLimit: 13 } : {}),
+    });
 
     const preparationView: SchoolAdmissionsPreparationView | null = latest
       ? {
@@ -860,10 +892,11 @@ export function createSchoolAdmissionsService(
       intakeLabel: input.record.intakeLabel,
       journey: journeyView(outcomes, at),
       managedReadiness: readinessView(input.record, disclosures),
-      nextStepCodes,
+      nextStepCodes: linkedApplicationUnavailable ? [] : nextStepCodes,
       offer: offerView,
       originKind: input.record.originKind,
-      preparationStale: staleReasonCodes.length > 0,
+      preparationStale:
+        linkedApplicationUnavailable || staleReasonCodes.length > 0,
       preparationState: input.record.preparationState,
       projectId: input.record.projectId,
       revision: input.record.revision,
@@ -873,6 +906,7 @@ export function createSchoolAdmissionsService(
     };
 
     return {
+      ...(options.projectStateRead ? { preparationContentOmitted: true } : {}),
       ...summary,
       application: application
         ? {
@@ -923,7 +957,7 @@ export function createSchoolAdmissionsService(
           preparationId: entry.id,
           version: entry.version,
         })),
-      requirements,
+      requirements: linkedApplicationUnavailable ? [] : requirements,
     };
   }
 
@@ -1012,6 +1046,59 @@ export function createSchoolAdmissionsService(
   }
 
   return {
+    /**
+     * Bounded, owner-scoped case index for the read-only Project State projection.
+     * It deliberately avoids the customer workflow list, whose summary expansion
+     * requires every linked M5.1 application to be readable.
+     */
+    async listProjectStateCases(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+    }): Promise<
+      readonly {
+        readonly caseId: string;
+        readonly applicationId: string | null;
+      }[]
+    > {
+      await authorize(input);
+      const records = await store.listCases({
+        ownerUserId: input.actorUserId,
+        projectId: input.projectId,
+        maxRows: SCHOOL_ADMISSIONS_MAX_CASES_PER_PROJECT + 1,
+      });
+      if (records.length > SCHOOL_ADMISSIONS_MAX_CASES_PER_PROJECT) {
+        throw new SchoolAdmissionsError("limit_exceeded");
+      }
+      return records.map((record) => ({
+        applicationId: record.applicationId,
+        caseId: record.id,
+      }));
+    },
+
+    /**
+     * Re-authorizes the actor and case on every read. If the separately scoped
+     * M5.1 capability is unavailable, linked application-derived requirements and
+     * next steps are withheld while case-owned outcomes and provenance remain.
+     */
+    async getProjectStateCase(input: {
+      readonly actorUserId: string;
+      readonly projectId: string;
+      readonly caseId: string;
+      readonly applicationDataAvailable: boolean;
+    }): Promise<{ readonly case: SchoolAdmissionsCaseDetail }> {
+      await authorize(input);
+      const record = await requireCase(input);
+      return {
+        case: await loadDetail(
+          { ...input, record },
+          {
+            applicationDataAvailable: input.applicationDataAvailable,
+            projectStateRead: true,
+          }
+        ),
+      };
+    },
+
     async list(input: {
       readonly actorUserId: string;
       readonly projectId: string;

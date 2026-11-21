@@ -217,6 +217,7 @@ export type Student500PreparationStore = {
 
   listFactReferences(input: {
     readonly applicationId: string;
+    readonly maxRows?: number;
   }): Promise<readonly Student500FactReferenceRecord[]>;
 
   insertFactReference(input: {
@@ -258,6 +259,8 @@ export type Student500PreparationStore = {
 
   listDrafts(input: {
     readonly applicationId: string;
+    readonly maxRows?: number;
+    readonly metadataOnly?: boolean;
   }): Promise<readonly Student500GsDraftRecord[]>;
 
   getDraft(input: {
@@ -276,6 +279,8 @@ export type Student500PreparationStore = {
 
   listSnapshots(input: {
     readonly applicationId: string;
+    readonly maxRows?: number;
+    readonly metadataOnly?: boolean;
   }): Promise<readonly Student500PreparationSnapshotRecord[]>;
 
   getSnapshot(input: {

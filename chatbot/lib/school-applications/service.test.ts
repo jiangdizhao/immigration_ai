@@ -1454,3 +1454,167 @@ test("an exact package version can be re-read for review, and tampering is refus
     })
   );
 });
+
+test("Project State reads bound events while full history and authorization remain intact", async () => {
+  const { service } = harness();
+  let current = (
+    await service.create(application({ operationId: "bounded-school-create" }))
+  ).application;
+  for (let i = 0; i < 16; i++) {
+    current = (
+      await service.update({
+        actorUserId: owner,
+        projectId,
+        applicationId: current.applicationId,
+        expectedRevision: current.revision,
+        operationId: `bounded-school-update-${i}`,
+        institutionName: "Example University",
+        courseTitle: "Bachelor of Nursing",
+        intakeLabel: `Intake ${i}`,
+      })
+    ).application;
+  }
+  const input = {
+    actorUserId: owner,
+    projectId,
+    applicationId: current.applicationId,
+  };
+  const full = await service.get(input);
+  const bounded = await service.getProjectState(input);
+  assert.equal(full.events.length, 17);
+  assert.equal(bounded.events.length, 13);
+  assert.equal(bounded.events.at(-1)?.applicationRevision, current.revision);
+  await assert.rejects(
+    service.getProjectState({ ...input, actorUserId: outsider })
+  );
+});
+
+test("Project State school index rejects overflow instead of returning a partial list", async () => {
+  const { service, store } = harness();
+  const created = (
+    await service.create(
+      application({ operationId: "bounded-school-list-create" })
+    )
+  ).application;
+  const original = store.listApplications;
+  let requested = 0;
+  store.listApplications = async (input) => {
+    requested = input.maxRows ?? 0;
+    const rows = await original(input);
+    return Array.from({ length: 13 }, () => rows[0]);
+  };
+  try {
+    await assert.rejects(
+      service.listProjectState({ actorUserId: owner, projectId }),
+      (error: unknown) => (error as { code?: string }).code === "limit_exceeded"
+    );
+    assert.equal(requested, 13);
+    assert.ok(created.applicationId);
+  } finally {
+    store.listApplications = original;
+  }
+});
+
+test("Project State package candidates retain current and latest while full history remains available", async () => {
+  const { service } = harness();
+  let current = (
+    await service.create(application({ operationId: "a4-package-create" }))
+  ).application;
+  for (let i = 0; i < 4; i++) {
+    current = (
+      await service.buildPackage({
+        actorUserId: owner,
+        projectId,
+        applicationId: current.applicationId,
+        expectedRevision: current.revision,
+        operationId: `a4-package-build-${i}`,
+      })
+    ).application;
+    if (i < 3) {
+      current = (
+        await service.update({
+          actorUserId: owner,
+          projectId,
+          applicationId: current.applicationId,
+          expectedRevision: current.revision,
+          operationId: `a4-package-change-${i}`,
+          institutionName: "Example University",
+          courseTitle: "Bachelor of Nursing",
+          intakeLabel: `Intake ${i}`,
+        })
+      ).application;
+    }
+  }
+  const input = {
+    actorUserId: owner,
+    projectId,
+    applicationId: current.applicationId,
+  };
+  const full = await service.get(input);
+  const bounded = await service.getProjectState(input);
+  assert.equal(full.packages.length, 4);
+  assert.equal(bounded.packages.length, 2);
+  assert.equal(bounded.packageHistoryTruncated, true);
+  assert.equal(
+    bounded.currentPackage?.packageId,
+    full.currentPackage?.packageId
+  );
+  assert.equal(bounded.currentPackage?.usable, full.currentPackage?.usable);
+  current = (
+    await service.update({
+      ...input,
+      expectedRevision: current.revision,
+      operationId: "a4-package-stale",
+      institutionName: "Example University",
+      courseTitle: "Bachelor of Nursing",
+      intakeLabel: "Changed",
+    })
+  ).application;
+  const staleFull = await service.get(input);
+  const staleBounded = await service.getProjectState(input);
+  assert.equal(staleBounded.currentPackage, null);
+  assert.equal(
+    staleBounded.packages[0]?.packageId,
+    staleFull.packages[0]?.packageId
+  );
+  assert.equal(staleBounded.packages[0]?.usable, false);
+  await assert.rejects(
+    service.getProjectState({ ...input, actorUserId: outsider })
+  );
+});
+
+test("Project State reference-history overflow fails closed before resolving partial input", async () => {
+  const { service, store } = harness();
+  const created = await service.create(
+    application({ operationId: "a4-reference-create" })
+  );
+  await service.bindReference({
+    actorUserId: owner,
+    projectId,
+    applicationId: created.application.applicationId,
+    expectedRevision: created.application.revision,
+    kind: "fact",
+    referenceId: factId,
+    operationId: "a4-reference-bind",
+  });
+  const original = store.listReferences;
+  let requested = 0;
+  store.listReferences = async (input) => {
+    requested = input.maxRows ?? 0;
+    const rows = await original(input);
+    return Array.from({ length: 41 }, () => rows[0]);
+  };
+  try {
+    await assert.rejects(
+      service.getProjectState({
+        actorUserId: owner,
+        projectId,
+        applicationId: created.application.applicationId,
+      }),
+      (error: unknown) => (error as { code?: string }).code === "limit_exceeded"
+    );
+    assert.equal(requested, 41);
+  } finally {
+    store.listReferences = original;
+  }
+});
