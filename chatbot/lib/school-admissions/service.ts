@@ -32,6 +32,7 @@ import {
   SchoolAdmissionsError,
   type SchoolAdmissionsExceptionClaimKind,
   type SchoolAdmissionsExceptionState,
+  type SchoolAdmissionsExpiryState,
   type SchoolAdmissionsExternalActionKind,
   type SchoolAdmissionsNextStep,
   type SchoolAdmissionsOfferAction,
@@ -129,7 +130,7 @@ export type SchoolAdmissionsOutcomeView = {
   readonly validFrom: string | null;
   readonly validTo: string | null;
   readonly decisionOn: string | null;
-  readonly expiryState: string;
+  readonly expiryState: SchoolAdmissionsExpiryState;
   readonly recordedAt: string;
   readonly superseded: boolean;
 };
@@ -480,6 +481,7 @@ export function createSchoolAdmissionsService(
         ? {
             provenance: coe.provenance,
             state: coe.state as SchoolAdmissionsCoeState,
+            validFrom: coe.validFrom,
             validTo: coe.validTo,
           }
         : null,
@@ -611,6 +613,7 @@ export function createSchoolAdmissionsService(
         : coeValidityState({
             now: at,
             state: record.state as SchoolAdmissionsCoeState,
+            validFrom: record.validFrom,
             validTo: record.validTo,
           });
     return {
@@ -690,6 +693,7 @@ export function createSchoolAdmissionsService(
         ? coeValidityState({
             now: at,
             state: outcomes.coe.state,
+            validFrom: outcomes.coe.validFrom,
             validTo: outcomes.coe.validTo,
           })
         : "not_applicable",

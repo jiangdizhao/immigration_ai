@@ -228,6 +228,7 @@ async function readAdmissions(input: {
                 recordedAt: detail.coe.recordedAt,
                 state: detail.coe.state,
                 superseded: detail.coe.superseded,
+                validityState: detail.coe.expiryState,
                 version: detail.coe.version,
               }
             : null,
@@ -264,6 +265,7 @@ async function readAdmissions(input: {
                 recordedAt: detail.offer.recordedAt,
                 state: detail.offer.state,
                 superseded: detail.offer.superseded,
+                validityState: detail.offer.expiryState,
                 version: detail.offer.version,
               }
             : null,

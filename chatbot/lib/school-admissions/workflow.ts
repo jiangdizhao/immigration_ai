@@ -97,6 +97,7 @@ export type SchoolAdmissionsOutcomeSummary = {
   readonly coe: {
     readonly state: SchoolAdmissionsCoeState;
     readonly provenance: SchoolAdmissionsOutcomeProvenance;
+    readonly validFrom: string | null;
     readonly validTo: string | null;
   } | null;
   readonly exception: {

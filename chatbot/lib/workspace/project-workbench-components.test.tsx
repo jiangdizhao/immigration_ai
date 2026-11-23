@@ -7,6 +7,7 @@ import {
   ProjectWorkbenchHeader,
   ProjectWorkbenchTargetRail,
 } from "@/components/project-workbench";
+import { ProjectWorkflowNavigation } from "@/components/project-workflow-navigation";
 import type {
   ProjectJourney,
   ProjectJourneyNode,
@@ -19,6 +20,8 @@ import type {
   ProjectStateSchoolApplication,
   ProjectStateStudent500,
 } from "@/lib/workspace/project-state";
+import { getProjectWorkflowCopy } from "@/lib/workspace/project-workflow-copy";
+import { PROJECT_WORKFLOW_DEFINITION_VERSION } from "@/lib/workspace/project-workflows";
 import { getWorkspaceCopy } from "@/lib/workspace-copy";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -240,6 +243,21 @@ function buildJourney(status: "active" | "closed" = "active"): ProjectJourney {
       unknownProgressCount: 1,
       unavailableSourceCount: 1,
     },
+    workflowProjection: {
+      definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+      progress: {
+        completedKnownApplicable: 0,
+        coverage: "unavailable",
+        definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+        knownApplicableTotal: 0,
+        notApplicableCount: 0,
+        percent: null,
+        unavailableCount: 0,
+        unknownApplicabilityCount: 0,
+        unknownProgressCount: 0,
+      },
+      tasks: [],
+    },
   } as ProjectJourney;
 }
 
@@ -262,9 +280,12 @@ function renderRail(
     React.createElement(ProjectWorkbenchTargetRail, {
       journeyCopy: copy.projectJourney,
       journeyLoad: readyLoad(journey),
+      locale: "en",
       onRefresh: () => undefined,
       onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
       selectedNodeId,
+      selectedWorkflowTaskId: null,
       workbenchCopy: copy.projectWorkbench,
     })
   );
@@ -284,6 +305,343 @@ test("the target rail groups linked Admissions under its school and keeps source
   assert.doesNotMatch(markup, /projectFacts[\s\S]*?No records are available/u);
 });
 
+test("the consolidated workflow navigation keeps matters separate and exposes compact grounded task state", () => {
+  const journey = buildJourney();
+  const schoolTask: ProjectJourney["workflowProjection"]["tasks"][number] = {
+    actionability: "read_only",
+    applicability: "applicable",
+    definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+    dependencies: [],
+    dependencySemantics: "none",
+    panelKind: "school",
+    progress: "needs_information",
+    progressCreditKey: "school-discovery:school-a",
+    progressCreditOwner: true,
+    projectId,
+    reasonCodes: ["school_course_source_unverified"],
+    responsibleActor: "customer",
+    sourceRevision: 3,
+    sourceRevisions: [
+      {
+        revision: 3,
+        targetId: "school-a",
+        targetKind: "school_application",
+      },
+    ],
+    stepKey: "school_discovery",
+    targetId: "school-a",
+    targetKind: "school_application",
+    taskId: "task:school-a:school-discovery",
+    workflowKind: "school_application",
+  };
+  const projectTask: ProjectJourney["workflowProjection"]["tasks"][number] = {
+    ...schoolTask,
+    applicability: "unknown",
+    panelKind: "planning",
+    progress: "unknown",
+    progressCreditKey: null,
+    progressCreditOwner: false,
+    reasonCodes: ["project_purpose_not_recorded"],
+    sourceRevision: null,
+    sourceRevisions: [],
+    stepKey: "project_goal",
+    targetId: projectId,
+    targetKind: "project",
+    taskId: "task:project:goal",
+    workflowKind: "project_planning",
+  };
+  const schoolBTask: ProjectJourney["workflowProjection"]["tasks"][number] = {
+    ...schoolTask,
+    progressCreditKey: null,
+    progressCreditOwner: false,
+    sourceRevisions: [
+      {
+        revision: 2,
+        targetId: "school-b",
+        targetKind: "school_application",
+      },
+    ],
+    sourceRevision: 2,
+    targetId: "school-b",
+    taskId: "task:school-b:school-discovery",
+  };
+  const admissionsTask: ProjectJourney["workflowProjection"]["tasks"][number] =
+    {
+      ...schoolTask,
+      panelKind: "admissions",
+      progress: "not_started",
+      progressCreditKey: null,
+      progressCreditOwner: false,
+      sourceRevisions: [
+        {
+          revision: 3,
+          targetId: "case-a",
+          targetKind: "school_admission_case",
+        },
+      ],
+      stepKey: "offer_coe_evidence",
+      targetId: "case-a",
+      targetKind: "school_admission_case",
+      taskId: "task:admissions:case-a:offer-coe-evidence",
+      workflowKind: "school_admissions",
+    };
+  const independentAdmissionsTask: ProjectJourney["workflowProjection"]["tasks"][number] =
+    {
+      ...admissionsTask,
+      sourceRevisions: [
+        {
+          revision: 1,
+          targetId: "existing-offer",
+          targetKind: "school_admission_case",
+        },
+      ],
+      targetId: "existing-offer",
+      taskId: "task:admissions:existing-offer:offer-coe-evidence",
+    };
+  const studentTask: ProjectJourney["workflowProjection"]["tasks"][number] = {
+    ...schoolTask,
+    panelKind: "student_500",
+    progress: "in_progress",
+    progressCreditKey: null,
+    progressCreditOwner: false,
+    sourceRevisions: [
+      {
+        revision: 3,
+        targetId: "student-a",
+        targetKind: "student500_application",
+      },
+    ],
+    stepKey: "study_evidence_coe",
+    targetId: "student-a",
+    targetKind: "student500_application",
+    taskId: "task:student-a:study-evidence-coe",
+    workflowKind: "student_500",
+  };
+  const schoolB = node({
+    id: "school:school-b",
+    kind: "school_application",
+    sourceKey: "schoolApplications",
+    title: "Harbour School",
+  });
+  const student = node({
+    id: "student500:student-a",
+    kind: "student500_application",
+    sourceKey: "student500",
+    title: "Student 500 application",
+  });
+  const independentAdmissions = node({
+    id: "admissions:existing-offer",
+    kind: "admission_case",
+    sourceKey: "schoolAdmissions",
+    title: "Independent Admissions · Existing Offer",
+  });
+  const navigationJourney = {
+    ...journey,
+    nodes: [...journey.nodes, schoolB, student, independentAdmissions],
+    sources: journey.sources.map((source) =>
+      source.key === "schoolApplications"
+        ? { ...source, recordCount: 2 }
+        : source.key === "schoolAdmissions"
+          ? { ...source, recordCount: 2 }
+          : source.key === "student500"
+            ? { ...source, recordCount: 1 }
+            : source
+    ),
+    workflowProjection: {
+      ...journey.workflowProjection,
+      tasks: [
+        projectTask,
+        schoolTask,
+        schoolBTask,
+        admissionsTask,
+        independentAdmissionsTask,
+        studentTask,
+      ],
+    },
+  } as ProjectJourney;
+  const copy = getWorkspaceCopy("en").projectEntry;
+  const markup = renderToStaticMarkup(
+    React.createElement(ProjectWorkflowNavigation, {
+      journeyCopy: copy.projectJourney,
+      journeyLoad: readyLoad(navigationJourney),
+      locale: "en",
+      onRefresh: () => undefined,
+      onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
+      selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: schoolTask.taskId,
+    })
+  );
+
+  assert.match(markup, /data-testid="project-workflow-navigation"/u);
+  assert.match(markup, /data-matter-id="school:school-a"/u);
+  assert.match(markup, /data-matter-id="school:school-b"/u);
+  assert.match(markup, /data-matter-id="admissions:case-a"/u);
+  assert.match(markup, /data-matter-id="admissions:existing-offer"/u);
+  assert.match(markup, /data-matter-id="student500:student-a"/u);
+  assert.match(
+    markup,
+    /aria-expanded="true"[^>]*data-testid="project-navigation-matter-toggle"/u
+  );
+  assert.match(
+    markup,
+    /data-workflow-task-id="task:school-a:school-discovery"/u
+  );
+  assert.match(markup, /School and course discovery/u);
+  assert.match(markup, /Needs information/u);
+  assert.doesNotMatch(markup, /school_course_source_unverified/u);
+  assert.doesNotMatch(markup, /Who acts next/u);
+  assert.match(markup, /data-testid="project-navigation-recorded-route"/u);
+  assert.match(
+    markup,
+    /data-workflow-task-id="task:student-a:study-evidence-coe"/u
+  );
+
+  const studentRoute = node({
+    id: "route:student500:student-a",
+    kind: "route_entry",
+    parentNodeId: student.id,
+    sourceKey: "student500",
+    title: "",
+  });
+  const studentOnlyJourney = {
+    ...navigationJourney,
+    edges: [],
+    nodes: [student, studentRoute],
+    sources: navigationJourney.sources.map((source) =>
+      ["schoolApplications", "schoolAdmissions"].includes(source.key)
+        ? { ...source, recordCount: 0 }
+        : source
+    ),
+    workflowProjection: {
+      ...navigationJourney.workflowProjection,
+      tasks: [studentTask],
+    },
+  } as ProjectJourney;
+  const studentOnlyMarkup = renderToStaticMarkup(
+    React.createElement(ProjectWorkflowNavigation, {
+      journeyCopy: copy.projectJourney,
+      journeyLoad: readyLoad(studentOnlyJourney),
+      locale: "en",
+      onRefresh: () => undefined,
+      onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
+      selectedNodeId: student.id,
+      selectedWorkflowTaskId: studentTask.taskId,
+    })
+  );
+  assert.match(studentOnlyMarkup, /data-matter-id="student500:student-a"/u);
+  assert.match(
+    studentOnlyMarkup,
+    /data-workflow-task-id="task:student-a:study-evidence-coe"/u
+  );
+  assert.match(
+    studentOnlyMarkup,
+    /data-testid="project-navigation-recorded-route"/u
+  );
+  assert.doesNotMatch(studentOnlyMarkup, /data-matter-id="school:/u);
+  assert.doesNotMatch(studentOnlyMarkup, /data-matter-id="admissions:/u);
+});
+
+test("navigation labels support English, Simplified Chinese and Traditional Chinese", () => {
+  for (const [locale, expected] of [
+    ["en", "Workflows"],
+    ["zh-CN", "工作流程"],
+    ["zh-Hant", "工作流程"],
+  ] as const) {
+    assert.equal(getProjectWorkflowCopy(locale).navigation.workflows, expected);
+  }
+  assert.equal(
+    getProjectWorkflowCopy("zh-Hant").navigation.projectTools,
+    "專案工具與業務管理"
+  );
+  assert.equal(
+    getProjectWorkflowCopy("zh-CN").navigation.expandMatter,
+    "展开业务事项"
+  );
+  assert.equal(
+    getProjectWorkflowCopy("zh-Hant").navigation.currentTask,
+    "目前任務"
+  );
+});
+
+test("workflow navigation distinguishes an empty source, an unavailable source, and a closed Project", () => {
+  const copy = getWorkspaceCopy("en").projectEntry;
+  const emptyJourney = {
+    ...buildJourney(),
+    edges: [],
+    nodes: [],
+    sources: buildJourney().sources.map((source) =>
+      ["schoolApplications", "schoolAdmissions", "student500"].includes(
+        source.key
+      )
+        ? { ...source, recordCount: 0 }
+        : source
+    ),
+  } as ProjectJourney;
+  const emptyMarkup = renderToStaticMarkup(
+    React.createElement(ProjectWorkflowNavigation, {
+      journeyCopy: copy.projectJourney,
+      journeyLoad: readyLoad(emptyJourney),
+      locale: "en",
+      onRefresh: () => undefined,
+      onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
+      selectedNodeId: null,
+      selectedWorkflowTaskId: null,
+    })
+  );
+  assert.match(
+    emptyMarkup,
+    /No records are currently available in readable areas/u
+  );
+  assert.doesNotMatch(emptyMarkup, /data-matter-id="school:/u);
+
+  const unavailableJourney = {
+    ...emptyJourney,
+    sources: emptyJourney.sources.map((source) =>
+      source.key === "student500"
+        ? {
+            ...source,
+            reasonCode: "source_timeout",
+            recordCount: null,
+            state: "unavailable" as const,
+          }
+        : source
+    ),
+  } as ProjectJourney;
+  const unavailableMarkup = renderToStaticMarkup(
+    React.createElement(ProjectWorkflowNavigation, {
+      journeyCopy: copy.projectJourney,
+      journeyLoad: readyLoad(unavailableJourney),
+      locale: "en",
+      onRefresh: () => undefined,
+      onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
+      selectedNodeId: null,
+      selectedWorkflowTaskId: null,
+    })
+  );
+  assert.match(
+    unavailableMarkup,
+    /data-testid="project-workflow-navigation-source-student500"/u
+  );
+
+  const closedMarkup = renderToStaticMarkup(
+    React.createElement(ProjectWorkflowNavigation, {
+      journeyCopy: copy.projectJourney,
+      journeyLoad: readyLoad(buildJourney("closed")),
+      locale: "en",
+      onRefresh: () => undefined,
+      onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
+      selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: null,
+    })
+  );
+  assert.ok(closedMarkup.includes(copy.projectJourney.closedTitle));
+});
+
 test("the task panel shows selected matter metadata and navigates to existing sections only", () => {
   const copy = getWorkspaceCopy("en").projectEntry;
   const markup = renderToStaticMarkup(
@@ -298,6 +656,7 @@ test("the task panel shows selected matter metadata and navigates to existing se
       projectId,
       projectView: "home",
       selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: null,
       workbenchCopy: copy.projectWorkbench,
     })
   );
@@ -351,6 +710,7 @@ test("School, Admissions and Student 500 selections show distinct read-only reco
         projectId,
         projectView: "home",
         selectedNodeId,
+        selectedWorkflowTaskId: null,
         workbenchCopy: copy.projectWorkbench,
       })
     );
@@ -411,6 +771,7 @@ test("closed Projects retain history details while suppressing section entry", (
       projectId,
       projectView: "home",
       selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: null,
       workbenchCopy: copy.projectWorkbench,
     })
   );
@@ -441,9 +802,12 @@ test("an unavailable Project State read does not render stale target metadata", 
     React.createElement(ProjectWorkbenchTargetRail, {
       journeyCopy: copy.projectJourney,
       journeyLoad: failedLoad,
+      locale: "en",
       onRefresh: () => undefined,
       onSelectTarget: () => undefined,
+      onSelectWorkflowTask: () => undefined,
       selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: null,
       workbenchCopy: copy.projectWorkbench,
     })
   );
@@ -459,6 +823,7 @@ test("an unavailable Project State read does not render stale target metadata", 
       projectId,
       projectView: "home",
       selectedNodeId: "school:school-a",
+      selectedWorkflowTaskId: null,
       workbenchCopy: copy.projectWorkbench,
     })
   );
@@ -471,8 +836,10 @@ test("an unavailable Project State read does not render stale target metadata", 
   );
 });
 
-test("the Project header presents unknown progress honestly and reuses the same progress projection", () => {
+test("the Project header presents the grounded E2 projection and keeps progress separate", () => {
   const copy = getWorkspaceCopy("en").projectEntry;
+  const longProjectName =
+    "Northern Coast International Institute of Technology Graduate Project";
   const markup = renderToStaticMarkup(
     React.createElement(ProjectWorkbenchHeader, {
       enabledSections: {
@@ -491,7 +858,7 @@ test("the Project header presents unknown progress honestly and reuses the same 
       onSelectView: () => undefined,
       project: {
         createdAt: updatedAt,
-        displayName: "Review Project",
+        displayName: longProjectName,
         id: projectId,
         revision: 5,
         status: "active",
@@ -503,9 +870,17 @@ test("the Project header presents unknown progress honestly and reuses the same 
     })
   );
   assert.match(markup, /data-testid="project-workbench-header"/u);
-  assert.match(markup, /Review Project/u);
+  assert.ok(markup.includes(`title="${longProjectName}"`));
+  assert.match(markup, /line-clamp-2 break-normal text-base font-semibold/u);
+  assert.match(markup, /xl:line-clamp-1/u);
+  assert.match(markup, /xl:min-h-\[84px\]/u);
   assert.match(markup, /Project goal is not recorded/u);
-  assert.match(markup, /Known records: 2/u);
+  assert.match(markup, /Project task progress is unavailable/u);
+  assert.match(markup, /data-variant="compact"/u);
+  assert.doesNotMatch(markup, /task\(s\) with unknown applicability/u);
+  assert.doesNotMatch(markup, /unavailable task\(s\)/u);
+  assert.doesNotMatch(markup, /not-applicable task\(s\)/u);
+  assert.doesNotMatch(markup, /task\(s\) with unknown progress/u);
   assert.match(markup, /data-testid="view-project-progress"/u);
   assert.match(markup, /data-testid="project-mobile-chat-tab-label"/u);
   assert.match(markup, /data-testid="project-mobile-task-tab-label"/u);
@@ -513,5 +888,5 @@ test("the Project header presents unknown progress honestly and reuses the same 
     markup,
     /aria-pressed="true"[^>]*data-testid="project-mobile-chat-tab-label"/u
   );
-  assert.doesNotMatch(markup, /\b\d+\s*\/\s*\d+\b/u);
+  assert.match(markup, /0 \/ 0 complete/u);
 });

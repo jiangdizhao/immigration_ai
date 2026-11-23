@@ -108,6 +108,35 @@ test("offer/CoE validity is an observation and never fabricates state", () => {
     coeValidityState({ now, state: "superseded", validTo: "2026-10-01" }),
     "not_applicable"
   );
+  assert.equal(
+    coeValidityState({
+      now,
+      state: "obtained",
+      validFrom: "2026-11-01",
+      validTo: "2027-03-01",
+    }),
+    "unknown",
+    "a future start date is not current evidence"
+  );
+  assert.equal(
+    coeValidityState({
+      now,
+      state: "obtained",
+      validFrom: "2026-10-30",
+      validTo: "2026-10-29",
+    }),
+    "unknown",
+    "inconsistent validity bounds stay unknown"
+  );
+  assert.equal(
+    coeValidityState({
+      now,
+      state: "obtained",
+      validFrom: "2026-10-01",
+      validTo: "2027-03-01",
+    }),
+    "valid"
+  );
 });
 
 test("bounded text and date validators reject unsafe input", () => {
@@ -352,6 +381,7 @@ test("a claimed CoE is unverified until a document is attached", () => {
         coe: {
           provenance: "customer_reported",
           state: "claimed",
+          validFrom: null,
           validTo: null,
         },
         exception: null,
@@ -367,6 +397,7 @@ test("a claimed CoE is unverified until a document is attached", () => {
         coe: {
           provenance: "document_backed_unverified",
           state: "obtained",
+          validFrom: null,
           validTo: null,
         },
         exception: null,
@@ -520,7 +551,12 @@ test("disclosures stay honest for unverified and managed cases", () => {
 
   const managed = buildDisclosures({
     assistKind: "deterministic_template",
-    coe: { provenance: "customer_reported", state: "claimed", validTo: null },
+    coe: {
+      provenance: "customer_reported",
+      state: "claimed",
+      validFrom: null,
+      validTo: null,
+    },
     education: {
       courseLabel: null,
       institutionLabel: null,

@@ -67,13 +67,25 @@ import {
 } from "@/lib/workspace/project-entry";
 import { useProjectJourney } from "@/lib/workspace/project-journey-client";
 import { deriveProjectOverview } from "@/lib/workspace/project-overview";
-import { projectWorkspaceSplitColumns } from "@/lib/workspace/project-splitter";
+import {
+  PROJECT_SPLITTER_HANDLE_WIDTH,
+  PROJECT_SPLITTER_MIN_CENTER,
+  PROJECT_SPLITTER_MIN_RIGHT,
+  projectWorkspaceSplitColumns,
+} from "@/lib/workspace/project-splitter";
 import { openProjectStageChat } from "@/lib/workspace/project-stage-chats";
 import {
   deriveProjectStages,
   stageSignalsFromSummary,
 } from "@/lib/workspace/project-stages";
-import { reconcileProjectWorkbenchTarget } from "@/lib/workspace/project-workbench-model";
+import {
+  projectWorkbenchDefaultTaskIdForNode,
+  projectWorkbenchSelectionForWorkflowTask,
+  reconcileProjectWorkbenchTarget,
+  reconcileProjectWorkbenchTaskId,
+} from "@/lib/workspace/project-workbench-model";
+import { getProjectWorkflowCopy } from "@/lib/workspace/project-workflow-copy";
+import { projectWorkflowTaskById } from "@/lib/workspace/project-workflows";
 import {
   EMPTY_PROJECT_WORKSPACE_DATA,
   type ProjectWorkspaceData,
@@ -88,6 +100,7 @@ import {
   projectSwitchClearsConversation,
   workspaceUrlWithoutChat,
 } from "@/lib/workspace/project-workspace-view";
+import { WORKSPACE_NAVIGATION_MIN_STANDALONE_CONTENT } from "@/lib/workspace/workspace-navigation-splitter";
 import {
   buildWorkspaceCaseSummary,
   shouldClearWorkspaceCaseSummary,
@@ -123,14 +136,18 @@ import { ProjectStepMaterialsPanel } from "./project-step-materials-panel";
 import {
   ProjectTaskWorkspacePanel,
   ProjectWorkbenchHeader,
-  ProjectWorkbenchTargetRail,
 } from "./project-workbench";
+import { ProjectWorkflowNavigation } from "./project-workflow-navigation";
 import { ProjectWorkspaceHome } from "./project-workspace-home";
 import { ProjectWorkspaceNav } from "./project-workspace-nav";
 import {
   ProjectWorkspaceSplitSeparator,
   useResizableProjectWorkspaceSplit,
 } from "./resizable-project-workspace-split";
+import {
+  useResizableWorkspaceNavigationSplit,
+  WorkspaceNavigationSplitSeparator,
+} from "./resizable-workspace-navigation-split";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -685,6 +702,8 @@ export function ImmigrationAIWorkspace({
   const [selectedProjectTargetId, setSelectedProjectTargetId] = useState<
     string | null
   >(null);
+  const [selectedProjectWorkflowTaskId, setSelectedProjectWorkflowTaskId] =
+    useState<string | null>(null);
   const [mobileProjectSurface, setMobileProjectSurface] = useState<
     "chat" | "task"
   >("chat");
@@ -804,6 +823,7 @@ export function ImmigrationAIWorkspace({
     setSelectedProjectId(null);
     setSelectedProject(null);
     setSelectedProjectTargetId(null);
+    setSelectedProjectWorkflowTaskId(null);
     setMobileProjectSurface("chat");
     setProjectView("home");
     setProjectSelectionReset((current) => current + 1);
@@ -862,6 +882,7 @@ export function ImmigrationAIWorkspace({
         previousProjectViewRef.current = "home";
         setPreviousProjectView("home");
         setSelectedProjectTargetId(null);
+        setSelectedProjectWorkflowTaskId(null);
         setMobileProjectSurface("chat");
       }
       if (
@@ -908,15 +929,53 @@ export function ImmigrationAIWorkspace({
   const handleSelectProjectTarget = useCallback(
     (nodeId: string) => {
       const load = projectJourneyResource.load;
+      const selectedNode =
+        load.status === "ready"
+          ? load.journey.nodes.find((node) => node.id === nodeId)
+          : undefined;
+      const exactNodeId =
+        selectedNode?.kind === "route_entry"
+          ? (selectedNode.route?.parentNodeId ?? null)
+          : (selectedNode?.id ?? null);
       if (
         projectNavigationBusyRef.current ||
         load.status !== "ready" ||
         load.journey.project.id !== selectedProjectIdRef.current ||
-        !load.journey.nodes.some((node) => node.id === nodeId)
+        !selectedNode ||
+        !exactNodeId
       ) {
         return;
       }
-      setSelectedProjectTargetId(nodeId);
+      setSelectedProjectTargetId(exactNodeId);
+      setSelectedProjectWorkflowTaskId(
+        projectWorkbenchDefaultTaskIdForNode(load.journey, exactNodeId)
+      );
+      setProjectView("home");
+      setMobileProjectSurface("task");
+      setMobileSheetOpen(false);
+    },
+    [projectJourneyResource.load]
+  );
+
+  const handleSelectProjectWorkflowTask = useCallback(
+    (taskId: string) => {
+      const load = projectJourneyResource.load;
+      if (
+        projectNavigationBusyRef.current ||
+        load.status !== "ready" ||
+        load.journey.project.id !== selectedProjectIdRef.current
+      ) {
+        return;
+      }
+      const selection = projectWorkbenchSelectionForWorkflowTask(
+        load.journey,
+        taskId
+      );
+      if (!selection) {
+        return;
+      }
+      setSelectedProjectWorkflowTaskId(selection.taskId);
+      setSelectedProjectTargetId(selection.targetNodeId);
       setProjectView("home");
       setMobileProjectSurface("task");
       setMobileSheetOpen(false);
@@ -1113,6 +1172,16 @@ export function ImmigrationAIWorkspace({
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, []);
+  const workspaceNavigationSplit = useResizableWorkspaceNavigationSplit({
+    enabled: isWideViewport,
+    minimumMainContentWidth:
+      selectedProjectId !== null
+        ? PROJECT_SPLITTER_MIN_CENTER +
+          PROJECT_SPLITTER_HANDLE_WIDTH +
+          PROJECT_SPLITTER_MIN_RIGHT
+        : WORKSPACE_NAVIGATION_MIN_STANDALONE_CONTENT,
+    projectMode: selectedProjectId !== null,
+  });
   /**
    * Phase 12 Stage 1 R3: one contract decides whether this conversation accepts
    * new work. Read-only is derived from the origin that was applied together
@@ -1159,13 +1228,40 @@ export function ImmigrationAIWorkspace({
       load.status === "ready" &&
       load.journey.project.id === selectedProjectId
     ) {
+      const selectedTask = projectWorkflowTaskById(
+        load.journey.workflowProjection.tasks,
+        selectedProjectWorkflowTaskId
+      );
+      const preserveProjectSelection =
+        selectedProjectTargetId === null &&
+        selectedTask?.targetKind === "project";
+      const targetId = reconcileProjectWorkbenchTarget(
+        selectedProjectTargetId,
+        load.journey,
+        preserveProjectSelection
+      );
+      const taskId = reconcileProjectWorkbenchTaskId(
+        selectedProjectWorkflowTaskId,
+        load.journey,
+        targetId,
+        preserveProjectSelection && targetId === null
+      );
       setSelectedProjectTargetId((current) =>
-        reconcileProjectWorkbenchTarget(current, load.journey)
+        current === targetId ? current : targetId
+      );
+      setSelectedProjectWorkflowTaskId((current) =>
+        current === taskId ? current : taskId
       );
     } else if (load.status === "failed") {
       setSelectedProjectTargetId(null);
+      setSelectedProjectWorkflowTaskId(null);
     }
-  }, [projectJourneyResource.load, selectedProjectId]);
+  }, [
+    projectJourneyResource.load,
+    selectedProjectId,
+    selectedProjectTargetId,
+    selectedProjectWorkflowTaskId,
+  ]);
   /**
    * Phase 13 M9-A navigation/overview. Derived only from the server-authorized
    * projection: no summary means no stages and no fabricated counts.
@@ -2438,60 +2534,51 @@ export function ImmigrationAIWorkspace({
    * is never a second Project controller or a duplicated panel instance.
    */
   const sidebarRailContent = (
-    <>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-950">
-            {copy.history.title}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {copy.history.quickQuestions}
-          </p>
+    <ProjectEntryPanel
+      activeConversationId={conversationId}
+      availability={projectAvailability}
+      clearSelectionSignal={projectSelectionReset}
+      copy={copy.projectEntry}
+      generalHeader={
+        <div className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">
+              {getProjectWorkflowCopy(locale).navigation.workspaceTitle}
+            </h2>
+            <p className="mt-1 text-xs leading-4 text-slate-600">
+              {copy.history.quickQuestions}
+            </p>
+          </div>
+          <button
+            className="flex min-h-12 w-full items-center gap-2 rounded-xl bg-[#001736] px-3 py-2 text-left text-sm font-semibold text-white transition hover:bg-[#002b5b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="new-standalone-conversation"
+            disabled={status !== "ready" || conversationLoading}
+            onClick={startStandaloneConversation}
+            type="button"
+          >
+            <span aria-hidden="true" className="text-lg leading-none">
+              +
+            </span>
+            {copy.history.newConversation}
+          </button>
         </div>
+      }
+      locale={locale}
+      navigationBusy={projectNavigationBusy}
+      onOpenProjectChat={handleSheetAwareOpenConversation}
+      onSelectedProjectChange={handleSelectedProjectChange}
+      projectConversationAction={
         <button
-          className="shrink-0 rounded-xl bg-[#001736] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
+          className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          data-testid="new-standalone-conversation-from-project"
           disabled={status !== "ready" || conversationLoading}
           onClick={startStandaloneConversation}
           type="button"
         >
-          +
-          {selectedProjectId
-            ? copy.projectEntry.standaloneConversation
-            : copy.history.newConversation}
+          {copy.projectEntry.standaloneConversation}
         </button>
-      </div>
-
-      <ProjectEntryPanel
-        availability={projectAvailability}
-        clearSelectionSignal={projectSelectionReset}
-        copy={copy.projectEntry}
-        locale={locale}
-        navigationBusy={projectNavigationBusy}
-        onOpenProjectChat={handleSheetAwareOpenConversation}
-        onSelectedProjectChange={handleSelectedProjectChange}
-        onSelectProjectView={handleSheetAwareSelectProjectView}
-        projectView={projectView}
-        schoolPreparationRestricted={schoolPreparationRestricted}
-        selectedProjectId={selectedProjectId}
-        temporaryGuestProject={temporaryGuestProject}
-      />
-
-      {selectedProjectId ? (
-        <ProjectWorkbenchTargetRail
-          journeyCopy={copy.projectEntry.projectJourney}
-          journeyLoad={projectJourneyResource.load}
-          onRefresh={projectJourneyResource.refresh}
-          onSelectTarget={handleSelectProjectTarget}
-          selectedNodeId={selectedProjectTargetId}
-          workbenchCopy={copy.projectEntry.projectWorkbench}
-        />
-      ) : null}
-
-      {/*
-        Phase 13 M9-A: real step navigation with real status. It is only rendered
-        for a selected Project, and every stage behind it re-checks authorization.
-      */}
-      {selectedProjectId ? (
+      }
+      projectToolsNavigation={
         <ProjectWorkspaceNav
           activeStageChatKey={activeStageChatKey}
           copy={copy.projectEntry.projectWorkspace}
@@ -2503,94 +2590,108 @@ export function ImmigrationAIWorkspace({
           stages={projectStages}
           view={projectView}
         />
-      ) : null}
-
-      {selectedProjectId ? null : (
-        <>
-          <div className="space-y-2">
+      }
+      recentConversations={
+        <section
+          aria-label={
+            getProjectWorkflowCopy(locale).navigation.recentConversations
+          }
+          className="space-y-2"
+          data-testid="workspace-recent-conversations"
+        >
+          <div className="flex items-center gap-2 px-1">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-700">
+              {getProjectWorkflowCopy(locale).navigation.recentConversations}
+            </h3>
+            {conversationTotalCount !== null ? (
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                {conversationTotalCount}
+              </span>
+            ) : null}
+          </div>
+          <div className="space-y-1">
             {conversationLoading ? (
-              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+              <p className="rounded-lg bg-white p-2.5 text-xs text-slate-500">
                 {copy.history.loading}
               </p>
             ) : null}
-            {conversations.map((conversation) => (
-              <button
-                className={cn(
-                  "w-full rounded-xl p-3 text-left text-xs leading-5 transition",
-                  conversation.chatId === conversationId
-                    ? "bg-[#001736] text-white"
-                    : "bg-white text-slate-700 hover:bg-slate-100"
-                )}
-                disabled={status !== "ready" || conversationLoading}
-                key={conversation.chatId}
-                onClick={() => {
-                  clearProjectSelection();
-                  handleSheetAwareOpenConversation(conversation.chatId);
-                }}
-                type="button"
-              >
-                <span className="block truncate font-semibold">
-                  {conversation.title || copy.history.unnamed}
-                  {conversation.origin === "legacy_chat" ? (
-                    <LegacyConversationBadge copy={copy} />
-                  ) : conversation.origin === "project" ? (
-                    <span
-                      className="ml-2 inline-flex shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-900"
-                      data-testid="project-chat-history-badge"
-                    >
-                      {conversation.readOnly
-                        ? copy.projectChat.readOnlyBadge
-                        : copy.projectChat.badge}
-                    </span>
-                  ) : null}
-                  {conversation.policyBinding ? (
-                    <span
-                      className="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900"
-                      data-testid="conversation-policy-badge"
-                      title={
-                        conversation.policyBinding.title[locale] ||
-                        copy.history.policyTopicBadge
-                      }
-                    >
-                      {copy.history.policyTopicBadge}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="mt-1 block text-[11px] opacity-75">
-                  {formatConversationUpdatedAt(
-                    conversation.updatedAt,
-                    conversation.createdAt,
-                    locale,
-                    copy.history.updatedUnavailable
+            {conversations.map((conversation) => {
+              const active = conversation.chatId === conversationId;
+              return (
+                <button
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "w-full min-w-0 rounded-lg border px-2.5 py-2 text-left text-xs leading-4 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-1",
+                    active
+                      ? "border-blue-800 bg-[#001736] text-white shadow-sm"
+                      : "border-transparent bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/70"
                   )}
-                </span>
-                <span className="mt-1 block break-all font-mono text-[10px] opacity-75">
-                  {copy.history.chat} {conversation.chatId.slice(0, 8)} ·{" "}
-                  {copy.history.matter}{" "}
-                  {conversation.legalMatterId
-                    ? conversation.legalMatterId.slice(0, 8)
-                    : copy.status.noMatter}
-                </span>
-                {conversation.origin === "legacy_chat" ? (
-                  <span className="mt-1 block text-[11px] opacity-75">
-                    {copy.legacy.listHint}
+                  disabled={status !== "ready" || conversationLoading}
+                  key={conversation.chatId}
+                  onClick={() => {
+                    clearProjectSelection();
+                    handleSheetAwareOpenConversation(conversation.chatId);
+                  }}
+                  type="button"
+                >
+                  <span className="block truncate font-semibold">
+                    {conversation.title || copy.history.unnamed}
                   </span>
-                ) : conversation.origin === "project" &&
-                  conversation.readOnly ? (
-                  <span className="mt-1 block text-[11px] opacity-75">
-                    {copy.projectChat.listHint}
+                  <span className="mt-1 flex min-w-0 items-center gap-1.5">
+                    {conversation.origin === "legacy_chat" ? (
+                      <LegacyConversationBadge copy={copy} />
+                    ) : conversation.origin === "project" ? (
+                      <span
+                        className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[9px] font-medium ${active ? "bg-white/15 text-white" : "bg-blue-100 text-blue-900"}`}
+                        data-testid="project-chat-history-badge"
+                      >
+                        {conversation.readOnly
+                          ? copy.projectChat.readOnlyBadge
+                          : copy.projectChat.badge}
+                      </span>
+                    ) : null}
+                    {conversation.policyBinding ? (
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${active ? "bg-violet-300/20 text-violet-100" : "bg-violet-100 text-violet-900"}`}
+                        data-testid="conversation-policy-badge"
+                        title={
+                          conversation.policyBinding.title[locale] ||
+                          copy.history.policyTopicBadge
+                        }
+                      >
+                        {copy.history.policyTopicBadge}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </button>
-            ))}
+                  <span className="mt-1 block text-[10px] opacity-75">
+                    {formatConversationUpdatedAt(
+                      conversation.updatedAt,
+                      conversation.createdAt,
+                      locale,
+                      copy.history.updatedUnavailable
+                    )}
+                  </span>
+                  {conversation.origin === "legacy_chat" ? (
+                    <span className="mt-1 block truncate text-[10px] opacity-75">
+                      {copy.legacy.listHint}
+                    </span>
+                  ) : conversation.origin === "project" &&
+                    conversation.readOnly ? (
+                    <span className="mt-1 block truncate text-[10px] opacity-75">
+                      {copy.projectChat.listHint}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
             {!conversationLoading && conversations.length === 0 ? (
-              <p className="rounded-xl bg-white p-3 text-xs text-slate-500">
+              <p className="rounded-lg bg-white p-3 text-xs text-slate-500">
                 {copy.history.empty}
               </p>
             ) : null}
             {conversationLoadFailed ? (
               <p
-                className="rounded-xl bg-red-50 p-3 text-xs text-red-700"
+                className="rounded-lg bg-red-50 p-3 text-xs text-red-700"
                 role="alert"
               >
                 {copy.history.loadFailed}
@@ -2598,7 +2699,7 @@ export function ImmigrationAIWorkspace({
             ) : null}
             {conversationHasMore ? (
               <button
-                className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                className="min-h-10 w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 data-testid="load-older-conversations"
                 disabled={status !== "ready" || loadingOlderConversations}
                 onClick={() => loadOlderConversations()}
@@ -2609,22 +2710,18 @@ export function ImmigrationAIWorkspace({
                   : copy.history.loadOlder}
               </button>
             ) : conversations.length > 0 ? (
-              <p className="px-1 text-[11px] text-slate-400">
+              <p className="px-1 text-[10px] text-slate-400">
                 {copy.history.allLoaded}
-                {conversationTotalCount === null
-                  ? ""
-                  : ` (${conversationTotalCount})`}
               </p>
             ) : null}
           </div>
-
-          <div className="mt-4 space-y-2">
-            <p className="text-xs font-semibold text-slate-500">
+          <div className="space-y-1.5 border-t border-slate-200 pt-3">
+            <p className="text-[10px] font-semibold text-slate-500">
               {copy.history.quickQuestions}
             </p>
             {quickQuestions.map((question) => (
               <button
-                className="w-full rounded-xl bg-white px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
+                className="min-h-9 w-full rounded-lg bg-white px-2.5 py-1.5 text-left text-[11px] leading-4 text-slate-700 transition hover:bg-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:opacity-50"
                 disabled={!interaction.canUseSuggestedQuestions}
                 key={question}
                 onClick={() => submitMessageFromRail(question)}
@@ -2634,9 +2731,24 @@ export function ImmigrationAIWorkspace({
               </button>
             ))}
           </div>
-        </>
-      )}
-    </>
+        </section>
+      }
+      selectedProjectId={selectedProjectId}
+      temporaryGuestProject={temporaryGuestProject}
+      workflowNavigation={
+        <ProjectWorkflowNavigation
+          journeyCopy={copy.projectEntry.projectJourney}
+          journeyLoad={projectJourneyResource.load}
+          key={selectedProjectId ?? "no-project"}
+          locale={locale}
+          onRefresh={projectJourneyResource.refresh}
+          onSelectTarget={handleSelectProjectTarget}
+          onSelectWorkflowTask={handleSelectProjectWorkflowTask}
+          selectedNodeId={selectedProjectTargetId}
+          selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
+        />
+      }
+    />
   );
 
   const projectContextRailContent = (
@@ -2840,7 +2952,14 @@ export function ImmigrationAIWorkspace({
 
   return (
     <section
-      className="flex min-h-0 w-full flex-col px-3 pt-2 pb-[calc(4.75rem_+_env(safe-area-inset-bottom))] sm:px-4 lg:px-6 xl:h-full xl:pb-3"
+      className={cn(
+        "flex min-h-0 w-full flex-1 flex-col px-3 pt-2 sm:px-4 lg:px-6 xl:h-full xl:pb-3",
+        isWideViewport
+          ? ""
+          : composerFocused
+            ? "pb-[env(safe-area-inset-bottom)]"
+            : "pb-[var(--workspace-mobile-navigation-inset)]"
+      )}
       id="ai-workspace"
     >
       {/*
@@ -2900,20 +3019,26 @@ export function ImmigrationAIWorkspace({
         underneath it; the rail and panel components are still the existing ones.
       */}
 
-      {/*
-        Layout correction: main-content priority. The left rail and the right materials
-        panel previously took 250px + 290px of a 1600px viewport before any padding. They
-        are now narrower (210px + 220px) so the centre column — where the Project workspace
-        actually lives — receives substantially more width. Breakpoint behaviour is
-        unchanged: a single column below `xl`, three columns from `xl`.
-      */}
+      {/* The desktop navigation width is measured from this grid container. Its
+          24px handle and the active mode's minimum work area are included in the
+          clamp; the independent E1 splitter measures its own inner Project grid. */}
       <div
         className={cn(
           "grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]",
           selectedProjectId
-            ? "xl:grid-cols-[220px_minmax(0,1fr)] xl:grid-rows-[auto_minmax(0,1fr)]"
-            : "xl:grid-cols-[210px_minmax(0,1fr)_220px]"
+            ? "min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] xl:grid-cols-[288px_24px_minmax(0,1fr)] xl:grid-rows-[auto_minmax(0,1fr)]"
+            : "xl:grid-cols-[288px_24px_minmax(0,1fr)_220px]"
         )}
+        data-testid="workspace-layout-grid"
+        ref={workspaceNavigationSplit.containerRef}
+        style={
+          isWideViewport
+            ? {
+                gridTemplateColumns:
+                  workspaceNavigationSplit.gridTemplateColumns,
+              }
+            : undefined
+        }
       >
         {/*
           Phase 14-A: the rails are the desktop (`xl`) presentation only. Below
@@ -2923,17 +3048,32 @@ export function ImmigrationAIWorkspace({
         {isWideViewport ? (
           <aside
             className={cn(
-              "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
+              "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:col-start-1 xl:row-start-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
               selectedProjectId ? "xl:row-span-2" : ""
             )}
             data-testid="workspace-history-panel"
+            id="workspace-history-panel"
           >
             {sidebarRailContent}
           </aside>
         ) : null}
 
+        {isWideViewport ? (
+          <WorkspaceNavigationSplitSeparator
+            accessibleLabel={
+              getProjectWorkflowCopy(locale).navigation
+                .resizeWorkspaceNavigation
+            }
+            bounds={workspaceNavigationSplit.bounds}
+            controls="workspace-history-panel"
+            handlers={workspaceNavigationSplit.separatorHandlers}
+            navigationWidth={workspaceNavigationSplit.navigationWidth}
+            projectMode={selectedProjectId !== null}
+          />
+        ) : null}
+
         {selectedProjectId ? (
-          <div className="order-1 min-w-0 xl:order-2 xl:col-start-2 xl:row-start-1">
+          <div className="order-1 min-w-0 xl:order-3 xl:col-start-3 xl:row-start-1">
             <ProjectWorkbenchHeader
               enabledSections={{
                 applications: schoolApplicationsEnabled,
@@ -2966,7 +3106,7 @@ export function ImmigrationAIWorkspace({
         <div
           className={cn(
             selectedProjectId
-              ? "order-2 grid min-w-0 grid-cols-1 gap-0 xl:order-3 xl:col-start-2 xl:row-start-2 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(460px,1fr)_24px_minmax(300px,0.72fr)]"
+              ? "order-2 grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 xl:order-4 xl:col-start-3 xl:row-start-2 xl:h-full xl:min-h-0 xl:grid-rows-1 xl:grid-cols-[minmax(460px,1fr)_24px_minmax(300px,0.72fr)]"
               : "contents"
           )}
           data-testid={
@@ -2986,15 +3126,10 @@ export function ImmigrationAIWorkspace({
         >
           <div
             className={cn(
-              "order-1 flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
+              "order-1 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
               selectedProjectId
                 ? cn(
-                    "xl:order-1 xl:h-full",
-                    isWideViewport
-                      ? ""
-                      : isActiveSelectedProjectConversation
-                        ? "h-[calc(100dvh_-_16rem)] min-h-[320px]"
-                        : "min-h-[320px]",
+                    "h-full xl:order-1 xl:h-full",
                     mobileProjectSurface === "chat" ? "flex" : "hidden xl:flex"
                   )
                 : isWideViewport
@@ -3002,9 +3137,9 @@ export function ImmigrationAIWorkspace({
                   : /*
                   Phase 14-A: a Project home/section is one natural page scroll, so
                   the centre column must not impose a viewport-fraction height. A
-                  conversation keeps its own bounded area so only the message list
-                  scrolls. `4.75rem`/`16rem` reserve room for the chrome, the bottom
-                  navigation bar and the safe area instead of overhanging them.
+                  standalone conversations keep their existing bounded area. Project
+                  Chat instead fills the remaining viewport track above the mobile
+                  navigation and safe area.
                 */
                     isNeutralProjectSelection
                     ? "min-h-[320px]"
@@ -3640,7 +3775,7 @@ export function ImmigrationAIWorkspace({
                   </div>
                 ) : null}
 
-                <div className="border-t border-slate-100 bg-white p-2 sm:p-3">
+                <div className="shrink-0 border-t border-slate-100 bg-white p-2 sm:p-3">
                   {isReadOnlyConversation ? (
                     // Archived history: no composer exists here, only reading and the
                     // explicit path to a new conversation.
@@ -3707,10 +3842,7 @@ export function ImmigrationAIWorkspace({
               ) : null}
               <aside
                 className={cn(
-                  "order-3 min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-full xl:min-h-0 xl:rounded-none xl:shadow-none",
-                  isWideViewport
-                    ? ""
-                    : "h-[calc(100dvh_-_16rem)] min-h-[320px]",
+                  "order-3 h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-full xl:min-h-0 xl:rounded-none xl:shadow-none",
                   mobileProjectSurface === "task" ? "flex" : "hidden xl:flex"
                 )}
                 data-testid="workspace-project-task-region"
@@ -3731,6 +3863,7 @@ export function ImmigrationAIWorkspace({
                   projectId={selectedProjectId}
                   projectView={projectView}
                   selectedNodeId={selectedProjectTargetId}
+                  selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
                   workbenchCopy={copy.projectEntry.projectWorkbench}
                 >
                   {selectedProject && projectView !== "home" ? (
@@ -3855,28 +3988,17 @@ export function ImmigrationAIWorkspace({
                 {mobileSheetMode === "steps" ? (
                   <div className="space-y-3" data-testid="mobile-sheet-steps">
                     {selectedProjectId ? (
-                      projectStages.length > 0 ? (
-                        <ProjectWorkspaceNav
-                          activeStageChatKey={activeStageChatKey}
-                          copy={copy.projectEntry.projectWorkspace}
-                          navigationBusy={projectNavigationBusy}
-                          onOpenStageChat={handleSheetAwareOpenStageChat}
-                          onSelectView={handleSheetAwareSelectProjectView}
-                          pendingStageChatKey={pendingStageChatKey}
-                          stageChatError={stageChatError}
-                          stages={projectStages}
-                          view={projectView}
-                        />
-                      ) : (
-                        <p
-                          className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-600"
-                          data-testid="mobile-sheet-steps-state"
-                        >
-                          {workspaceSummaryState === "failed"
-                            ? copy.projectEntry.projectServiceUnavailable
-                            : copy.history.loading}
-                        </p>
-                      )
+                      <ProjectWorkflowNavigation
+                        journeyCopy={copy.projectEntry.projectJourney}
+                        journeyLoad={projectJourneyResource.load}
+                        key={selectedProjectId}
+                        locale={locale}
+                        onRefresh={projectJourneyResource.refresh}
+                        onSelectTarget={handleSelectProjectTarget}
+                        onSelectWorkflowTask={handleSelectProjectWorkflowTask}
+                        selectedNodeId={selectedProjectTargetId}
+                        selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
+                      />
                     ) : (
                       <div
                         className="space-y-2 rounded-xl bg-[#f3f4f5] p-3"

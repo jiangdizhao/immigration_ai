@@ -17,6 +17,21 @@ const splitterModel = readFileSync(
   new URL("./project-splitter.ts", import.meta.url),
   "utf8"
 );
+const navigationSplitter = readFileSync(
+  new URL(
+    "../../components/resizable-workspace-navigation-split.tsx",
+    import.meta.url
+  ),
+  "utf8"
+);
+const navigationSplitterModel = readFileSync(
+  new URL("./workspace-navigation-splitter.ts", import.meta.url),
+  "utf8"
+);
+const projectEntry = readFileSync(
+  new URL("../../components/project-entry-panel.tsx", import.meta.url),
+  "utf8"
+);
 
 function section(start: string, end: string): string {
   const startIndex = workspace.indexOf(start);
@@ -27,14 +42,14 @@ function section(start: string, end: string): string {
   return workspace.slice(startIndex, endIndex);
 }
 
-test("the Project workspace uses one shared M1 read for the rail, progress view and Task panel", () => {
+test("the Project workspace uses one shared M1 read for workflow navigation, progress and the Task panel", () => {
   assert.equal(
     (workspace.match(/useProjectJourney\(selectedProjectId\)/gu) ?? []).length,
     1
   );
   assert.match(
     workspace,
-    /ProjectWorkbenchTargetRail[\s\S]*?journeyLoad=\{projectJourneyResource\.load\}/u
+    /ProjectWorkflowNavigation[\s\S]*?journeyLoad=\{projectJourneyResource\.load\}/u
   );
   assert.match(
     workspace,
@@ -52,11 +67,25 @@ test("changing target or Project section does not reset the active chat, while a
     "const handleSelectProjectTarget",
     "const returnToPreviousProjectView"
   );
-  assert.match(target, /setSelectedProjectTargetId\(nodeId\)/u);
+  assert.match(target, /setSelectedProjectTargetId\(exactNodeId\)/u);
   assert.match(target, /setProjectView\("home"\)/u);
   assert.doesNotMatch(
     target,
     /resetProjectConversation|setMessages\(\[\]\)|setInput\(""\)|submitMessage/u
+  );
+
+  const taskSelection = section(
+    "const handleSelectProjectWorkflowTask",
+    "const returnToPreviousProjectView"
+  );
+  assert.match(taskSelection, /projectWorkbenchSelectionForWorkflowTask/u);
+  assert.match(
+    taskSelection,
+    /setSelectedProjectWorkflowTaskId\(selection\.taskId\)/u
+  );
+  assert.doesNotMatch(
+    taskSelection,
+    /fetch\(|resetProjectConversation|setMessages\(\[\]\)|setInput\(""\)|submitMessage/u
   );
 
   const sectionNavigation = section(
@@ -158,4 +187,51 @@ test("the desktop splitter remains Project-only and is omitted from mobile rende
     /selectedProjectId\n\s*\? "order-2 grid[\s\S]*?: "contents"/u
   );
   assert.match(splitter, /hidden[\s\S]*?xl:flex/u);
+});
+
+test("the independent left splitter reserves actual Project content and remains absent on mobile", () => {
+  assert.equal(
+    (workspace.match(/useResizableWorkspaceNavigationSplit\(/gu) ?? []).length,
+    1
+  );
+  assert.match(workspace, /<WorkspaceNavigationSplitSeparator/u);
+  assert.match(workspace, /ref=\{workspaceNavigationSplit\.containerRef\}/u);
+  assert.match(
+    workspace,
+    /gridTemplateColumns:\s*workspaceNavigationSplit\.gridTemplateColumns/u
+  );
+  assert.match(
+    workspace,
+    /PROJECT_SPLITTER_MIN_CENTER[\s\S]*?PROJECT_SPLITTER_MIN_RIGHT/u
+  );
+  assert.match(navigationSplitter, /role="separator"/u);
+  assert.match(navigationSplitter, /aria-valuemin=/u);
+  assert.match(navigationSplitter, /aria-valuemax=/u);
+  assert.match(navigationSplitter, /cursor-col-resize/u);
+  assert.match(navigationSplitter, /case "ArrowLeft"/u);
+  assert.match(navigationSplitter, /case "ArrowRight"/u);
+  assert.match(navigationSplitter, /case "Home"/u);
+  assert.match(navigationSplitter, /case "End"/u);
+  assert.match(navigationSplitter, /setPointerCapture\(event.pointerId\)/u);
+  assert.match(navigationSplitter, /releasePointerCapture\(event.pointerId\)/u);
+  assert.match(navigationSplitter, /new ResizeObserver\(measure\)/u);
+  assert.match(
+    navigationSplitter,
+    /localStorage\.getItem\(\s*WORKSPACE_NAVIGATION_SPLITTER_PREFERENCE_KEY/u
+  );
+  assert.match(navigationSplitter, /localStorage\.setItem\(/u);
+  assert.match(
+    navigationSplitterModel,
+    /width - WORKSPACE_NAVIGATION_SPLITTER_WIDTH - contentWidth/u
+  );
+  assert.match(navigationSplitterModel, /WORKSPACE_NAVIGATION_MAX_WIDTH/u);
+  assert.match(projectEntry, /data-testid="project-navigation-tabs"/u);
+  assert.match(projectEntry, /data-testid="project-tools-disclosure"/u);
+  assert.match(
+    projectEntry,
+    /hidden=\{projectNavigationTab !== "workflows"\}/u
+  );
+  assert.match(projectEntry, /hidden=\{projectNavigationTab !== "chats"\}/u);
+  assert.match(workspace, /<ProjectWorkflowNavigation/u);
+  assert.match(workspace, /mobileSheetMode === "steps"/u);
 });

@@ -628,17 +628,27 @@ export function offerExpiryState(input: {
 
 export function coeValidityState(input: {
   readonly state: SchoolAdmissionsCoeState;
+  readonly validFrom?: string | null;
   readonly validTo: string | null;
   readonly now: Date;
 }): SchoolAdmissionsExpiryState {
   if (input.state === "superseded") {
     return "not_applicable";
   }
+  const startsAt = input.validFrom
+    ? Date.parse(`${input.validFrom}T00:00:00.000Z`)
+    : null;
+  if (
+    (startsAt !== null && Number.isNaN(startsAt)) ||
+    (startsAt !== null && startsAt > input.now.getTime())
+  ) {
+    return "unknown";
+  }
   if (!input.validTo) {
     return "unknown";
   }
   const expiry = Date.parse(`${input.validTo}T23:59:59.999Z`);
-  if (Number.isNaN(expiry)) {
+  if (Number.isNaN(expiry) || (startsAt !== null && startsAt > expiry)) {
     return "unknown";
   }
   const remaining = expiry - input.now.getTime();

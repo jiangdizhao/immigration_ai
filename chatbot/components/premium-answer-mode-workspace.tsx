@@ -107,7 +107,7 @@ export function PremiumAnswerModeWorkspace({
 
   if (!accessPolicy || !modeHydrated) {
     return (
-      <section className="w-full px-3 pt-2 sm:px-4 lg:px-6">
+      <section className="w-full min-h-0 flex-1 px-3 pt-2 sm:px-4 lg:px-6">
         <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
           {copy.loading}
         </div>
@@ -124,7 +124,7 @@ export function PremiumAnswerModeWorkspace({
         : hydratedAccessPolicy.premiumAllowed;
 
   return (
-    <div className="flex min-h-0 flex-col xl:h-full">
+    <div className="flex min-h-0 flex-1 flex-col xl:h-full">
       {/*
         Phase 12 Stage 2 compact toolbar: one row on every viewport. The mode
         description is kept as an accessible hint instead of a permanent block so

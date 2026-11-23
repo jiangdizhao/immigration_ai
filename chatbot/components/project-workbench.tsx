@@ -27,9 +27,22 @@ import {
   projectWorkbenchPanelKind,
   recordedRoutesForTarget,
 } from "@/lib/workspace/project-workbench-model";
+import { getProjectWorkflowCopy } from "@/lib/workspace/project-workflow-copy";
+import {
+  defaultWorkflowTaskForTarget,
+  projectWorkflowTaskById,
+  type WorkflowTaskProjectionV1,
+  workflowTasksForTarget,
+} from "@/lib/workspace/project-workflows";
 import type { ProjectWorkspaceView } from "@/lib/workspace/project-workspace-view";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectGuidedJourneyContent } from "./project-guided-journey";
+import {
+  ProjectWorkflowProgressDetails,
+  ProjectWorkflowProgressSummary,
+  ProjectWorkflowStepList,
+  ProjectWorkflowTaskDetails,
+} from "./project-workflow-components";
 import {
   Dialog,
   DialogContent,
@@ -130,18 +143,61 @@ function SourceState({
   );
 }
 
+function WorkflowTaskGroup({
+  label,
+  locale,
+  onSelectTask,
+  selectedTaskId,
+  tasks,
+}: {
+  label: string;
+  locale: string;
+  onSelectTask: (taskId: string) => void;
+  selectedTaskId: string | null;
+  tasks: readonly WorkflowTaskProjectionV1[];
+}) {
+  if (!tasks.length) {
+    return null;
+  }
+  return (
+    <details
+      className="rounded-lg border border-slate-200 bg-white p-1.5"
+      data-testid="project-workflow-task-group"
+      open={tasks.some((task) => task.taskId === selectedTaskId)}
+    >
+      <summary className="cursor-pointer list-none break-words px-1 py-1 text-[10px] font-semibold text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-800">
+        {label} · {tasks.length}
+      </summary>
+      <div className="mt-1">
+        <ProjectWorkflowStepList
+          locale={locale}
+          onSelectTask={onSelectTask}
+          selectedTaskId={selectedTaskId}
+          tasks={tasks}
+        />
+      </div>
+    </details>
+  );
+}
+
 export function ProjectWorkbenchTargetRail({
   journeyLoad,
+  locale,
   onRefresh,
   onSelectTarget,
+  onSelectWorkflowTask,
   selectedNodeId,
+  selectedWorkflowTaskId,
   workbenchCopy,
   journeyCopy,
 }: {
   journeyLoad: ProjectJourneyClientLoad;
+  locale: string;
   onRefresh: () => void;
   onSelectTarget: (nodeId: string) => void;
+  onSelectWorkflowTask: (taskId: string) => void;
   selectedNodeId: string | null;
+  selectedWorkflowTaskId: string | null;
   workbenchCopy: ProjectWorkbenchCopy;
   journeyCopy: ProjectJourneyCopy;
 }) {
@@ -198,6 +254,7 @@ export function ProjectWorkbenchTargetRail({
   }
 
   const { journey } = journeyLoad;
+  const workflowCopy = getProjectWorkflowCopy(locale);
   const schools = journey.nodes.filter(
     (node) => node.kind === "school_application"
   );
@@ -218,6 +275,28 @@ export function ProjectWorkbenchTargetRail({
     (node) => !linkedAdmissions.has(node.id)
   );
   const renderedRouteIds = new Set<string>();
+
+  const workflowSteps = (node: ProjectJourneyNode) => (
+    <WorkflowTaskGroup
+      label={
+        workflowCopy.profileLabels[
+          node.kind === "school_application"
+            ? "school_application"
+            : node.kind === "admission_case"
+              ? "school_admissions"
+              : "student_500"
+        ]
+      }
+      locale={locale}
+      onSelectTask={onSelectWorkflowTask}
+      selectedTaskId={selectedWorkflowTaskId}
+      tasks={workflowTasksForTarget(
+        journey.workflowProjection.tasks,
+        node.targetKind,
+        node.targetId
+      )}
+    />
+  );
 
   const nodeButton = (node: ProjectJourneyNode, nested = false) => {
     const title = nodeTitle(node, journeyCopy);
@@ -296,6 +375,44 @@ export function ProjectWorkbenchTargetRail({
           {journeyCopy.closedTitle} · {journeyCopy.closedMessage}
         </p>
       ) : null}
+      <section
+        className="space-y-2"
+        data-testid="project-workflow-project-profile"
+      >
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          {workflowCopy.profileLabels.project_planning}
+        </h4>
+        <WorkflowTaskGroup
+          label={workflowCopy.profileLabels.project_planning}
+          locale={locale}
+          onSelectTask={onSelectWorkflowTask}
+          selectedTaskId={selectedWorkflowTaskId}
+          tasks={journey.workflowProjection.tasks.filter(
+            (task) =>
+              task.targetKind === "project" &&
+              task.workflowKind === "project_planning"
+          )}
+        />
+        {(
+          ["school_application", "school_admissions", "student_500"] as const
+        ).map((workflowKind) => {
+          const tasks = journey.workflowProjection.tasks.filter(
+            (task) =>
+              task.targetKind === "project" &&
+              task.workflowKind === workflowKind
+          );
+          return (
+            <WorkflowTaskGroup
+              key={workflowKind}
+              label={`${workflowCopy.profileLabels[workflowKind]} · ${workflowCopy.stepTitles.source_coverage}`}
+              locale={locale}
+              onSelectTask={onSelectWorkflowTask}
+              selectedTaskId={selectedWorkflowTaskId}
+              tasks={tasks}
+            />
+          );
+        })}
+      </section>
       <div className="space-y-2">
         <h4 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
           {journeyCopy.groups.schools}
@@ -328,12 +445,14 @@ export function ProjectWorkbenchTargetRail({
               return (
                 <li className="space-y-1.5" key={school.id}>
                   {nodeButton(school)}
+                  {workflowSteps(school)}
                   {linked.map((admission) => (
                     <div className="space-y-1.5" key={admission.id}>
                       <p className="ml-3 border-l-2 border-slate-300 pl-2 text-[9px] text-slate-500">
                         {journeyCopy.relationship.schoolAdmissions}
                       </p>
                       {nodeButton(admission, true)}
+                      {workflowSteps(admission)}
                       {renderRoutes(admission.id)}
                     </div>
                   ))}
@@ -361,6 +480,7 @@ export function ProjectWorkbenchTargetRail({
             independentAdmissions.map((node) => (
               <div className="space-y-1.5" key={node.id}>
                 {nodeButton(node)}
+                {workflowSteps(node)}
                 {renderRoutes(node.id)}
               </div>
             ))
@@ -394,6 +514,7 @@ export function ProjectWorkbenchTargetRail({
             {studentApplications.map((node) => (
               <li className="space-y-1.5" key={node.id}>
                 {nodeButton(node)}
+                {workflowSteps(node)}
                 {renderRoutes(node.id)}
               </li>
             ))}
@@ -962,6 +1083,7 @@ export function ProjectTaskWorkspacePanel({
   onReturnToTarget,
   projectId,
   selectedNodeId,
+  selectedWorkflowTaskId,
   workbenchCopy,
   journeyCopy,
   projectView,
@@ -975,6 +1097,7 @@ export function ProjectTaskWorkspacePanel({
   onReturnToTarget: () => void;
   projectId: string;
   selectedNodeId: string | null;
+  selectedWorkflowTaskId: string | null;
   workbenchCopy: ProjectWorkbenchCopy;
   journeyCopy: ProjectJourneyCopy;
   projectView: ProjectWorkspaceView;
@@ -983,6 +1106,27 @@ export function ProjectTaskWorkspacePanel({
 }) {
   const journey = journeyLoad.status === "ready" ? journeyLoad.journey : null;
   const selectedNode = projectWorkbenchNodeById(journey, selectedNodeId);
+  const selectedWorkflowTaskCandidate = projectWorkflowTaskById(
+    journey?.workflowProjection.tasks ?? [],
+    selectedWorkflowTaskId
+  );
+  const selectedWorkflowTask =
+    journey &&
+    selectedWorkflowTaskCandidate?.projectId === journey.project.id &&
+    ((selectedNodeId === null &&
+      selectedWorkflowTaskCandidate.targetKind === "project") ||
+      (selectedNodeId !== null &&
+        selectedNode &&
+        selectedWorkflowTaskCandidate.targetKind === selectedNode.targetKind &&
+        selectedWorkflowTaskCandidate.targetId === selectedNode.targetId))
+      ? selectedWorkflowTaskCandidate
+      : journey && selectedNode
+        ? defaultWorkflowTaskForTarget(
+            journey.workflowProjection.tasks,
+            selectedNode.targetKind,
+            selectedNode.targetId
+          )
+        : null;
 
   return (
     <section
@@ -1077,15 +1221,26 @@ export function ProjectTaskWorkspacePanel({
               {workbenchCopy.targetUnavailable}
             </p>
           ) : (
-            <SelectedMatterDetails
-              journey={journey}
-              journeyCopy={journeyCopy}
-              locale={locale}
-              navigationBusy={navigationBusy}
-              node={selectedNode}
-              onOpenWorkspace={onOpenWorkspace}
-              workbenchCopy={workbenchCopy}
-            />
+            <div
+              className="space-y-3"
+              data-testid="project-task-workflow-context"
+            >
+              <ProjectWorkflowTaskDetails
+                journey={journey}
+                journeyCopy={journeyCopy}
+                locale={locale}
+                task={selectedWorkflowTask}
+              />
+              <SelectedMatterDetails
+                journey={journey}
+                journeyCopy={journeyCopy}
+                locale={locale}
+                navigationBusy={navigationBusy}
+                node={selectedNode}
+                onOpenWorkspace={onOpenWorkspace}
+                workbenchCopy={workbenchCopy}
+              />
+            </div>
           )}
         </div>
       )}
@@ -1135,9 +1290,13 @@ export function ProjectWorkbenchHeader({
   const title =
     project?.displayName?.trim() ||
     `${workbenchCopy.unnamedProject} #${projectId.slice(0, 8)}`;
+  const selectedContext = selected
+    ? nodeTitle(selected, journeyCopy)
+    : workbenchCopy.purposeUnknown;
   const isReady =
     journeyLoad.status === "ready" &&
     journeyLoad.journey.project.id === projectId;
+  const workflowCopy = getProjectWorkflowCopy(locale);
   const projectStatus = isReady
     ? journeyLoad.journey.project.status === "closed"
       ? workbenchCopy.closedStatus
@@ -1145,25 +1304,28 @@ export function ProjectWorkbenchHeader({
     : journeyLoad.status === "failed"
       ? journeyCopy.unavailable
       : journeyCopy.loading;
-  const stateSummary = isReady ? journeyLoad.journey.summary : null;
+  const workflowProgress = isReady
+    ? journeyLoad.journey.workflowProjection.progress
+    : null;
 
   return (
     <>
       <header
-        className="sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur sm:px-4"
+        className="sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur sm:px-4 xl:min-h-[84px] xl:px-5"
         data-testid="project-workbench-header"
       >
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-2 xl:min-h-[64px] xl:flex-row xl:items-center xl:justify-between xl:gap-6">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <FolderKanban
                 aria-hidden="true"
                 className="size-5 shrink-0 text-blue-800"
               />
-              <h1 className="min-w-0 break-words text-lg font-semibold text-slate-950 sm:text-xl">
-                {project?.displayName?.trim() ||
-                  title ||
-                  `Project ${projectId.slice(0, 8)}`}
+              <h1
+                className="min-w-0 flex-1 line-clamp-2 break-normal text-base font-semibold text-slate-950 sm:text-lg xl:line-clamp-1 xl:text-xl"
+                title={title}
+              >
+                {title}
               </h1>
               <span
                 className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${isReady && journeyLoad.journey.project.status === "closed" ? "bg-slate-100 text-slate-700" : "bg-blue-50 text-blue-900"}`}
@@ -1171,40 +1333,27 @@ export function ProjectWorkbenchHeader({
                 {projectStatus}
               </span>
             </div>
-            <p className="mt-1 break-words text-xs leading-5 text-slate-600">
-              {selected
-                ? nodeTitle(selected, journeyCopy)
-                : workbenchCopy.purposeUnknown}
-            </p>
-            <p className="mt-0.5 truncate font-mono text-[10px] text-slate-500">
-              {projectId}
+            <p
+              className="mt-0.5 truncate text-xs leading-4 text-slate-600"
+              title={selectedContext}
+            >
+              {selectedContext}
             </p>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
-            <div className="min-w-0 text-xs">
-              <p className="font-semibold text-slate-800">
-                {stateSummary
-                  ? journeyCopy.summaryKnown(stateSummary.knownRecordCount)
-                  : workbenchCopy.progressNotDetermined}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 xl:shrink-0 xl:flex-nowrap xl:justify-end">
+            {workflowProgress ? (
+              <ProjectWorkflowProgressSummary
+                compact
+                locale={locale}
+                progress={workflowProgress}
+              />
+            ) : (
+              <p className="text-xs font-semibold text-slate-800">
+                {workbenchCopy.progressNotDetermined}
               </p>
-              {stateSummary ? (
-                <p className="mt-0.5 break-words text-[10px] leading-4 text-slate-600">
-                  {journeyCopy.summaryIncomplete(
-                    stateSummary.knownIncompleteWorkCount
-                  )}{" "}
-                  ·{" "}
-                  {journeyCopy.summaryUnknown(
-                    stateSummary.unknownProgressCount
-                  )}{" "}
-                  ·{" "}
-                  {journeyCopy.summaryUnavailable(
-                    stateSummary.unavailableSourceCount
-                  )}
-                </p>
-              ) : null}
-            </div>
+            )}
             <button
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-700 bg-white px-3 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-800"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-blue-700 bg-white px-2 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-800 sm:px-3"
               data-testid="view-project-progress"
               onClick={() => setProgressOpen(true)}
               type="button"
@@ -1242,29 +1391,46 @@ export function ProjectWorkbenchHeader({
       <Dialog onOpenChange={setProgressOpen} open={progressOpen}>
         <DialogContent className="max-h-[92dvh] w-[min(96vw,1500px)] max-w-[1500px] overflow-hidden p-3 sm:p-5">
           <DialogHeader className="pr-10">
-            <DialogTitle>{journeyCopy.title}</DialogTitle>
-            <DialogDescription>{journeyCopy.subtitle}</DialogDescription>
+            <DialogTitle>{workflowCopy.progressTitle}</DialogTitle>
+            <DialogDescription>
+              {
+                workflowCopy.coverage[
+                  workflowProgress?.coverage ?? "unavailable"
+                ]
+              }
+            </DialogDescription>
           </DialogHeader>
           <div
             className="min-h-0 overflow-y-auto pr-1"
             data-testid="project-progress-details"
           >
             {journeyLoad.status === "ready" && isReady ? (
-              <ProjectGuidedJourneyContent
-                copy={journeyCopy}
-                enabledSections={enabledSections}
-                journey={journeyLoad.journey}
-                key={journeyLoad.journey.project.id}
-                locale={locale}
-                navigationBusy={navigationBusy}
-                onNodeSelect={onSelectNode}
-                onRefresh={onRefresh}
-                onSelectView={(view) => {
-                  setProgressOpen(false);
-                  onSelectView(view);
-                }}
-                selectedNodeId={selectedNodeId}
-              />
+              <div className="space-y-6">
+                <ProjectWorkflowProgressDetails
+                  locale={locale}
+                  projection={journeyLoad.journey.workflowProjection}
+                />
+                <section className="border-t border-slate-200 pt-4">
+                  <h3 className="mb-2 text-sm font-semibold text-slate-900">
+                    {journeyCopy.title}
+                  </h3>
+                  <ProjectGuidedJourneyContent
+                    copy={journeyCopy}
+                    enabledSections={enabledSections}
+                    journey={journeyLoad.journey}
+                    key={journeyLoad.journey.project.id}
+                    locale={locale}
+                    navigationBusy={navigationBusy}
+                    onNodeSelect={onSelectNode}
+                    onRefresh={onRefresh}
+                    onSelectView={(view) => {
+                      setProgressOpen(false);
+                      onSelectView(view);
+                    }}
+                    selectedNodeId={selectedNodeId}
+                  />
+                </section>
+              </div>
             ) : journeyLoad.status === "failed" ? (
               <div
                 className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"

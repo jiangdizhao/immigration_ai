@@ -1,7 +1,21 @@
 "use client";
 
-import { ArrowLeft, Pencil } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  FolderKanban,
+  MessageSquareText,
+  Pencil,
+} from "lucide-react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,13 +35,11 @@ import {
   projectEntryControlsEnabled,
   runProjectNavigationAction,
 } from "@/lib/workspace/project-entry";
-import {
-  PROJECT_WORKSPACE_VIEWS,
-  type ProjectWorkspaceView,
-} from "@/lib/workspace/project-workspace-view";
+import { getProjectWorkflowCopy } from "@/lib/workspace/project-workflow-copy";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
 type ProjectEntryCopy = WorkspaceCopy["projectEntry"];
+type ProjectNavigationTab = "workflows" | "chats";
 
 export function BackToConversationsButton({
   label,
@@ -52,23 +64,6 @@ export function BackToConversationsButton({
   );
 }
 
-const NAV_LABEL_KEYS = {
-  home: "projectHomeTab",
-  applications: "projectSchoolApplicationsTab",
-  admissions: "projectSchoolAdmissionsTab",
-  student500: "projectStudent500Tab",
-} as const satisfies Record<ProjectPanelView, keyof ProjectEntryCopy>;
-
-/**
- * Phase 13 M9-A: the Project document centre is reached from the step rail and the
- * main-area section tabs, so this legacy compact section list keeps exactly the four
- * sections it has always offered.
- */
-type ProjectPanelView = Exclude<ProjectWorkspaceView, "documents" | "review">;
-const PANEL_VIEWS: readonly ProjectPanelView[] = PROJECT_WORKSPACE_VIEWS.filter(
-  (view): view is ProjectPanelView => view !== "documents" && view !== "review"
-);
-
 export function ProjectEntryPanel({
   copy,
   locale,
@@ -79,9 +74,13 @@ export function ProjectEntryPanel({
   availability = "available",
   temporaryGuestProject = false,
   schoolPreparationRestricted = false,
-  projectView = "home",
-  onSelectProjectView,
-  selectedProjectId: initialSelectedProjectId = null,
+  selectedProjectId: selectedProjectIdProp,
+  activeConversationId,
+  generalHeader,
+  recentConversations,
+  projectConversationAction,
+  workflowNavigation,
+  projectToolsNavigation,
 }: {
   copy: ProjectEntryCopy;
   locale: string;
@@ -97,6 +96,7 @@ export function ProjectEntryPanel({
    * selection instead of publishing an empty one that would clear the Project.
    */
   selectedProjectId?: string | null;
+  activeConversationId?: string | null;
   /** Changed when global history or the Standalone action takes focus. */
   clearSelectionSignal: number;
   /** Mirrors the Workspace's conversation load and active-turn state. */
@@ -116,20 +116,33 @@ export function ProjectEntryPanel({
    * (Project home, School applications, Admissions workflow) render in the main
    * content area, so no business form is mounted at navigation width.
    */
-  projectView?: ProjectWorkspaceView;
-  onSelectProjectView?: (view: ProjectWorkspaceView) => void;
+  generalHeader?: ReactNode;
+  recentConversations?: ReactNode;
+  projectConversationAction?: ReactNode;
+  workflowNavigation?: ReactNode;
+  projectToolsNavigation?: ReactNode;
 }) {
+  const initialSelectedProjectId = selectedProjectIdProp ?? null;
   const [controller] = useState(() => createProjectEntryController({ copy }));
   const state = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
     controller.getSnapshot
   );
-  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const [projectSelectorExpanded, setProjectSelectorExpanded] = useState(false);
+  const [projectNavigationTab, setProjectNavigationTab] =
+    useState<ProjectNavigationTab>("workflows");
   const [openingChatId, setOpeningChatId] = useState<string | null>(null);
   /** Phase 14 naming: the create-dialog draft and the rename-dialog draft. */
   const [createName, setCreateName] = useState("");
   const [renameName, setRenameName] = useState("");
+  const projectTabRefs = useRef<
+    Record<ProjectNavigationTab, HTMLButtonElement | null>
+  >({
+    chats: null,
+    workflows: null,
+  });
   const appliedClearSignal = useRef(clearSelectionSignal);
   const openingChatRef = useRef(false);
   const navigationBusyRef = useRef(navigationBusy);
@@ -162,6 +175,7 @@ export function ProjectEntryPanel({
     initialSelectedProjectId === null
   );
   const controlsEnabled = projectEntryControlsEnabled(availability);
+  const workflowCopy = getProjectWorkflowCopy(locale);
   const availabilityMessage = controlsEnabled
     ? null
     : availability === "disabled"
@@ -180,6 +194,10 @@ export function ProjectEntryPanel({
     // still unresolved.
     selectionDecidedRef.current = true;
     setSelectionReady(true);
+    setProjectSelectorExpanded(false);
+    if (projectId !== state.selectedProjectId) {
+      setProjectNavigationTab("workflows");
+    }
     runWhenIdle(() =>
       controller.selectProject(projectId).catch(() => undefined)
     );
@@ -249,18 +267,68 @@ export function ProjectEntryPanel({
     };
   }, [controlsEnabled, selectionReconciler]);
 
+  const activeProjectId =
+    selectedProjectIdProp === undefined
+      ? state.selectedProjectId
+      : selectedProjectIdProp;
   const selectedProject = state.projects.find(
+    (project) => project.id === activeProjectId
+  );
+  const controllerSelectedProject = state.projects.find(
     (project) => project.id === state.selectedProjectId
   );
+  const inProjectMode = activeProjectId !== null;
+  const observedProjectId = useRef(activeProjectId);
+
+  useEffect(() => {
+    if (observedProjectId.current === activeProjectId) {
+      return;
+    }
+    observedProjectId.current = activeProjectId;
+    setProjectNavigationTab("workflows");
+    setProjectSelectorExpanded(false);
+  }, [activeProjectId]);
+
+  function handleProjectTabsKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: ProjectNavigationTab
+  ) {
+    const tabs: ProjectNavigationTab[] = ["workflows", "chats"];
+    const index = tabs.indexOf(currentTab);
+    const nextIndex = (() => {
+      switch (event.key) {
+        case "ArrowRight":
+          return (index + 1) % tabs.length;
+        case "ArrowLeft":
+          return (index + tabs.length - 1) % tabs.length;
+        case "Home":
+          return 0;
+        case "End":
+          return tabs.length - 1;
+        default:
+          return -1;
+      }
+    })();
+    if (nextIndex < 0) {
+      return;
+    }
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    setProjectNavigationTab(nextTab);
+    projectTabRefs.current[nextTab]?.focus();
+  }
 
   useEffect(() => {
     if (!selectionReady) {
       return;
     }
-    onSelectedProjectChange(state.selectedProjectId, selectedProject ?? null);
+    onSelectedProjectChange(
+      state.selectedProjectId,
+      controllerSelectedProject ?? null
+    );
   }, [
+    controllerSelectedProject,
     onSelectedProjectChange,
-    selectedProject,
     selectionReady,
     state.selectedProjectId,
   ]);
@@ -323,258 +391,481 @@ export function ProjectEntryPanel({
 
   return (
     <section
-      aria-label={copy.projects}
-      className="mb-4 flex flex-col gap-2 sm:gap-3 xl:gap-2"
+      aria-label={inProjectMode ? copy.selectedProject : copy.projects}
+      className="mb-4 flex min-w-0 flex-col gap-3"
       data-testid="project-entry-panel"
     >
-      <div>
-        <button
-          className="w-full rounded-xl bg-[#001736] px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-[#002b5b] disabled:opacity-50"
-          data-testid="create-project-open"
-          disabled={
-            !controlsEnabled || projectEntryButtonDisabled(navigationBusy)
-          }
-          onClick={openCreateProjectDialog}
-          type="button"
-        >
-          + {copy.createProject}
-        </button>
-      </div>
-
-      {availabilityMessage ? (
-        <output
-          className="block rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900"
-          data-testid="project-availability-notice"
-        >
-          {availabilityMessage}
-        </output>
-      ) : null}
-
-      {temporaryGuestProject ? (
-        <p
-          className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
-          data-testid="guest-project-notice"
-          role="note"
-        >
-          {copy.guestTemporaryProject}
-        </p>
-      ) : null}
-
-      {schoolPreparationRestricted ? (
-        <p
-          className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
-          data-testid="school-preparation-restricted"
-          role="note"
-        >
-          {copy.schoolPreparationRestricted}
-        </p>
-      ) : null}
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <button
-          aria-controls="workspace-project-list"
-          aria-expanded={projectsExpanded}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50"
-          data-testid="toggle-project-list"
-          onClick={() => setProjectsExpanded((expanded) => !expanded)}
-          type="button"
-        >
-          <span>{copy.projects}</span>
-          <span aria-hidden="true">{projectsExpanded ? "−" : "+"}</span>
-        </button>
-        <div
-          className="space-y-1 border-t border-slate-100 p-2"
-          data-testid="workspace-project-list"
-          hidden={!projectsExpanded}
-          id="workspace-project-list"
-        >
-          {state.loadingProjects ? (
-            <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
-              {copy.loadingProjects}
-            </p>
-          ) : null}
-          {!state.loadingProjects && state.projects.length === 0 ? (
-            <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
-              {copy.projectsEmpty}
-            </p>
-          ) : null}
-          {state.projects.map((project) => (
-            <button
-              aria-label={`${projectDisplayLabel(project, locale, copy)} · ${copy.projectId} ${project.id}`}
-              className={`block w-full rounded-lg px-2.5 py-2 text-left text-xs leading-5 transition ${
-                project.id === state.selectedProjectId
-                  ? "bg-blue-50 font-semibold text-blue-950"
-                  : "text-slate-700 hover:bg-slate-50"
-              } disabled:cursor-not-allowed disabled:opacity-50`}
-              data-testid="project-list-item"
+      {inProjectMode ? (
+        <>
+          <div className="space-y-1.5">
+            <BackToConversationsButton
               disabled={projectEntryButtonDisabled(navigationBusy)}
-              key={project.id}
-              onClick={() => selectProject(project.id)}
-              title={`${copy.projectId}: ${project.id}`}
-              type="button"
-            >
-              <span className="block break-words">
-                {projectDisplayLabel(project, locale, copy)}
-              </span>
-            </button>
-          ))}
-          {state.error && !selectedProject ? (
-            <div
-              className="flex items-center justify-between gap-2"
-              role="alert"
-            >
-              <p className="min-w-0 text-xs text-red-700">{state.error}</p>
+              label={copy.backToConversations}
+              onClick={() => selectProject(null)}
+            />
+            {projectConversationAction}
+          </div>
+
+          <section
+            aria-label={copy.selectedProject}
+            className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/70 p-2.5"
+            data-testid="selected-project-navigation"
+          >
+            <div className="flex min-w-0 items-start gap-2">
               <button
-                className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-red-800 underline"
+                aria-controls="workspace-project-selector-list"
+                aria-expanded={projectSelectorExpanded}
+                aria-label={`${workflowCopy.navigation.switchProject}: ${selectedProject ? projectDisplayLabel(selectedProject, locale, copy) : copy.loadingProjects}`}
+                className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-lg border border-blue-200 bg-white px-2.5 py-2 text-left transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="project-selector"
+                disabled={projectEntryButtonDisabled(navigationBusy)}
                 onClick={() =>
-                  controller.refreshProjects().catch(() => undefined)
+                  setProjectSelectorExpanded((expanded) => !expanded)
                 }
                 type="button"
               >
-                {copy.retry}
+                <FolderKanban
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-blue-800"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold text-blue-950">
+                    {selectedProject
+                      ? projectDisplayLabel(selectedProject, locale, copy)
+                      : copy.loadingProjects}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] text-slate-600">
+                    {workflowCopy.navigation.activeProject}
+                  </span>
+                </span>
+                {projectSelectorExpanded ? (
+                  <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+                ) : (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 shrink-0"
+                  />
+                )}
               </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {selectedProject ? (
-        <section
-          aria-label={copy.selectedProject}
-          className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3"
-          data-testid="selected-project-chats"
-        >
-          <BackToConversationsButton
-            disabled={projectEntryButtonDisabled(navigationBusy)}
-            label={copy.backToConversations}
-            onClick={() => selectProject(null)}
-          />
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="break-words text-xs font-semibold text-blue-950">
-                {projectDisplayLabel(selectedProject, locale, copy)}
-              </h3>
-              <p className="mt-1 break-all font-mono text-[10px] text-slate-500">
-                {copy.projectId}: {selectedProject.id}
-              </p>
-            </div>
-            {/* Phase 14: an obvious rename action beside the selected name. */}
-            <button
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-blue-300 bg-white px-2 py-1 text-[11px] font-semibold text-blue-900 transition enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-              data-testid="rename-project"
-              disabled={projectEntryButtonDisabled(navigationBusy)}
-              onClick={() => {
-                setRenameName(selectedProject.displayName ?? "");
-                controller.openRenameDialog();
-              }}
-              type="button"
-            >
-              <Pencil aria-hidden="true" className="size-3" />
-              {copy.renameProject}
-            </button>
-          </div>
-          <p className="text-[11px] leading-4 text-slate-600">
-            {copy.projectChatHistoryScope}
-          </p>
-          {onSelectProjectView ? (
-            <nav
-              aria-label={copy.projectHomeTitle}
-              className="grid gap-1"
-              data-testid="project-view-nav"
-            >
-              {PANEL_VIEWS.map((view) => (
+              {selectedProject ? (
                 <button
-                  aria-current={projectView === view ? "page" : undefined}
-                  className={
-                    projectView === view
-                      ? "w-full rounded-lg bg-white px-2.5 py-2 text-left text-xs font-semibold text-blue-950 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                      : "w-full rounded-lg bg-white/60 px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                  }
-                  data-testid={`project-view-${view}`}
+                  aria-label={`${copy.renameProject}: ${projectDisplayLabel(selectedProject, locale, copy)}`}
+                  className="inline-flex min-h-12 shrink-0 items-center gap-1 rounded-lg border border-blue-300 bg-white px-2.5 text-[11px] font-semibold text-blue-900 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="rename-project"
                   disabled={projectEntryButtonDisabled(navigationBusy)}
-                  key={view}
-                  onClick={() => onSelectProjectView(view)}
+                  onClick={() => {
+                    setRenameName(selectedProject.displayName ?? "");
+                    controller.openRenameDialog();
+                  }}
                   type="button"
                 >
-                  {copy[NAV_LABEL_KEYS[view]]}
+                  <Pencil aria-hidden="true" className="size-3.5" />
+                  {copy.renameProject}
                 </button>
-              ))}
-            </nav>
+              ) : null}
+            </div>
+            <div
+              className="space-y-1 border-t border-blue-100 pt-2"
+              data-testid="workspace-project-selector-list"
+              hidden={!projectSelectorExpanded}
+              id="workspace-project-selector-list"
+            >
+              {state.loadingProjects ? (
+                <p className="rounded-lg bg-white p-2 text-xs text-slate-500">
+                  {copy.loadingProjects}
+                </p>
+              ) : null}
+              {state.projects.map((project) => {
+                const projectLabel = projectDisplayLabel(project, locale, copy);
+                const selected = project.id === activeProjectId;
+                return (
+                  <button
+                    aria-current={selected ? "page" : undefined}
+                    aria-label={`${projectLabel} · ${workflowCopy.navigation.activeProject}`}
+                    className={`flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 ${selected ? "bg-blue-100 font-semibold text-blue-950" : "text-slate-700 hover:bg-white"}`}
+                    data-testid="project-selector-item"
+                    disabled={projectEntryButtonDisabled(navigationBusy)}
+                    key={project.id}
+                    onClick={() => selectProject(project.id)}
+                    type="button"
+                  >
+                    <FolderKanban
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-blue-800"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {projectLabel}
+                    </span>
+                    {project.status === "active" ? (
+                      <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-900">
+                        {workflowCopy.navigation.activeProject}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+              {state.error && !selectedProject ? (
+                <div
+                  className="flex items-center justify-between gap-2"
+                  role="alert"
+                >
+                  <p className="min-w-0 text-xs text-red-700">{state.error}</p>
+                  <button
+                    className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-red-800 underline"
+                    onClick={() =>
+                      controller.refreshProjects().catch(() => undefined)
+                    }
+                    type="button"
+                  >
+                    {copy.retry}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          {availabilityMessage ? (
+            <output
+              className="block rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900"
+              data-testid="project-availability-notice"
+            >
+              {availabilityMessage}
+            </output>
           ) : null}
-          <h4 className="pt-1 text-xs font-semibold text-slate-800">
-            {copy.chatsTitle}
-          </h4>
-          {state.loadingChats ? (
-            <p className="rounded-lg bg-white p-2 text-xs text-slate-500">
-              {copy.loadingChats}
+          {temporaryGuestProject ? (
+            <p
+              className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+              data-testid="guest-project-notice"
+              role="note"
+            >
+              {copy.guestTemporaryProject}
             </p>
           ) : null}
-          {!state.loadingChats && state.chats.length === 0 ? (
-            <p className="rounded-lg bg-white p-2 text-xs text-slate-500">
-              {copy.chatsEmpty}
+          {schoolPreparationRestricted ? (
+            <p
+              className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+              data-testid="school-preparation-restricted"
+              role="note"
+            >
+              {copy.schoolPreparationRestricted}
             </p>
           ) : null}
-          <div className="space-y-1">
-            {state.chats.map((chat) => (
+
+          <div
+            aria-label={workflowCopy.navigation.workflows}
+            className="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-100 p-1"
+            data-testid="project-navigation-tabs"
+            role="tablist"
+          >
+            {(
+              [
+                ["workflows", workflowCopy.navigation.workflows],
+                ["chats", workflowCopy.navigation.projectChats],
+              ] as const
+            ).map(([tab, label]) => (
               <button
-                className="block w-full rounded-lg bg-white px-2.5 py-2 text-left text-xs leading-5 text-slate-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                data-testid="project-chat-list-item"
-                disabled={projectEntryButtonDisabled(
-                  navigationBusy,
-                  openingChatId !== null
-                )}
-                key={chat.chatId}
-                onClick={() => openChat(chat).catch(() => undefined)}
+                aria-controls={`project-navigation-panel-${tab}`}
+                aria-selected={projectNavigationTab === tab}
+                className={`min-h-10 rounded-lg px-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-1 ${projectNavigationTab === tab ? "bg-white text-blue-950 shadow-sm ring-1 ring-blue-200" : "text-slate-600 hover:bg-white/70 hover:text-slate-900"}`}
+                data-testid={`project-navigation-tab-${tab}`}
+                id={`project-navigation-tab-button-${tab}`}
+                key={tab}
+                onClick={() => setProjectNavigationTab(tab)}
+                onKeyDown={(event) => handleProjectTabsKeyDown(event, tab)}
+                ref={(element) => {
+                  projectTabRefs.current[tab] = element;
+                }}
+                role="tab"
+                tabIndex={projectNavigationTab === tab ? 0 : -1}
                 type="button"
               >
-                <span className="block truncate font-semibold">
-                  {chat.title}
-                </span>
-                <span className="mt-0.5 block font-mono text-[10px] text-slate-500">
-                  {chat.chatId.slice(0, 8)}
-                  {chat.readOnly
-                    ? ` · ${copy.readOnly}`
-                    : ` · ${copy.projectChatLabel}`}
-                </span>
+                {label}
               </button>
             ))}
           </div>
-          {state.error ? (
-            <p className="text-xs text-red-700" role="alert">
-              {state.error}
-            </p>
-          ) : null}
-          {state.hasMore ? (
+
+          <section
+            aria-labelledby="project-navigation-tab-button-workflows"
+            className="space-y-3"
+            data-testid="project-navigation-panel-workflows"
+            hidden={projectNavigationTab !== "workflows"}
+            id="project-navigation-panel-workflows"
+            role="tabpanel"
+          >
+            {workflowNavigation}
+            <details
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+              data-testid="project-tools-disclosure"
+            >
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700">
+                <span>{workflowCopy.navigation.projectTools}</span>
+                <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+              </summary>
+              <div
+                className="border-t border-slate-100 p-2"
+                data-testid="project-tools-content"
+              >
+                {projectToolsNavigation}
+              </div>
+            </details>
+          </section>
+
+          <section
+            aria-labelledby="project-navigation-tab-button-chats"
+            className="space-y-2"
+            data-testid="project-navigation-panel-chats"
+            hidden={projectNavigationTab !== "chats"}
+            id="project-navigation-panel-chats"
+            role="tabpanel"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold text-slate-950">
+                  {copy.chatsTitle}
+                </h3>
+                <p className="mt-0.5 text-[10px] leading-4 text-slate-600">
+                  {copy.projectChatHistoryScope}
+                </p>
+              </div>
+              <MessageSquareText
+                aria-hidden="true"
+                className="size-4 shrink-0 text-blue-800"
+              />
+            </div>
+            {state.loadingChats ? (
+              <p className="rounded-lg bg-white p-2 text-xs text-slate-500">
+                {copy.loadingChats}
+              </p>
+            ) : null}
+            {!state.loadingChats && state.chats.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-300 bg-white p-2 text-xs leading-5 text-slate-600">
+                {copy.chatsEmpty}
+              </p>
+            ) : null}
+            <div className="space-y-1.5">
+              {state.chats.map((chat) => (
+                <button
+                  aria-current={
+                    chat.chatId === activeConversationId ? "page" : undefined
+                  }
+                  aria-label={`${chat.title || copy.chatsTitle} · ${chat.readOnly ? copy.readOnly : copy.projectChatLabel}`}
+                  className={`flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs leading-4 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60 ${chat.chatId === activeConversationId || chat.chatId === openingChatId ? "border-blue-500 bg-blue-50 text-blue-950" : "border-slate-200 bg-white text-slate-800 hover:border-blue-300 hover:bg-blue-50/60"}`}
+                  data-testid="project-chat-list-item"
+                  disabled={projectEntryButtonDisabled(
+                    navigationBusy,
+                    openingChatId !== null
+                  )}
+                  key={chat.chatId}
+                  onClick={() => openChat(chat).catch(() => undefined)}
+                  type="button"
+                >
+                  <MessageSquareText
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-blue-800"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {chat.title || copy.chatsTitle}
+                    </span>
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${chat.readOnly ? "bg-slate-100 text-slate-700" : "bg-blue-50 text-blue-900"}`}
+                    >
+                      {chat.readOnly ? copy.readOnly : copy.projectChatLabel}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {state.error ? (
+              <p className="text-xs text-red-700" role="alert">
+                {state.error}
+              </p>
+            ) : null}
+            {state.hasMore ? (
+              <button
+                className="min-h-10 w-full rounded-lg border border-dashed border-blue-300 bg-white px-2.5 py-2 text-xs font-semibold text-blue-900 disabled:opacity-50"
+                disabled={projectEntryButtonDisabled(
+                  navigationBusy,
+                  state.loadingMoreChats
+                )}
+                onClick={() =>
+                  runWhenIdle(() =>
+                    controller.loadMoreChats().catch(() => undefined)
+                  )
+                }
+                type="button"
+              >
+                {copy.loadMoreChats}
+              </button>
+            ) : null}
             <button
-              className="w-full rounded-lg border border-dashed border-blue-300 bg-white px-2.5 py-2 text-xs font-semibold text-blue-900 disabled:opacity-50"
+              className="min-h-11 w-full rounded-lg bg-[#001736] px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-[#002b5b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2 disabled:opacity-50"
+              data-testid="new-project-chat"
               disabled={projectEntryButtonDisabled(
                 navigationBusy,
-                state.loadingMoreChats
+                state.creatingChat || state.loadingChats
               )}
-              onClick={() =>
-                runWhenIdle(() =>
-                  controller.loadMoreChats().catch(() => undefined)
-                )
-              }
+              onClick={() => createProjectChat().catch(() => undefined)}
               type="button"
             >
-              {copy.loadMoreChats}
+              {state.creatingChat ? copy.creatingChat : copy.newProjectChat}
             </button>
+          </section>
+        </>
+      ) : (
+        <>
+          {generalHeader}
+          {availabilityMessage ? (
+            <output
+              className="block rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-900"
+              data-testid="project-availability-notice"
+            >
+              {availabilityMessage}
+            </output>
           ) : null}
-          <button
-            className="w-full rounded-lg bg-[#001736] px-2.5 py-2 text-xs font-semibold text-white disabled:opacity-50"
-            data-testid="new-project-chat"
-            disabled={projectEntryButtonDisabled(
-              navigationBusy,
-              state.creatingChat || state.loadingChats
-            )}
-            onClick={() => createProjectChat().catch(() => undefined)}
-            type="button"
+          {temporaryGuestProject ? (
+            <p
+              className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+              data-testid="guest-project-notice"
+              role="note"
+            >
+              {copy.guestTemporaryProject}
+            </p>
+          ) : null}
+          {schoolPreparationRestricted ? (
+            <p
+              className="rounded-xl border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-600"
+              data-testid="school-preparation-restricted"
+              role="note"
+            >
+              {copy.schoolPreparationRestricted}
+            </p>
+          ) : null}
+
+          <section
+            aria-label={copy.projects}
+            className="space-y-2"
+            data-testid="workspace-my-projects"
           >
-            {state.creatingChat ? copy.creatingChat : copy.newProjectChat}
-          </button>
-        </section>
-      ) : null}
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <button
+                aria-controls="workspace-project-list"
+                aria-expanded={projectsExpanded}
+                aria-label={`${copy.projects} · ${projectsExpanded ? copy.collapseProjects : copy.expandProjects}`}
+                className="flex min-h-12 w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold text-slate-900 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
+                data-testid="toggle-project-list"
+                onClick={() => setProjectsExpanded((expanded) => !expanded)}
+                type="button"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <FolderKanban
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-blue-800"
+                  />
+                  <span>{copy.projects}</span>
+                </span>
+                {projectsExpanded ? (
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-slate-600"
+                  />
+                ) : (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-slate-600"
+                  />
+                )}
+              </button>
+              <div
+                className="space-y-1.5 border-t border-slate-100 p-2"
+                data-testid="workspace-project-list"
+                hidden={!projectsExpanded}
+                id="workspace-project-list"
+              >
+                {state.loadingProjects ? (
+                  <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
+                    {copy.loadingProjects}
+                  </p>
+                ) : null}
+                {!state.loadingProjects && state.projects.length === 0 ? (
+                  <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
+                    {copy.projectsEmpty}
+                  </p>
+                ) : null}
+                {state.projects.map((project) => {
+                  const projectLabel = projectDisplayLabel(
+                    project,
+                    locale,
+                    copy
+                  );
+                  return (
+                    <button
+                      aria-label={`${projectLabel} · ${workflowCopy.navigation.activeProject}`}
+                      className={`flex min-h-14 w-full min-w-0 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 ${project.id === state.selectedProjectId ? "border-blue-500 bg-blue-50 text-blue-950 shadow-sm" : "border-slate-200 bg-white text-slate-800 hover:border-blue-300 hover:bg-blue-50/60"}`}
+                      data-testid="project-list-item"
+                      disabled={projectEntryButtonDisabled(navigationBusy)}
+                      key={project.id}
+                      onClick={() => selectProject(project.id)}
+                      title={projectLabel}
+                      type="button"
+                    >
+                      <FolderKanban
+                        aria-hidden="true"
+                        className="size-5 shrink-0 text-blue-800"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-semibold">
+                          {projectLabel}
+                        </span>
+                        <span className="mt-1 block text-[10px] text-slate-600">
+                          {project.status === "active"
+                            ? workflowCopy.navigation.activeProject
+                            : ""}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-slate-500"
+                      />
+                    </button>
+                  );
+                })}
+                {state.error && !selectedProject ? (
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    role="alert"
+                  >
+                    <p className="min-w-0 text-xs text-red-700">
+                      {state.error}
+                    </p>
+                    <button
+                      className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-red-800 underline"
+                      onClick={() =>
+                        controller.refreshProjects().catch(() => undefined)
+                      }
+                      type="button"
+                    >
+                      {copy.retry}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <button
+              className="min-h-11 w-full rounded-xl border border-blue-300 bg-white px-3 py-2 text-left text-xs font-semibold text-blue-950 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="create-project-open"
+              disabled={
+                !controlsEnabled || projectEntryButtonDisabled(navigationBusy)
+              }
+              onClick={openCreateProjectDialog}
+              type="button"
+            >
+              + {copy.createProject}
+            </button>
+          </section>
+          {recentConversations}
+        </>
+      )}
 
       <Dialog
         onOpenChange={(open) => {

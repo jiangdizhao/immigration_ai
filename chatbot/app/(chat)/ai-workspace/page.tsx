@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/app/(auth)/auth";
 import { PremiumAnswerModeWorkspace } from "@/components/premium-answer-mode-workspace";
 import { SiteHeader } from "@/components/site-header";
+import { WorkspaceViewportFrame } from "@/components/workspace-viewport-frame";
 import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
 import type { PolicyLaunchRequestState } from "@/lib/policy-intelligence/conversation-policy-binding";
 import {
@@ -113,9 +114,9 @@ export default async function AIWorkspacePage({
   }
 
   return (
-    <div className="min-h-dvh bg-[#f3f5f7] text-slate-900 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
+    <WorkspaceViewportFrame>
       <SiteHeader />
-      <main className="min-h-[calc(100dvh-72px)] xl:min-h-0 xl:flex-1 xl:overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:overflow-hidden">
         <PremiumAnswerModeWorkspace
           initialChatId={validChatId}
           policyLaunch={policyLaunchRequested}
@@ -143,6 +144,6 @@ export default async function AIWorkspacePage({
           temporaryGuestProject={personalProject.temporaryGuestProject}
         />
       </main>
-    </div>
+    </WorkspaceViewportFrame>
   );
 }

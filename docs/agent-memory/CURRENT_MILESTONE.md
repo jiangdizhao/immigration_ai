@@ -1,3 +1,27 @@
+<!-- BEGIN PHASE15_M3_E2_5_2026_11_23 -->
+## Phase 15 M3-E2.5 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW (2026-11-23)
+
+**Current status:** `PHASE15_M3_E2_5_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M3_E2_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E3_NOT_STARTED / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Base HEAD is `ac74f81f87ea3107c31ba8cdede17d208683cc90`; all changes remain uncommitted.
+
+E2.5 separates General Workspace navigation from Project navigation, makes Project selection and creation distinct, adds Workflows / Project Chats tabs, and presents Project planning, each School, each Admissions case, and each Student 500 application as separate matters with projection-derived tasks. Legacy business sections remain behind Project Tools. One existing Project Entry controller and one M1 Journey load continue to serve desktop and the single mobile Sheet. Task selection, source availability, empty states, and closed Project state stay explicit. The independent 24px left splitter measures the real outer container, uses its own versioned client preference, and preserves the Project Chat/task minima alongside E1's 24px centre/right splitter. E1/E2 business rules and server behavior were not changed.
+
+**Validation:** 13 focused workspace test files passed; Chromium browser integration passed 3/3 at 1280×800, 1920×900, and 390×844, including drag/keyboard/persistence, tab and Chat draft continuity, Project-switch draft clearing, mobile Chat/Task switching, and no horizontal overflow. Screenshots were inspected at `/tmp/phase15_m3_e2_5_desktop.png` and `/tmp/phase15_m3_e2_5_mobile.png`; the harness compiled the real navigation components with application global Tailwind CSS and synthetic API data. Changed-file Biome checked 28 files; `git diff --check` passed. TypeScript reports the existing 44 diagnostics, with none in E2.5 or E2 paths. `pnpm build` did not complete: Turbopack could not fetch Geist / Geist Mono from Google Fonts. Authenticated Next.js owner-browser acceptance remains pending.
+
+Independent review and owner browser acceptance are pending. No separate collapse rail was added; the desktop sidebar resizes to a 236px minimum. E2 owner acceptance remains separate and pending; E1 acceptance is unchanged; E3/E4 remain unstarted. See `phase15_m3_e2_5_implementation_report.md`. No production feature enablement, database migration, paid call, commit, push or deployment occurred.
+<!-- END PHASE15_M3_E2_5_2026_11_23 -->
+
+<!-- BEGIN PHASE15_M3_E2_2026_11_23 -->
+## Phase 15 M3-E2 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW (2026-11-23)
+
+**Current status:** `PHASE15_M3_E2_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M3_E1_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E3_NOT_STARTED / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Base: `ac74f81f87ea3107c31ba8cdede17d208683cc90`; no E2 commit exists.
+
+Implemented a versioned, read-only workflow/task/progress projection from the existing authorized M1 Journey load, target-specific School/Admissions/Student 500 panels, and stable exact-task navigation. Unknown scope and source gaps remain explicit; only narrow verified Offer/CoE evidence can complete a task and shared evidence receives one progress credit. The Project planning panel also summarizes recorded Offer/CoE and Student 500 route nodes, exact target IDs and outcome evidence metadata from that same Journey. E1 shell and Chat continuity are preserved. No Project Goal migration, second state store, endpoint, AI context change or business write was introduced.
+
+**Validation:** 166/166 focused tests passed across 14 files; Biome, `pnpm db:check`, and `git diff --check` pass. TypeScript retains 44 historical diagnostics and none in E2 paths. In the final 31-sample synthetic run, E2 projection median/max latencies for 1/3/5 schools were 0.028/0.662 ms, 0.049/0.554 ms, and 0.046/0.231 ms. M1/E2/Journey JSON sizes are 2,986/11,808/17,126; 4,836/21,796/30,016; and 6,686/31,782/42,904 bytes. These do not measure database latency; sub-millisecond timing varies with host scheduling. Guarded PostgreSQL was not run because approved connection identity variables were absent. Production build was attempted but blocked by the sandbox's inability to fetch Geist fonts. Authenticated browser E2 acceptance remains unverified; owner steps are in the report.
+
+Independent review and owner acceptance are pending. Preserve the E1 accepted record below. M2 owner acceptance remains separate, and E3/E4 remain unstarted. `LIVE_PRODUCTION_NO_GO`; no commit, push, migration or deployment.
+<!-- END PHASE15_M3_E2_2026_11_23 -->
+
 <!-- BEGIN PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
 ## Phase 15 M3 Extended — E1 owner acceptance checkpoint (2026-11-23)
 

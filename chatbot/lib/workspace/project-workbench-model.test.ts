@@ -6,12 +6,54 @@ import {
   projectWorkbenchDefaultTargetId,
   projectWorkbenchNodeById,
   projectWorkbenchPanelKind,
+  projectWorkbenchSelectionForWorkflowTask,
   projectWorkbenchTargetGroupForNode,
   reconcileProjectWorkbenchTarget,
   recordedRoutesForTarget,
 } from "./project-workbench-model";
+import {
+  PROJECT_WORKFLOW_DEFINITION_VERSION,
+  type WorkflowTaskProjectionV1,
+  workflowTaskId,
+} from "./project-workflows";
 
 const projectId = "project-workbench-model";
+
+function workflowTask(input: {
+  workflowKind: WorkflowTaskProjectionV1["workflowKind"];
+  stepKey: WorkflowTaskProjectionV1["stepKey"];
+  targetKind: WorkflowTaskProjectionV1["targetKind"];
+  targetId: string;
+}): WorkflowTaskProjectionV1 {
+  return {
+    actionability: "read_only",
+    applicability: "applicable",
+    definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+    dependencies: [],
+    dependencySemantics: "none",
+    panelKind:
+      input.targetKind === "project"
+        ? "planning"
+        : input.targetKind === "school_application"
+          ? "school"
+          : input.targetKind === "school_admission_case"
+            ? "admissions"
+            : "student_500",
+    progress: "in_progress",
+    progressCreditKey: null,
+    progressCreditOwner: true,
+    projectId,
+    reasonCodes: [],
+    responsibleActor: "unknown",
+    sourceRevision: 1,
+    sourceRevisions: [],
+    stepKey: input.stepKey,
+    targetId: input.targetId,
+    targetKind: input.targetKind,
+    taskId: workflowTaskId(input),
+    workflowKind: input.workflowKind,
+  };
+}
 
 function node(
   id: string,
@@ -88,6 +130,51 @@ function journey(nodes: ProjectJourneyNode[]): ProjectJourney {
       unknownProgressCount: 0,
       unavailableSourceCount: 0,
     },
+    workflowProjection: {
+      definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+      progress: {
+        completedKnownApplicable: 0,
+        coverage: "partial",
+        definitionVersion: PROJECT_WORKFLOW_DEFINITION_VERSION,
+        knownApplicableTotal: 0,
+        notApplicableCount: 0,
+        percent: null,
+        unavailableCount: 0,
+        unknownApplicabilityCount: 0,
+        unknownProgressCount: 0,
+      },
+      tasks: [
+        workflowTask({
+          workflowKind: "project_planning",
+          stepKey: "project_goal",
+          targetKind: "project",
+          targetId: projectId,
+        }),
+        ...nodes.flatMap((entry) => {
+          if (entry.kind === "route_entry") {
+            return [];
+          }
+          return [
+            workflowTask({
+              workflowKind:
+                entry.kind === "school_application"
+                  ? "school_application"
+                  : entry.kind === "admission_case"
+                    ? "school_admissions"
+                    : "student_500",
+              stepKey:
+                entry.kind === "school_application"
+                  ? "planning"
+                  : entry.kind === "admission_case"
+                    ? "admissions_planning"
+                    : "visa_planning",
+              targetKind: entry.targetKind,
+              targetId: entry.targetId,
+            }),
+          ];
+        }),
+      ],
+    },
   } as unknown as ProjectJourney;
 }
 
@@ -147,4 +234,29 @@ test("linked Admissions and recorded route relationships use explicit Project St
     projectWorkbenchTargetGroupForNode(independent),
     "independent_admissions"
   );
+});
+
+test("workflow task selection binds to its exact existing Project target", () => {
+  const schoolA = node("school:school-a", "school_application");
+  const schoolB = node("school:school-b", "school_application");
+  const student = node("student500:visa-a", "student500_application");
+  const current = journey([schoolA, schoolB, student]);
+  const schoolBTask = current.workflowProjection.tasks.find(
+    (task) => task.targetId === schoolB.targetId
+  );
+  assert.ok(schoolBTask);
+  assert.deepEqual(
+    projectWorkbenchSelectionForWorkflowTask(current, schoolBTask.taskId),
+    { targetNodeId: schoolB.id, taskId: schoolBTask.taskId }
+  );
+  assert.equal(
+    projectWorkbenchSelectionForWorkflowTask(current, "stale-task-id"),
+    null
+  );
+  const projectTask = current.workflowProjection.tasks[0];
+  assert.deepEqual(
+    projectWorkbenchSelectionForWorkflowTask(current, projectTask.taskId),
+    { targetNodeId: null, taskId: projectTask.taskId }
+  );
+  assert.equal(current.nodes.length, 3);
 });

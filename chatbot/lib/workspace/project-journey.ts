@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   PROJECT_STATE_CAPABILITY_STATES,
+  PROJECT_STATE_OUTCOME_VALIDITY_STATES,
   PROJECT_STATE_PROGRESS_STATES,
   PROJECT_STATE_SCHEMA_VERSION,
   type ProjectState,
@@ -12,12 +13,19 @@ import {
   type ProjectStateSchoolApplication,
   type ProjectStateStudent500,
 } from "./project-state";
+import {
+  buildProjectWorkflowProjection,
+  type ProjectWorkflowProjectionV1,
+} from "./project-workflows";
 
 const nonEmptyString = z.string().min(1);
 const nullableString = z.string().nullable();
 const stringList = z.array(z.string());
 const progressSchema = z.enum(PROJECT_STATE_PROGRESS_STATES);
 const capabilityStateSchema = z.enum(PROJECT_STATE_CAPABILITY_STATES);
+const outcomeValidityStateSchema = z.enum(
+  PROJECT_STATE_OUTCOME_VALIDITY_STATES
+);
 
 const eventSchema = z
   .object({
@@ -49,15 +57,46 @@ const outcomeSchema = z
   .object({
     outcomeId: nonEmptyString,
     kind: z.enum(["offer", "coe"]),
-    state: nonEmptyString,
+    // Keep these values aligned with School Admissions' persisted state contracts.
+    state: z.enum([
+      "received",
+      "under_review",
+      "accepted",
+      "declined",
+      "expired",
+      "deferred",
+      "claimed",
+      "obtained",
+      "superseded",
+    ]),
     provenance: nonEmptyString,
     independentlyVerified: z.boolean(),
     evidenceAttached: z.boolean(),
+    validityState: outcomeValidityStateSchema.optional(),
     version: z.number().int().nonnegative(),
     recordedAt: nonEmptyString,
     superseded: z.boolean(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((outcome, context) => {
+    const offerStates = [
+      "received",
+      "under_review",
+      "accepted",
+      "declined",
+      "expired",
+      "deferred",
+    ];
+    const coeStates = ["claimed", "obtained", "superseded"];
+    const supportedStates = outcome.kind === "offer" ? offerStates : coeStates;
+    if (!supportedStates.includes(outcome.state)) {
+      context.addIssue({
+        code: "custom",
+        message: "outcome_state_kind_mismatch",
+        path: ["state"],
+      });
+    }
+  });
 
 const admissionSchema = z
   .object({
@@ -433,6 +472,8 @@ export type ProjectJourney = {
     unknownProgressCount: number;
     unavailableSourceCount: number;
   };
+  /** E2 tasks are rebuilt from this same authorized M1 response; no second fetch or store. */
+  workflowProjection: ProjectWorkflowProjectionV1;
 };
 
 export type ProjectStateLoadFailure =
@@ -1028,6 +1069,7 @@ export function buildProjectJourney(state: ProjectState): ProjectJourney {
     "blocked",
   ]);
   const sources = makeSourceList(state, admissions);
+  const workflowProjection = buildProjectWorkflowProjection(state);
   return {
     schemaVersion: PROJECT_STATE_SCHEMA_VERSION,
     generatedAt: state.generatedAt,
@@ -1057,6 +1099,7 @@ export function buildProjectJourney(state: ProjectState): ProjectJourney {
         (entry) => entry.state !== "available"
       ).length,
     },
+    workflowProjection,
   };
 }
 

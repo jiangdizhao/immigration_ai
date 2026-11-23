@@ -36,6 +36,16 @@ export const PROJECT_STATE_PROGRESS_STATES = [
 export type ProjectStateProgressState =
   (typeof PROJECT_STATE_PROGRESS_STATES)[number];
 
+export const PROJECT_STATE_OUTCOME_VALIDITY_STATES = [
+  "not_applicable",
+  "valid",
+  "expiring_soon",
+  "expired",
+  "unknown",
+] as const;
+export type ProjectStateOutcomeValidityState =
+  (typeof PROJECT_STATE_OUTCOME_VALIDITY_STATES)[number];
+
 export type ProjectStateCapability = {
   state: ProjectStateCapabilityState;
   reasonCode: string | null;
@@ -93,6 +103,8 @@ export type ProjectStateOutcome = {
   provenance: string;
   independentlyVerified: boolean;
   evidenceAttached: boolean;
+  /** Derived by the authorized School Admissions service; absence is unknown. */
+  validityState?: ProjectStateOutcomeValidityState;
   version: number;
   recordedAt: string;
   superseded: boolean;

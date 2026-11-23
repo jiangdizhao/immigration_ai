@@ -101,7 +101,7 @@ test("Project entry controls stay interactive only for the server-resolved avail
   assert.equal(projectEntryControlsEnabled("unavailable"), false);
 });
 
-test("Project entry renders accessible Chinese-default and English responsive controls", () => {
+test("General Workspace navigation has discoverable Project and Conversation controls in both locales", () => {
   for (const locale of ["zh-CN", "en"] as const) {
     const copy = getWorkspaceCopy(locale);
     const markup = renderToStaticMarkup(
@@ -112,59 +112,80 @@ test("Project entry renders accessible Chinese-default and English responsive co
         navigationBusy: false,
         onOpenProjectChat: () => undefined,
         onSelectedProjectChange: () => undefined,
+        generalHeader: React.createElement(
+          "div",
+          { "data-testid": "general-heading" },
+          React.createElement("button", {
+            "data-testid": "new-standalone-conversation",
+            type: "button",
+          })
+        ),
+        recentConversations: React.createElement("div", {
+          "data-testid": "workspace-recent-conversations",
+        }),
       })
     );
     assert.match(markup, /aria-label=/u);
-    assert.match(markup, /aria-expanded="false"/u);
+    assert.match(markup, /aria-expanded="true"/u);
     assert.match(markup, /data-testid="create-project-open"/u);
-    assert.match(markup, /sm:gap-3/u);
-    assert.match(markup, /xl:gap-2/u);
+    assert.match(markup, /data-testid="workspace-my-projects"/u);
+    assert.match(markup, /data-testid="workspace-recent-conversations"/u);
+    assert.match(markup, /data-testid="new-standalone-conversation"/u);
     assert.match(markup, new RegExp(copy.projectEntry.createProject, "u"));
   }
 });
 
-test("Back navigation is a visible, keyboard-accessible full-width button above the Project title", () => {
-  const selectedPanelStart = projectPanelSource.indexOf(
-    'data-testid="selected-project-chats"'
+test("Project navigation provides an accessible return path, selector and two presentation-only tabs", () => {
+  const copy = getWorkspaceCopy("en");
+  const markup = renderToStaticMarkup(
+    React.createElement(ProjectEntryPanel, {
+      clearSelectionSignal: 0,
+      copy: copy.projectEntry,
+      locale: "en",
+      navigationBusy: false,
+      onOpenProjectChat: () => undefined,
+      onSelectedProjectChange: () => undefined,
+      selectedProjectId: projectA,
+    })
   );
-  const backButtonStart = projectPanelSource.indexOf(
-    "<BackToConversationsButton",
-    selectedPanelStart
-  );
-  const titleRowStart = projectPanelSource.indexOf(
-    '<div className="flex items-start justify-between gap-2">',
-    selectedPanelStart
-  );
-  assert.ok(selectedPanelStart >= 0);
-  assert.ok(backButtonStart > selectedPanelStart);
-  assert.ok(titleRowStart > backButtonStart);
   assert.match(
     projectPanelSource,
     /onClick=\{\(\) => selectProject\(null\)\}/u
   );
+  assert.match(markup, /data-testid="back-to-all-conversations"/u);
+  assert.match(markup, /data-testid="project-selector"/u);
+  assert.match(markup, /role="tablist"/u);
+  assert.match(markup, /data-testid="project-navigation-tab-workflows"/u);
+  assert.match(markup, /data-testid="project-navigation-tab-chats"/u);
+  assert.match(markup, /data-testid="project-navigation-panel-workflows"/u);
+  assert.match(markup, /data-testid="project-navigation-panel-chats"/u);
+  assert.match(projectPanelSource, /setProjectNavigationTab\(tab\)/u);
   assert.match(
     projectPanelSource,
-    /disabled=\{projectEntryButtonDisabled\(navigationBusy\)\}/u
-  );
-  assert.match(projectPanelSource, /break-all font-mono/u);
-  /*
-    Layout correction (post-Phase-13 desktop workspace task): the desktop grid keeps
-    the same three-region contract — a bounded left rail, a flexible centre column and
-    a bounded right rail — but the rails were narrowed (250/290 → 210/220) so the
-    centre, where the Project workspace lives, receives substantially more width. The
-    assertion pins the *contract* (fixed rails + `minmax(0,1fr)` centre), not the old
-    pixel values.
-  */
-  assert.match(
-    workspaceSource,
-    /xl:grid-cols-\[\d+px_minmax\(0,1fr\)_\d+px\]/u
+    /hidden=\{projectNavigationTab !== "workflows"\}/u
   );
   assert.match(
-    workspaceSource,
-    /xl:grid-cols-\[210px_minmax\(0,1fr\)_220px\]/u
+    projectPanelSource,
+    /hidden=\{projectNavigationTab !== "chats"\}/u
   );
-  assert.match(workspaceSource, /grid min-w-0 grid-cols-1/u);
-  assert.match(projectPanelSource, /min-w-0 flex-1 text-left leading-4/u);
+  assert.match(projectPanelSource, /data-testid="project-tools-disclosure"/u);
+  assert.match(
+    workspaceSource,
+    /data-testid=\{\s*selectedProjectId\s*\?\s*"project-workspace-split"/u
+  );
+  assert.match(workspaceSource, /<WorkspaceNavigationSplitSeparator/u);
+  assert.match(
+    workspaceSource,
+    /xl:grid-cols-\[288px_24px_minmax\(0,1fr\)_220px\]/u
+  );
+  assert.match(
+    workspaceSource,
+    /xl:grid-cols-\[288px_24px_minmax\(0,1fr\)\] xl:grid-rows/u
+  );
+  assert.match(
+    workspaceSource,
+    /projectToolsNavigation=\{[\s\S]*?<ProjectWorkspaceNav/u
+  );
 
   for (const [locale, expectedLabel] of [
     ["zh-CN", "返回全部对话"],
@@ -905,8 +926,15 @@ test("the Project rail is navigation-only and the M5 panels live in the main are
   assert.doesNotMatch(projectPanelSource, /<SchoolApplicationsPanel/u);
   assert.doesNotMatch(projectPanelSource, /<SchoolAdmissionsWorkflowPanel/u);
   assert.doesNotMatch(projectPanelSource, /<ProjectDocumentsPanel/u);
-  assert.match(projectPanelSource, /data-testid="project-view-nav"/u);
-  assert.match(projectPanelSource, /project-view-\$\{view\}/u);
+  assert.match(projectPanelSource, /data-testid="project-tools-disclosure"/u);
+  assert.match(
+    workspaceSource,
+    /projectToolsNavigation=\{[\s\S]*?<ProjectWorkspaceNav/u
+  );
+  assert.match(
+    projectPanelSource,
+    /data-testid="project-navigation-panel-workflows"/u
+  );
 });
 
 test("the selected Project uses the shared Chat and Task workbench", () => {
@@ -955,11 +983,11 @@ const projectNavSource = workspaceSource.slice(
   workspaceSource.indexOf("const handleSelectProjectTarget = useCallback")
 );
 const railNavSource = projectPanelSource.slice(
-  projectPanelSource.indexOf('data-testid="project-view-nav"'),
-  projectPanelSource.indexOf("</nav>")
+  projectPanelSource.indexOf('data-testid="project-tools-content"'),
+  projectPanelSource.indexOf("</details>")
 );
 
-test("Project section navigation uses the shared navigation-busy contract", () => {
+test("Project Tools retain the guarded business routes while navigation tabs only change presentation", () => {
   assert.ok(projectNavSource.length > 0);
   const guards =
     projectNavSource.match(
@@ -971,10 +999,20 @@ test("Project section navigation uses the shared navigation-busy contract", () =
     workspaceSource,
     /projectNavigationBusyRef\.current = projectNavigationBusy;/u
   );
-  // The rail links are visually disabled by the existing button contract.
+  assert.match(railNavSource, /\{projectToolsNavigation\}/u);
+  assert.match(projectPanelSource, /data-testid="project-navigation-tabs"/u);
   assert.match(
-    railNavSource,
-    /disabled=\{projectEntryButtonDisabled\(navigationBusy\)\}/u
+    projectPanelSource,
+    /onClick=\{\(\) => setProjectNavigationTab\(tab\)\}/u
+  );
+  assert.doesNotMatch(
+    projectPanelSource.slice(
+      projectPanelSource.indexOf('data-testid="project-navigation-tabs"'),
+      projectPanelSource.indexOf(
+        'data-testid="project-navigation-panel-workflows"'
+      )
+    ),
+    /fetch\(|createProjectChat\(|onSelectedProjectChange\(/u
   );
   // Target selection shares the same guard and does not dispatch a Chat message.
   const targetSource = workspaceSource.slice(
@@ -1121,10 +1159,7 @@ test("a freshly mounted Project panel adopts the Workspace selection instead of 
   }
   // The panel stays silent until it is ready, and the Sheet hands it the
   // Workspace's selection instead of letting a fresh controller invent one.
-  assert.match(
-    projectPanelSource,
-    /selectedProjectId: initialSelectedProjectId = null/u
-  );
+  assert.match(projectPanelSource, /selectedProjectId: selectedProjectIdProp/u);
   assert.match(
     projectPanelSource,
     /const \[selectionReady, setSelectionReady\] = useState\(/u
