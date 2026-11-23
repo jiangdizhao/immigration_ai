@@ -87,15 +87,8 @@ test("the Project home exposes the M5 sections and the M9-A document centre as t
       new RegExp(`data-testid="project-view-tab-${tab}"`, "u")
     );
   }
-  assert.match(markup, /data-testid="project-home-open-applications"/u);
-  assert.match(markup, /data-testid="project-home-open-admissions"/u);
-  // Phase 13 M6.1: Student 500 preparation is a first-class Project area.
-  assert.match(markup, /data-testid="project-home-open-student500"/u);
-  // The enabled home tab links into both M5 surfaces.
-  assert.doesNotMatch(
-    markup,
-    /data-testid="project-home-open-applications"[^>]*disabled/u
-  );
+  assert.match(markup, /data-testid="project-guided-journey-loading"/u);
+  assert.doesNotMatch(markup, /data-testid="project-overview"/u);
 });
 
 test("existing M5 panels render in the main content area, not in the rail", () => {
@@ -126,29 +119,17 @@ test("disabled or restricted M5 sections stay truthful instead of faking state",
   assert.doesNotMatch(restricted, /data-testid="school-admissions-panel"/u);
   assert.match(restricted, /registered personal accounts only/u);
 
-  // The home tab disables the unavailable next step rather than hiding it.
-  const disabledHome = render({ schoolAdmissionsEnabled: false });
-  assert.match(
-    disabledHome,
-    /data-testid="project-home-open-admissions"[^>]*disabled=""/u
-  );
-
-  // A restricted identity is told it needs a registered account, not that the
-  // feature is missing.
-  const restrictedHome = render({
-    schoolApplicationsEnabled: false,
-    schoolAdmissionsEnabled: false,
-    schoolPreparationRestricted: true,
-  });
-  assert.match(restrictedHome, /registered personal accounts only/u);
-  assert.doesNotMatch(restrictedHome, /not enabled in this environment/u);
+  // The Project Home loads its own versioned M1 source and does not substitute
+  // zero counts or the older aggregate overview when records are unavailable.
+  const disabledHome = render({ schoolApplicationsEnabled: false });
+  assert.match(disabledHome, /data-testid="project-guided-journey-loading"/u);
+  assert.doesNotMatch(disabledHome, /data-testid="project-overview"/u);
 
   // No invented progress, Offer/CoE or approval state is presented anywhere.
   for (const markup of [disabled, restricted, disabledHome]) {
     assert.doesNotMatch(markup, /\b\d+\s*\/\s*12\b/u);
     assert.doesNotMatch(markup, /lawyer approved/iu);
   }
-  assert.match(disabledHome, /data-testid="project-home-limits"/u);
 });
 
 test("guest Projects keep their temporary-session disclosure on the home surface", () => {
@@ -215,25 +196,11 @@ test("the Project home does not offer section changes while navigation is busy",
   for (const tab of tabs) {
     assert.match(tab, /disabled=""/u);
   }
-  // Both next-step cards are disabled as well.
-  assert.match(
-    busy,
-    /<button[^>]*data-testid="project-home-open-applications"[^>]*disabled=""/u
-  );
-  assert.match(
-    busy,
-    /<button[^>]*data-testid="project-home-open-admissions"[^>]*disabled=""/u
-  );
-  assert.match(
-    busy,
-    /<button[^>]*data-testid="project-home-open-student500"[^>]*disabled=""/u
-  );
-
-  // Idle navigation stays available.
+  // Idle section navigation remains available.
   const idle = render({ navigationBusy: false });
   assert.match(
     idle,
-    /<button[^>]*data-testid="project-home-open-applications"(?![^>]*disabled)[^>]*>/u
+    /<button[^>]*data-testid="project-view-tab-applications"(?![^>]*disabled)[^>]*>/u
   );
 });
 

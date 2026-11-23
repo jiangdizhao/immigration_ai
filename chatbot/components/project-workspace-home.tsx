@@ -1,11 +1,9 @@
 "use client";
 
-import { BookOpenCheck, FolderLock, GraduationCap, School } from "lucide-react";
+import { FolderLock } from "lucide-react";
 import type { SiteLocale } from "@/lib/site-locale";
 import type { ProjectArtifactsSummary } from "@/lib/workspace/project-artifacts";
 import { projectDisplayLabel } from "@/lib/workspace/project-entry";
-import type { ProjectOverview } from "@/lib/workspace/project-overview";
-import type { ProjectStage } from "@/lib/workspace/project-stages";
 import {
   PROJECT_WORKSPACE_VIEWS,
   type ProjectWorkspaceView,
@@ -14,7 +12,7 @@ import type { WorkspaceCopy } from "@/lib/workspace-copy";
 import { ProjectDocumentsCenter } from "./project-documents-center";
 import { ProjectDocumentsPanel } from "./project-documents-panel";
 import { ProjectFactsPanel } from "./project-facts-panel";
-import { ProjectOverviewPanel } from "./project-overview-panel";
+import { ProjectGuidedJourney } from "./project-guided-journey";
 import { ProjectReviewPanel } from "./project-review-panel";
 import { SchoolAdmissionsWorkflowPanel } from "./school-admissions-workflow-panel";
 import { SchoolApplicationsPanel } from "./school-applications-panel";
@@ -59,10 +57,7 @@ export function ProjectWorkspaceHome({
   projectFactsEnabled = false,
   projectReviewEnabled = false,
   projectReviewCopy,
-  stages = [],
-  overview = null,
   summaryState = "ready",
-  onRefreshSummary,
   onReturnToPreviousView,
   returnToPreviousViewLabel,
   onOpenArtifactOwner,
@@ -101,15 +96,7 @@ export function ProjectWorkspaceHome({
   /** Phase 13 M9-B exact-version review surface (server keeps the real gate). */
   projectReviewEnabled?: boolean;
   projectReviewCopy: WorkspaceCopy["projectReview"];
-  /**
-   * Phase 13 M9-A: the real, server-authorized Project stage model and overview.
-   * Missing/empty values simply render the overview's honest unavailable state; they
-   * never fall back to invented progress.
-   */
-  stages?: readonly ProjectStage[];
-  overview?: ProjectOverview | null;
   summaryState?: "idle" | "loading" | "ready" | "failed";
-  onRefreshSummary?: () => void;
   /**
    * Phase 13 M9-A R1-04: the document centre returns to the view the customer came
    * from. No document→step association is claimed, because none is authorized.
@@ -212,124 +199,19 @@ export function ProjectWorkspaceHome({
         </div>
 
         {view === "home" ? (
-          <div className="space-y-4" data-testid="project-home-overview">
-            {/*
-              Phase 13 M9-A: the overview is derived only from authorized reads. When
-              no summary could be read the panel says so and shows a blocked area
-              instead of zero progress.
-            */}
-            <ProjectOverviewPanel
-              copy={copy.projectWorkspace}
-              navigationBusy={navigationBusy}
-              onRefresh={onRefreshSummary ?? (() => undefined)}
-              onSelectView={onSelectView}
-              overview={
-                overview ?? {
-                  blockers: [
-                    "documents_unavailable",
-                    "step_conversations_unavailable",
-                  ],
-                  nextAction: { kind: "none", reason: "nothing_available" },
-                  preparation: {
-                    needsAttention: null,
-                    openItems: null,
-                    readableStages: 0,
-                    state: "unknown",
-                    totalStages: stages.length,
-                  },
-                  readiness: {
-                    reason: "submission_capability_disabled",
-                    state: "unavailable",
-                  },
-                }
-              }
-              stages={stages}
-              summaryState={summaryState}
-            />
-            <section className="space-y-2">
-              <h3 className="text-lg font-semibold text-slate-950">
-                {copy.projectHomeNextSteps}
-              </h3>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-left transition enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 disabled:cursor-not-allowed disabled:opacity-70"
-                  data-testid="project-home-open-applications"
-                  disabled={navigationBusy || !applicationsReady}
-                  onClick={() => onSelectView("applications")}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                    <School
-                      aria-hidden="true"
-                      className="size-4 text-slate-500"
-                    />
-                    {copy.projectSchoolApplicationsTab}
-                  </span>
-                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
-                    {applicationsReady
-                      ? copy.projectHomeOpenApplications
-                      : schoolPreparationRestricted
-                        ? copy.projectHomeApplicationsRestricted
-                        : copy.projectHomeApplicationsUnavailable}
-                  </span>
-                </button>
-                <button
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-left transition enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 disabled:cursor-not-allowed disabled:opacity-70"
-                  data-testid="project-home-open-admissions"
-                  disabled={navigationBusy || !admissionsReady}
-                  onClick={() => onSelectView("admissions")}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                    <GraduationCap
-                      aria-hidden="true"
-                      className="size-4 text-slate-500"
-                    />
-                    {copy.projectSchoolAdmissionsTab}
-                  </span>
-                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
-                    {admissionsReady
-                      ? copy.projectHomeOpenAdmissions
-                      : schoolPreparationRestricted
-                        ? copy.projectHomeAdmissionsRestricted
-                        : copy.projectHomeAdmissionsUnavailable}
-                  </span>
-                </button>
-                <button
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-left transition enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 disabled:cursor-not-allowed disabled:opacity-70"
-                  data-testid="project-home-open-student500"
-                  disabled={navigationBusy || !student500Ready}
-                  onClick={() => onSelectView("student500")}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                    <BookOpenCheck
-                      aria-hidden="true"
-                      className="size-4 text-slate-500"
-                    />
-                    {copy.projectStudent500Tab}
-                  </span>
-                  <span className="mt-1 block text-[15px] leading-6 text-slate-600">
-                    {student500Ready
-                      ? copy.projectHomeOpenStudent500
-                      : schoolPreparationRestricted
-                        ? copy.projectHomeStudent500Restricted
-                        : copy.projectHomeStudent500Unavailable}
-                  </span>
-                </button>
-              </div>
-            </section>
-
-            <p
-              className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900"
-              data-testid="project-home-limits"
-            >
-              {copy.projectHomeLimits}
-            </p>
-            <p className="text-xs leading-5 text-slate-600">
-              {copy.projectHomeChatsHint}
-            </p>
-          </div>
+          <ProjectGuidedJourney
+            copy={copy.projectJourney}
+            enabledSections={{
+              applications: applicationsReady,
+              admissions: admissionsReady,
+              student500: student500Ready,
+            }}
+            key={project.id}
+            locale={locale}
+            navigationBusy={navigationBusy}
+            onSelectView={onSelectView}
+            projectId={project.id}
+          />
         ) : null}
 
         {view === "applications" ? (

@@ -17,6 +17,10 @@ const workspaceSource = readFileSync(
   new URL("../../components/immigration-ai-workspace.tsx", import.meta.url),
   "utf8"
 );
+const composerSource = readFileSync(
+  new URL("../../components/workspace-chat-composer.tsx", import.meta.url),
+  "utf8"
+);
 
 test("the workspace derives read-only capability from the shared contract", () => {
   assert.match(
@@ -63,7 +67,9 @@ test("read-only screens replace the composer instead of disabling part of it", (
   assert.match(readOnlyBranch[1], /LegacyConversationNotice/u);
   assert.doesNotMatch(readOnlyBranch[1], /<textarea/u);
   assert.doesNotMatch(readOnlyBranch[1], /MatterDocumentsPanel/u);
+  assert.doesNotMatch(readOnlyBranch[1], /WorkspaceChatComposer/u);
   // The interactive composer still exists for normal conversations.
-  assert.match(workspaceSource, /data-testid="workspace-input"/u);
-  assert.match(workspaceSource, /data-testid="workspace-send"/u);
+  assert.match(workspaceSource, /<WorkspaceChatComposer/u);
+  assert.match(composerSource, /data-testid="workspace-input"/u);
+  assert.match(composerSource, /data-testid="workspace-send"/u);
 });

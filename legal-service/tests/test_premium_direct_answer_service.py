@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.schemas.query import QueryRequest
+from app.core.config import Settings
 from app.services import premium_direct_answer_service as premium_module
 from app.services.agent_observability_service import AbsoluteTurnDeadline
 from app.services.premium_direct_answer_service import PremiumDirectAnswerService
@@ -87,14 +88,44 @@ def test_stage_a_premium_research_defaults_are_bounded(monkeypatch) -> None:
     assert service.primary_reasoning_effort == "medium"
     assert service.web_search_context_size == "medium"
     assert service.max_tool_calls is None
-    assert service.research_stage_target_ms == 40000
+    assert service.research_stage_target_ms == service.settings.premium_answer_research_target_ms
     assert service.minimum_fallback_budget_ms == 10000
     assert service.terminal_reasoning_effort == "low"
-    assert service.terminal_synthesis_target_ms == 20000
+    assert service.terminal_synthesis_target_ms == 12000
     instructions = service._model_instructions(is_zh=False)
     assert "sufficiently supported" in instructions
     assert "more search actions are available" in instructions
     assert "2-5" not in instructions
+
+
+def test_premium_budget_defaults_are_90_65_12_with_configurable_tool_calls(monkeypatch) -> None:
+    for name in (
+        "PREMIUM_DIRECT_LANE_BUDGET_MS",
+        "PREMIUM_DIRECT_RESEARCH_TARGET_MS",
+        "PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS",
+        "PREMIUM_DIRECT_TIMEOUT_SECONDS",
+        "PREMIUM_DIRECT_TERMINAL_TARGET_MS",
+        "PREMIUM_DIRECT_MAX_TOOL_CALLS",
+        "PREMIUM_ANSWER_RESEARCH_TARGET_MS",
+        "PREMIUM_TURN_DEADLINE_MS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None, DATABASE_URL="postgresql://localhost/test")
+    assert settings.premium_turn_deadline_ms == 90000
+    assert settings.premium_answer_research_target_ms == 65000
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_MAX_TOOL_CALLS="4",
+        PREMIUM_DIRECT_LANE_BUDGET_MS="90000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="65000",
+        PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="65",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="12000",
+    )
+    assert service.primary_timeout_seconds == 65
+    assert service.lane_budget_ms == 90000
+    assert service.research_stage_target_ms == 65000
+    assert service.terminal_synthesis_target_ms == 12000
+    assert service.max_tool_calls == 4
 
 
 def test_normal_premium_exposes_optional_web_search_with_auto_tool_choice(monkeypatch) -> None:
@@ -285,6 +316,109 @@ def test_premium_model_input_includes_marked_policy_topic_context(monkeypatch) -
     assert question in captured["input"]
 
 
+def test_terminal_input_compacts_history_and_retains_project_context(monkeypatch) -> None:
+    service = _service(monkeypatch)
+    service.minimum_fallback_budget_ms = 100_000
+    service.terminal_min_start_budget_ms = 1
+    service.terminal_synthesis_target_ms = 1_000
+    captured: dict[str, str] = {}
+    question = "结合当前已保存的学校申请，我下一步应核实什么？"
+    project_assistant_context = {
+        "schemaVersion": "phase15.project-assistant-context.v1",
+        "contextOrigin": "project_chat",
+        "availability": "available",
+        "reasonCode": None,
+        "consistency": "live_per_source_revision",
+        "project": {"id": "project-test", "status": "active", "purpose": {"state": "unknown"}},
+        "capabilities": {"projectDocuments": {"state": "unavailable"}},
+        "facts": {"state": "unavailable", "authorizedForAI": None},
+        "factContext": {"state": "unknown", "omitted": None},
+        "indexes": {
+            "schoolApplications": [{
+                "applicationId": "school-test",
+                "projectOrdinal": 1,
+                "institutionName": "Northbridge University",
+                "courseTitle": "Master of Research",
+                "status": "draft",
+                "progress": "needs_information",
+                "sourceStatus": "customer_reported",
+                "package": None,
+                "linkedAdmissionsCaseId": None,
+                "relatedStudent500ApplicationIds": [],
+                "provenanceRevision": 1,
+            }],
+            "linkedAdmissions": [],
+            "standaloneAdmissions": [],
+            "unresolvedLinkedAdmissions": [],
+            "student500Applications": [],
+        },
+        "matters": {
+            "schoolApplications": [{
+                "applicationId": "school-test",
+                "institution": {"name": "Northbridge University"},
+                "missingInformationCodes": ["intake_missing"],
+            }],
+            "standaloneAdmissions": [],
+            "unresolvedLinkedAdmissions": [],
+            "student500Applications": [],
+        },
+        "unresolvedIssues": [],
+        "nextActions": [],
+        "omissions": {
+            "schoolApplications": 0,
+            "standaloneAdmissions": 0,
+            "unresolvedLinkedAdmissions": 0,
+            "student500Applications": 0,
+            "unresolvedIssues": 0,
+            "nextActions": 0,
+            "linkedAdmissions": 0,
+            "admissionsCases": 0,
+        },
+    }
+    frontend_messages = [
+        {"role": "user", "text": f"Older context {index}: {'x' * 700}"}
+        for index in range(8)
+    ]
+    frontend_messages.extend([
+        {"role": "assistant", "text": "We have not submitted the application."},
+        {"role": "user", "text": question},
+    ])
+
+    def fake_call(**kwargs):
+        if kwargs["model"] == service.primary_model:
+            raise TimeoutError("research timeout")
+        captured["terminal_input"] = kwargs["model_input"]
+        assert kwargs["web_search_enabled"] is False
+        return "Partial synthesis answer.", [], {"provider_status": "ok"}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    response = service.answer(
+        payload=QueryRequest(
+            question=question,
+            frontend_messages=frontend_messages,
+            project_context={
+                "schema_version": "phase13.project-context.v1",
+                "context_origin": "project_chat",
+                "project_id": "project-test",
+                "confirmed_project_facts": [],
+                "document_evidence": [],
+            },
+            project_assistant_context=project_assistant_context,
+        ),
+        original_question=question,
+        effective_question=question,
+        response_language="zh",
+        matter_id=None,
+    )
+
+    assert "部分答复" in response.answer
+    assert question in captured["terminal_input"]
+    assert "Northbridge University" in captured["terminal_input"]
+    assert "intake_missing" in captured["terminal_input"]
+    assert len(captured["terminal_input"]) < 6000
+    assert response.research_status == "incomplete"
+
+
 def test_instructions_are_separate_from_lightweight_input(monkeypatch) -> None:
     service = _service(monkeypatch)
     calls = _capturing_client(monkeypatch, service, FakeResponse("answer"))
@@ -380,9 +514,9 @@ def test_quick_primary_failure_gets_bounded_fallback_budget(monkeypatch) -> None
 
     assert answer == "fallback answer"
     assert [call["model"] for call in calls] == [service.primary_model, service.fallback_model]
-    assert calls[0]["timeout_seconds"] == pytest.approx(10)
-    assert calls[1]["timeout_seconds"] == pytest.approx(8.5)
-    assert debug["fallback_budget_ms"] == pytest.approx(8500)
+    assert calls[0]["timeout_seconds"] == pytest.approx(7)
+    assert calls[1]["timeout_seconds"] == pytest.approx(5.5)
+    assert debug["fallback_budget_ms"] == pytest.approx(5500)
     assert debug["fallback_skipped_due_to_budget"] is False
 
 
@@ -415,7 +549,8 @@ def test_exhausted_primary_budget_uses_protected_terminal_synthesis(monkeypatch)
         model_input="question", deadline=deadline
     )
 
-    assert answer == "terminal best-effort answer"
+    assert "terminal best-effort answer" in answer
+    assert "Partial answer" in answer
     assert sources == []
     assert [call["model"] for call in calls] == [
         service.primary_model,
@@ -455,10 +590,75 @@ def test_fallback_is_skipped_when_only_three_seconds_research_budget_remains(mon
         deadline=deadline,
     )
 
-    assert answer == "terminal answer"
+    assert "terminal answer" in answer
+    assert "Partial answer" in answer
     assert calls == [service.primary_model, service.terminal_model]
     assert debug["fallback_skipped_due_to_budget"] is True
     assert debug["fallback_budget_ms"] == pytest.approx(3000)
+
+
+def test_primary_completion_near_absolute_deadline_uses_remaining_research_budget(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="3000",
+        PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 10000, clock=clock)
+    clock.advance_ms(6000)
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        return "complete answer", [], {"provider_status": "ok"}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(
+        model_input="question",
+        deadline=deadline,
+    )
+
+    assert answer == "complete answer"
+    assert len(calls) == 1
+    assert calls[0]["timeout_seconds"] == pytest.approx(0.5)
+    assert debug["primary_research_stage"]["allocated_timeout_ms"] == pytest.approx(500)
+    assert debug["terminal_synthesis_stage"]["skip_reason"] == "primary_research_succeeded"
+
+
+def test_primary_fallback_and_terminal_preserve_absolute_response_reserve(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="4000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="3000",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+        PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 4000, clock=clock)
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        clock.advance_ms(kwargs["timeout_seconds"] * 1000)
+        raise TimeoutError("primary exhausted budget before response reserve")
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(
+        model_input="question",
+        deadline=deadline,
+    )
+
+    assert answer == ""
+    assert len(calls) == 1
+    assert calls[0]["timeout_seconds"] == pytest.approx(1)
+    assert deadline.remaining_ms() == pytest.approx(3000)
+    assert debug["fallback_research_stage"]["invoked"] is False
+    assert debug["terminal_synthesis_stage"]["invoked"] is False
+    assert debug["terminal_synthesis_stage"]["skip_reason"] == "insufficient_remaining_lane_budget"
 
 
 def test_terminal_call_forcibly_omits_all_web_search_fields(monkeypatch) -> None:
@@ -579,7 +779,8 @@ def test_timeout_with_genuine_source_metadata_allows_supported_terminal_fact(mon
         current_fact_request=True,
     )
 
-    assert answer == "The supported amount is AUD 2,000."
+    assert "The supported amount is AUD 2,000." in answer
+    assert "Partial answer" in answer
     assert sources == [source]
     assert debug["verified_source_count"] == 1
     assert "verified_source_count=1" in calls[-1]["instructions"]
@@ -622,9 +823,10 @@ def test_timeout_stable_general_question_keeps_useful_terminal_answer(monkeypatc
 def test_terminal_failure_with_recovered_sources_uses_deterministic_salvage(monkeypatch) -> None:
     service = _service(monkeypatch)
     sources = [
-        {"title": "Official fee page", "url": "https://example.gov.au/fees"},
-        {"title": "Official fee page duplicate", "url": "https://example.gov.au/fees/"},
+        {"title": f"Official source {index}", "url": f"https://example.gov.au/{index}"}
+        for index in range(14)
     ]
+    sources.append({"title": "Duplicate", "url": "https://example.gov.au/1/"})
     monkeypatch.setattr(
         service,
         "_answer_with_fallback",
@@ -653,14 +855,18 @@ def test_terminal_failure_with_recovered_sources_uses_deterministic_salvage(monk
     assert debug["completion_status"] == "evidence_salvage"
     assert debug["evidence_salvage_triggered"] is True
     assert response.escalate is True
-    assert len(response.compact_sources) == 1
-    assert "https://example.gov.au/fees" in response.answer
+    assert len(response.compact_sources) == 14
+    assert "https://example.gov.au/13" in response.answer
     assert "safe failure" not in response.answer.lower()
     assert "AUD" not in response.answer
 
 
 def test_fallback_success_is_served_with_shared_budget_debug(monkeypatch) -> None:
-    service = _service(monkeypatch, PREMIUM_DIRECT_LANE_BUDGET_MS="12000")
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="12000",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="1000",
+    )
     clock = FakeClock()
     deadline = AbsoluteTurnDeadline(100.0, 12000, clock=clock)
 
@@ -680,6 +886,379 @@ def test_fallback_success_is_served_with_shared_budget_debug(monkeypatch) -> Non
     assert debug["used_fallback_model"] is True
     assert debug["premium_lane_budget_ms"] == 12000
     assert 0 < debug["fallback_budget_ms"] <= service.fallback_timeout_seconds * 1000
+
+
+def test_fallback_success_preserves_primary_sources_and_separate_stage_metrics(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="12000",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="1000",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 12000, clock=clock)
+    primary_source = {"title": "Primary source", "url": "https://example.gov.au/primary"}
+    fallback_source = {"title": "Fallback source", "url": "https://example.gov.au/fallback"}
+
+    def fake_call(**kwargs):
+        if kwargs["model"] == service.primary_model:
+            return "", [primary_source], {
+                "provider_status": "timeout",
+                "web_search_request_mode": "web_search",
+                "web_action_search_count": 2,
+                "web_search_query_count": 3,
+            }
+        return "fallback answer", [fallback_source], {
+            "provider_status": "ok",
+            "web_search_request_mode": "web_search",
+            "web_action_search_count": 1,
+            "web_search_query_count": 2,
+        }
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, sources, debug = service._answer_with_fallback(
+        model_input="question",
+        deadline=deadline,
+    )
+
+    assert answer == "fallback answer"
+    assert sources == [primary_source, fallback_source]
+    assert debug["primary_research_stage"]["web_action_counts"]["search"] == 2
+    assert debug["fallback_research_stage"]["web_action_counts"]["search"] == 1
+    assert debug["fallback_research_stage"]["observed_source_count"] == 1
+
+
+def test_terminal_telemetry_does_not_overwrite_primary_search_metrics(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+        PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
+    )
+    clock = FakeClock()
+    deadline = AbsoluteTurnDeadline(100.0, 10000, clock=clock)
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        if kwargs["model"] == service.primary_model:
+            clock.advance_ms(6000)
+            return "partial research notes", [
+                {"title": "Official page", "url": "https://example.gov.au/page"}
+            ], {
+                "provider_status": "timeout",
+                "web_search_request_mode": "web_search",
+                "web_action_search_count": 5,
+                "web_search_query_count": 11,
+                "web_sources_observed_count": 45,
+                "web_citations_observed_count": 18,
+                "stream_partial_text_chars": 24,
+                "stream_end_reason": "transport_timeout",
+            }
+        return "A careful partial answer.", [], {
+            "provider_status": "ok",
+            "web_search_request_mode": "disabled",
+            "web_action_search_count": 0,
+            "web_search_query_count": 0,
+        }
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(
+        model_input="question",
+        deadline=deadline,
+    )
+
+    assert "Partial answer" in answer
+    assert [call["model"] for call in calls] == [service.primary_model, service.terminal_model]
+    assert debug["web_search_request_mode"] == "web_search"
+    assert debug["web_action_search_count"] == 5
+    assert debug["web_search_query_count"] == 11
+    assert debug["primary_research_stage"]["observed_source_count"] == 45
+    assert debug["terminal_synthesis_stage"]["web_search_tool_mode"] == "disabled"
+    assert debug["terminal_synthesis_stage"]["web_action_counts"]["search"] == 0
+    assert debug["terminal_synthesis_stage"]["distinct_search_query_count"] == 0
+    assert debug["terminal_synthesis_stage"]["partial_research_material_supplied"] is True
+    assert debug["serving_model"] == service.terminal_model
+    assert debug["completion_status"] == "partial_timeout"
+
+
+def test_completed_cited_segment_can_be_served_as_labeled_partial_without_synthesis(monkeypatch) -> None:
+    service = _service(monkeypatch)
+    segment_text = (
+        "The official guidance explains the requirements that applicants should review "
+        "before lodging. It also describes the supporting material and the need to check "
+        "that each document matches the current application details."
+    )
+    source = {"title": "Official guidance", "url": "https://example.gov.au/guidance"}
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        return segment_text, [source], {
+            "provider_status": "timeout",
+            "stream_partial_available": True,
+            "stream_partial_text_chars": len(segment_text),
+            "stream_end_reason": "transport_timeout",
+            "web_search_request_mode": "web_search",
+            "_completed_text_segments_internal": [{
+                "text": segment_text,
+                "output_index": 0,
+                "content_index": 0,
+            }],
+            "_citation_annotations_internal": [{
+                "url": source["url"],
+                "start_index": 0,
+                "end_index": 80,
+                "output_index": 0,
+                "content_index": 0,
+            }],
+        }
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, sources, debug = service._answer_with_fallback(model_input="question")
+
+    assert "Partial answer" in answer
+    assert segment_text in answer
+    assert sources == [source]
+    assert len(calls) == 1
+    assert debug["completion_status"] == "partial_timeout"
+    assert debug["research_status"] == "incomplete"
+    assert debug["fallback_research_stage"]["skip_reason"] == "usable_completed_cited_partial_answer"
+    assert debug["terminal_synthesis_stage"]["invoked"] is False
+    assert "_completed_text_segments_internal" not in debug
+
+
+def test_partial_gate_rejects_uncompleted_uncited_short_or_badly_indexed_text() -> None:
+    source = {"url": "https://example.gov.au/guidance", "title": "Official guidance"}
+    text = "A sufficiently long complete segment. " * 5
+    segment = {"text": text, "output_index": 0, "content_index": 0}
+    valid = {
+        "url": source["url"],
+        "start_index": 0,
+        "end_index": 20,
+        "output_index": 0,
+        "content_index": 0,
+    }
+
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[], citation_annotations=[valid], verified_sources=[source]
+    ) is None
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[segment], citation_annotations=[], verified_sources=[source]
+    ) is None
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[{"text": "Short sentence."}],
+        citation_annotations=[valid],
+        verified_sources=[source],
+    ) is None
+    invalid_range = {**valid, "end_index": len(text) + 1}
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[segment],
+        citation_annotations=[invalid_range],
+        verified_sources=[source],
+    ) is None
+
+
+@pytest.mark.parametrize(
+    ("annotation_output", "annotation_content"),
+    [
+        (None, 1),
+        (2, None),
+        (1, 1),
+        (2, 0),
+    ],
+    ids=["missing-output", "missing-content", "mismatched-output", "mismatched-content"],
+)
+def test_partial_gate_rejects_missing_or_mismatched_segment_identity(
+    annotation_output: int | None,
+    annotation_content: int | None,
+) -> None:
+    source = {"url": "https://example.gov.au/guidance", "title": "Official guidance"}
+    first_text = "First fully completed segment. " * 5
+    second_text = "Second fully completed segment. " * 5
+    annotations = [{
+        "url": source["url"],
+        "start_index": 0,
+        "end_index": 20,
+        "output_index": annotation_output,
+        "content_index": annotation_content,
+    }]
+
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[
+            {"text": first_text, "output_index": 0, "content_index": 0},
+            {"text": second_text, "output_index": 2, "content_index": 1},
+        ],
+        citation_annotations=annotations,
+        verified_sources=[source],
+    ) is None
+
+
+def test_partial_gate_selects_only_the_matching_segment_among_multiple_outputs() -> None:
+    source = {"url": "https://example.gov.au/guidance", "title": "Official guidance"}
+    first_text = "First fully completed segment. " * 5
+    second_text = "Second fully completed segment. " * 5
+    result = PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[
+            {"text": first_text, "output_index": 0, "content_index": 0},
+            {"text": second_text, "output_index": 2, "content_index": 1},
+        ],
+        citation_annotations=[{
+            "url": source["url"],
+            "start_index": 0,
+            "end_index": 20,
+            "output_index": 2,
+            "content_index": 1,
+        }],
+        verified_sources=[source],
+    )
+
+    assert result == second_text.strip()
+
+
+def test_missing_citation_identity_uses_terminal_recovery(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+    )
+    service.minimum_fallback_budget_ms = 100_000
+    segment_text = "A completed paragraph that lacks segment-bound citation identity. " * 3
+    source = {"title": "Official guidance", "url": "https://example.gov.au/guidance"}
+    calls: list[str] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == service.primary_model:
+            return segment_text, [source], {
+                "provider_status": "timeout",
+                "_completed_text_segments_internal": [{
+                    "text": segment_text,
+                    "output_index": 1,
+                    "content_index": 0,
+                }],
+                "_citation_annotations_internal": [{
+                    "url": source["url"],
+                    "start_index": 0,
+                    "end_index": 30,
+                }],
+            }
+        return "A bounded terminal recovery response.", [], {"provider_status": "ok"}
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(model_input="question")
+
+    assert calls == [service.primary_model, service.terminal_model]
+    assert segment_text not in answer
+    assert "A bounded terminal recovery response." in answer
+    assert debug["terminal_synthesis_stage"]["invoked"] is True
+    assert debug["fallback_research_stage"]["skip_reason"] == "insufficient_remaining_research_budget"
+
+
+def test_fallback_citation_cannot_qualify_primary_segment_with_same_numeric_indices(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="15000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="12000",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="1000",
+    )
+    primary_text = "An uncited completed Primary segment. " * 5
+    source = {"title": "Official guidance", "url": "https://example.gov.au/guidance"}
+    calls: list[str] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == service.primary_model:
+            return primary_text, [source], {
+                "provider_status": "timeout",
+                "_completed_text_segments_internal": [{
+                    "text": primary_text,
+                    "output_index": 0,
+                    "content_index": 0,
+                }],
+            }
+        if kwargs["model"] == service.terminal_model and kwargs.get("web_search_enabled") is False:
+            return "Terminal recovery kept the response incomplete.", [], {"provider_status": "ok"}
+        if kwargs["model"] == service.fallback_model:
+            return "", [source], {
+                "provider_status": "timeout",
+                "_citation_annotations_internal": [{
+                    "url": source["url"],
+                    "start_index": 0,
+                    "end_index": 25,
+                    "output_index": 0,
+                    "content_index": 0,
+                }],
+            }
+        raise AssertionError("unexpected Premium model call")
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    answer, _sources, debug = service._answer_with_fallback(model_input="question")
+
+    assert calls == [service.primary_model, service.fallback_model, service.terminal_model]
+    assert primary_text not in answer
+    assert "Terminal recovery kept the response incomplete." in answer
+    assert debug["terminal_synthesis_stage"]["invoked"] is True
+
+
+def test_primary_citations_survive_terminal_failure_and_evidence_salvage(monkeypatch) -> None:
+    service = _service(
+        monkeypatch,
+        PREMIUM_DIRECT_LANE_BUDGET_MS="10000",
+        PREMIUM_DIRECT_RESEARCH_TARGET_MS="6500",
+        PREMIUM_DIRECT_FINAL_RESPONSE_RESERVE_MS="1000",
+        PREMIUM_DIRECT_TERMINAL_TARGET_MS="3000",
+        PREMIUM_DIRECT_TERMINAL_MIN_START_BUDGET_MS="500",
+        PREMIUM_DIRECT_PRIMARY_TIMEOUT_SECONDS="10",
+        PREMIUM_DIRECT_MIN_FALLBACK_BUDGET_MS="10000",
+    )
+    sources = [
+        {"title": f"Official source {index}", "url": f"https://example.gov.au/{index}"}
+        for index in range(14)
+    ]
+    calls: list[str] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == service.primary_model:
+            return "", sources, {
+                "provider_status": "timeout",
+                "stream_citation_count": 2,
+                "web_search_request_mode": "web_search",
+            }
+        if kwargs["model"] == service.terminal_model:
+            raise TimeoutError("terminal synthesis timed out")
+        raise AssertionError("fallback should not run with an insufficient research budget")
+
+    monkeypatch.setattr(service, "_call_model", fake_call)
+    response = service.answer(
+        payload=QueryRequest(question="What does the official guidance say?"),
+        original_question="What does the official guidance say?",
+        effective_question="What does the official guidance say?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    debug = response.retrieval_debug["premium_direct_answer"]
+    assert calls == [service.primary_model, service.terminal_model]
+    assert debug["primary_research_stage"]["citation_annotation_count"] == 2
+    assert debug["fallback_research_stage"]["invoked"] is False
+    assert debug["terminal_synthesis_stage"]["invoked"] is True
+    assert debug["terminal_synthesis_stage"]["citation_annotation_count"] == 0
+    assert debug["recovered_citation_count"] == 2
+    assert debug["evidence_salvage_triggered"] is True
+    assert debug["recovered_citation_count"] == 2
+    assert response.research_status == "incomplete"
+    assert len(response.compact_sources) == len(sources)
+    assert response.compact_sources[0] == "Official source 0 (https://example.gov.au/0)"
+    assert response.compact_sources[-1] == "Official source 13 (https://example.gov.au/13)"
 
 
 def test_premium_prompt_uses_epistemic_need_policy_in_english_and_chinese(monkeypatch) -> None:

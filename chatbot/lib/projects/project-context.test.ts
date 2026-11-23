@@ -99,3 +99,30 @@ test("Project document packet drops malformed or over-bounded locators", () => {
   });
   assert.equal(packet.documentEvidence.length, 0);
 });
+
+test("bounded facts report omissions to the new assistant context", () => {
+  const base = {
+    assertionVersion: 1,
+    key: "study.test",
+    valueType: "string" as const,
+    value: "synthetic",
+    originKind: "customer_stated" as const,
+    confirmedByUserId: "actor",
+    effectiveFrom: null,
+    effectiveTo: null,
+    observedAt: null,
+    sourceEvidenceRef: null,
+    state: "customer_confirmed",
+    stale: false,
+  };
+  const packet = buildProjectContextPacket({
+    projectId: "project-a",
+    documentEvidence: [],
+    facts: Array.from({ length: 21 }, (_, index) => ({
+      ...base,
+      assertionId: `fact-${index}`,
+    })),
+  });
+  assert.equal(packet.confirmedProjectFacts.length, 20);
+  assert.equal(packet.omittedFacts, 1);
+});

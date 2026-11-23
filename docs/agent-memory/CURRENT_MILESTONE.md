@@ -1,3 +1,51 @@
+<!-- BEGIN PHASE15_M3_02_2026_11_22 -->
+## Phase 15 M3-02 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+**Current status:** `PHASE15_M3_02_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M2_ENGINEERING_ACCEPTANCE_PENDING / LIVE_PRODUCTION_NO_GO`. The Project main content now renders a deterministic M1-backed branching journey. It preserves parallel applications, actual recorded Admissions and Student 500 relationships, progress distinctions, source restrictions/unavailability, action responsibility and provenance. Navigation remains read-only and opens existing Project sections; no record-specific deep links or confirmed changes are claimed.
+
+Focused frontend regression results: **127/127 PASS** across Project Journey, M1 state, Home, existing navigation/Overview/entry, Composer and mobile navigation. Changed-file Biome and Drizzle schema check pass; TypeScript has the unchanged 44-diagnostic baseline and no M3-02 diagnostics. `git diff --check` passes. Next production build did not complete because the sandbox could not fetch Geist fonts. The local synthetic browser harness confirmed 1280px and 390px widths without horizontal overflow, Chinese/English rendering, keyboard selection and no write callback; authenticated Next.js E2E remains unverified. No business DB, migrations, provider calls, AWS or production feature changes were used.
+
+M3-02 is implemented and pending independent review. M2 owner engineering acceptance and M3-01 Composer/Premium owner acceptance remain open; `LIVE_PRODUCTION_NO_GO` remains. M3-03 is not started. See `phase15_m3_02_report.md` and `phase15_m3_02_review.patch`.
+<!-- END PHASE15_M3_02_2026_11_22 -->
+
+<!-- BEGIN PHASE15_M3_01_2026_11_22 -->
+## Phase 15 M3-01 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+
+**Current status:** `PHASE15_M3_01_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M2_ENGINEERING_ACCEPTANCE_PENDING / LIVE_PRODUCTION_NO_GO`. The shared controlled Composer improves input space and accessibility across Fast, Default, Premium, Project and Standalone chats while preserving the controller and archived read-only behavior. Premium Direct keeps its native agentic research path and M2 context, allocates research and recovery inside the absolute deadline, reports Primary/Fallback/Terminal telemetry separately, and retains all genuine recovered references in its output and durable conversation metadata.
+
+Focused offline tests, changed-file lint, schema check and diff check passed. TypeScript has the unchanged 44-diagnostic baseline. The production build did not complete because the sandbox could not fetch Geist fonts; it is not recorded as a pass. No paid provider/browser acceptance or real-session test was run. M2 remains pending owner engineering acceptance, `LIVE_PRODUCTION_NO_GO` remains; M3-02 is implemented pending independent review and M3-03 has not started. See the M3-01 report for inventory, exact command results and the owner-run manual/live acceptance matrix.
+<!-- END PHASE15_M3_01_2026_11_22 -->
+
+<!-- BEGIN PHASE15_M2_R1_CORRECTIVE_2026_11_21 -->
+## Phase 15 M2 R1 — Corrected; pending independent owner acceptance
+
+**Current status:** `PHASE15_M2_R1_IMPLEMENTED_PENDING_INDEPENDENT_OWNER_ACCEPTANCE / LIVE_PRODUCTION_NO_GO`. R1 preserves M2 and native agentic Web Search. Default Project turns now require the accepted Default AgentRuntime: with `DEFAULT_AGENT_SERVING_ENABLED=true`, the route uses the existing `QueryService`/`DefaultAgentServingService` path even when `ANSWER_ENGINE=v2`; with the flag false, a Project Default turn returns HTTP 503 `project_default_agent_runtime_required` before legacy dispatch. Standalone flag-off routing is unchanged. The repository setting defaults false; the inspected local `.env` is true and the production example is false.
+
+The bounded M2 packet now carries complete compact identity/status indexes for every available M1-bounded source (12 School Applications, 16 Admissions cases including linked cases, 6 Student 500 applications) before selecting detail records. Details retain exact ID/name/course/ordinal priority, relationship IDs, package freshness and explicit omission counts; English and Chinese school ordinals are supported without interpreting unsupported pronouns. An index that exceeds source or packet bounds returns unavailable with no partial index. No Project business write path was added.
+
+Focused synthetic regressions passed: 11 frontend test files across the context/widget suite and additional Fact/cross-Chat checks, plus 71 backend tests. TypeScript reports the existing 44 diagnostics with no new Project Assistant locations. Biome, `pnpm db:check`, and `git diff --check` pass. The production build was attempted but blocked when the sandbox could not fetch Geist fonts from Google Fonts. No database write/integration test or paid provider call was run for R1; real-session Next.js E2E and live answer quality remain unverified. See `phase15_m2_R1_report.md` and the cumulative `phase15_m2_R1_review.patch` for exact inventory and the owner-run synthetic live acceptance plan. No commit, push, deployment, migration, AWS operation or M3 work occurred.
+<!-- END PHASE15_M2_R1_CORRECTIVE_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M2_FUNCTIONAL_IMPLEMENTATION_2026_11_21 -->
+## Phase 15 M2 — Functional implementation pending independent review
+
+**Current status:** `PHASE15_M2_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / LIVE_PRODUCTION_NO_GO`. Under [D-P15-003](./DECISIONS.md), the previously proposed public-index-first design remains historical; M2 keeps the existing native agentic Web Search. The three widget routes use the shared authorized Workspace refresh and receive a separate bounded `phase15.project-assistant-context.v1` packet derived from one M1 state load. It retains independent applications, Admissions, Student 500, provenance, action targets, unavailability and explicit omissions; Phase 13 Facts/document context remains separate. Pre-dispatch selection prioritizes exact school/course/ID mentions; it is not a model-controlled detail tool. The latest event is retained and older history is marked omitted. Browser-supplied context is ignored. M2 remains read-only.
+
+Synthetic guarded PostgreSQL tests verified two new Project Chats, two schools, Admissions, Student 500 preparation and an AI-authorized Fact, as well as unrelated-owner isolation. The actual synthetic payload was validated in the Python request schema and all three model-input paths. Mocked tests exercised all three real widget POST handlers and provider requests; live model quality, real authenticated browser E2E, full document receipt details and model-controlled drill-down remain unverified or unavailable. Native hosted search remains available; its pre-execution query-isolation guarantee is not proven, as accepted by the owner for synthetic development only. No production or real-customer release is authorized.
+
+The five-school synthetic state-plus-packet read measured 152 shared-runtime SQL statements, 22,219 packet bytes and 27.57 ms median locally in four reads with test-only Fact flags enabled; context build median was 0.795 ms. Separate schema probes, provider latency and production performance were not measured. Full results, test counts, limitations and the cumulative patch are in `phase15_m2_functional_report.md`. The implementation remains uncommitted, and M2 awaits independent review and owner acceptance.
+<!-- END PHASE15_M2_FUNCTIONAL_IMPLEMENTATION_2026_11_21 -->
+
+<!-- BEGIN PHASE15_M2_ARCHITECTURE_DECISION_REQUIRED_2026_11_21 -->
+## Phase 15 M2 — Historical pre-implementation privacy checkpoint
+
+**Status at that checkpoint:** `PHASE15_M2_BLOCKED_DECISION_REQUIRED / LIVE_PRODUCTION_NO_GO`. This was the pre-implementation snapshot before the owner approved D-P15-003 and before M2/R1 implementation. The checkpoint recorded M1 at `6b7c531ee2839e9a955dfd992b5e19a560fa6064` on `phase15-guided-project-workflows`; M2 implementation had not yet occurred at that time.
+
+The existing three chat routes share server-side Project/Chat authorization refresh before provider dispatch and carry the Phase 13 Project Facts/document packet, but not M1 business state. The M1 read-only state loader is a possible authorized source for a bounded additive Project assistant context. Education Intelligence records are labeled synthetic or unverified and are not current official admission authority. Existing Fast and Premium use provider-hosted native web search; Default's provider adapter identifies its search-query PII inspection as retroactive. With private Project context in the same model input, that inspection cannot prevent a generated search from transmitting identifiers. M2 requires both proactive search privacy and preservation of the frozen mode/research contracts; the current architecture does not determine a compatible prevention boundary.
+
+**Historical disposition:** the owner later selected native agentic research for synthetic M2 development under D-P15-003. This old privacy analysis remains context only; it is not the current implementation status or release decision. `LIVE_PRODUCTION_NO_GO` remains. The pre-implementation baseline is in `phase15_m2_report.md`.
+<!-- END PHASE15_M2_ARCHITECTURE_DECISION_REQUIRED_2026_11_21 -->
+
 <!-- BEGIN PHASE15_M1_OWNER_ACCEPTANCE_2026_11_21 -->
 ## Phase 15 M1 — Owner engineering acceptance with limitations
 

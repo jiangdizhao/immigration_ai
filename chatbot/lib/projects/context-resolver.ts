@@ -4,7 +4,11 @@ import { projectFoundationRepository } from "@/lib/db/project-foundation";
 import { projectFoundationSchemaStatus } from "@/lib/db/project-foundation-schema-availability";
 import { getLazyDatabase } from "@/lib/db/runtime-client";
 import { createDatabaseProjectFactEvidenceVerifier } from "@/lib/project-documents/fact-capabilities";
-import { createProjectFactManagementService } from "@/lib/project-facts/facts";
+import {
+  createProjectFactManagementService,
+  PROJECT_STATE_FACT_SOURCE_MAX,
+  ProjectFactSourceOverflow,
+} from "@/lib/project-facts/facts";
 import { PostgresProjectFactRepository } from "@/lib/project-facts/postgres-repository";
 import { projectChatWritesEnabled } from "./chat-policy";
 import {
@@ -97,7 +101,18 @@ const productionDependencies = (): Dependencies => {
     contextEnabled: () =>
       process.env.PHASE13_PROJECT_CONTEXT_ENABLED === "true",
     stableFacts: async (input) => {
-      const projection = await factService.stableProjection(input);
+      let projection: Awaited<ReturnType<typeof factService.stableProjection>>;
+      try {
+        projection = await factService.stableProjection({
+          ...input,
+          maxSourceRows: PROJECT_STATE_FACT_SOURCE_MAX,
+        });
+      } catch (error) {
+        if (error instanceof ProjectFactSourceOverflow) {
+          return { available: false, authorizedForAI: [] };
+        }
+        throw error;
+      }
       return {
         ...projection,
         authorizedForAI: projection.authorizedForAI.map(
@@ -248,6 +263,7 @@ export async function resolveProjectContext(input: {
         documentEvidence,
         verifiedEvidenceRefs,
       });
+      packet.factSourceState = facts.available ? "available" : "unavailable";
       // Facts can be present while Project document evidence remains blocked.
       // Keep this typed diagnostic internal to the server resolver.
       diagnostic = "document_context_unavailable";
@@ -264,7 +280,10 @@ export async function resolveProjectContext(input: {
     projectId: origin.projectId,
     packet:
       packet &&
-      (packet.confirmedProjectFacts.length || packet.documentEvidence.length)
+      (packet.confirmedProjectFacts.length ||
+        packet.documentEvidence.length ||
+        packet.factSourceState === "unavailable" ||
+        packet.omittedFacts)
         ? packet
         : null,
     diagnostic,

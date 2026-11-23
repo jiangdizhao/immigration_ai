@@ -4,7 +4,7 @@ import time
 import logging
 import threading
 
-from fastapi import APIRouter, Depends, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Request
 
 from app.api.deps import verify_api_key
 from app.db.session import get_db, SessionLocal
@@ -146,6 +146,10 @@ def run_query(
     accepted_at = time.perf_counter()
     settings = get_settings()
     fast_selected = payload.assistant_mode == "fast"
+    project_default_turn = (
+        payload.project_assistant_context is not None
+        and payload.assistant_mode in {"default", "default_legal_pipeline"}
+    )
     default_agent_selected = (
         getattr(settings, "default_agent_serving_enabled", False)
         and payload.assistant_mode in {"default", "default_legal_pipeline"}
@@ -225,6 +229,26 @@ def run_query(
             observability_service.mark_metrics_complete()
             return response
 
+        if project_default_turn and not getattr(
+            settings, "default_agent_serving_enabled", False
+        ):
+            # The legacy Default runtime does not consume the M2 Project packet.
+            # Fail before constructing QueryService or starting its legacy path;
+            # Standalone turns still retain their existing flag-off behavior.
+            logger.warning(
+                "Project Default turn rejected because Default AgentRuntime is disabled"
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "project_default_agent_runtime_required",
+                    "message": (
+                        "Project-aware Default serving requires "
+                        "DEFAULT_AGENT_SERVING_ENABLED=true."
+                    ),
+                },
+            )
+
         # Launch the non-serving shadow after the political gate and before
         # legacy work.  The shadow receives only immutable request data and
         # owns its DB/provider resources, so legacy state mutation cannot race
@@ -262,7 +286,13 @@ def run_query(
         elif payload.assistant_mode == "premium":
             payload = payload.model_copy(update={"assistant_mode": "premium_direct_gpt55_high"})
         engine = os.getenv("ANSWER_ENGINE", "v1").strip().lower()
-        if engine in {"v2", "verified", "verified_answer", "v2_verified_answer"}:
+        if project_default_turn and default_agent_selected:
+            # Project-aware Default requests must pass through the accepted
+            # QueryService wrapper that selects DefaultAgentServingService.
+            # This scoped override prevents ANSWER_ENGINE=v2 from bypassing the
+            # M2 packet while leaving Standalone engine selection unchanged.
+            service = QueryService()
+        elif engine in {"v2", "verified", "verified_answer", "v2_verified_answer"}:
             from app.services.v2.verified_answer_service_patch2 import QueryServiceV2Patch2
 
             service = QueryServiceV2Patch2()

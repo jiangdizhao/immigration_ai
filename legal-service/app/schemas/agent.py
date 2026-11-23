@@ -200,6 +200,7 @@ class AgentRuntimeRequest(StrictContract):
     # conclusion. Absent/empty for conversations without a policy binding.
     policy_topic_context: str = Field(default="", max_length=4_000)
     project_context: str = Field(default="", max_length=16_000)
+    project_assistant_context: str = Field(default="", max_length=25_500)
 
 
 class DeadlineCheckpoint(StrictContract):

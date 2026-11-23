@@ -336,7 +336,13 @@ export function MatterDocumentsPanel({
               disabled={!(chatId && accountAccess) || disabled || busy !== null}
               onClick={() => inputRef.current?.click()}
               size={compact ? "icon" : "sm"}
-              title={compact ? labels.upload : undefined}
+              title={
+                compact
+                  ? accountAccess
+                    ? labels.upload
+                    : labels.signInForFiles
+                  : undefined
+              }
               type="button"
               variant={compact ? "ghost" : "outline"}
             >
@@ -375,25 +381,17 @@ export function MatterDocumentsPanel({
         </p>
       )}
       {conversationDocumentsAvailable ? (
-        accountAccess ? null : (
+        accountAccess ? null : compact ? null : (
           <p
-            className={
-              compact
-                ? "basis-full text-[11px] text-slate-500"
-                : "mt-2 text-xs text-slate-500"
-            }
+            className="mt-2 text-xs text-slate-500"
             data-testid="matter-documents-guest-hint"
           >
             {labels.signInForFiles}
           </p>
         )
-      ) : (
+      ) : compact ? null : (
         <output
-          className={
-            compact
-              ? "basis-full text-[11px] text-slate-500"
-              : "mt-2 text-xs text-slate-500"
-          }
+          className="mt-2 text-xs text-slate-500"
           data-testid="project-documents-unavailable"
         >
           {labels.projectDocumentsUnavailable}

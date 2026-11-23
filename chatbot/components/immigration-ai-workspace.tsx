@@ -5,7 +5,6 @@ import {
   Bot,
   CalendarDays,
   Loader2,
-  Send,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -132,6 +131,7 @@ import {
   SheetTitle,
 } from "./ui/sheet";
 import { UserDocumentHistoryPanel } from "./user-document-history-panel";
+import { WorkspaceChatComposer } from "./workspace-chat-composer";
 
 const TYPEWRITER_TICK_MS = 38;
 const TYPEWRITER_WORDS_PER_TICK = 3;
@@ -775,7 +775,6 @@ export function ImmigrationAIWorkspace({
    */
   const [composerFocused, setComposerFocused] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = useRef(true);
 
   const clearProjectSelection = useCallback(() => {
@@ -1214,23 +1213,6 @@ export function ImmigrationAIWorkspace({
   useEffect(() => {
     scrollToBottom();
   }, [scrollToBottom]);
-
-  /**
-   * Phase 12 Stage 2: the composer grows only as far as it needs to and then
-   * scrolls internally, so a long question can never push the conversation out
-   * of view. It is measured after the DOM has the new value, which also covers
-   * the send/clear path.
-   */
-  const resizeComposer = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      const element = composerRef.current;
-      if (!element) {
-        return;
-      }
-      element.style.height = "auto";
-      element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
-    });
-  }, []);
 
   useEffect(() => {
     if (status !== "submitted" || submittedAt === null) {
@@ -1926,7 +1908,6 @@ export function ImmigrationAIWorkspace({
 
   const appendBlockedResponse = async (decision: PoliticalGateResult) => {
     setInput("");
-    resizeComposer();
     setDraftFacts({});
     setError(null);
     await appendAssistantMessage(blockedWidgetResponse(decision));
@@ -2105,7 +2086,6 @@ export function ImmigrationAIWorkspace({
     setMessages(nextMessages);
     scrollToBottom(true);
     setInput("");
-    resizeComposer();
     const requestStartedAt = Date.now();
     setStatus("submitted");
     setSubmittedAt(requestStartedAt);
@@ -2973,12 +2953,8 @@ export function ImmigrationAIWorkspace({
                 locale={locale}
                 navigationBusy={projectNavigationBusy}
                 onOpenArtifactOwner={handleSelectProjectView}
-                onRefreshSummary={() => {
-                  refreshProjectWorkspaceData().catch(() => undefined);
-                }}
                 onReturnToPreviousView={returnToPreviousProjectView}
                 onSelectView={handleSelectProjectView}
-                overview={projectOverview}
                 project={selectedProject}
                 projectDocumentsEnabled={false}
                 projectFactsEnabled={projectFactsEnabled}
@@ -2998,7 +2974,6 @@ export function ImmigrationAIWorkspace({
                 schoolApplicationsCopy={copy.schoolApplications}
                 schoolApplicationsEnabled={schoolApplicationsEnabled}
                 schoolPreparationRestricted={schoolPreparationRestricted}
-                stages={projectStages}
                 student500Copy={copy.student500}
                 student500Enabled={student500Enabled}
                 summaryState={workspaceSummaryState}
@@ -3485,8 +3460,8 @@ export function ImmigrationAIWorkspace({
                 button. Uploaded files are managed in the conversation file panel
                 so no attachment list grows under the composer.
               */
-                  <div className="rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
-                    <div className="flex min-w-0 items-end gap-1.5">
+                  <WorkspaceChatComposer
+                    attachmentControl={
                       <MatterDocumentsPanel
                         accountAccess={canUseDocuments}
                         chatId={conversationId}
@@ -3499,64 +3474,20 @@ export function ImmigrationAIWorkspace({
                         key={`conversation-documents:${conversationOrigin}:${conversationId ?? "new"}`}
                         onDocumentsChanged={notifyDocumentsChanged}
                       />
-                      <textarea
-                        aria-label={copy.consultation.placeholder}
-                        className="max-h-[120px] min-h-[40px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-2 py-2 text-sm leading-5 text-slate-900 outline-none placeholder:text-slate-400 focus-visible:ring-0"
-                        data-testid="workspace-input"
-                        disabled={!interaction.canSubmitMessage}
-                        onBlur={() => setComposerFocused(false)}
-                        onChange={(event) => {
-                          setInput(event.target.value);
-                          resizeComposer();
-                        }}
-                        onFocus={() => setComposerFocused(true)}
-                        onKeyDown={(event) => {
-                          // Enter sends; Shift+Enter adds a line. IME composition
-                          // (Chinese input) never submits a half-composed character.
-                          if (
-                            event.key !== "Enter" ||
-                            event.shiftKey ||
-                            event.nativeEvent.isComposing
-                          ) {
-                            return;
-                          }
-                          event.preventDefault();
-                          submitMessage(input);
-                        }}
-                        placeholder={copy.consultation.placeholder}
-                        ref={composerRef}
-                        rows={1}
-                        value={input}
-                      />
-                      <Button
-                        aria-label={copy.consultation.send}
-                        className="shrink-0 rounded-xl bg-[#001736] px-3 text-white hover:bg-[#002b5b] sm:px-4"
-                        data-testid="workspace-send"
-                        disabled={
-                          !input.trim() || !interaction.canSubmitMessage
-                        }
-                        onClick={() => submitMessage(input)}
-                        size="sm"
-                        type="button"
-                      >
-                        {status === "ready" ? (
-                          <Send className="size-4 sm:mr-2" />
-                        ) : (
-                          <Loader2 className="size-4 animate-spin sm:mr-2" />
-                        )}
-                        <span className="hidden sm:inline">
-                          {copy.consultation.send}
-                        </span>
-                      </Button>
-                    </div>
-                    <p className="px-2 pt-1 text-[11px] leading-4 text-slate-500">
-                      {status === "ready"
-                        ? copy.consultation.composerHelp
-                        : status === "submitted"
-                          ? copy.status.submitted
-                          : copy.status.typing}
-                    </p>
-                  </div>
+                    }
+                    disabled={!interaction.canSubmitMessage}
+                    inputLabel={copy.consultation.inputLabel}
+                    onBlur={() => setComposerFocused(false)}
+                    onFocus={() => setComposerFocused(true)}
+                    onSubmit={(value) => submitMessage(value)}
+                    onValueChange={setInput}
+                    placeholder={copy.consultation.placeholder}
+                    sendLabel={copy.consultation.send}
+                    status={status}
+                    submittedLabel={copy.status.submitted}
+                    typingLabel={copy.status.typing}
+                    value={input}
+                  />
                 )}
               </div>
             </>

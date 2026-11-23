@@ -90,7 +90,12 @@ class ResponsesStreamAccumulator:
     before interruption is retained as context, never as a final answer.
     """
 
+    # Premium Direct opts in so partial citation gates can bind annotations to
+    # one completed output segment. Default/Fast keep their existing metadata.
+    preserve_citation_segment_identity: bool = False
     text_parts: list[str] = field(default_factory=list)
+    completed_text_segments: list[dict[str, Any]] = field(default_factory=list)
+    completed_text_segment_ids: set[tuple[Any, Any, str]] = field(default_factory=set)
     response_id: str = ""
     completed: bool = False
     partial: bool = False
@@ -145,7 +150,15 @@ class ResponsesStreamAccumulator:
                 return dumped
         return {
             key: getattr(value, key)
-            for key in ("url", "title", "type", "start_index", "end_index")
+            for key in (
+                "url",
+                "title",
+                "type",
+                "start_index",
+                "end_index",
+                "output_index",
+                "content_index",
+            )
             if getattr(value, key, None) is not None
         }
 
@@ -174,10 +187,19 @@ class ResponsesStreamAccumulator:
                     self.first_output_text_after_web_ms = observed_at_ms
         elif event_type == "response.output_text.done":
             text = self._get(event, "text", "")
+            self._add_completed_text_segment(
+                text,
+                output_index=self._get(event, "output_index"),
+                content_index=self._get(event, "content_index"),
+            )
             if text and not self.text_parts:
                 self.text_parts.append(str(text))
         elif event_type == "response.output_text.annotation.added":
-            self._add_annotation(self._get(event, "annotation"))
+            self._add_annotation(
+                self._get(event, "annotation"),
+                output_index=self._get(event, "output_index"),
+                content_index=self._get(event, "content_index"),
+            )
         elif event_type == "response.function_call_arguments.delta":
             item_id = str(self._get(event, "item_id", ""))
             if item_id:
@@ -196,6 +218,7 @@ class ResponsesStreamAccumulator:
                 self._get(event, "item"),
                 confirmed_completed=True,
                 observed_at_ms=observed_at_ms,
+                output_index=self._get(event, "output_index"),
             )
         elif event_type == "response.completed":
             response = self._get(event, "response")
@@ -305,23 +328,41 @@ class ResponsesStreamAccumulator:
     ) -> None:
         if response is None:
             return
-        for item in self._get(response, "output", []) or []:
+        for output_index, item in enumerate(self._get(response, "output", []) or []):
             item_type = self._get(item, "type", "")
             if item_type == "message":
+                item_completed = (
+                    allow_implicit_function_completion
+                    or self._get(item, "status") == "completed"
+                )
                 if include_text:
                     for block in self._get(item, "content", []) or []:
                         if self._get(block, "type", "") == "output_text":
                             text = self._get(block, "text", "")
                             if text:
                                 self.text_parts.append(str(text))
-                for block in self._get(item, "content", []) or []:
+                for content_index, block in enumerate(self._get(item, "content", []) or []):
+                    block_content_index = self._get(block, "content_index", content_index)
+                    if self.preserve_citation_segment_identity and block_content_index is None:
+                        block_content_index = content_index
+                    if item_completed and self._get(block, "type", "") == "output_text":
+                        self._add_completed_text_segment(
+                            self._get(block, "text", ""),
+                            output_index=output_index,
+                            content_index=block_content_index,
+                        )
                     for annotation in self._get(block, "annotations", []) or []:
-                        self._add_annotation(annotation)
+                        self._add_annotation(
+                            annotation,
+                            output_index=output_index,
+                            content_index=block_content_index,
+                        )
             elif item_type in {"function_call", "web_search_call"}:
                 self._consume_completed_item(
                     item,
                     allow_implicit_completion=allow_implicit_function_completion,
                     observed_at_ms=observed_at_ms,
+                    output_index=output_index,
                 )
 
     def _consume_completed_item(
@@ -331,6 +372,7 @@ class ResponsesStreamAccumulator:
         confirmed_completed: bool = False,
         allow_implicit_completion: bool = False,
         observed_at_ms: float | None = None,
+        output_index: Any = None,
     ) -> None:
         if item is None:
             return
@@ -371,6 +413,25 @@ class ResponsesStreamAccumulator:
             ):
                 return
             self._consume_web_search_item(item, observed_at_ms=observed_at_ms)
+        elif item_type == "message":
+            if confirmed_completed or self._get(item, "status") == "completed":
+                for content_index, block in enumerate(self._get(item, "content", []) or []):
+                    block_content_index = self._get(block, "content_index", content_index)
+                    if self.preserve_citation_segment_identity and block_content_index is None:
+                        block_content_index = content_index
+                    if self._get(block, "type", "") == "output_text":
+                        self._add_completed_text_segment(
+                            self._get(block, "text", ""),
+                            output_index=output_index,
+                            content_index=block_content_index,
+                        )
+                    if self.preserve_citation_segment_identity:
+                        for annotation in self._get(block, "annotations", []) or []:
+                            self._add_annotation(
+                                annotation,
+                                output_index=output_index,
+                                content_index=block_content_index,
+                            )
 
     def _consume_web_search_item(
         self,
@@ -520,29 +581,83 @@ class ResponsesStreamAccumulator:
             })
         return sources
 
-    def _add_annotation(self, annotation: Any) -> None:
+    def _add_annotation(
+        self,
+        annotation: Any,
+        *,
+        output_index: Any = None,
+        content_index: Any = None,
+    ) -> None:
         annotation_dict = self._as_dict(annotation)
         nested = annotation_dict.get("url_citation")
         if isinstance(nested, dict):
             annotation_dict = {**annotation_dict, **nested}
+        if self.preserve_citation_segment_identity:
+            identity_conflict = False
+            for key, event_value in (
+                ("output_index", output_index),
+                ("content_index", content_index),
+            ):
+                annotation_value = annotation_dict.get(key)
+                if event_value is None:
+                    continue
+                if annotation_value is None:
+                    annotation_dict[key] = event_value
+                elif annotation_value != event_value:
+                    identity_conflict = True
+            if identity_conflict:
+                annotation_dict["_segment_identity_conflict"] = True
         url = str(annotation_dict.get("url") or "").strip()
         if not url.startswith("https://"):
             return
-        key = (
+        key: tuple[Any, ...] = (
             url.rstrip("/").lower(),
             annotation_dict.get("start_index"),
             annotation_dict.get("end_index"),
         )
-        if not any(
-            (
+        if self.preserve_citation_segment_identity:
+            key += (
+                annotation_dict.get("output_index"),
+                annotation_dict.get("content_index"),
+            )
+        def existing_key(existing: dict[str, Any]) -> tuple[Any, ...]:
+            identity = (
                 str(existing.get("url") or "").rstrip("/").lower(),
                 existing.get("start_index"),
                 existing.get("end_index"),
             )
-            == key
+            if self.preserve_citation_segment_identity:
+                return identity + (
+                    existing.get("output_index"),
+                    existing.get("content_index"),
+                )
+            return identity
+
+        if not any(
+            existing_key(existing) == key
             for existing in self.citation_annotations
         ):
             self.citation_annotations.append(annotation_dict)
+
+    def _add_completed_text_segment(
+        self,
+        text: Any,
+        *,
+        output_index: Any = None,
+        content_index: Any = None,
+    ) -> None:
+        value = str(text or "")
+        if not value.strip():
+            return
+        identity = (output_index, content_index, value)
+        if identity in self.completed_text_segment_ids:
+            return
+        self.completed_text_segment_ids.add(identity)
+        self.completed_text_segments.append({
+            "text": value,
+            "output_index": output_index,
+            "content_index": content_index,
+        })
 
     def _maybe_add_function_call(self, item_id: str) -> None:
         if item_id not in self.function_arguments_done:
@@ -593,6 +708,7 @@ def consume_responses_stream(
     *,
     allocated_timeout_seconds: float,
     clock: Any = time.perf_counter,
+    preserve_citation_segment_identity: bool = False,
 ) -> ResponsesStreamAccumulator:
     """Consume one Responses stream under a monotonic total-duration deadline.
 
@@ -601,7 +717,9 @@ def consume_responses_stream(
     Premium. A stream close is best-effort and can never discard artifacts or
     downgrade an already completed response.
     """
-    accumulator = ResponsesStreamAccumulator()
+    accumulator = ResponsesStreamAccumulator(
+        preserve_citation_segment_identity=preserve_citation_segment_identity
+    )
     stream_started_at = clock()
     provider_deadline = stream_started_at + max(0.0, allocated_timeout_seconds)
 

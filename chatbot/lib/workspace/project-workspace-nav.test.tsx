@@ -61,7 +61,7 @@ function stagesFor(input: ProjectWorkspaceSummary) {
   });
 }
 
-test("the step rail shows real statuses and step-conversation entry", () => {
+test("the step rail remains navigation-only and keeps step-conversation entry", () => {
   const copy = getWorkspaceCopy("en");
   const markup = renderToStaticMarkup(
     React.createElement(ProjectWorkspaceNav, {
@@ -77,12 +77,9 @@ test("the step rail shows real statuses and step-conversation entry", () => {
     })
   );
   assert.match(markup, /data-testid="project-workspace-nav"/u);
-  // Real status per stage, derived from the authorized projection.
-  assert.match(markup, /data-testid="project-nav-stage-status-applications"/u);
-  assert.match(markup, /Needs information/u);
-  // A blocked capability says so rather than showing an invented zero.
-  assert.match(markup, /data-testid="project-nav-stage-status-documents"/u);
-  assert.match(markup, /Unavailable here/u);
+  // M1 Project Journey is the only application-specific progress authority.
+  assert.doesNotMatch(markup, /data-testid="project-nav-stage-status-/u);
+  assert.doesNotMatch(markup, /data-testid="project-nav-stage-count-/u);
   // Student 500 is bound, so the action offers to return to that conversation.
   assert.match(
     markup,

@@ -46,6 +46,7 @@ class EvidenceSalvageFinalizer:
         local_entries: Iterable[Any] = (),
         web_sources: Iterable[dict[str, Any]] = (),
         citation_count: int = 0,
+        max_displayed_sources: int | None = MAX_DISPLAYED_SOURCES,
     ) -> EvidenceSalvageResult | None:
         local = [entry for entry in local_entries if cls._is_local_evidence(entry)]
         web = cls._deduplicate_web_sources(web_sources)
@@ -100,7 +101,10 @@ class EvidenceSalvageFinalizer:
         for key, citation in display_items:
             if key in seen_display:
                 continue
-            if len(citations) >= MAX_DISPLAYED_SOURCES:
+            if (
+                max_displayed_sources is not None
+                and len(citations) >= max(0, max_displayed_sources)
+            ):
                 break
             seen_display.add(key)
             citations.append(citation)

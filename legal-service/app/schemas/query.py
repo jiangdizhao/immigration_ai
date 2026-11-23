@@ -161,6 +161,126 @@ class ProjectContextPacket(BaseSchema):
         return self
 
 
+class ProjectAssistantContextPacket(BaseSchema):
+    """Server-derived M1 business state; customer data, not legal evidence."""
+
+    schemaVersion: Literal["phase15.project-assistant-context.v1"]
+    contextOrigin: Literal["project_chat"]
+    availability: Literal["available", "unavailable"]
+    reasonCode: str | None = Field(default=None, max_length=128)
+    consistency: Literal["live_per_source_revision", "unknown"]
+    project: dict[str, Any] | None = None
+    capabilities: dict[str, Any] | None = None
+    facts: dict[str, Any] | None = None
+    factContext: dict[str, Any]
+    indexes: dict[str, list[dict[str, Any]] | None]
+    matters: dict[str, list[dict[str, Any]] | None]
+    unresolvedIssues: list[dict[str, Any]] = Field(max_length=128)
+    nextActions: list[dict[str, Any]] = Field(max_length=128)
+    omissions: dict[str, int]
+
+    @model_validator(mode="after")
+    def bounded_payload(self):
+        import json
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 24_000:
+            raise ValueError("Project assistant context exceeds its byte bound")
+        expected_matters = {"schoolApplications", "standaloneAdmissions", "unresolvedLinkedAdmissions", "student500Applications"}
+        expected_indexes = expected_matters | {"linkedAdmissions"}
+        if set(self.matters) != expected_matters or set(self.indexes) != expected_indexes:
+            raise ValueError("Invalid Project assistant matters")
+        expected_omissions = expected_matters | {
+            "unresolvedIssues", "nextActions", "linkedAdmissions", "admissionsCases"
+        }
+        if set(self.omissions) != expected_omissions or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in self.omissions.values()
+        ):
+            raise ValueError("Invalid Project assistant omissions")
+        limits = {
+            "schoolApplications": 12,
+            "linkedAdmissions": 12,
+            "standaloneAdmissions": 16,
+            "unresolvedLinkedAdmissions": 16,
+            "student500Applications": 6,
+        }
+        if any(
+            value is not None and len(value) > limits[key]
+            for mapping in (self.matters, self.indexes)
+            for key, value in mapping.items()
+        ):
+            raise ValueError("Project assistant matter count exceeds bound")
+
+        if self.availability == "unavailable":
+            if any(value is not None for value in self.indexes.values()) or any(
+                value is not None for value in self.matters.values()
+            ):
+                raise ValueError("Unavailable Project context cannot expose partial matters")
+            return self
+
+        index_ids: dict[str, set[str]] = {}
+        for key, index_rows in self.indexes.items():
+            if key == "linkedAdmissions":
+                continue
+            detail_rows = self.matters[key]
+            omission_count = self.omissions[key]
+            if index_rows is None:
+                if detail_rows is not None or omission_count:
+                    raise ValueError("Unavailable source cannot present partial details")
+                continue
+            if detail_rows is None or len(index_rows) != len(detail_rows) + omission_count:
+                raise ValueError("Project detail coverage does not match complete index")
+            id_key = "applicationId" if key in {"schoolApplications", "student500Applications"} else "caseId"
+            identities = [row.get(id_key) for row in index_rows]
+            if any(not isinstance(identity, str) or not identity for identity in identities):
+                raise ValueError("Project index identity is required")
+            if len(set(identities)) != len(identities):
+                raise ValueError("Project index identities must be unique")
+            detail_identities = [row.get(id_key) for row in detail_rows]
+            if any(identity not in identities for identity in detail_identities) or len(set(detail_identities)) != len(detail_identities):
+                raise ValueError("Project details must resolve to unique indexed identities")
+            index_ids[key] = set(identities)
+
+        school_rows = self.indexes["schoolApplications"] or []
+        linked_admission_rows = self.indexes["linkedAdmissions"] or []
+        admissions_rows = [
+            *linked_admission_rows,
+            *(self.indexes["standaloneAdmissions"] or []),
+            *(self.indexes["unresolvedLinkedAdmissions"] or []),
+        ]
+        student_rows = self.indexes["student500Applications"] or []
+        if len(school_rows) > 12 or len(admissions_rows) > 16 or len(student_rows) > 6:
+            raise ValueError("Project index exceeds M1 record limits")
+        admission_ids = [row.get("caseId") for row in admissions_rows]
+        if any(not isinstance(identity, str) or not identity for identity in admission_ids) or len(set(admission_ids)) != len(admission_ids):
+            raise ValueError("Admissions index identities must be unique")
+        linked_details = []
+        for school in self.matters["schoolApplications"] or []:
+            linked = school.get("linkedAdmissionsCase")
+            if isinstance(linked, dict):
+                linked_details.append(linked)
+        detailed_admission_ids = {
+            row.get("caseId")
+            for row in [
+                *(self.matters["standaloneAdmissions"] or []),
+                *(self.matters["unresolvedLinkedAdmissions"] or []),
+                *linked_details,
+            ]
+        }
+        detailed_linked_admission_ids = {
+            row.get("caseId") for row in linked_details
+        }
+        linked_admission_ids = {row.get("caseId") for row in linked_admission_rows}
+        if not detailed_linked_admission_ids.issubset(linked_admission_ids):
+            raise ValueError("Linked Admissions details must resolve to indexed identities")
+        if self.omissions["linkedAdmissions"] != len(linked_admission_ids - detailed_linked_admission_ids):
+            raise ValueError("Linked Admissions detail omission count is inaccurate")
+        if not detailed_admission_ids.issubset(set(admission_ids)):
+            raise ValueError("Admissions details must resolve to indexed identities")
+        if self.omissions["admissionsCases"] != len(set(admission_ids) - detailed_admission_ids):
+            raise ValueError("Admissions detail omission count is inaccurate")
+        return self
+
+
 class QueryRequest(BaseSchema):
     question: str = Field(min_length=1, max_length=4000)
 
@@ -203,6 +323,7 @@ class QueryRequest(BaseSchema):
     # not provide this field through the widget; the authenticated server path
     # constructs it. Older/direct callers omit it.
     project_context: ProjectContextPacket | None = None
+    project_assistant_context: ProjectAssistantContextPacket | None = None
 
     @field_validator("question")
     @classmethod

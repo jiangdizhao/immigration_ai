@@ -21,6 +21,7 @@ import {
 } from "@/lib/policy-intelligence/conversation-policy-binding-service";
 import type { ResolvedProjectContext } from "@/lib/projects/context-resolver";
 import { resolveProjectContext } from "@/lib/projects/context-resolver";
+import { refreshProjectAssistantContext } from "@/lib/projects/project-assistant-refresh";
 import type { ProjectContextPacket } from "@/lib/projects/project-context";
 
 /**
@@ -103,6 +104,8 @@ function emptyContext(scope: WorkspaceContextScope): WorkspaceContext {
  */
 export async function resolveWorkspaceContext(input: {
   userId: string;
+  actorType?: "guest" | "regular";
+  question?: string;
   chatId: string | null;
   matterId?: string | null;
   clientPolicySlug?: unknown;
@@ -180,6 +183,18 @@ export async function resolveWorkspaceContext(input: {
     },
     projectContext: projectContext.packet,
     projectContextDiagnostic: projectContext.diagnostic,
-    refreshProjectContextBeforeProvider: projectContext.refreshBeforeProvider,
+    refreshProjectContextBeforeProvider: async () =>
+      refreshProjectAssistantContext({
+        resolved: projectContext,
+        actorUserId: input.userId,
+        actorType: input.actorType ?? "guest",
+        question: input.question,
+        loadState: async (stateInput) => {
+          const { loadProjectStateForActor } = await import(
+            "@/lib/workspace/project-state-server"
+          );
+          return loadProjectStateForActor(stateInput);
+        },
+      }),
   };
 }

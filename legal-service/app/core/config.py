@@ -147,7 +147,7 @@ class Settings(BaseSettings):
         default="medium", alias="DEFAULT_TERMINAL_RECOVERY_REASONING_EFFORT"
     )
     premium_answer_research_target_ms: int = Field(
-        default=40000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
+        default=65000, ge=1, alias="PREMIUM_ANSWER_RESEARCH_TARGET_MS"
     )
     terminal_synthesis_target_ms: int = Field(
         default=15000, ge=1, alias="TERMINAL_SYNTHESIS_TARGET_MS"

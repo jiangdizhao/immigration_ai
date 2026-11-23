@@ -36,7 +36,7 @@ def test_salvage_requires_completed_legal_or_usable_web_evidence():
     assert "definitive case-specific" in result.answer
 
 
-def test_salvage_deduplicates_and_caps_display_without_losing_counts():
+def test_salvage_deduplicates_and_keeps_the_existing_default_display_cap():
     sources = [
         {"title": f"Source {index}", "url": f"https://example.gov.au/{index}"}
         for index in range(12)
@@ -55,6 +55,27 @@ def test_salvage_deduplicates_and_caps_display_without_losing_counts():
     assert result.displayed_source_count == 10
     assert len(result.compact_sources) == 10
     assert "internal call" not in result.answer.lower()
+
+
+def test_premium_salvage_can_display_all_genuine_sources_over_ten():
+    sources = [
+        {"title": f"Source {index}", "url": f"https://example.gov.au/{index}"}
+        for index in range(14)
+    ]
+    sources.append({"title": "Duplicate", "url": "https://example.gov.au/1/"})
+
+    result = EvidenceSalvageFinalizer.build(
+        is_zh=False,
+        web_sources=sources,
+        citation_count=4,
+        max_displayed_sources=None,
+    )
+
+    assert result is not None
+    assert result.recovered_web_source_count == 14
+    assert result.displayed_source_count == 14
+    assert len(result.compact_sources) == 14
+    assert "https://example.gov.au/13" in result.answer
 
 
 def test_salvage_does_not_expose_partial_prose_or_diagnostic_metadata():

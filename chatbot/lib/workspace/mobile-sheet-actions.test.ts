@@ -113,8 +113,12 @@ test("a rail quick question submits once and closes on acceptance only", () => {
   );
   // …while the in-chat empty-state questions keep the plain submission path.
   assert.match(workspace, /onClick=\{\(\) => submitMessage\(question\)\}/u);
-  // And the composer is untouched.
-  assert.match(workspace, /onClick=\{\(\) => submitMessage\(input\)\}/u);
+  // The extracted Composer still routes its accepted input through the same
+  // guarded submission callback.
+  assert.match(
+    workspace,
+    /<WorkspaceChatComposer[\s\S]*?onSubmit=\{\(value\) => submitMessage\(value\)\}/u
+  );
 });
 
 test("submission acceptance is reported before dispatch and never on a guard rejection", () => {

@@ -1,4 +1,5 @@
 import type { ProjectFactAssertion } from "@/lib/project-facts/facts";
+import type { ProjectAssistantContext } from "./project-assistant-context";
 
 export type AuthorizedProjectFact = {
   assertionId: string;
@@ -61,6 +62,9 @@ export type ProjectContextPacket = {
     sourceExcerptIncluded: boolean;
   }>;
   documentEvidence: AuthorizedProjectDocumentEvidence[];
+  assistantContext?: ProjectAssistantContext;
+  factSourceState?: "available" | "unavailable";
+  omittedFacts?: number;
 };
 
 export const MAX_PROJECT_FACTS = 20;
@@ -144,6 +148,7 @@ export function buildProjectContextPacket(input: {
   const evidenceRefs = new Set(evidence.map((item) => item.evidenceRef));
   const verifiedEvidenceRefs = input.verifiedEvidenceRefs ?? new Set<string>();
   const facts: ProjectContextPacket["confirmedProjectFacts"] = [];
+  let eligibleFactCount = 0;
   const seen = new Set<string>();
   const orderedFacts = [...input.facts].sort(
     (left, right) =>
@@ -192,6 +197,7 @@ export function buildProjectContextPacket(input: {
         fact.sourceEvidenceRef !== null &&
         evidenceRefs.has(fact.sourceEvidenceRef),
     };
+    eligibleFactCount += 1;
     if (
       serializedSize(candidate) > MAX_PROJECT_FACT_BYTES ||
       facts.length >= MAX_PROJECT_FACTS
@@ -221,6 +227,7 @@ export function buildProjectContextPacket(input: {
   ) {
     packet.documentEvidence.pop();
   }
+  packet.omittedFacts = eligibleFactCount - packet.confirmedProjectFacts.length;
   return packet;
 }
 
@@ -231,6 +238,9 @@ export function projectContextRequestPayload(
     return {};
   }
   return {
+    ...(packet.assistantContext
+      ? { project_assistant_context: packet.assistantContext }
+      : {}),
     project_context: {
       schema_version: packet.schemaVersion,
       context_origin: packet.contextOrigin,

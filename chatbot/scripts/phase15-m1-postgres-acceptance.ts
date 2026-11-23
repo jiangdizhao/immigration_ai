@@ -2171,6 +2171,326 @@ async function verifyAdmissionsMetadata(client: ReturnType<typeof postgres>) {
   );
 }
 
+async function verifyM2NewProjectChats(client: ReturnType<typeof postgres>) {
+  assert.equal(process.env.PHASE14_PROJECT_FACTS_ENABLED, "true");
+  assert.equal(process.env.PHASE13_PROJECT_CONTEXT_ENABLED, "true");
+  const { projectFoundationRepository: projects } = await import(
+    "../lib/db/project-foundation"
+  );
+  const { schoolApplicationService: school } = await import(
+    "../lib/school-applications/runtime"
+  );
+  const { schoolAdmissionsService: admissions } = await import(
+    "../lib/school-admissions/runtime"
+  );
+  const { student500Service: student } = await import(
+    "../lib/student-500/runtime"
+  );
+  const { student500PreparationService: preparation } = await import(
+    "../lib/student-500/preparation/runtime"
+  );
+  const { projectFactServices } = await import("../lib/project-facts/runtime");
+  const { resolveWorkspaceContext } = await import(
+    "../lib/workspace/context-resolver"
+  );
+  const { projectContextRequestPayload } = await import(
+    "../lib/projects/project-context"
+  );
+  const owner = randomUUID();
+  const other = randomUUID();
+  const op = () => `p15m2.${randomUUID()}`;
+  await client`insert into "User" (id, email, role) values (${owner}, ${`p15m2.${owner.slice(0, 12)}@test.invalid`}, 'user'), (${other}, ${`p15m2.${other.slice(0, 12)}@test.invalid`}, 'user')`;
+  const project = (
+    await projects.createProject({
+      actorUserId: owner,
+      operationId: op(),
+      displayName: "P15 M2 Synthetic",
+    })
+  ).project;
+  const revision = async () =>
+    (
+      await projects.authorizeProjectRead({
+        actorUserId: owner,
+        projectId: project.id,
+      })
+    ).revision;
+  const fact = await projectFactServices.facts.propose({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+    expectedProjectRevision: await revision(),
+    key: "study.synthetic_goal",
+    valueType: "string",
+    value: "Synthetic project goal",
+    originKind: "customer_stated",
+  });
+  const confirmed = await projectFactServices.facts.confirm({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+    expectedProjectRevision: await revision(),
+    assertionId: fact.id,
+    assertionVersion: fact.version,
+  });
+  await projectFactServices.facts.publish({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+    expectedProjectRevision: await revision(),
+    assertionId: fact.id,
+    assertionVersion: confirmed.version,
+    audience: "project",
+  });
+  await projectFactServices.facts.grantAIUse({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+    expectedProjectRevision: await revision(),
+    assertionId: fact.id,
+    assertionVersion: confirmed.version,
+    audience: "project",
+  });
+  const a = (
+    await school.create({
+      actorUserId: owner,
+      projectId: project.id,
+      operationId: op(),
+      institutionName: "Synthetic Northbridge",
+      courseTitle: "Synthetic Course A",
+      intakeLabel: "2027 intake",
+    })
+  ).application;
+  const b = (
+    await school.create({
+      actorUserId: owner,
+      projectId: project.id,
+      operationId: op(),
+      institutionName: "Synthetic Harbour",
+      courseTitle: "Synthetic Course B",
+      intakeLabel: "2028 intake",
+    })
+  ).application;
+  await admissions.createCase({
+    actorUserId: owner,
+    projectId: project.id,
+    applicationId: a.applicationId,
+    originKind: "school_application",
+    operationId: op(),
+  });
+  const visa = (
+    await student.create({
+      actorUserId: owner,
+      projectId: project.id,
+      context: { entryRoute: "no_school_application" },
+      operationId: op(),
+    })
+  ).application;
+  await preparation.createDraft({
+    actorUserId: owner,
+    projectId: project.id,
+    applicationId: visa.applicationId,
+    operationId: op(),
+  });
+  const first = await projects.createProjectChat({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+  });
+  const second = await projects.createProjectChat({
+    actorUserId: owner,
+    projectId: project.id,
+    operationId: op(),
+  });
+  for (const chat of [first, second]) {
+    const context = await resolveWorkspaceContext({
+      userId: owner,
+      actorType: "regular",
+      chatId: chat.chatId,
+      question: "What remains?",
+    });
+    assert.equal(context.scope.projectId, project.id);
+    assert.equal(context.history.messageCount, 0);
+    const payload = projectContextRequestPayload(
+      await context.refreshProjectContextBeforeProvider()
+    );
+    const encoded = JSON.stringify(payload);
+    assert.ok(
+      encoded.includes(a.applicationId) &&
+        encoded.includes(b.applicationId) &&
+        encoded.includes(visa.applicationId)
+    );
+    assert.ok(
+      encoded.includes("Synthetic Northbridge") &&
+        encoded.includes("Synthetic Harbour")
+    );
+    assert.ok(encoded.includes("Synthetic project goal"));
+  }
+  const forbidden = await resolveWorkspaceContext({
+    userId: other,
+    actorType: "regular",
+    chatId: first.chatId,
+    question: "What remains?",
+  });
+  assert.equal(forbidden.scope.projectId, null);
+  assert.equal(await forbidden.refreshProjectContextBeforeProvider(), null);
+  process.stdout.write(
+    `${JSON.stringify({ case: "M2 new Project Chat integration", status: "PASS", schoolApplications: 2, admissions: 1, student500: 1, preparationDrafts: 1, authorizedFacts: 1, newChats: 2, otherOwner: "no_context", syntheticWrites: true })}\n`
+  );
+}
+
+async function verifyM2ExistingChats(client: ReturnType<typeof postgres>) {
+  const { resolveWorkspaceContext } = await import(
+    "../lib/workspace/context-resolver"
+  );
+  const { projectContextRequestPayload } = await import(
+    "../lib/projects/project-context"
+  );
+  const [row] =
+    await client`select p.id as project, p."ownerUserId" as owner from "StudyJourneyProject" p join "User" u on u.id = p."ownerUserId" where u.email like 'p15m2.%@test.invalid' and p."displayName" = 'P15 M2 Synthetic' and exists(select 1 from "ProjectFactAssertion" f where f."projectId" = p.id) order by p."createdAt" desc limit 1`;
+  assert.ok(row);
+  const chats =
+    await client`select "chatId" as chat from "ProjectConversation" where "projectId" = ${row.project} and "createdByUserId" = ${row.owner} order by "createdAt"`;
+  assert.equal(chats.length, 2);
+  const options = client.options as unknown as {
+    debug: false | ((id: number, text: string, params: unknown[]) => void);
+  };
+  const prior = options.debug;
+  let statements = 0;
+  let exported = false;
+  try {
+    options.debug = () => {
+      statements += 1;
+    };
+    for (const chat of chats) {
+      const context = await resolveWorkspaceContext({
+        userId: row.owner,
+        actorType: "regular",
+        chatId: chat.chat,
+        question: "What remains?",
+      });
+      assert.equal(context.history.messageCount, 0);
+      const packet = await context.refreshProjectContextBeforeProvider();
+      assert.equal(packet?.assistantContext?.availability, "available");
+      assert.equal(packet?.assistantContext?.factContext.state, "available");
+      assert.equal(packet?.assistantContext?.factContext.omitted, 0);
+      assert.equal(
+        packet?.assistantContext?.matters.schoolApplications?.length,
+        2
+      );
+      assert.ok(
+        JSON.stringify(projectContextRequestPayload(packet)).includes(
+          "Synthetic project goal"
+        )
+      );
+      if (process.argv.includes("--m2-packet-export") && !exported) {
+        const path = `/tmp/phase15-m2-synthetic-packet-${randomUUID()}.json`;
+        await writeFile(
+          path,
+          JSON.stringify(projectContextRequestPayload(packet)),
+          { flag: "wx" }
+        );
+        process.stdout.write(
+          `${JSON.stringify({ syntheticPacketPath: path })}\n`
+        );
+        exported = true;
+      }
+    }
+  } finally {
+    options.debug = prior;
+  }
+  process.stdout.write(
+    `${JSON.stringify({ case: "M2 persisted Chat read", status: "PASS", chats: chats.length, sharedRuntimeStatements: statements, realChatVerified: true, schemaProbeStatements: "NOT_MEASURED" })}\n`
+  );
+}
+
+async function verifyM2ProjectContext(client: ReturnType<typeof postgres>) {
+  const { loadProjectStateForActor } = await import(
+    "../lib/workspace/project-state-server"
+  );
+  const { buildProjectAssistantContext } = await import(
+    "../lib/projects/project-assistant-context"
+  );
+  const { resolveProjectContext } = await import(
+    "../lib/projects/context-resolver"
+  );
+  const { refreshProjectAssistantContext } = await import(
+    "../lib/projects/project-assistant-refresh"
+  );
+  const rows =
+    await client`select p.id as project, p."ownerUserId" as owner, p."displayName" as label from "StudyJourneyProject" p join "User" u on u.id = p."ownerUserId" where u.email like 'p15a2perf.%@test.invalid' and p.status = 'active' order by p."createdAt"`;
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    const [chat] =
+      await client`select "chatId" from "ProjectConversation" where "projectId" = ${row.project} and "createdByUserId" = ${row.owner} limit 1`;
+    const options = client.options as unknown as {
+      debug: false | ((id: number, text: string, params: unknown[]) => void);
+    };
+    const previous = options.debug;
+    let statements = 0;
+    let reads = 0;
+    const timings: number[] = [];
+    const buildTimings: number[] = [];
+    const queryCounts: number[] = [];
+    let packetBytes = 0;
+    let schoolCount = 0;
+    let omissions: Record<string, number> = {};
+    try {
+      options.debug = () => {
+        statements += 1;
+      };
+      for (let i = 0; i < 4; i += 1) {
+        statements = 0;
+        const start = performance.now();
+        const result = await loadProjectStateForActor({
+          actorUserId: row.owner,
+          actorType: "regular",
+          projectId: row.project,
+        });
+        reads += 1;
+        assert.equal(result.kind, "ok");
+        if (result.kind !== "ok") {
+          throw new Error("state unavailable");
+        }
+        const buildStarted = performance.now();
+        const packet = buildProjectAssistantContext(result.state);
+        buildTimings.push(
+          Math.round((performance.now() - buildStarted) * 100) / 100
+        );
+        timings.push(Math.round((performance.now() - start) * 100) / 100);
+        queryCounts.push(statements);
+        packetBytes = Buffer.byteLength(JSON.stringify(packet));
+        omissions = packet.omissions;
+        schoolCount = packet.matters.schoolApplications?.length ?? 0;
+        assert.equal(packet.availability, "available");
+        assert.equal(packet.omissions.schoolApplications, 0);
+        assert.ok(packetBytes <= 24_000);
+      }
+    } finally {
+      options.debug = previous;
+    }
+    let realChatVerified = false;
+    if (chat?.chatId) {
+      const resolved = await resolveProjectContext({
+        actorUserId: row.owner,
+        chatId: chat.chatId,
+      });
+      const payload = await refreshProjectAssistantContext({
+        resolved,
+        actorUserId: row.owner,
+        actorType: "regular",
+        loadState: loadProjectStateForActor,
+      });
+      assert.equal(payload?.assistantContext?.availability, "available");
+      realChatVerified = true;
+    }
+    const sorted = [...timings].sort((a, b) => a - b);
+    const sortedBuild = [...buildTimings].sort((a, b) => a - b);
+    process.stdout.write(
+      `${JSON.stringify({ case: "M2 Project context read", fixture: row.label, schoolCount, packetBytes, omissions, stateReads: reads, sharedRuntimeStatements: queryCounts, medianMs: (sorted[1] + sorted[2]) / 2, maxMs: Math.max(...timings), contextBuildMedianMs: (sortedBuild[1] + sortedBuild[2]) / 2, contextBuildMaxMs: Math.max(...buildTimings), realChatVerified, schemaProbeStatements: "NOT_MEASURED" })}\n`
+    );
+  }
+}
+
 async function run() {
   let runtimeClose: (() => Promise<void>) | undefined;
   try {
@@ -2343,6 +2663,24 @@ async function run() {
         throw new Error("Runtime guard required");
       }
       await verifyClosedState();
+    }
+    if (process.argv.includes("--m2-write")) {
+      if (!process.argv.includes("--runtime-probe")) {
+        throw new Error("Runtime guard required");
+      }
+      await verifyM2NewProjectChats(verifiedClient);
+    }
+    if (process.argv.includes("--m2-chat-read")) {
+      if (!process.argv.includes("--runtime-probe")) {
+        throw new Error("Runtime guard required");
+      }
+      await verifyM2ExistingChats(verifiedClient);
+    }
+    if (process.argv.includes("--m2-read")) {
+      if (!process.argv.includes("--runtime-probe")) {
+        throw new Error("Runtime guard required");
+      }
+      await verifyM2ProjectContext(verifiedClient);
     }
     if (process.argv.includes("--a3-read")) {
       if (!process.argv.includes("--runtime-probe")) {

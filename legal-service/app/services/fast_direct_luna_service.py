@@ -9,7 +9,7 @@ from openai import OpenAI
 
 from app.core.config import get_settings
 from app.schemas.query import QueryRequest, QueryResponse
-from app.services.project_context import render_project_context_prompt_section
+from app.services.project_context import render_project_assistant_context_prompt_section, render_project_context_prompt_section
 from app.schemas.source import CitationOut
 from app.services.agent_observability_service import AbsoluteTurnDeadline
 from app.services.customer_document_context import (
@@ -465,6 +465,9 @@ class FastDirectLunaService:
         project_context = render_project_context_prompt_section(payload.project_context)
         if project_context:
             lines.extend(["", project_context])
+        assistant_context = render_project_assistant_context_prompt_section(payload.project_assistant_context)
+        if assistant_context:
+            lines.extend(["", assistant_context])
         return "\n".join(lines)
 
     @staticmethod

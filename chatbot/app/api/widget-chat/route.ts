@@ -1018,6 +1018,8 @@ async function handleWidgetRequest(request: Request, requestId: string) {
      */
     const workspaceContext = await resolveWorkspaceContext({
       userId: frontendUserId,
+      actorType: session.user.type,
+      question,
       chatId: ownedConversation?.chatId ?? null,
       matterId: effectiveMatterId,
       clientPolicySlug: policySlug,

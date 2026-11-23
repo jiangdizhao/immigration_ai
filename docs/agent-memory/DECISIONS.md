@@ -1,3 +1,11 @@
+<!-- BEGIN D_P15_003_2026_11_21 -->
+## D-P15-003 — Implement a Project-aware assistant with native agentic research
+
+**Date:** 2026-11-21 (Australia/Sydney). **Owner authorization:** `PHASE15_M2_PROJECT_AWARE_NATIVE_AGENTIC_RESEARCH`. Functional Project Agent capability is the primary development objective. Retain the existing native agentic Web Search and the established Fast, Default and Premium serving/evidence contracts. The previously proposed independent public-index-first design is not selected as the M2 primary architecture and remains historical context. Existing Project/application authorization, Project Document trust and legal evidence controls remain in force. M2 business operations are read-only; development and tests use synthetic data.
+
+The owner accepts, for this synthetic development milestone, that provider-hosted native search lacks a proven pre-execution query-isolation guarantee. Existing search diagnostics remain; this is not an approval to process real customer data or deploy. This decision authorizes implementation, not M2 acceptance, production feature activation or release. `LIVE_PRODUCTION_NO_GO` remains. No M3 work is authorized.
+<!-- END D_P15_003_2026_11_21 -->
+
 <!-- BEGIN D_P15_002_2026_11_21 -->
 ## D-P15-002 — Accept Phase 15 M1 engineering with limitations
 

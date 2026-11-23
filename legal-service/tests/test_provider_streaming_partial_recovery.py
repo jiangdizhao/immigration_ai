@@ -734,6 +734,272 @@ def test_premium_call_uses_stream_accumulator_for_partial_timeout(monkeypatch) -
     assert responses.calls[0]["stream"] is True
 
 
+def test_premium_uses_completed_cited_segment_without_terminal_call(monkeypatch) -> None:
+    service = PremiumDirectAnswerService()
+    service.minimum_fallback_budget_ms = 100_000
+    text = (
+        "The official guidance explains the requirements applicants should review before lodging. "
+        "It describes the relevant supporting material and says applicants should check that their "
+        "documents match the current application details."
+    )
+    uncited_text = (
+        "Another completed segment describes the general background but has no citation attached. "
+        "It must not be selected simply because a citation appears elsewhere in the response."
+    )
+    url = "https://www.example.gov.au/official-guidance"
+    stream = FakeStream(
+        [
+            SimpleNamespace(type="response.created", response=SimpleNamespace(id="premium-partial")),
+            SimpleNamespace(
+                type="response.web_search_call.in_progress",
+                item_id="search-partial",
+                action=SimpleNamespace(type="search", queries=["official guidance"]),
+            ),
+            SimpleNamespace(
+                type="response.web_search_call.completed",
+                item_id="search-partial",
+                action=SimpleNamespace(type="search", queries=["official guidance"]),
+            ),
+            SimpleNamespace(
+                type="response.output_item.done",
+                output_index=1,
+                item=SimpleNamespace(
+                    type="web_search_call",
+                    id="search-partial",
+                    status="completed",
+                    action=SimpleNamespace(
+                        type="search",
+                        queries=["official guidance"],
+                        sources=[{"url": url, "title": "Official guidance"}],
+                    ),
+                ),
+            ),
+            SimpleNamespace(type="response.output_text.delta", delta=text),
+            SimpleNamespace(
+                type="response.output_text.done",
+                output_index=1,
+                content_index=0,
+                text=uncited_text,
+            ),
+            SimpleNamespace(
+                type="response.output_text.done",
+                output_index=3,
+                content_index=1,
+                text=text,
+            ),
+            SimpleNamespace(
+                type="response.output_text.annotation.added",
+                output_index=3,
+                content_index=1,
+                annotation=SimpleNamespace(
+                    type="url_citation",
+                    url=url,
+                    title="Official guidance",
+                    start_index=0,
+                    end_index=80,
+                ),
+            ),
+            SimpleNamespace(
+                type="response.output_text.annotation.added",
+                output_index=3,
+                content_index=1,
+                annotation=SimpleNamespace(
+                    type="url_citation",
+                    url=url,
+                    title="Official guidance",
+                    start_index=0,
+                    end_index=80,
+                ),
+            ),
+        ],
+        error=TimeoutError("research stream interrupted after completed text segment"),
+    )
+    responses = FakeResponses(stream)
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda **_kwargs: SimpleNamespace(responses=responses),
+    )
+
+    response = service.answer(
+        payload=QueryRequest(question="What does the official guidance say?"),
+        original_question="What does the official guidance say?",
+        effective_question="What does the official guidance say?",
+        response_language="en",
+        matter_id=None,
+    )
+
+    debug = response.retrieval_debug["premium_direct_answer"]
+    assert "Partial answer" in response.answer
+    assert text in response.answer
+    assert uncited_text not in response.answer
+    assert response.research_status == "incomplete"
+    assert debug["completion_status"] == "partial_timeout"
+    assert debug["primary_research_stage"]["provider_status"] == "timeout"
+    assert debug["primary_research_stage"]["citation_annotation_count"] == 1
+    assert debug["terminal_synthesis_stage"]["invoked"] is False
+    assert debug["fallback_research_stage"]["skip_reason"] == "usable_completed_cited_partial_answer"
+    assert len(response.compact_sources) == 1
+    assert len(responses.calls) == 1  # No fallback or terminal provider call was started.
+
+
+def test_stream_annotation_event_identity_is_preserved_and_duplicate_is_counted_once(monkeypatch) -> None:
+    service = PremiumDirectAnswerService()
+    url = "https://www.example.gov.au/official-guidance"
+    first_text = "First completed output segment."
+    second_text = "Second completed output segment."
+    annotation = SimpleNamespace(
+        type="url_citation",
+        url=url,
+        start_index=0,
+        end_index=12,
+    )
+    stream = FakeStream(
+        [
+            SimpleNamespace(type="response.created", response=SimpleNamespace(id="identity-check")),
+            SimpleNamespace(
+                type="response.output_text.done",
+                output_index=4,
+                content_index=0,
+                text=first_text,
+            ),
+            SimpleNamespace(
+                type="response.output_text.done",
+                output_index=5,
+                content_index=2,
+                text=second_text,
+            ),
+            SimpleNamespace(
+                type="response.output_text.annotation.added",
+                output_index=5,
+                content_index=2,
+                annotation=annotation,
+            ),
+            SimpleNamespace(
+                type="response.output_text.annotation.added",
+                output_index=5,
+                content_index=2,
+                annotation=annotation,
+            ),
+            SimpleNamespace(
+                type="response.output_text.annotation.added",
+                output_index=5,
+                content_index=2,
+                annotation=SimpleNamespace(
+                    type="url_citation",
+                    url=url,
+                    start_index=2,
+                    end_index=14,
+                    output_index=4,
+                    content_index=0,
+                ),
+            ),
+        ],
+        error=TimeoutError("interrupted after citation event"),
+    )
+    responses = FakeResponses(stream)
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda **_kwargs: SimpleNamespace(responses=responses),
+    )
+
+    _text, _sources, debug = service._call_model(
+        model="gpt-5.6-sol",
+        reasoning_effort="medium",
+        timeout_seconds=1,
+        max_retries=0,
+        model_input="question",
+    )
+
+    segments = debug["_completed_text_segments_internal"]
+    annotations = debug["_citation_annotations_internal"]
+    assert [(item["output_index"], item["content_index"]) for item in segments] == [
+        (4, 0),
+        (5, 2),
+    ]
+    assert len(annotations) == 2
+    inherited = next(item for item in annotations if item["start_index"] == 0)
+    assert inherited["output_index"] == 5
+    assert inherited["content_index"] == 2
+    assert "_segment_identity_conflict" not in inherited
+    conflicting = next(item for item in annotations if item["start_index"] == 2)
+    assert conflicting["output_index"] == 4
+    assert conflicting["content_index"] == 0
+    assert conflicting["_segment_identity_conflict"] is True
+    assert debug["citation_annotation_count"] == 2
+    assert PremiumDirectAnswerService._usable_partial_answer(
+        completed_text_segments=[{
+            "text": ("A complete paragraph whose citation event identity conflicts. " * 3),
+            "output_index": 4,
+            "content_index": 0,
+        }],
+        citation_annotations=[conflicting],
+        verified_sources=[{"url": url}],
+    ) is None
+
+
+def test_search_action_and_query_counts_deduplicate_sdk_lifecycle_events(monkeypatch) -> None:
+    service = PremiumDirectAnswerService()
+    service.max_tool_calls = 4
+    action_queries = [
+        ["q0", "q1"],
+        ["q2", "q3"],
+        ["q4", "q5"],
+        ["q6", "q7"],
+        ["q8", "q9", "q10"],
+    ]
+    events: list[object] = []
+    for index, queries in enumerate(action_queries):
+        action_id = f"search-{index}"
+        action = SimpleNamespace(type="search", queries=queries)
+        events.extend([
+            SimpleNamespace(
+                type="response.web_search_call.in_progress",
+                item_id=action_id,
+                action=action,
+            ),
+            SimpleNamespace(
+                type="response.web_search_call.completed",
+                item_id=action_id,
+                action=action,
+            ),
+            SimpleNamespace(
+                type="response.output_item.done",
+                item=SimpleNamespace(
+                    type="web_search_call",
+                    id=action_id,
+                    status="completed",
+                    action=action,
+                ),
+            ),
+        ])
+    events.append(SimpleNamespace(
+        type="response.completed",
+        response=SimpleNamespace(id="metrics-response", output=[]),
+    ))
+    responses = FakeResponses(FakeStream(events))
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda **_kwargs: SimpleNamespace(responses=responses),
+    )
+
+    _text, _sources, debug = service._call_model(
+        model="gpt-5.6-sol",
+        reasoning_effort="medium",
+        timeout_seconds=10,
+        max_retries=0,
+        model_input="question",
+    )
+
+    request = responses.calls[0]
+    assert request["max_tool_calls"] == 4
+    assert debug["web_action_search_count"] == 5
+    assert debug["web_search_query_count"] == 11
+    assert debug["stream_completed"] is True
+
+
 def test_premium_partial_research_uses_context_only_terminal_recovery(monkeypatch) -> None:
     service = PremiumDirectAnswerService()
     service.minimum_fallback_budget_ms = 100_000

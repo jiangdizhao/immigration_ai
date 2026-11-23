@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  CheckCircle2,
-  CircleDashed,
-  MessageSquarePlus,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronRight, MessageSquarePlus } from "lucide-react";
 import type { ProjectConversationStageKey } from "@/lib/projects/stage-keys";
 import type {
   ProjectStage,
@@ -23,37 +18,16 @@ const STAGE_LABEL_KEYS = {
   student500: "stageStudent500",
 } as const satisfies Record<ProjectStageKey, keyof NavCopy>;
 
-const STATUS_LABEL_KEYS = {
-  blocked: "statusBlocked",
-  in_progress: "statusInProgress",
-  needs_information: "statusNeedsInformation",
-  not_started: "statusNotStarted",
-  unknown: "statusUnknown",
-} as const;
-
-function StageIcon({ stage }: { stage: ProjectStage }) {
-  if (stage.status === "needs_information") {
-    return (
-      <TriangleAlert aria-hidden="true" className="size-3.5 text-amber-700" />
-    );
-  }
-  if (stage.status === "in_progress") {
-    return (
-      <CheckCircle2 aria-hidden="true" className="size-3.5 text-blue-800" />
-    );
-  }
-  return (
-    <CircleDashed aria-hidden="true" className="size-3.5 text-slate-500" />
-  );
+function StageIcon() {
+  return <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />;
 }
 
 /**
  * Phase 13 M9-A Project navigation rail.
  *
- * The rail is navigation only: it lists the stages the server said this actor may use,
- * their real status, and the entry point for a step conversation. It cannot widen
- * access — every stage behind it re-checks authorization — and it never shows a
- * completion percentage or an invented step list.
+ * The rail is navigation only. Application-specific progress and record counts come
+ * from the M1 Project Journey in the main canvas, so this older workspace summary
+ * cannot present a competing progress story. Every destination still re-checks access.
  */
 export function ProjectWorkspaceNav({
   activeStageChatKey,
@@ -107,40 +81,18 @@ export function ProjectWorkspaceNav({
                   onClick={() => onSelectView(stage.view)}
                   type="button"
                 >
-                  <StageIcon stage={stage} />
+                  <StageIcon />
                   <span className="min-w-0 flex-1 truncate">
                     {copy[STAGE_LABEL_KEYS[stage.key]]}
                   </span>
-                  {stage.count === null ? null : (
-                    <span
-                      className={
-                        selected
-                          ? "rounded-full bg-white/20 px-1.5 text-[10px]"
-                          : "rounded-full bg-slate-200 px-1.5 text-[10px] text-slate-700"
-                      }
-                      data-testid={`project-nav-stage-count-${stage.key}`}
-                    >
-                      {stage.count}
-                    </span>
-                  )}
                 </button>
-                <p
-                  className={
-                    selected
-                      ? "mt-0.5 pl-5 text-[10px] text-slate-200"
-                      : "mt-0.5 pl-5 text-[10px] text-slate-500"
-                  }
-                  data-testid={`project-nav-stage-status-${stage.key}`}
-                >
-                  {copy[STATUS_LABEL_KEYS[stage.status]]}
-                </p>
                 {chatStageKey ? (
                   <button
                     aria-pressed={activeStageChatKey === chatStageKey}
                     className={
                       selected
-                        ? "mt-1 ml-5 inline-flex items-center gap-1 text-[10px] font-semibold text-cyan-100 underline disabled:opacity-60"
-                        : "mt-1 ml-5 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-900 underline disabled:opacity-60"
+                        ? "mt-1 ml-5 inline-flex min-h-8 items-center gap-1 text-[10px] font-semibold text-cyan-100 underline disabled:opacity-60"
+                        : "mt-1 ml-5 inline-flex min-h-8 items-center gap-1 text-[10px] font-semibold text-blue-900 underline disabled:opacity-60"
                     }
                     data-testid={`project-nav-stage-chat-${stage.key}`}
                     disabled={!stage.conversation.available || busy}

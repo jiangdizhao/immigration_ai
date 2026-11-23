@@ -1,4 +1,118 @@
 import type { SiteLocale } from "./site-locale";
+import type {
+  ProjectJourneyRouteKind,
+  ProjectJourneySourceKey,
+} from "./workspace/project-journey";
+import type {
+  ProjectStateCapabilityState,
+  ProjectStateProgressState,
+} from "./workspace/project-state";
+
+type ProjectJourneyCopy = {
+  title: string;
+  subtitle: string;
+  refresh: string;
+  loading: string;
+  unauthorized: string;
+  notFound: string;
+  unavailable: string;
+  invalidResponse: string;
+  networkError: string;
+  closedTitle: string;
+  closedMessage: string;
+  summaryKnown: (count: number) => string;
+  summaryIncomplete: (count: number) => string;
+  summaryUnknown: (count: number) => string;
+  summaryUnavailable: (count: number) => string;
+  groups: {
+    schools: string;
+    admissions: string;
+    student500: string;
+    details: string;
+    sources: string;
+    routes: string;
+  };
+  emptyRecords: string;
+  admissionsShownWithSchools: string;
+  capability: Record<ProjectStateCapabilityState, string>;
+  status: Record<ProjectStateProgressState, string>;
+  route: Record<ProjectJourneyRouteKind, string>;
+  sourceNames: Record<ProjectJourneySourceKey, string>;
+  sourceUnavailable: string;
+  unknownSchool: string;
+  unknownCourse: string;
+  unknownIntake: string;
+  selectHint: string;
+  responsibilityTitle: string;
+  responsibility: Record<
+    "customer" | "external_institution" | "unknown",
+    string
+  >;
+  updatedAt: string;
+  revision: string;
+  historyTruncated: string;
+  sourceProvenance: string;
+  relatedRecords: string;
+  relationship: {
+    schoolAdmissions: string;
+    studentSchool: string;
+    studentAdmissions: string;
+    recordedRoute: string;
+    linkUnavailable: string;
+    linkNotRecorded: string;
+    studentNoSchool: string;
+    studentLinkUnknown: string;
+    studentLinkUnavailable: string;
+  };
+  actionsTitle: string;
+  actionLabels: Record<string, string>;
+  executableAction: string;
+  advisoryAction: string;
+  actionSectionUnavailable: string;
+  openSection: string;
+  noSupportedAction: string;
+  genericReason: string;
+  reasonLabels: Record<string, string>;
+  technicalDetails: string;
+  missingRequirements: string;
+  noMissingRequirements: string;
+  requirementsStatus: Record<
+    "missing" | "conflicting" | "unknown" | "unverified",
+    string
+  >;
+  packageNotRecorded: string;
+  packageRecorded: (version: number) => string;
+  packageUsable: string;
+  packageStale: string;
+  recordedOutcomes: string;
+  offer: string;
+  coe: string;
+  independentlyVerified: string;
+  notIndependentlyVerified: string;
+  evidenceAttached: string;
+  evidenceNotRecorded: string;
+  superseded: string;
+  outcomeStatusNotInterpreted: string;
+  receiptUnrecorded: string;
+  externalActionsReported: (count: number) => string;
+  handoffLabel: string;
+  handoffState: Record<
+    "READY" | "NOT_READY" | "UNKNOWN" | "NOT_EVALUATED" | "NOT_APPLICABLE",
+    string
+  >;
+  handoffIsNotReceipt: string;
+  sourceNotVerified: string;
+  studentPreparation: string;
+  preparationState: Record<
+    "available" | "disabled" | "restricted" | "unavailable" | "not_recorded",
+    string
+  >;
+  preparationArtifacts: (drafts: number, snapshots: number) => string;
+  preparationNotApproval: string;
+  projectPurposeUnknown: string;
+  closedActionNotice: string;
+  noSelectedNode: string;
+};
 
 export type WorkspaceCopy = {
   identity: { title: string; subtitle: string };
@@ -182,6 +296,7 @@ export type WorkspaceCopy = {
     projectHomeStudent500Restricted: string;
     projectHomeLimits: string;
     projectHomeChatsHint: string;
+    projectJourney: ProjectJourneyCopy;
     returnToProjectHome: string;
     projectStatusActive: string;
     projectStatusClosed: string;
@@ -686,8 +801,8 @@ export type WorkspaceCopy = {
     escalationTitle: string;
     escalationDescription: string;
     requestedFact: string;
+    inputLabel: string;
     placeholder: string;
-    composerHelp: string;
     send: string;
   };
   matter: {
@@ -1110,6 +1225,184 @@ const zh: WorkspaceCopy = {
       "项目文件、共享事实与分阶段进度尚未开放；此处不会显示模拟进度、Offer、CoE 或律师批准。",
     projectHomeChatsHint:
       "您的项目对话列在左侧导航中。选择一条即可继续，或新建项目对话。",
+    projectJourney: {
+      title: "项目进度与下一步",
+      subtitle:
+        "此路线图仅根据当前已授权并可读取的项目记录显示。未读取到的区域会明确标出。",
+      refresh: "刷新进度",
+      loading: "正在读取项目进度…",
+      unauthorized: "无法验证您访问此项目的权限。请重新登录后重试。",
+      notFound: "项目不存在或当前账户无权访问。",
+      unavailable: "项目进度暂时无法读取。",
+      invalidResponse: "项目进度返回的数据不完整或版本不受支持，暂不显示。",
+      networkError: "无法连接项目进度服务。请检查连接后重试。",
+      closedTitle: "项目已关闭",
+      closedMessage: "以下内容仅供查看；该项目当前没有可执行操作。",
+      summaryKnown: (count) => `已读取记录 ${count} 条`,
+      summaryIncomplete: (count) => `已知未完成工作 ${count} 项`,
+      summaryUnknown: (count) => `进度未知 ${count} 项`,
+      summaryUnavailable: (count) => `不可用或受限区域 ${count} 个`,
+      groups: {
+        schools: "学校申请（可并行）",
+        admissions: "入学准备",
+        student500: "学生签证 500 准备",
+        details: "所选事项详情",
+        sources: "项目数据可用性",
+        routes: "已记录的路径",
+      },
+      emptyRecords: "当前可读取的区域中没有已记录的事项。",
+      admissionsShownWithSchools:
+        "已关联的入学准备记录显示在对应的学校申请下方。",
+      capability: {
+        available: "可读取",
+        disabled: "此功能未启用",
+        restricted: "当前账户无权查看",
+        unavailable: "当前无法读取",
+        unsupported: "当前版本不支持",
+      },
+      status: {
+        not_started: "尚未开始",
+        in_progress: "进行中",
+        needs_information: "需要补充信息",
+        waiting: "等待外部回复",
+        blocked: "受阻",
+        completed: "已记录完成",
+        not_applicable: "不适用",
+        unknown: "进度未知",
+        archived: "已归档",
+      },
+      route: {
+        no_school_application: "不需要学校申请的签证路径",
+        existing_offer: "记录为已有 Offer 路径",
+        existing_coe: "记录为已有 CoE 路径",
+        school_application_in_progress: "记录为学校申请进行中",
+        claimed_exception: "记录为例外声明（未核实）",
+        other_recorded_route: "已记录其他路径",
+      },
+      sourceNames: {
+        schoolApplications: "学校申请记录",
+        schoolAdmissions: "入学准备记录",
+        student500: "学生签证 500 申请记录",
+        student500Preparation: "学生签证准备材料",
+        projectFacts: "项目共享事实",
+        projectDocuments: "项目文件",
+        submissionPackages: "提交材料包",
+        serviceEngagements: "服务范围记录",
+      },
+      sourceUnavailable: "此区域的记录无法读取，因此不会显示为没有事项。",
+      unknownSchool: "学校名称未记录",
+      unknownCourse: "课程未记录",
+      unknownIntake: "入学时间未记录",
+      selectHint: "选择一项查看状态、已知关系和下一步。",
+      responsibilityTitle: "当前由谁处理",
+      responsibility: {
+        customer: "您需要提供或确认信息",
+        external_institution: "等待学校或机构处理",
+        unknown: "负责人尚未记录",
+      },
+      updatedAt: "最近记录更新",
+      revision: "记录版本",
+      historyTruncated: "这里只显示近期历史；更早的事件未包含在此视图中。",
+      sourceProvenance: "状态来自已授权的业务记录。",
+      relatedRecords: "已记录的关联关系",
+      relationship: {
+        schoolAdmissions: "此入学准备记录关联到此学校申请。",
+        studentSchool: "此学生签证准备记录关联到此学校申请。",
+        studentAdmissions: "此学生签证准备记录关联到此入学准备记录。",
+        recordedRoute: "此路径来源已记录在对应事项中。",
+        linkUnavailable: "关联的学校申请当前无法读取；这不表示该申请不存在。",
+        linkNotRecorded: "没有记录与学校申请的关联。",
+        studentNoSchool: "记录的路径不需要学校申请。",
+        studentLinkUnknown: "学校或入学准备关联尚未确认。",
+        studentLinkUnavailable:
+          "关联记录当前无法读取；此处不会将其显示为不存在。",
+      },
+      actionsTitle: "可采取的下一步",
+      actionLabels: {
+        select_intake: "选择入学时间",
+        add_application_reference: "补充学校申请资料",
+        review_school_source_status: "查看学校资料来源状态",
+        rebuild_preparation_package: "更新准备材料包",
+        open_admissions_workflow: "查看入学准备流程",
+        complete_application_details: "补充申请详情",
+        bind_source_evidence: "关联资料来源",
+        build_preparation_package: "生成准备材料包",
+        select_service_mode: "查看服务方式",
+        record_offer_or_exception: "记录 Offer 或例外信息",
+        record_coe_evidence: "记录 CoE 资料",
+        provide_student500_information: "补充学生签证信息",
+        record_study_evidence_route: "记录学习材料路径",
+        student500_source_verification_incomplete: "查看来源核验状态",
+        review_application_information: "查看申请信息",
+      },
+      executableAction: "可在现有业务页面继续处理。",
+      advisoryAction: "此项为提示；具体处理方式尚未确认。",
+      actionSectionUnavailable: "此步骤对应的业务页面当前不可用。",
+      openSection: "打开相关页面",
+      noSupportedAction: "当前没有可从此视图打开的下一步操作。",
+      genericReason: "此事项需要查看相关业务记录以了解具体原因。",
+      reasonLabels: {
+        intakeNotSelected: "尚未选择入学时间。",
+        referencesMissing: "尚未添加学校申请所需资料。",
+        sourceNotVerified: "学校或签证来源尚未完成独立核验。",
+        packageUnusable: "准备材料包不可用或需要更新。",
+        admissionsCaseMissing: "尚未记录对应的入学准备事项。",
+        studentRouteMissing: "尚未记录学习材料路径。",
+        studentSourceNotVerified: "学生签证材料来源尚未完成核验。",
+        linkedSchoolUnavailable: "关联的学校申请目前无法读取。",
+        routeNotApplicable: "此路径不需要学校申请。",
+      },
+      technicalDetails: "查看技术详情",
+      missingRequirements: "需要留意的事项",
+      noMissingRequirements: "此记录没有标记需要补充的信息。",
+      requirementsStatus: {
+        missing: "缺少",
+        conflicting: "存在冲突",
+        unknown: "尚未确认",
+        unverified: "未核实",
+      },
+      packageNotRecorded: "尚未记录准备材料包。",
+      packageRecorded: (version) =>
+        `已记录准备材料包，版本 ${version}。这本身不代表申请已完成。`,
+      packageUsable: "当前记录未标记此材料包过期。",
+      packageStale: "此材料包已标记为过期或不可用。",
+      recordedOutcomes: "已记录的 Offer / CoE 信息",
+      offer: "Offer",
+      coe: "CoE",
+      independentlyVerified: "记录显示已独立核验",
+      notIndependentlyVerified: "尚未独立核验",
+      evidenceAttached: "已关联资料",
+      evidenceNotRecorded: "未记录资料凭证",
+      superseded: "已被后续记录取代，不作为当前结果",
+      outcomeStatusNotInterpreted: "记录了状态；请在入学页面查看来源详情。",
+      receiptUnrecorded: "尚未记录学校收件凭证。",
+      externalActionsReported: (count) =>
+        `客户报告的外部操作记录 ${count} 条；这些记录尚未独立核实。`,
+      handoffLabel: "服务交接状态",
+      handoffState: {
+        READY: "交接条件显示为已准备",
+        NOT_READY: "交接条件尚未满足",
+        UNKNOWN: "交接状态未知",
+        NOT_EVALUATED: "尚未评估交接条件",
+        NOT_APPLICABLE: "此服务方式不适用交接",
+      },
+      handoffIsNotReceipt: "交接状态不代表学校已收到申请。",
+      sourceNotVerified: "来源未独立核验",
+      studentPreparation: "学生签证准备材料",
+      preparationState: {
+        available: "可读取",
+        disabled: "准备功能未启用",
+        restricted: "当前账户无权查看",
+        unavailable: "准备材料暂时无法读取",
+        not_recorded: "尚无准备材料记录",
+      },
+      preparationArtifacts: (drafts, snapshots) =>
+        `记录了 ${drafts} 份草稿和 ${snapshots} 份快照。`,
+      preparationNotApproval: "这些准备材料不表示申请已递交或签证已获批准。",
+      projectPurposeUnknown: "尚未记录项目目的。",
+      closedActionNotice: "项目已关闭，当前不能发起新的业务处理。",
+      noSelectedNode: "选择路线图中的一项查看详情。",
+    },
     returnToProjectHome: "返回项目主页",
     projectStatusActive: "进行中",
     projectStatusClosed: "已关闭",
@@ -1918,9 +2211,8 @@ const zh: WorkspaceCopy = {
     escalationTitle: "建议咨询律师",
     escalationDescription: "此事项可能涉及期限、材料或个案事实。",
     requestedFact: "待补充信息",
-    placeholder: "输入问题。按 Enter 换行，再点击发送。",
-    composerHelp:
-      "按 Enter 换行，点击发送提交。仅供一般信息参考，不构成法律意见。",
+    inputLabel: "输入消息",
+    placeholder: "输入消息…",
     send: "发送",
   },
   matter: {
@@ -2489,6 +2781,213 @@ const en: WorkspaceCopy = {
       "Project documents, shared facts and staged progress are not available yet. No simulated progress, Offer, CoE or lawyer approval is shown here.",
     projectHomeChatsHint:
       "Your Project Chats are listed in the left navigation. Open one to continue, or create a new Project Chat.",
+    projectJourney: {
+      title: "Project progress and next steps",
+      subtitle:
+        "This journey reflects authorized Project records that are currently readable. Areas that could not be read stay visible as unavailable.",
+      refresh: "Refresh progress",
+      loading: "Loading Project progress…",
+      unauthorized:
+        "We could not verify your access to this Project. Sign in again and retry.",
+      notFound: "This Project was not found or your account cannot access it.",
+      unavailable: "Project progress is temporarily unavailable.",
+      invalidResponse:
+        "The Project progress response is incomplete or uses an unsupported version, so it is not shown.",
+      networkError:
+        "The Project progress service could not be reached. Check your connection and retry.",
+      closedTitle: "Project closed",
+      closedMessage:
+        "The information below is read-only. This Project has no current actions to take.",
+      summaryKnown: (count) => `Known records: ${count}`,
+      summaryIncomplete: (count) => `Known unfinished work: ${count}`,
+      summaryUnknown: (count) => `Unknown progress: ${count}`,
+      summaryUnavailable: (count) => `Unavailable or limited areas: ${count}`,
+      groups: {
+        schools: "School Applications · parallel work",
+        admissions: "Admissions preparation",
+        student500: "Student 500 preparation",
+        details: "Selected item details",
+        sources: "Project data availability",
+        routes: "Recorded route",
+      },
+      emptyRecords: "No records are currently available in readable areas.",
+      admissionsShownWithSchools:
+        "Linked Admissions cases appear under their related School Applications.",
+      capability: {
+        available: "Readable",
+        disabled: "Feature is disabled",
+        restricted: "Not available to this account",
+        unavailable: "Temporarily unavailable",
+        unsupported: "Not supported by this version",
+      },
+      status: {
+        not_started: "Not started",
+        in_progress: "In progress",
+        needs_information: "Needs information",
+        waiting: "Waiting for an external response",
+        blocked: "Blocked",
+        completed: "Recorded as completed",
+        not_applicable: "Not applicable",
+        unknown: "Progress unknown",
+        archived: "Archived",
+      },
+      route: {
+        no_school_application: "Visa route without a School Application",
+        existing_offer: "Recorded as an existing Offer route",
+        existing_coe: "Recorded as an existing CoE route",
+        school_application_in_progress:
+          "Recorded as a School Application in progress",
+        claimed_exception: "Recorded exception claim · not verified",
+        other_recorded_route: "Other recorded route",
+      },
+      sourceNames: {
+        schoolApplications: "School Application records",
+        schoolAdmissions: "Admissions records",
+        student500: "Student 500 Application records",
+        student500Preparation: "Student 500 preparation materials",
+        projectFacts: "Shared Project facts",
+        projectDocuments: "Project documents",
+        submissionPackages: "Submission packages",
+        serviceEngagements: "Service scope records",
+      },
+      sourceUnavailable:
+        "These records could not be read, so this area is not shown as empty.",
+      unknownSchool: "School not recorded",
+      unknownCourse: "Course not recorded",
+      unknownIntake: "Intake not recorded",
+      selectHint:
+        "Select an item to see its status, known links and next step.",
+      responsibilityTitle: "Who acts next",
+      responsibility: {
+        customer: "You need to provide or confirm information",
+        external_institution: "Waiting for the school or institution",
+        unknown: "The responsible person is not recorded",
+      },
+      updatedAt: "Last recorded update",
+      revision: "Record revision",
+      historyTruncated:
+        "Only recent history is shown here; earlier events are not included in this view.",
+      sourceProvenance: "Status comes from authorized business records.",
+      relatedRecords: "Recorded relationships",
+      relationship: {
+        schoolAdmissions:
+          "This Admissions case is linked to this School Application.",
+        studentSchool:
+          "This Student 500 preparation is linked to this School Application.",
+        studentAdmissions:
+          "This Student 500 preparation is linked to this Admissions case.",
+        recordedRoute: "This route was recorded on the related matter.",
+        linkUnavailable:
+          "The linked School Application cannot currently be read; this does not mean it is absent.",
+        linkNotRecorded: "No School Application link is recorded.",
+        studentNoSchool:
+          "The recorded route does not require a School Application.",
+        studentLinkUnknown:
+          "The School or Admissions relationship has not been established.",
+        studentLinkUnavailable:
+          "A linked record cannot currently be read; it is not shown as absent.",
+      },
+      actionsTitle: "Useful next step",
+      actionLabels: {
+        select_intake: "Select an intake",
+        add_application_reference: "Add School Application details",
+        review_school_source_status: "Review school source status",
+        rebuild_preparation_package: "Refresh the preparation package",
+        open_admissions_workflow: "Review Admissions preparation",
+        complete_application_details: "Complete application details",
+        bind_source_evidence: "Link supporting evidence",
+        build_preparation_package: "Build a preparation package",
+        select_service_mode: "Review the service mode",
+        record_offer_or_exception: "Record Offer or exception information",
+        record_coe_evidence: "Record CoE evidence",
+        provide_student500_information: "Add Student 500 information",
+        record_study_evidence_route: "Record the study evidence route",
+        student500_source_verification_incomplete: "Review source verification",
+        review_application_information: "Review application information",
+      },
+      executableAction: "Continue in the existing business workspace.",
+      advisoryAction:
+        "This is guidance; the available handling has not been established.",
+      actionSectionUnavailable:
+        "The workspace for this step is not currently available.",
+      openSection: "Open related section",
+      noSupportedAction:
+        "There is no supported next action to open from this view.",
+      genericReason:
+        "Review the related business record to understand this item.",
+      reasonLabels: {
+        intakeNotSelected: "An intake has not been selected.",
+        referencesMissing: "School Application details have not been added.",
+        sourceNotVerified:
+          "The school or visa source has not been independently verified.",
+        packageUnusable:
+          "The preparation package is unavailable or needs refreshing.",
+        admissionsCaseMissing:
+          "An Admissions preparation case has not been recorded.",
+        studentRouteMissing: "The study evidence route has not been recorded.",
+        studentSourceNotVerified:
+          "The Student 500 source has not been verified.",
+        linkedSchoolUnavailable:
+          "The linked School Application is currently unavailable.",
+        routeNotApplicable:
+          "A School Application does not apply to this recorded route.",
+      },
+      technicalDetails: "Technical details",
+      missingRequirements: "Items to review",
+      noMissingRequirements:
+        "No additional information is marked as missing in this record.",
+      requirementsStatus: {
+        missing: "Missing",
+        conflicting: "Conflicting",
+        unknown: "Not established",
+        unverified: "Unverified",
+      },
+      packageNotRecorded: "No preparation package is recorded.",
+      packageRecorded: (version) =>
+        `Preparation package version ${version} is recorded. This alone does not mean the application is complete.`,
+      packageUsable: "This package is not currently marked as stale.",
+      packageStale: "This package is marked stale or unusable.",
+      recordedOutcomes: "Recorded Offer / CoE information",
+      offer: "Offer",
+      coe: "CoE",
+      independentlyVerified: "Marked independently verified in the record",
+      notIndependentlyVerified: "Not independently verified",
+      evidenceAttached: "Evidence is attached",
+      evidenceNotRecorded: "No evidence is recorded",
+      superseded: "Superseded by a later record; not the current outcome",
+      outcomeStatusNotInterpreted:
+        "A status is recorded; review the source details in Admissions.",
+      receiptUnrecorded: "No institutional receipt has been recorded.",
+      externalActionsReported: (count) =>
+        `${count} customer-reported external action(s); these records are not independently verified.`,
+      handoffLabel: "Service handoff status",
+      handoffState: {
+        READY: "Handoff checks are marked ready",
+        NOT_READY: "Handoff checks are not complete",
+        UNKNOWN: "Handoff state is unknown",
+        NOT_EVALUATED: "Handoff checks have not been evaluated",
+        NOT_APPLICABLE: "Handoff does not apply to this service mode",
+      },
+      handoffIsNotReceipt:
+        "A handoff status does not confirm that a school received an application.",
+      sourceNotVerified: "Source not independently verified",
+      studentPreparation: "Student 500 preparation materials",
+      preparationState: {
+        available: "Readable",
+        disabled: "Preparation is disabled",
+        restricted: "Not available to this account",
+        unavailable: "Preparation materials are unavailable",
+        not_recorded: "No preparation materials are recorded",
+      },
+      preparationArtifacts: (drafts, snapshots) =>
+        `${drafts} draft(s) and ${snapshots} snapshot(s) are recorded.`,
+      preparationNotApproval:
+        "These preparation materials do not show that an application was lodged or a visa granted.",
+      projectPurposeUnknown: "The Project purpose has not been recorded.",
+      closedActionNotice:
+        "This Project is closed; new business actions cannot be started.",
+      noSelectedNode: "Select an item in the journey to see its details.",
+    },
     returnToProjectHome: "Back to Project home",
     projectStatusActive: "Active",
     projectStatusClosed: "Closed",
@@ -3367,10 +3866,8 @@ const en: WorkspaceCopy = {
     escalationDescription:
       "This matter may involve deadlines, documents, or case-specific facts.",
     requestedFact: "Information to confirm",
-    placeholder:
-      "Type your question. Press Enter for a new paragraph, then click Send.",
-    composerHelp:
-      "Press Enter for a new paragraph, then click Send. General information only, not legal advice.",
+    inputLabel: "Message input",
+    placeholder: "Message…",
     send: "Send",
   },
   matter: {

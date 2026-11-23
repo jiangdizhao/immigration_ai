@@ -426,6 +426,8 @@ export async function POST(request: Request) {
      */
     const workspaceContext = await resolveWorkspaceContext({
       userId: session.user.id,
+      actorType: session.user.type,
+      question,
       chatId: ownedConversation?.chatId ?? null,
       clientPolicySlug: parsed.policySlug,
     });

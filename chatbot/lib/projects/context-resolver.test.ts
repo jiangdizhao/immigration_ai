@@ -351,3 +351,16 @@ test("Fast, Default and Premium routes submit the freshly resolved packet", () =
     );
   }
 });
+
+test("unavailable Project Fact source is preserved for the assistant instead of appearing empty", async () => {
+  const deps = dependencies({
+    stableFacts: async () => ({ available: false, authorizedForAI: [] }),
+  });
+  const resolved = await resolveProjectContext({
+    actorUserId: "actor-a",
+    chatId: "chat-a",
+    dependencies: deps.value as never,
+  });
+  assert.equal(resolved.packet?.factSourceState, "unavailable");
+  assert.equal(resolved.packet?.confirmedProjectFacts.length, 0);
+});
