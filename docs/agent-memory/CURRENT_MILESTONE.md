@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+## Phase 15 M3 Extended — E1 owner acceptance checkpoint (2026-11-23)
+
+**Status:** `PHASE15_M3_E1_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_NOT_STARTED / PHASE15_M3_E3_NOT_STARTED / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`.
+
+- **Code checkpoint:** `phase15-guided-project-workflows` @ [`1d2f40bb2af4deb87831882ccf10927a268022e1`](https://github.com/jiangdizhao/immigration_ai/commit/1d2f40bb2af4deb87831882ccf10927a268022e1); one bounded E1 implementation plus R1/R2, 17 files.
+- **Accepted engineering:** universal three-region Project shell, M1-backed record target rail and truthful progress detail, preserved existing Project Chat and M3-01 Composer, read-only context-specific right panel, mobile Chat/Task switch, visible 24px pointer/keyboard-resizable and client-persistent centre/right divider. School A/B selections retain Chat history. No Task completeness percentage or unverified application/visa outcomes.
+- **Validation:** Codex's focused E1 suite (14 UI/workspace files) and isolated Chromium splitter tests (2) PASS; changed-file Biome and whitespace PASS; 44 historical TypeScript diagnostics, no E1-path diagnostics. Owner-local Ubuntu production `pnpm build` PASS after R2; owner browser desktop and mobile smoke PASS for the specific interactions recorded in CURRENT_HANDOFF.
+- **Known limitations:** mobile Project name narrow-column wrapping (P2 UX); full authenticated cross-role/security, cross-device, real provider, true professional operations and production deploy acceptance NOT RUN/NOT ACCEPTED. M2 owner acceptance remains separate. No release, AWS, database migration, paid provider call or deployment authorized.
+- **Next action:** E1 closed. Await a separately issued, bounded M3-E2 task packet; do not silently implement E2–E4.
+<!-- END PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+
 <!-- BEGIN PHASE15_M3_02_2026_11_22 -->
 ## Phase 15 M3-02 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
 

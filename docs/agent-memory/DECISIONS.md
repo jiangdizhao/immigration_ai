@@ -1,3 +1,17 @@
+<!-- BEGIN D_P15_004_2026_11_23 -->
+## D-P15-004 — Accept M3 Extended E1 three-region workbench with limitations
+
+**Date:** 2026-11-23 (Australia/Sydney). **Owner decision:** `PHASE15_M3_E1_OWNER_ACCEPTED_WITH_LIMITATIONS`. **Release:** `LIVE_PRODUCTION_NO_GO`.
+
+**Accepted scope:** E1+R1+R2 established the Project-only header/rail/Chat/Task three-region interaction, honest M1-backed target selection and full Journey detail, persistent existing Chat/Composer, read-only context panels, desktop accessible resizable splitter with saved width, and mobile Chat/Task switching. The accepted source commit is [`1d2f40bb2af4deb87831882ccf10927a268022e1`](https://github.com/jiangdizhao/immigration_ai/commit/1d2f40bb2af4deb87831882ccf10927a268022e1). No E2 profile/task progress projection or E3 authorized action/write-back was implemented.
+
+**Acceptance evidence:** Independent source/patch review passed after bounded R1/R2; Codex reported focused UI/workspace and isolated Chromium component/layout tests PASS; the owner confirmed post-R2 `pnpm build` PASS and real local synthetic Project browser smoke for School A/B target transitions with preserved messages, splitter drag and refresh restoration, mobile Chat/Task switching and unsent draft preservation. This acceptance applies to the tested E1 interaction scope only.
+
+**Limitations:** Mobile narrow-screen Project title wraps awkwardly (non-blocking P2 UX debt). Full cross-role/accessibility/security/production E2E, paid-provider/live legal answer quality, and M2 owner acceptance are not thereby accepted. An isolated splitter Chromium test is not a full authenticated Next.js test. The decision does not authorize M3-E2/E3/E4 implementation, migrations, partner/professional authority, external submissions, production flags, AWS or deployment. Release remains NO-GO.
+
+**Authority:** [2026-11-23 M3 Extended plan](./PHASE15_M3_EXTENDED_MULTI_WORKFLOW_UI_PLAN_2026_11_23.md); accepted E1 source commit above. This closes E1 engineering only and does not supersede D-P15-003 or M1/M2 safety boundaries.
+<!-- END D_P15_004_2026_11_23 -->
+
 <!-- BEGIN D_P15_003_2026_11_21 -->
 ## D-P15-003 — Implement a Project-aware assistant with native agentic research
 

@@ -1,3 +1,17 @@
+<!-- BEGIN PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+## Phase 15 M3-E1 — OWNER_ACCEPTED_WITH_LIMITATIONS (2026-11-23)
+
+**Current authoritative status:** `PHASE15_M3_E1_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / LIVE_PRODUCTION_NO_GO`. The complete E1 + R1 + R2 implementation was reviewed, owner-tested in local desktop/mobile browsers, and committed on `phase15-guided-project-workflows` at [`1d2f40bb2af4deb87831882ccf10927a268022e1`](https://github.com/jiangdizhao/immigration_ai/commit/1d2f40bb2af4deb87831882ccf10927a268022e1) (17 E1-related files). The previous E1 `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` block below is historical, not the present state.
+
+**Accepted scope:** Project-only header, actual M1-based selectable School/Admissions/Student 500 targets and honest progress detail, persistent existing Chat/Composer alongside a target-aware read-only Task panel, responsive Chat/Task mobile interaction, and a visible accessible 24px centre/right splitter. R1 corrected valid wide-screen preference restoration and cross-Chat draft carry-over, and retained bounded authorized closed-Project history. R2 made the splitter discoverable and usable with pointer/keyboard controls and regression coverage. No E2 workflow-definition/task-completion engine, E3 AI step-context/write-back, business migration or new authorization was introduced.
+
+**Acceptance evidence:** Codex reported 14 focused E1 UI/workspace test files plus 2 isolated Chromium splitter browser tests passing; changed-file Biome and `git diff --check` passed; standalone TypeScript retained 44 historical diagnostics with none in modified E1 paths. The owner confirmed `pnpm build` PASSED on Ubuntu **after R2**. In the authenticated local synthetic Project, desktop screenshots and owner interaction confirmed School Northbridge/Harbour target selection updating the right panel without losing an existing Chat, visible splitter pointer drag changing both panel widths, and saved width plus Chat history restoration after refresh/reopening. Mobile approximately 390px screenshots confirmed Chat↔Task switching, existing messages and unsent Composer draft retention, and a visible send control; **no paid message was submitted**.
+
+**Limitations / deferred:** The owner-observed mobile Project name wraps poorly into multiple lines (P2 non-blocking UX debt). Browser coverage does not certify all roles, cross-device behavior, accessibility devices, security/authorization penetration testing, production environment or real-provider answer quality; isolated Chromium component tests were not full authenticated E2E. These are not marked PASS. M2 owner acceptance remains a separate open gate. Unrelated local `chatbot/tsconfig.tsbuildinfo` modification and untracked M2 research privacy document were excluded and must not be cleaned automatically. `LIVE_PRODUCTION_NO_GO` remains.
+
+**Next:** Close E1 engineering without R3; do not start M3-E2, E3 or E4 without a separate owner task/authorization. No AWS, production flags, migrations, deployment or paid provider action is authorized by this closeout.
+<!-- END PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+
 <!-- BEGIN PHASE15_M3_E1_2026_11_23 -->
 ## Phase 15 M3-E1 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
 

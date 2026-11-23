@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+## Project state — Phase 15 M3-E1 accepted with limitations (2026-11-23)
+
+- **Repository/branch:** `jiangdizhao/immigration_ai`, `phase15-guided-project-workflows`. E1+R1+R2 implementation committed at [`1d2f40bb2af4deb87831882ccf10927a268022e1`](https://github.com/jiangdizhao/immigration_ai/commit/1d2f40bb2af4deb87831882ccf10927a268022e1) (17 files); no production deployment.
+- **Current decision:** `PHASE15_M3_E1_OWNER_ACCEPTED_WITH_LIMITATIONS / LIVE_PRODUCTION_NO_GO`. M1 engineering was accepted with limitations earlier; M2 final owner acceptance remains outstanding and is not conferred by this UI acceptance. E2–E4 have not started.
+- **E1 outcome:** Three-region Project workbench with shared authorized M1 read and selectable real School/Admissions/Student 500 targets; existing Chat/Composer stays mounted during read-only Task navigation and desktop resizing; M3-02 Journey remains accessible through View Project Progress; right panel is target-specific and honestly capability-gated. R1 fixed splitter round-trip and cross-Chat draft isolation; R2 added visible accessible 24px splitter grip and isolated browser interaction evidence. No E2 conditional task definitions, E3 contextual business mutations or backend changes.
+- **Evidence:** Owner-local Ubuntu `pnpm build` PASS after R2; owner desktop and ~390px mobile browser smoke for Chat history, School A/B selection, visible divider dragging and reload restoration, Chat↔Task switching and draft retention. Codex reported 14 focused E1 UI/workspace test files, 2 isolated Chromium splitter tests, Biome and whitespace PASS; 44 existing TypeScript diagnostics unchanged. These do not constitute complete cross-role, accessibility, security or production E2E approval.
+- **Deferred:** Mobile Project name wraps into several lines (non-blocking P2 UX debt); provider quality/security/professional and production gates remain separate. Existing unrelated local modified `chatbot/tsconfig.tsbuildinfo` and untracked `PHASE15_M2_RESEARCH_PRIVACY_BOUNDARY_DESIGN_2026_11_21.md` must remain untouched.
+<!-- END PHASE15_M3_E1_OWNER_ACCEPTANCE_2026_11_23 -->
+
 <!-- BEGIN PHASE15_M3_02_2026_11_22 -->
 ## Project state — Phase 15 M3-02 implemented; independent review pending (2026-11-22)
 
