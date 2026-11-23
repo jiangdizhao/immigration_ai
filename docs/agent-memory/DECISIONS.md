@@ -1,3 +1,15 @@
+<!-- BEGIN D_P15_005_2026_11_24 -->
+## D-P15-005 — Close M3-E2 engineering and accept M3-E2.5 UI with limitations
+
+**Date:** 2026-11-24 (Australia/Sydney). **Branch and reviewed source:** `phase15-guided-project-workflows` at [`01731ec0be5bca720bc5a49162a4658cfe13a5fc`](https://github.com/jiangdizhao/immigration_ai/commit/01731ec0be5bca720bc5a49162a4658cfe13a5fc), 35 scoped files. **Release:** `LIVE_PRODUCTION_NO_GO`.
+
+**Decision:** `PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS`. E2's deterministic versioned School/Admissions/Student 500 workflow projection, evidence-gated statuses and partial coverage counts passed independent source reviews including R1 Offer/CoE validity, R2 accepted-Offer semantics and R3 compact header. It is not marked as fully business-data accepted because PostgreSQL actual readback/scale remains pending. E2.5's clearer general/project navigation, distinct Workflows and Project Chats, per-matter tasks, independently resizable left rail and bounded mobile Composer layout were tested by the owner in local desktop/mobile Chrome and accepted with limitations. The owner confirmed a post-fix local production build pass.
+
+**Evidence limitations:** Codex's 5/5 Chromium checks used synthetic UI components, not full authenticated server E2E. Owner browser smoke does not certify permission revocation, cross-role or production security. Real-device virtual keyboard/safe-area behavior is not verified. Historical 44 TypeScript diagnostics and two stale Stage 2 UI-wiring source assertions are not resolved. M2 final owner acceptance remains pending. No automatic inference of Project Goal, school receipt, verified CoE or official legal outcome is authorized.
+
+**Scope boundary:** This decision does not approve real-user traffic, paid search, AWS, schema migrations, external submission, professional signoff, or deployment. E3 remains its separate planned increment: step-aware server-resolved AI context, source-backed research candidates, and explicit confirmation through existing authorized business services with durable readback. E3 execution needs a distinct owner-authorized task. E4 and production remain NO-GO. Historical previous-milestone pending/uncommitted text below reflects its then-current status.
+<!-- END D_P15_005_2026_11_24 -->
+
 <!-- BEGIN D_P15_004_2026_11_23 -->
 ## D-P15-004 — Accept M3 Extended E1 three-region workbench with limitations
 

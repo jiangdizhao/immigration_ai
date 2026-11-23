@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE15_M3_E2_E2_5_CLOSEOUT_2026_11_24 -->
+## Project state — E2/E2.5 committed and closed with limits (2026-11-24)
+
+- **Repository checkpoint:** `jiangdizhao/immigration_ai` → `phase15-guided-project-workflows` at [`01731ec0be5bca720bc5a49162a4658cfe13a5fc`](https://github.com/jiangdizhao/immigration_ai/commit/01731ec0be5bca720bc5a49162a4658cfe13a5fc); exactly 35 implementation/test/docs paths. `M3-E1` remains owner-accepted with limitations.
+- **Current acceptance:** `PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / LIVE_PRODUCTION_NO_GO`; E3 and E4 NOT STARTED. E2 authorisation, PostgreSQL actual readback and aggregate/database scaling are still explicit future verification needs, not PASS.
+- **System shape:** Deterministic versioned workflow/task projections over single authorized M1 Project State; School, independent Admissions and Student 500-only/Offer/CoE/composed matter paths; true status distinctions and partial progress. Project purpose remains unknown. E2.5 restructured global vs Project navigation, Project Chats vs Workflows, progressive matter/task rail, and independent left/sidebar and centre/right splitters. R1 mobile viewport frame keeps Composer visible with controlled message scrolling.
+- **Evidence and limits:** E2/R1/R2/R3 independent patch review and owner authenticated synthetic Project UI; owner desktop and mobile UI tests including draft/identity persistence and Composer visibility; final Ubuntu `pnpm build` PASS. Codex-reported focused tests, 5/5 synthetic Chromium cases, Biome and diff checks PASS; 44 pre-existing TypeScript diagnostics. Guarded E2 PostgreSQL, full authenticated security/roles, live-provider/legal quality, real-device keyboard/safe area remain unverified. Two old Stage 2 source-assertion failures recorded separately.
+- **Local safety:** `chatbot/tsconfig.tsbuildinfo`, untracked M2 privacy note, E2.5 R1 report and patch remain user-owned and excluded. No migration, AWS, production feature flip, provider paid call or deployment. Next proposed increment E3 must receive a separate task and preserve E1/E2/E2.5 contracts.
+<!-- END PHASE15_M3_E2_E2_5_CLOSEOUT_2026_11_24 -->
+
 <!-- BEGIN PHASE15_M3_E2_5_2026_11_23 -->
 ## Project state — Phase 15 M3-E2.5 implemented, pending independent review (2026-11-23)
 

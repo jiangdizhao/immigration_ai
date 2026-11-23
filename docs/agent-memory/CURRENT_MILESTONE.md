@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE15_M3_E2_E2_5_CLOSEOUT_2026_11_24 -->
+## M3 Extended milestone checkpoint — E2/E2.5 source closeout (2026-11-24)
+
+**Current status:** `PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E3_NOT_STARTED / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`.
+
+- **Committed code:** [`01731ec0be5bca720bc5a49162a4658cfe13a5fc`](https://github.com/jiangdizhao/immigration_ai/commit/01731ec0be5bca720bc5a49162a4658cfe13a5fc), 35 reviewed E2+R1+R2+R3+E2.5+mobile-R1 paths; remote SHA independently verified against owner local HEAD. Older “no commit yet” sections are historical snapshots.
+- **E2:** Read-only M1-derived versioned School/Admissions/Student 500 workflow applicability, conditional task progress and source-qualified Project aggregates; accepted Offer and verified/current CoE semantics preserved; compact truthful header and detailed progress dialog. Engineering/code review passed but PostgreSQL integration/readback/SQL scaling remains open, so do not label E2 full owner acceptance.
+- **E2.5:** UI information hierarchy and navigation (General Workspace / Project / business matter / task; Project Chats separate from Workflows), explicit project selection/actions, independently resizable left navigation plus existing Chat/Task splitter, mobile Composer viewport fix. Owner local desktop/mobile smoke PASS for navigation, Chat/draft persistence and restored Composer visibility; final owner-local `pnpm build` PASS. Synthetic Chromium 5/5 PASS reported; not full authenticated E2E.
+- **Limitations:** E2 guarded PostgreSQL test and full security/permission/provider E2E NOT RUN. Real mobile soft keyboard/safe-area not verified. Historical 44 TypeScript diagnostics and two stale Stage 2 UI-wiring assertions persist. M2 owner acceptance remains pending. No production release, AWS work, new migrations, professional/partner privilege or E3/E4 execution has occurred.
+- **Next:** After separate owner E3 authorization, follow the existing M3 Extended E3 plan; no expansion of E2.5 UI scope merely for polish. `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE15_M3_E2_E2_5_CLOSEOUT_2026_11_24 -->
+
 <!-- BEGIN PHASE15_M3_E2_5_2026_11_23 -->
 ## Phase 15 M3-E2.5 — IMPLEMENTED_PENDING_INDEPENDENT_REVIEW (2026-11-23)
 
