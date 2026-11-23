@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-21 (Australia/Sydney)  
 **Owner decision:** Five-milestone Phase-15 plan APPROVED; documentation/branch setup AUTHORISED.  
-**Implementation:** NOT STARTED. No M1 Codex task packet or implementation prompt has been issued.  
+**Current implementation checkpoint (updated 2026-11-23):** M1 engineering accepted and committed at `6b7c531ee2839e9a955dfd992b5e19a560fa6064`. M2 and M3-01/M3-02 exist only as uncommitted local work and remain subject to owner/relevant browser acceptance; M3 Extended E1–E4 are planning-approved, not implemented or execution-authorized by this update. The original Phase 15 kickoff statements below are historical.   
 **Branch:** phase15-guided-project-workflows  
 **Base:** phase14-b-project-document-cross-chat @ f23094b3dda90d304db81f99401a44dfc3e3e8ac  
 **Release:** LIVE_PRODUCTION_NO_GO remains. A planned engineering milestone is not a live customer capability.
@@ -25,9 +25,11 @@ The owner additionally requires the assistant to understand the project as a who
 | --- | --- | --- | --- |
 | **M1** | Durable Project State & Progress Engine | Project status survives chat closure and reflects authorized business changes and dependencies | Owner + technical reviewer |
 | **M2** | Global Project AI Assistant & Official Intelligence | Any new Project Chat can answer open-ended project questions and reason from current records plus relevant official sources | Owner + legal/domain reviewer where material |
-| **M3** | Central Guided Workspace & Confirmed AI Actions | Main canvas shows the applicable journey; chat and UI update the same real drafts following explicit confirmation | Owner + UX reviewer |
+| **M3 Extended** | Multi-Workflow AI Interactive Workspace & Confirmed Actions | Shared resizable three-region shell, profile-specific School/Student 500 workflows, grounded overall progress, step-aware AI + dynamic task tools, and confirmed business readback | Owner + UX reviewer |
 | **M4** | DIY, Engagement Scope, Partner Routes & School Handoffs | Each school application follows the correct DIY/direct-agent/first-tier-agent route with real forms, roles and receipts | Owner + business/lawyer reviewer |
 | **M5** | Domestic Staff Copilot & Integrated Acceptance | Assigned workers can handle normal intake with less re-entry, while the client sees trustworthy progress | Owner + new worker + business/lawyer reviewer |
+
+**M3 planning amendment:** The detailed 2026-11-23 [M3 Extended multi-workflow UI plan](./PHASE15_M3_EXTENDED_MULTI_WORKFLOW_UI_PLAN_2026_11_23.md) governs M3's revised interaction design. It does not supersede M1/M2 technical acceptance boundaries or change M4/M5 ownership.
 
 These are exactly five substantive milestones, NOT dozens of micro-phases. A bounded correction may be accepted within the same milestone when evidence shows a main-path, data-integrity, legal or authorization defect; do not start indefinite cosmetic subprojects.
 
@@ -62,20 +64,29 @@ These are exactly five substantive milestones, NOT dozens of micro-phases. A bou
 
 **Exit:** Owner accepts truthful project-wide assistant behavior in bounded test scope; no assumption that all legal sources are complete or current without real checks.
 
-### M3 — Central Guided Workspace & Confirmed AI Actions
+### M3 Extended — Multi-Workflow AI Interactive Workspace & Confirmed Actions
 
-**Goal.** Make the main content area—not a narrow left rail—the primary guide to the user's entire applicable journey, while enabling chat-led clarification and safe work on the underlying forms.
+**Owner-approved M3 scope amendment (2026-11-23):** See the [complete M3 Extended UI, workflow, interface and E1–E4 delivery plan](./PHASE15_M3_EXTENDED_MULTI_WORKFLOW_UI_PLAN_2026_11_23.md). The original M3 intent—guided Project journey plus explicitly confirmed AI-assisted business changes—remains; the main interaction is redesigned following the lawyer/business owner's **school-application example**, and **Student 500 Visa Application receives an independent first-class Workflow Profile**, not copied School steps. This is **not** a sixth Phase-15 milestone.
+
+**Goal.** One shared **Project Header + Left Step Rail + Centre Step-aware AI Chat + Right Dynamic Task Workspace** interaction for School Application, Student 500-only and genuinely combined Projects. A keyboard/pointer-accessible **draggable divider** adjusts centre/right widths, with an appropriate mobile alternative. The top-right persistent progress bar and **“View Project Progress”** action open real, grounded progress/dependency details without displacing current work. The M3-02 Journey projection may feed the rail and detailed progress view, but must no longer monopolize the central work surface.
 
 **In scope.**
-- Main canvas renders a large, accessible, responsive, branching step graph with arrows, status text and color+icon semantics for complete, active, waiting on person, blocked and not applicable. Current step expands to tell the user what it is, why it matters, who acts, and the one most useful next action; parallel School A/B and visa activity remain visible. Sidebar remains for navigation.
-- Use exactly M1's permissioned state and M2's assistant context. Project Home, application detail, chat and refresh must agree. External Offer/CoE, visa-only and DIY routes are real graph alternatives, not fake “skip then blocked later” behavior.
-- Convert uncertain natural inputs (e.g. “university of wolloongong” and “computer vision”) into sourced school candidates and *proposed* updates. Correct spelling only after user approval; preserve “computer vision” as an interest until an actual course is selected. The target Project, specific application, field, prior value, suggested value and implications are previewed.
-- For any proposed mutation, require affirmative confirmation, use existing business services and idempotency/revision checks, report success only after persistent readback, and invalidate dependent versions/steps as appropriate. Cancellation, stale page, concurrent changes, retries and partial errors fail safely. The assistant must never write a different school's record from a vague reference.
-- Add context-aware request-a-lawyer entry where available, with recipient/visible content preview and actual permission and engagement checks. Do not promise an unimplemented lawyer chat feature.
+- Introduce conditional, versioned **Workflow Profiles**, not a single School→Admissions→500 checklist. School stages may include starting point, real course search/compare, academic/language/financial preparation, documents and pre-submission. Student 500 stages independently cover applicant/visa context, genuine CoE/study evidence, GS, financial/conditional supporting materials, pre-lodgement and external status; they are **product templates** whose applicability depends on trusted facts and current official requirements. An existing external Offer/CoE, visa-only route or two parallel schools must remain valid.
+- Reuse M1 \`phase15.project-state.v1\` and existing business services; add only necessary confirmed Project Goal, conditional task/progress projection and source-revision contracts. Overall \`completed / applicable\` metrics must be justified by authoritative task eligibility/completion, with explicit unknown/inapplicable/unavailable labels; **never hard-code “4/12” or fabricate a percentage**.
+- Reuse M2's authorized Project Context and Fast/Default/Premium native research. Add a bounded, server-validated **active step + exact business target** overlay and structured, source-grounded research candidates or modification proposals where needed. Do not degrade open-ended Agentic Search to a static page catalog.
+- The right panel changes **by workflow + step + selected business matter + actual capability**: customer onboarding form; official school/course discovery, filters, favorites and comparison; actual Admissions/Student 500/GS fields; permitted document/version and review views; proposed edits with their targets and impact. Disabled Project Document and professional/partner capabilities stay honestly unavailable.
+- The AI may propose a specific business-field change, but only **preview + explicit authenticated confirmation + existing service CAS/revision/idempotency + persistent readback** can save it. No guessed identity, cross-school mutation, lawyer approval or external submission.
+- Retain the approved M3-01 Composer/Premium reliability work and reuse the M3-02 deterministic journey/status code. Maintain Step Chat continuity and avoid losing drafts, messages or the selected matter when resizing, switching steps or Projects.
 
-**Acceptance.** First-time desktop/mobile users locate the active application, the responsible party and next step without explanation. A mistaken university name is clarified and correctly saved to one application, and project home/new chat show the same value. Test multi-school same-field input, no-confirm/no-write, stale edits, retry, switch, unavailable records and unassigned lawyers. The screen must never show a fake submitted/approved status.
+**Delivery increments (inside M3, each separately commissioned and reviewed):**
+- **M3-E1 — Universal three-region UI shell:** one resizable shell works for both School and Student 500 projects, with dynamic-right-panel infrastructure and mobile adaptation. Read-only and no new database migration.
+- **M3-E2 — Workflow Profiles & Task Progress:** real conditional School/Student 500 step definitions, composite/Offer/CoE/visa-only routes, truthful top-right progress and initial authorized task panels; minimum justified M1 extensions.
+- **M3-E3 — Contextual AI & Confirmed Actions:** current-step context, grounded school search/compare and typed proposals; authorized School and Student 500 draft field changes with target/revision confirmation, readback and UI synchronization; minimum justified M2/business-service extensions.
+- **M3-E4 — Integrated Acceptance:** authenticated browser and isolated PostgreSQL tests for School-only, Student 500-only, combined, alternative routes, mobile splitter, cross-chat continuity, user edits, conflicts, unavailable sources and legitimate source/citation behavior.
 
-**Exit:** UX + real DB-backed action acceptance; no claim of broad legal/professional authorization.
+**Acceptance.** Both Project types use the same responsive interaction framework **without** sharing a compulsory step checklist; the correct right-side tool appears for the selected target. All known progress/counts come from M1 and are consistent across header, rail, AI and task panel; incomplete coverage is labeled, not made numeric by guess. School A/B remain independent; visa-only/external CoE bypass fictitious School requirements. At least one genuinely confirmed School draft update and one genuinely confirmed Student 500 draft update produce authorized persistent readback (where accepted business capability permits); cancellation, stale changes, revoked access and wrong-target proposals never mutate data. Current-law and school-search assertions retain real sources. Do not claim file, lawyer or external operations the system cannot perform.
+
+**Exit:** Owner-reviewed UI + genuine isolated-DB workflow action acceptance + separately recorded browser/model evidence; full M3 E1–E4 is not complete merely because the E1 shell or the old M3-02 graph exists. \`LIVE_PRODUCTION_NO_GO\` remains until a separate release decision.
 
 ### M4 — DIY, Engagement Scope, Partner Routes & School Handoffs
 
