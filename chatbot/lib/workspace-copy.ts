@@ -65,6 +65,8 @@ type ProjectJourneyCopy = {
     studentLinkUnavailable: string;
   };
   actionsTitle: string;
+  projectIssuesTitle: string;
+  sectionNavigationOnly: string;
   actionLabels: Record<string, string>;
   executableAction: string;
   advisoryAction: string;
@@ -297,6 +299,37 @@ export type WorkspaceCopy = {
     projectHomeLimits: string;
     projectHomeChatsHint: string;
     projectJourney: ProjectJourneyCopy;
+    projectWorkbench: {
+      railTitle: string;
+      unnamedProject: string;
+      activeStatus: string;
+      closedStatus: string;
+      splitterLabel: string;
+      courseLabel: string;
+      intakeLabel: string;
+      projectTaskDetails: string;
+      chatTab: string;
+      taskTab: string;
+      purposeUnknown: string;
+      progressNotDetermined: string;
+      viewProgress: string;
+      panelTitle: string;
+      noTarget: string;
+      noKnownRecords: string;
+      chooseTarget: string;
+      targetUnavailable: string;
+      noProjectChatTitle: string;
+      noProjectChatDescription: string;
+      openProjectChats: string;
+      selectedTarget: string;
+      openExistingWorkspace: string;
+      targetReadOnly: string;
+      recordedAlternative: string;
+      stageChatsTitle: string;
+      recordHistoryTitle: string;
+      recordHistoryRevision: (revision: number) => string;
+      refresh: string;
+    };
     returnToProjectHome: string;
     projectStatusActive: string;
     projectStatusClosed: string;
@@ -1318,6 +1351,8 @@ const zh: WorkspaceCopy = {
           "关联记录当前无法读取；此处不会将其显示为不存在。",
       },
       actionsTitle: "可采取的下一步",
+      projectIssuesTitle: "记录的问题",
+      sectionNavigationOnly: "此按钮仅切换到现有业务页面。",
       actionLabels: {
         select_intake: "选择入学时间",
         add_application_reference: "补充学校申请资料",
@@ -1402,6 +1437,39 @@ const zh: WorkspaceCopy = {
       projectPurposeUnknown: "尚未记录项目目的。",
       closedActionNotice: "项目已关闭，当前不能发起新的业务处理。",
       noSelectedNode: "选择路线图中的一项查看详情。",
+    },
+    projectWorkbench: {
+      railTitle: "项目事项",
+      unnamedProject: "项目",
+      activeStatus: "进行中",
+      closedStatus: "已关闭",
+      splitterLabel: "调整对话与任务面板宽度",
+      courseLabel: "课程",
+      intakeLabel: "入学时间",
+      projectTaskDetails: "事项记录",
+      chatTab: "对话",
+      taskTab: "任务",
+      purposeUnknown: "尚未记录项目目标；以下仅显示当前可读取的项目事项。",
+      progressNotDetermined: "进度尚未完全确定",
+      viewProgress: "查看项目进度",
+      panelTitle: "当前工作区",
+      noTarget: "尚未选择项目事项。",
+      noKnownRecords: "目前没有可读取的项目事项。不可读取的区域会单独标明。",
+      chooseTarget: "选择一个已记录事项以查看对应信息。",
+      targetUnavailable: "所选事项当前不可读取；没有显示旧的项目数据或操作。",
+      noProjectChatTitle: "此项目当前没有打开的 AI 对话",
+      noProjectChatDescription:
+        "打开或新建一条项目对话后即可继续。此页面不会自动创建对话或发送消息。",
+      openProjectChats: "打开项目对话",
+      selectedTarget: "所选事项",
+      openExistingWorkspace: "打开现有工作区",
+      targetReadOnly:
+        "此处只显示已授权的项目记录。选择现有工作区可查看其当前功能。",
+      recordedAlternative: "已记录的替代路径",
+      stageChatsTitle: "步骤对话（单独打开）",
+      recordHistoryTitle: "近期记录历史",
+      recordHistoryRevision: (revision: number) => `记录版本 ${revision}`,
+      refresh: "刷新项目数据",
     },
     returnToProjectHome: "返回项目主页",
     projectStatusActive: "进行中",
@@ -2888,6 +2956,8 @@ const en: WorkspaceCopy = {
           "A linked record cannot currently be read; it is not shown as absent.",
       },
       actionsTitle: "Useful next step",
+      projectIssuesTitle: "Recorded issues",
+      sectionNavigationOnly: "This only opens the existing business page.",
       actionLabels: {
         select_intake: "Select an intake",
         add_application_reference: "Add School Application details",
@@ -2987,6 +3057,42 @@ const en: WorkspaceCopy = {
       closedActionNotice:
         "This Project is closed; new business actions cannot be started.",
       noSelectedNode: "Select an item in the journey to see its details.",
+    },
+    projectWorkbench: {
+      railTitle: "Project matters",
+      unnamedProject: "Project",
+      activeStatus: "Active",
+      closedStatus: "Closed",
+      splitterLabel: "Resize chat and task panel",
+      courseLabel: "Course",
+      intakeLabel: "Intake",
+      projectTaskDetails: "Recorded details",
+      chatTab: "Chat",
+      taskTab: "Task",
+      purposeUnknown:
+        "The Project goal is not recorded. Items below are the records currently available to read.",
+      progressNotDetermined: "Progress not fully determined",
+      viewProgress: "View Project Progress",
+      panelTitle: "Current task workspace",
+      noTarget: "No Project matter is selected.",
+      noKnownRecords:
+        "No Project matters are currently readable. Unavailable areas are identified separately.",
+      chooseTarget: "Select a recorded matter to see its details here.",
+      targetUnavailable:
+        "This matter is currently unavailable. Earlier Project data and actions are hidden.",
+      noProjectChatTitle: "No Project AI conversation is open",
+      noProjectChatDescription:
+        "Open an existing Project conversation or create one to continue. This view does not create a conversation or send a message automatically.",
+      openProjectChats: "Open Project conversations",
+      selectedTarget: "Selected matter",
+      openExistingWorkspace: "Open existing workspace",
+      targetReadOnly:
+        "This panel shows authorized Project records only. Open the existing workspace to use its current capabilities.",
+      recordedAlternative: "Recorded alternative route",
+      stageChatsTitle: "Step conversations · open separately",
+      recordHistoryTitle: "Recent record history",
+      recordHistoryRevision: (revision: number) => `Revision ${revision}`,
+      refresh: "Refresh Project data",
     },
     returnToProjectHome: "Back to Project home",
     projectStatusActive: "Active",

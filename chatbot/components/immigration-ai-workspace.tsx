@@ -65,12 +65,15 @@ import {
   runProjectNavigationAction,
   shouldShowNeutralProjectSelection,
 } from "@/lib/workspace/project-entry";
+import { useProjectJourney } from "@/lib/workspace/project-journey-client";
 import { deriveProjectOverview } from "@/lib/workspace/project-overview";
+import { projectWorkspaceSplitColumns } from "@/lib/workspace/project-splitter";
 import { openProjectStageChat } from "@/lib/workspace/project-stage-chats";
 import {
   deriveProjectStages,
   stageSignalsFromSummary,
 } from "@/lib/workspace/project-stages";
+import { reconcileProjectWorkbenchTarget } from "@/lib/workspace/project-workbench-model";
 import {
   EMPTY_PROJECT_WORKSPACE_DATA,
   type ProjectWorkspaceData,
@@ -117,8 +120,17 @@ import {
 } from "./mobile-workspace-navigation";
 import { ProjectEntryPanel } from "./project-entry-panel";
 import { ProjectStepMaterialsPanel } from "./project-step-materials-panel";
+import {
+  ProjectTaskWorkspacePanel,
+  ProjectWorkbenchHeader,
+  ProjectWorkbenchTargetRail,
+} from "./project-workbench";
 import { ProjectWorkspaceHome } from "./project-workspace-home";
 import { ProjectWorkspaceNav } from "./project-workspace-nav";
+import {
+  ProjectWorkspaceSplitSeparator,
+  useResizableProjectWorkspaceSplit,
+} from "./resizable-project-workspace-split";
 import { useSiteLocale } from "./site-locale-provider";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -670,6 +682,16 @@ export function ImmigrationAIWorkspace({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null
   );
+  const [selectedProjectTargetId, setSelectedProjectTargetId] = useState<
+    string | null
+  >(null);
+  const [mobileProjectSurface, setMobileProjectSurface] = useState<
+    "chat" | "task"
+  >("chat");
+  const projectJourneyResource = useProjectJourney(selectedProjectId);
+  const projectSplit = useResizableProjectWorkspaceSplit(
+    selectedProjectId !== null
+  );
   /**
    * Phase 13 UX: the selected Project record and the main-area section. The
    * section is presentation only; every panel behind it re-checks server
@@ -781,6 +803,8 @@ export function ImmigrationAIWorkspace({
     selectedProjectIdRef.current = null;
     setSelectedProjectId(null);
     setSelectedProject(null);
+    setSelectedProjectTargetId(null);
+    setMobileProjectSurface("chat");
     setProjectView("home");
     setProjectSelectionReset((current) => current + 1);
   }, []);
@@ -815,21 +839,6 @@ export function ImmigrationAIWorkspace({
   }, []);
 
   /**
-   * Return to the selected Project's home without creating a Chat. The existing
-   * navigation-busy contract blocks this while a turn or a conversation load is
-   * in progress, so an in-flight Chat can never be abandoned mid-request.
-   */
-  const returnToProjectHome = useCallback(() => {
-    const navigation = runProjectNavigationAction({
-      isBusy: () => projectNavigationBusyRef.current,
-      action: resetProjectConversation,
-    });
-    if (!navigation.allowed) {
-      return;
-    }
-  }, [resetProjectConversation]);
-
-  /**
    * Phase 13 UX: a Project change resets the main-area section, so Project B can
    * never open on a form whose data was loaded for Project A, and drops any
    * Project Chat that belonged to the previous Project.
@@ -852,6 +861,8 @@ export function ImmigrationAIWorkspace({
       if (previousProjectId !== projectId) {
         previousProjectViewRef.current = "home";
         setPreviousProjectView("home");
+        setSelectedProjectTargetId(null);
+        setMobileProjectSurface("chat");
       }
       if (
         projectSwitchClearsConversation({
@@ -862,6 +873,7 @@ export function ImmigrationAIWorkspace({
       ) {
         // Project B must not inherit Project A's Chat identity or its `chatId`.
         resetProjectConversation();
+        setInput("");
       }
     },
     [resetProjectConversation]
@@ -875,28 +887,41 @@ export function ImmigrationAIWorkspace({
    * centre can offer a correctly labelled "return to the previous view" instead of
    * claiming a document's (non-existent, unauthorized) originating step.
    */
-  const handleSelectProjectView = useCallback(
-    (view: ProjectWorkspaceView) => {
-      const navigation = runProjectNavigationAction({
-        isBusy: () => projectNavigationBusyRef.current,
-        action: () => {
-          if (conversationOriginRef.current === "project") {
-            resetProjectConversation();
+  const handleSelectProjectView = useCallback((view: ProjectWorkspaceView) => {
+    const navigation = runProjectNavigationAction({
+      isBusy: () => projectNavigationBusyRef.current,
+      action: () => {
+        setProjectView((current) => {
+          if (current !== view) {
+            previousProjectViewRef.current = current;
+            setPreviousProjectView(current);
           }
-          setProjectView((current) => {
-            if (current !== view) {
-              previousProjectViewRef.current = current;
-              setPreviousProjectView(current);
-            }
-            return view;
-          });
-        },
-      });
-      if (!navigation.allowed) {
+          return view;
+        });
+      },
+    });
+    if (!navigation.allowed) {
+      return;
+    }
+  }, []);
+
+  const handleSelectProjectTarget = useCallback(
+    (nodeId: string) => {
+      const load = projectJourneyResource.load;
+      if (
+        projectNavigationBusyRef.current ||
+        load.status !== "ready" ||
+        load.journey.project.id !== selectedProjectIdRef.current ||
+        !load.journey.nodes.some((node) => node.id === nodeId)
+      ) {
         return;
       }
+      setSelectedProjectTargetId(nodeId);
+      setProjectView("home");
+      setMobileProjectSurface("task");
+      setMobileSheetOpen(false);
     },
-    [resetProjectConversation]
+    [projectJourneyResource.load]
   );
 
   /** Back to the section the customer came from (the document centre's return path). */
@@ -937,6 +962,7 @@ export function ImmigrationAIWorkspace({
           // Leaving a Project Chat is the existing reset, which also drops its
           // `chatId` from the URL. It never archives or deletes the Chat itself.
           resetProjectConversation();
+          setInput("");
         }
       },
     });
@@ -953,9 +979,9 @@ export function ImmigrationAIWorkspace({
       openMobileSheet("navigation");
       return;
     }
-    // The existing section change also leaves an open Project Chat through
-    // `resetProjectConversation`, exactly like the desktop return control.
+    // M3-E1 keeps the single Project Chat mounted while the Task surface changes.
     handleSelectProjectView("home");
+    setMobileProjectSurface("task");
     setMobileSheetOpen(false);
   }, [handleSelectProjectView, openMobileSheet]);
 
@@ -1121,6 +1147,25 @@ export function ImmigrationAIWorkspace({
     conversationOrigin,
     conversationProjectId,
   });
+  const isActiveSelectedProjectConversation = Boolean(
+    selectedProjectId &&
+      conversationOrigin === "project" &&
+      conversationProjectId === selectedProjectId
+  );
+
+  useEffect(() => {
+    const load = projectJourneyResource.load;
+    if (
+      load.status === "ready" &&
+      load.journey.project.id === selectedProjectId
+    ) {
+      setSelectedProjectTargetId((current) =>
+        reconcileProjectWorkbenchTarget(current, load.journey)
+      );
+    } else if (load.status === "failed") {
+      setSelectedProjectTargetId(null);
+    }
+  }, [projectJourneyResource.load, selectedProjectId]);
   /**
    * Phase 13 M9-A navigation/overview. Derived only from the server-authorized
    * projection: no summary means no stages and no fabricated counts.
@@ -1315,6 +1360,12 @@ export function ImmigrationAIWorkspace({
         ) {
           return;
         }
+        // A composer draft belongs to the active Chat. Drop it only after a
+        // different Chat has passed the stale-response guard; refreshing the
+        // same Chat must preserve its unsent input.
+        if (conversationIdRef.current !== data.chatId) {
+          setInput("");
+        }
         if (
           shouldClearWorkspaceCaseSummary(
             conversationIdRef.current,
@@ -1433,6 +1484,9 @@ export function ImmigrationAIWorkspace({
         return;
       }
       handleSelectProjectView(view);
+      if (selectedProjectIdRef.current) {
+        setMobileProjectSurface("task");
+      }
       setMobileSheetOpen(false);
     },
     [handleSelectProjectView]
@@ -1443,6 +1497,7 @@ export function ImmigrationAIWorkspace({
       handleOpenStageConversation(stageKey)
         .then((opened) => {
           if (opened) {
+            setMobileProjectSurface("chat");
             setMobileSheetOpen(false);
           }
         })
@@ -1461,7 +1516,12 @@ export function ImmigrationAIWorkspace({
         return;
       }
       navigation.result
-        .then(() => setMobileSheetOpen(false))
+        .then(() => {
+          if (selectedProjectIdRef.current) {
+            setMobileProjectSurface("chat");
+          }
+          setMobileSheetOpen(false);
+        })
         .catch(() => undefined);
     },
     [loadConversation]
@@ -1518,6 +1578,10 @@ export function ImmigrationAIWorkspace({
       policySlug?: string | null;
       policyLaunchId?: string | null;
     }) => {
+      if (conversationOriginRef.current === "project") {
+        resetProjectConversation();
+        setInput("");
+      }
       clearProjectSelection();
       setConversationLoading(true);
       try {
@@ -1587,7 +1651,12 @@ export function ImmigrationAIWorkspace({
         setConversationLoading(false);
       }
     },
-    [clearProjectSelection, copy.history.createFailed, refreshConversationList]
+    [
+      clearProjectSelection,
+      copy.history.createFailed,
+      refreshConversationList,
+      resetProjectConversation,
+    ]
   );
 
   /**
@@ -2407,6 +2476,17 @@ export function ImmigrationAIWorkspace({
         temporaryGuestProject={temporaryGuestProject}
       />
 
+      {selectedProjectId ? (
+        <ProjectWorkbenchTargetRail
+          journeyCopy={copy.projectEntry.projectJourney}
+          journeyLoad={projectJourneyResource.load}
+          onRefresh={projectJourneyResource.refresh}
+          onSelectTarget={handleSelectProjectTarget}
+          selectedNodeId={selectedProjectTargetId}
+          workbenchCopy={copy.projectEntry.projectWorkbench}
+        />
+      ) : null}
+
       {/*
         Phase 13 M9-A: real step navigation with real status. It is only rendered
         for a selected Project, and every stage behind it re-checks authorization.
@@ -2769,43 +2849,48 @@ export function ImmigrationAIWorkspace({
         surface with modest gutters so the Project content (region E) can actually use the
         screen. Public marketing pages keep their own max-widths and are unaffected.
       */}
-      <header className="mb-2 flex flex-col gap-2 rounded-xl bg-[#001736] px-3 py-2 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-cyan-200">
-            <Bot className="size-3.5" />
+      {selectedProjectId ? null : (
+        <header className="mb-2 flex flex-col gap-2 rounded-xl bg-[#001736] px-3 py-2 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-cyan-200">
+              <Bot className="size-3.5" />
+            </div>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+              <h1 className="truncate text-sm font-semibold">
+                {copy.identity.title}
+              </h1>
+              <p className="truncate text-[11px] text-slate-300">
+                {copy.identity.subtitle}
+              </p>
+            </div>
           </div>
-          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-            <h1 className="truncate text-sm font-semibold">
-              {copy.identity.title}
-            </h1>
-            <p className="truncate text-[11px] text-slate-300">
-              {copy.identity.subtitle}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-200">
-          <span aria-live="polite" className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-300" />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-200">
+            <span
+              aria-live="polite"
+              className="inline-flex items-center gap-1.5"
+            >
+              <span className="size-1.5 rounded-full bg-emerald-300" />
+              <span>
+                {copy.status.label} · {statusText(status, copy)}
+              </span>
+            </span>
             <span>
-              {copy.status.label} · {statusText(status, copy)}
+              {copy.history.chat}{" "}
+              <span className="font-mono text-cyan-100">
+                {conversationId
+                  ? conversationId.slice(0, 8)
+                  : copy.status.loading}
+              </span>
             </span>
-          </span>
-          <span>
-            {copy.history.chat}{" "}
-            <span className="font-mono text-cyan-100">
-              {conversationId
-                ? conversationId.slice(0, 8)
-                : copy.status.loading}
+            <span>
+              {copy.history.matter}{" "}
+              <span className="font-mono text-cyan-100">
+                {matterId ? matterId.slice(0, 8) : copy.status.noMatter}
+              </span>
             </span>
-          </span>
-          <span>
-            {copy.history.matter}{" "}
-            <span className="font-mono text-cyan-100">
-              {matterId ? matterId.slice(0, 8) : copy.status.noMatter}
-            </span>
-          </span>
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       {/*
         Phase 14-A: the cramped top panel strip is gone. Below `xl` the four
@@ -2822,7 +2907,14 @@ export function ImmigrationAIWorkspace({
         actually lives — receives substantially more width. Breakpoint behaviour is
         unchanged: a single column below `xl`, three columns from `xl`.
       */}
-      <div className="grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[210px_minmax(0,1fr)_220px] xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]">
+      <div
+        className={cn(
+          "grid min-w-0 grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:gap-0 xl:overflow-hidden xl:rounded-2xl xl:bg-white xl:shadow-[0_24px_48px_-12px_rgba(0,23,54,0.12)]",
+          selectedProjectId
+            ? "xl:grid-cols-[220px_minmax(0,1fr)] xl:grid-rows-[auto_minmax(0,1fr)]"
+            : "xl:grid-cols-[210px_minmax(0,1fr)_220px]"
+        )}
+      >
         {/*
           Phase 14-A: the rails are the desktop (`xl`) presentation only. Below
           that breakpoint the same content renders inside the single shared Sheet,
@@ -2830,687 +2922,870 @@ export function ImmigrationAIWorkspace({
         */}
         {isWideViewport ? (
           <aside
-            className="order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+            className={cn(
+              "order-2 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:order-1 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3",
+              selectedProjectId ? "xl:row-span-2" : ""
+            )}
             data-testid="workspace-history-panel"
           >
             {sidebarRailContent}
           </aside>
         ) : null}
 
+        {selectedProjectId ? (
+          <div className="order-1 min-w-0 xl:order-2 xl:col-start-2 xl:row-start-1">
+            <ProjectWorkbenchHeader
+              enabledSections={{
+                applications: schoolApplicationsEnabled,
+                admissions: schoolAdmissionsEnabled,
+                student500: student500Enabled,
+              }}
+              journeyCopy={copy.projectEntry.projectJourney}
+              journeyLoad={projectJourneyResource.load}
+              locale={locale}
+              mobileSurface={mobileProjectSurface}
+              navigationBusy={projectNavigationBusy}
+              onMobileSurfaceChange={setMobileProjectSurface}
+              onRefresh={projectJourneyResource.refresh}
+              onSelectNode={handleSelectProjectTarget}
+              onSelectView={(view) => {
+                if (projectNavigationBusyRef.current) {
+                  return;
+                }
+                handleSelectProjectView(view);
+                setMobileProjectSurface("task");
+              }}
+              project={selectedProject}
+              projectId={selectedProjectId}
+              selectedNodeId={selectedProjectTargetId}
+              workbenchCopy={copy.projectEntry.projectWorkbench}
+            />
+          </div>
+        ) : null}
+
         <div
           className={cn(
-            "order-1 flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:order-2 xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
-            isWideViewport
-              ? "h-auto min-h-[560px] xl:h-full"
-              : /*
+            selectedProjectId
+              ? "order-2 grid min-w-0 grid-cols-1 gap-0 xl:order-3 xl:col-start-2 xl:row-start-2 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(460px,1fr)_24px_minmax(300px,0.72fr)]"
+              : "contents"
+          )}
+          data-testid={
+            selectedProjectId ? "project-workspace-split" : undefined
+          }
+          id={selectedProjectId ? "project-workspace-split-region" : undefined}
+          ref={selectedProjectId ? projectSplit.paneRef : null}
+          style={
+            selectedProjectId && isWideViewport
+              ? {
+                  gridTemplateColumns: projectWorkspaceSplitColumns(
+                    projectSplit.centerColumn
+                  ),
+                }
+              : undefined
+          }
+        >
+          <div
+            className={cn(
+              "order-1 flex min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-auto xl:min-h-0 xl:rounded-none xl:shadow-none",
+              selectedProjectId
+                ? cn(
+                    "xl:order-1 xl:h-full",
+                    isWideViewport
+                      ? ""
+                      : isActiveSelectedProjectConversation
+                        ? "h-[calc(100dvh_-_16rem)] min-h-[320px]"
+                        : "min-h-[320px]",
+                    mobileProjectSurface === "chat" ? "flex" : "hidden xl:flex"
+                  )
+                : isWideViewport
+                  ? "h-auto min-h-[560px] xl:h-full"
+                  : /*
                   Phase 14-A: a Project home/section is one natural page scroll, so
                   the centre column must not impose a viewport-fraction height. A
                   conversation keeps its own bounded area so only the message list
                   scrolls. `4.75rem`/`16rem` reserve room for the chrome, the bottom
                   navigation bar and the safe area instead of overhanging them.
                 */
-                isNeutralProjectSelection
-                ? "min-h-[320px]"
-                : "h-[calc(100dvh_-_16rem)] min-h-[320px]"
-          )}
-        >
-          {/*
+                    isNeutralProjectSelection
+                    ? "min-h-[320px]"
+                    : "h-[calc(100dvh_-_16rem)] min-h-[320px]"
+            )}
+            id={selectedProjectId ? "project-chat-region" : undefined}
+          >
+            {/*
             Layout correction: in Project-home mode the workspace home renders its own
             complete Project header (title, id, status, created date), so this strip is
             omitted instead of repeating the same Project identity a third time. Project
             Chat keeps it, because there the strip owns the conversation status, the
             read-only/legacy badges and the explicit return-to-project-home control.
           */}
-          {isNeutralProjectSelection && selectedProject ? null : (
-            <div className="border-b border-slate-100 px-4 py-2 sm:px-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="inline-flex items-center gap-2 text-xs text-slate-500">
-                    <span className="inline-flex size-2 rounded-full bg-emerald-400" />
-                    {isNeutralProjectSelection
-                      ? copy.projectEntry.selectedProject
-                      : copy.consultation.status}
-                  </p>
-                  <h2 className="mt-1 text-base font-semibold text-slate-950">
-                    {isNeutralProjectSelection && selectedProjectId
-                      ? `${copy.projectEntry.selectedProject} · #${selectedProjectId.slice(0, 8)}`
-                      : copy.consultation.title}
-                  </h2>
-                  {conversationOrigin === "project" && selectedProjectId ? (
-                    <button
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-900 underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
-                      data-testid="return-to-project-home"
-                      disabled={projectNavigationBusy}
-                      onClick={returnToProjectHome}
-                      title={
-                        projectNavigationBusy
-                          ? copy.projectEntry.openingChat
-                          : copy.projectEntry.returnToProjectHome
-                      }
-                      type="button"
-                    >
-                      <ArrowLeft aria-hidden="true" className="size-3.5" />
-                      {copy.projectEntry.returnToProjectHome}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {isNeutralProjectSelection && selectedProjectId ? (
+            {selectedProjectId &&
+            !isActiveSelectedProjectConversation ? null : !selectedProjectId &&
+              isNeutralProjectSelection &&
+              selectedProject ? null : (
+              <div className="border-b border-slate-100 px-4 py-2 sm:px-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="inline-flex items-center gap-2 text-xs text-slate-500">
+                      <span className="inline-flex size-2 rounded-full bg-emerald-400" />
+                      {isNeutralProjectSelection
+                        ? copy.projectEntry.selectedProject
+                        : copy.consultation.status}
+                    </p>
+                    <h2 className="mt-1 text-base font-semibold text-slate-950">
+                      {selectedProjectId
+                        ? copy.projectChat.badge
+                        : isNeutralProjectSelection && selectedProjectId
+                          ? `${copy.projectEntry.selectedProject} · #${selectedProjectId.slice(0, 8)}`
+                          : copy.consultation.title}
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {isNeutralProjectSelection && selectedProjectId ? (
+                      <Badge
+                        className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
+                        data-testid="selected-project-header-badge"
+                        title={`${copy.projectEntry.projectId}: ${selectedProjectId}`}
+                        variant="secondary"
+                      >
+                        {copy.projectEntry.projectId} #
+                        {selectedProjectId.slice(0, 8)}
+                      </Badge>
+                    ) : isReadOnlyConversation ? (
+                      <Badge
+                        className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
+                        data-testid={
+                          conversationOrigin === "project"
+                            ? "project-chat-read-only-header-badge"
+                            : "legacy-conversation-header-badge"
+                        }
+                        variant="secondary"
+                      >
+                        {conversationOrigin === "project"
+                          ? copy.projectChat.readOnlyBadge
+                          : copy.legacy.badge}
+                      </Badge>
+                    ) : conversationOrigin === "project" ? (
+                      <Badge
+                        className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
+                        data-testid="project-chat-header-badge"
+                        variant="secondary"
+                      >
+                        {copy.projectChat.badge}
+                      </Badge>
+                    ) : null}
                     <Badge
-                      className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
-                      data-testid="selected-project-header-badge"
-                      title={`${copy.projectEntry.projectId}: ${selectedProjectId}`}
+                      className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
                       variant="secondary"
                     >
-                      {copy.projectEntry.projectId} #
-                      {selectedProjectId.slice(0, 8)}
+                      {copy.consultation.generalInformation}
                     </Badge>
-                  ) : isReadOnlyConversation ? (
                     <Badge
-                      className="rounded-full bg-amber-100 text-[10px] text-amber-900 hover:bg-amber-100"
-                      data-testid={
-                        conversationOrigin === "project"
-                          ? "project-chat-read-only-header-badge"
-                          : "legacy-conversation-header-badge"
-                      }
+                      className="rounded-full bg-cyan-50 text-[10px] text-cyan-800 hover:bg-cyan-50"
                       variant="secondary"
                     >
-                      {conversationOrigin === "project"
-                        ? copy.projectChat.readOnlyBadge
-                        : copy.legacy.badge}
+                      {copy.consultation.australiaFocus}
                     </Badge>
-                  ) : conversationOrigin === "project" ? (
-                    <Badge
-                      className="rounded-full bg-blue-100 text-[10px] text-blue-900 hover:bg-blue-100"
-                      data-testid="project-chat-header-badge"
-                      variant="secondary"
-                    >
-                      {copy.projectChat.badge}
-                    </Badge>
-                  ) : null}
-                  <Badge
-                    className="rounded-full bg-slate-100 text-[10px] text-slate-700 hover:bg-slate-100"
-                    variant="secondary"
-                  >
-                    {copy.consultation.generalInformation}
-                  </Badge>
-                  <Badge
-                    className="rounded-full bg-cyan-50 text-[10px] text-cyan-800 hover:bg-cyan-50"
-                    variant="secondary"
-                  >
-                    {copy.consultation.australiaFocus}
-                  </Badge>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {isNeutralProjectSelection ? (
-            selectedProject ? (
-              <ProjectWorkspaceHome
-                artifacts={workspaceSummary?.artifacts ?? null}
-                copy={copy.projectEntry}
-                locale={locale}
-                navigationBusy={projectNavigationBusy}
-                onOpenArtifactOwner={handleSelectProjectView}
-                onReturnToPreviousView={returnToPreviousProjectView}
-                onSelectView={handleSelectProjectView}
-                project={selectedProject}
-                projectDocumentsEnabled={false}
-                projectFactsEnabled={projectFactsEnabled}
-                projectReviewCopy={copy.projectReview}
-                projectReviewEnabled={projectReviewEnabled}
-                returnToPreviousViewLabel={
-                  previousProjectView === "documents"
-                    ? undefined
-                    : `← ${
-                        copy.projectEntry[
-                          PROJECT_VIEW_TAB_LABEL_KEYS[previousProjectView]
-                        ]
-                      }`
-                }
-                schoolAdmissionsCopy={copy.schoolAdmissions}
-                schoolAdmissionsEnabled={schoolAdmissionsEnabled}
-                schoolApplicationsCopy={copy.schoolApplications}
-                schoolApplicationsEnabled={schoolApplicationsEnabled}
-                schoolPreparationRestricted={schoolPreparationRestricted}
-                student500Copy={copy.student500}
-                student500Enabled={student500Enabled}
-                summaryState={workspaceSummaryState}
-                temporaryGuestProject={temporaryGuestProject}
-                view={projectView}
-              />
-            ) : (
+            {selectedProjectId && !isActiveSelectedProjectConversation ? (
               <div
                 className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto px-5 py-8"
-                data-testid="project-selection-empty-state"
+                data-testid="project-chat-empty-state"
               >
-                <div className="max-w-xl text-center">
-                  <h3 className="text-lg font-semibold text-slate-950">
-                    {copy.projectEntry.selectedProject}
-                  </h3>
+                <div className="max-w-lg text-center">
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    {copy.projectEntry.projectWorkbench.noProjectChatTitle}
+                  </h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    {copy.projectEntry.projectChatHistoryScope}
+                    {
+                      copy.projectEntry.projectWorkbench
+                        .noProjectChatDescription
+                    }
                   </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {copy.projectEntry.projectContextUnavailable}
-                  </p>
+                  {conversationLoading ? (
+                    <p
+                      aria-live="polite"
+                      className="mt-3 text-xs text-slate-500"
+                    >
+                      {copy.history.loading}
+                    </p>
+                  ) : (
+                    <button
+                      className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-[#001736] px-4 py-2 text-sm font-semibold text-white hover:bg-[#002b5b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-800"
+                      data-testid="open-project-conversations"
+                      onClick={() => {
+                        if (!isWideViewport) {
+                          openMobileSheet("navigation");
+                          return;
+                        }
+                        document
+                          .querySelector<HTMLElement>(
+                            '[data-testid="project-entry-panel"]'
+                          )
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "nearest",
+                          });
+                      }}
+                      type="button"
+                    >
+                      {copy.projectEntry.projectWorkbench.openProjectChats}
+                    </button>
+                  )}
                 </div>
               </div>
-            )
-          ) : (
-            <>
-              <div
-                className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5"
-                data-testid="workspace-message-list"
-                onScroll={handleMessageListScroll}
-                ref={listRef}
-              >
-                {activePolicyReference &&
-                shouldApplyPolicyBinding({
-                  binding: policyBinding,
-                  activeChatId: conversationId,
-                  requestedChatId: conversationId,
-                }) ? (
-                  <section
-                    className="mb-5 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3"
-                    data-policy-continuity="topic-reference-only"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-violet-800">
-                          {policyCopy.askAi}
-                        </p>
-                        <h2 className="mt-1 break-words text-sm font-semibold text-slate-900">
-                          {activePolicyReference.title[locale]}
-                        </h2>
-                        <p className="mt-1 text-xs leading-5 text-slate-600">
-                          {policyCopy.workspaceOpener}
-                        </p>
-                        <p className="mt-2 text-[11px] font-medium text-violet-900">
-                          {activePolicyReference.revision?.number
-                            ? `${copy.policy.revision}: r${activePolicyReference.revision.number}`
-                            : copy.policy.revisionUnknown}
-                          {policyBinding?.boundAt
-                            ? ` · ${copy.policy.boundAt}: ${formatConversationUpdatedAt(
-                                policyBinding.boundAt,
-                                null,
-                                locale,
-                                copy.history.updatedUnavailable
-                              )}`
-                            : null}
-                        </p>
-                        {/*
+            ) : !selectedProjectId && isNeutralProjectSelection ? (
+              selectedProject ? (
+                <ProjectWorkspaceHome
+                  artifacts={workspaceSummary?.artifacts ?? null}
+                  copy={copy.projectEntry}
+                  locale={locale}
+                  navigationBusy={projectNavigationBusy}
+                  onOpenArtifactOwner={handleSelectProjectView}
+                  onReturnToPreviousView={returnToPreviousProjectView}
+                  onSelectView={handleSelectProjectView}
+                  project={selectedProject}
+                  projectDocumentsEnabled={false}
+                  projectFactsEnabled={projectFactsEnabled}
+                  projectReviewCopy={copy.projectReview}
+                  projectReviewEnabled={projectReviewEnabled}
+                  returnToPreviousViewLabel={
+                    previousProjectView === "documents"
+                      ? undefined
+                      : `← ${
+                          copy.projectEntry[
+                            PROJECT_VIEW_TAB_LABEL_KEYS[previousProjectView]
+                          ]
+                        }`
+                  }
+                  schoolAdmissionsCopy={copy.schoolAdmissions}
+                  schoolAdmissionsEnabled={schoolAdmissionsEnabled}
+                  schoolApplicationsCopy={copy.schoolApplications}
+                  schoolApplicationsEnabled={schoolApplicationsEnabled}
+                  schoolPreparationRestricted={schoolPreparationRestricted}
+                  student500Copy={copy.student500}
+                  student500Enabled={student500Enabled}
+                  summaryState={workspaceSummaryState}
+                  temporaryGuestProject={temporaryGuestProject}
+                  view={projectView}
+                />
+              ) : (
+                <div
+                  className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto px-5 py-8"
+                  data-testid="project-selection-empty-state"
+                >
+                  <div className="max-w-xl text-center">
+                    <h3 className="text-lg font-semibold text-slate-950">
+                      {copy.projectEntry.selectedProject}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      {copy.projectEntry.projectChatHistoryScope}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {copy.projectEntry.projectContextUnavailable}
+                    </p>
+                  </div>
+                </div>
+              )
+            ) : (
+              <>
+                <div
+                  className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5"
+                  data-testid="workspace-message-list"
+                  onScroll={handleMessageListScroll}
+                  ref={listRef}
+                >
+                  {activePolicyReference &&
+                  shouldApplyPolicyBinding({
+                    binding: policyBinding,
+                    activeChatId: conversationId,
+                    requestedChatId: conversationId,
+                  }) ? (
+                    <section
+                      className="mb-5 rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-3"
+                      data-policy-continuity="topic-reference-only"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-violet-800">
+                            {policyCopy.askAi}
+                          </p>
+                          <h2 className="mt-1 break-words text-sm font-semibold text-slate-900">
+                            {activePolicyReference.title[locale]}
+                          </h2>
+                          <p className="mt-1 text-xs leading-5 text-slate-600">
+                            {policyCopy.workspaceOpener}
+                          </p>
+                          <p className="mt-2 text-[11px] font-medium text-violet-900">
+                            {activePolicyReference.revision?.number
+                              ? `${copy.policy.revision}: r${activePolicyReference.revision.number}`
+                              : copy.policy.revisionUnknown}
+                            {policyBinding?.boundAt
+                              ? ` · ${copy.policy.boundAt}: ${formatConversationUpdatedAt(
+                                  policyBinding.boundAt,
+                                  null,
+                                  locale,
+                                  copy.history.updatedUnavailable
+                                )}`
+                              : null}
+                          </p>
+                          {/*
                       The snapshot is a topic reference, never verified current
                       law. This distinction is always visible with the card.
                     */}
-                        <p className="mt-1 text-[11px] leading-4 text-violet-800/90">
-                          {copy.policy.snapshotNotice}
-                        </p>
+                          <p className="mt-1 text-[11px] leading-4 text-violet-800/90">
+                            {copy.policy.snapshotNotice}
+                          </p>
+                        </div>
+                        {activePolicyReference.officialUrl ? (
+                          <a
+                            className="shrink-0 text-xs font-semibold text-violet-900 underline"
+                            href={activePolicyReference.officialUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            {policyCopy.officialSource}:{" "}
+                            {activePolicyReference.officialTitle ??
+                              activePolicyReference.title[locale]}
+                          </a>
+                        ) : (
+                          <span className="shrink-0 text-xs text-violet-900/80">
+                            {policyCopy.noOfficialSource}
+                          </span>
+                        )}
                       </div>
-                      {activePolicyReference.officialUrl ? (
-                        <a
-                          className="shrink-0 text-xs font-semibold text-violet-900 underline"
-                          href={activePolicyReference.officialUrl}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          {policyCopy.officialSource}:{" "}
-                          {activePolicyReference.officialTitle ??
-                            activePolicyReference.title[locale]}
-                        </a>
-                      ) : (
-                        <span className="shrink-0 text-xs text-violet-900/80">
-                          {policyCopy.noOfficialSource}
-                        </span>
-                      )}
-                    </div>
-                  </section>
-                ) : null}
-                {policyLaunchFailure ? (
-                  /**
-                   * Phase 12 Stage 2: a policy launch that could not be persisted is
-                   * reported explicitly, with honest recovery paths. It is never
-                   * silently replaced by an unrelated chat or a blank one.
-                   */
-                  <section
-                    className="mb-5 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm"
-                    data-policy-launch-state={policyLaunchFailure.code}
-                    role="alert"
-                  >
-                    <h2 className="font-semibold text-amber-900">
-                      {policyLaunchFailure.schemaUnavailable
-                        ? copy.policy.launchSchemaTitle
-                        : policyLaunchFailure.retryable
-                          ? copy.policy.launchFailedTitle
-                          : copy.policy.sourceUnavailableTitle}
-                    </h2>
-                    <p className="mt-1 text-xs leading-5 text-amber-900/90">
-                      {policyLaunchFailure.schemaUnavailable
-                        ? copy.policy.launchSchemaBody
-                        : policyLaunchFailure.retryable
-                          ? copy.policy.launchFailedBody
-                          : copy.policy.sourceUnavailableBody}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {policyLaunchFailure.retryable && requestedPolicySlug ? (
+                    </section>
+                  ) : null}
+                  {policyLaunchFailure ? (
+                    /**
+                     * Phase 12 Stage 2: a policy launch that could not be persisted is
+                     * reported explicitly, with honest recovery paths. It is never
+                     * silently replaced by an unrelated chat or a blank one.
+                     */
+                    <section
+                      className="mb-5 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm"
+                      data-policy-launch-state={policyLaunchFailure.code}
+                      role="alert"
+                    >
+                      <h2 className="font-semibold text-amber-900">
+                        {policyLaunchFailure.schemaUnavailable
+                          ? copy.policy.launchSchemaTitle
+                          : policyLaunchFailure.retryable
+                            ? copy.policy.launchFailedTitle
+                            : copy.policy.sourceUnavailableTitle}
+                      </h2>
+                      <p className="mt-1 text-xs leading-5 text-amber-900/90">
+                        {policyLaunchFailure.schemaUnavailable
+                          ? copy.policy.launchSchemaBody
+                          : policyLaunchFailure.retryable
+                            ? copy.policy.launchFailedBody
+                            : copy.policy.sourceUnavailableBody}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {policyLaunchFailure.retryable &&
+                        requestedPolicySlug ? (
+                          <Button
+                            data-testid="policy-launch-retry"
+                            onClick={() => retryPolicyLaunch()}
+                            size="sm"
+                            type="button"
+                          >
+                            {copy.policy.retry}
+                          </Button>
+                        ) : null}
+                        {requestedPolicySlug ? (
+                          <Button
+                            asChild
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Link href={`/intelligence/${requestedPolicySlug}`}>
+                              {copy.policy.openPolicy}
+                            </Link>
+                          </Button>
+                        ) : null}
                         <Button
-                          data-testid="policy-launch-retry"
-                          onClick={() => retryPolicyLaunch()}
-                          size="sm"
-                          type="button"
-                        >
-                          {copy.policy.retry}
-                        </Button>
-                      ) : null}
-                      {requestedPolicySlug ? (
-                        <Button
-                          asChild
+                          data-testid="policy-launch-continue-without"
+                          onClick={() => {
+                            // Explicit user choice: an ordinary conversation. This is
+                            // the only path that may drop the policy topic.
+                            setPolicyLaunchFailure(null);
+                            startNewConversation();
+                          }}
                           size="sm"
                           type="button"
                           variant="outline"
                         >
-                          <Link href={`/intelligence/${requestedPolicySlug}`}>
-                            {copy.policy.openPolicy}
-                          </Link>
+                          {copy.policy.continueWithoutPolicy}
                         </Button>
-                      ) : null}
-                      <Button
-                        data-testid="policy-launch-continue-without"
-                        onClick={() => {
-                          // Explicit user choice: an ordinary conversation. This is
-                          // the only path that may drop the policy topic.
-                          setPolicyLaunchFailure(null);
-                          startNewConversation();
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        {copy.policy.continueWithoutPolicy}
-                      </Button>
-                    </div>
-                  </section>
-                ) : null}
-                {launchingPolicy ? (
-                  <p
-                    className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-900"
-                    data-testid="policy-launch-progress"
-                  >
-                    {copy.status.loading}
-                  </p>
-                ) : null}
-                {messages.length === 0 ? (
-                  <div className="flex min-h-full items-center justify-center py-8">
-                    <div className="mx-auto max-w-2xl text-center">
-                      <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-[#001736] text-cyan-200">
-                        <Sparkles className="size-5" />
                       </div>
-                      <h3 className="text-xl font-semibold tracking-tight text-slate-950">
-                        {copy.consultation.emptyTitle}
-                      </h3>
-                      <p className="mt-3 text-sm leading-7 text-slate-600">
-                        {copy.consultation.emptyDescription}
-                      </p>
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        {quickQuestions.slice(0, 3).map((question) => (
-                          <button
-                            className="rounded-full bg-slate-100 px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
-                            disabled={!interaction.canUseSuggestedQuestions}
-                            key={question}
-                            onClick={() => submitMessage(question)}
-                            type="button"
-                          >
-                            {question.length > 58
-                              ? `${question.slice(0, 58)}…`
-                              : question}
-                          </button>
-                        ))}
+                    </section>
+                  ) : null}
+                  {launchingPolicy ? (
+                    <p
+                      className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-900"
+                      data-testid="policy-launch-progress"
+                    >
+                      {copy.status.loading}
+                    </p>
+                  ) : null}
+                  {messages.length === 0 ? (
+                    <div className="flex min-h-full items-center justify-center py-8">
+                      <div className="mx-auto max-w-2xl text-center">
+                        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-[#001736] text-cyan-200">
+                          <Sparkles className="size-5" />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight text-slate-950">
+                          {copy.consultation.emptyTitle}
+                        </h3>
+                        <p className="mt-3 text-sm leading-7 text-slate-600">
+                          {copy.consultation.emptyDescription}
+                        </p>
+                        <div className="mt-5 flex flex-wrap justify-center gap-2">
+                          {quickQuestions.slice(0, 3).map((question) => (
+                            <button
+                              className="rounded-full bg-slate-100 px-3 py-2 text-left text-xs leading-5 text-slate-700 transition hover:bg-cyan-50 disabled:opacity-50"
+                              disabled={!interaction.canUseSuggestedQuestions}
+                              key={question}
+                              onClick={() => submitMessage(question)}
+                              type="button"
+                            >
+                              {question.length > 58
+                                ? `${question.slice(0, 58)}…`
+                                : question}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="min-w-0 space-y-5 pb-4">
-                    {hasOlderMessages ? (
-                      <button
-                        className="mx-auto block rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-                        data-testid="load-earlier-messages"
-                        disabled={status !== "ready" || loadingOlderMessages}
-                        onClick={() => loadOlderMessages()}
-                        type="button"
-                      >
-                        {loadingOlderMessages
-                          ? copy.messages.loadingEarlier
-                          : copy.messages.loadEarlier}
-                      </button>
-                    ) : null}
-                    {messages.map((message) => {
-                      const isAssistant = message.role === "assistant";
-                      const isLatestAssistant =
-                        isAssistant && latestAssistant?.id === message.id;
-                      return (
-                        <div
-                          className={cn(
-                            "flex min-w-0 gap-3",
-                            isAssistant ? "items-start" : "justify-end"
-                          )}
-                          key={message.id}
+                  ) : (
+                    <div className="min-w-0 space-y-5 pb-4">
+                      {hasOlderMessages ? (
+                        <button
+                          className="mx-auto block rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                          data-testid="load-earlier-messages"
+                          disabled={status !== "ready" || loadingOlderMessages}
+                          onClick={() => loadOlderMessages()}
+                          type="button"
                         >
-                          {isAssistant ? (
-                            <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#001736] text-cyan-200">
-                              <Bot className="size-4" />
-                            </div>
-                          ) : null}
+                          {loadingOlderMessages
+                            ? copy.messages.loadingEarlier
+                            : copy.messages.loadEarlier}
+                        </button>
+                      ) : null}
+                      {messages.map((message) => {
+                        const isAssistant = message.role === "assistant";
+                        const isLatestAssistant =
+                          isAssistant && latestAssistant?.id === message.id;
+                        return (
                           <div
                             className={cn(
-                              "min-w-0 space-y-3",
-                              isAssistant
-                                ? "w-full max-w-full"
-                                : "flex max-w-[86%] flex-col items-end"
+                              "flex min-w-0 gap-3",
+                              isAssistant ? "items-start" : "justify-end"
                             )}
+                            key={message.id}
                           >
+                            {isAssistant ? (
+                              <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#001736] text-cyan-200">
+                                <Bot className="size-4" />
+                              </div>
+                            ) : null}
                             <div
                               className={cn(
-                                "min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-3 text-sm leading-7",
+                                "min-w-0 space-y-3",
                                 isAssistant
-                                  ? "bg-[#f3f4f5] text-slate-700"
-                                  : "bg-[#001736] text-white"
+                                  ? "w-full max-w-full"
+                                  : "flex max-w-[86%] flex-col items-end"
                               )}
-                              data-testid={
-                                isAssistant &&
-                                message.userDisplayMode ===
-                                  "political_gate_blocked"
-                                  ? "political-block-response"
-                                  : isAssistant
-                                    ? "workspace-assistant-message"
-                                    : "workspace-user-message"
-                              }
                             >
-                              {isAssistant ? (
-                                <AssistantRichMarkdown text={message.text} />
-                              ) : (
-                                <div className="whitespace-pre-wrap">
-                                  {message.text}
-                                </div>
-                              )}
-                              {isAssistant && message.isStreaming ? (
-                                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                                  <Loader2 className="size-3.5 animate-spin" />
-                                  {isZhLanguage(message.responseLanguage)
-                                    ? "正在整理答复…"
-                                    : "Preparing answer…"}
-                                </div>
-                              ) : null}
+                              <div
+                                className={cn(
+                                  "min-w-0 max-w-full overflow-hidden rounded-2xl px-4 py-3 text-sm leading-7",
+                                  isAssistant
+                                    ? "bg-[#f3f4f5] text-slate-700"
+                                    : "bg-[#001736] text-white"
+                                )}
+                                data-testid={
+                                  isAssistant &&
+                                  message.userDisplayMode ===
+                                    "political_gate_blocked"
+                                    ? "political-block-response"
+                                    : isAssistant
+                                      ? "workspace-assistant-message"
+                                      : "workspace-user-message"
+                                }
+                              >
+                                {isAssistant ? (
+                                  <AssistantRichMarkdown text={message.text} />
+                                ) : (
+                                  <div className="whitespace-pre-wrap">
+                                    {message.text}
+                                  </div>
+                                )}
+                                {isAssistant && message.isStreaming ? (
+                                  <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                    {isZhLanguage(message.responseLanguage)
+                                      ? "正在整理答复…"
+                                      : "Preparing answer…"}
+                                  </div>
+                                ) : null}
+                                {isAssistant &&
+                                !message.isStreaming &&
+                                message.researchStatus === "incomplete" ? (
+                                  <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                                    {isZhLanguage(message.responseLanguage)
+                                      ? "研究未完成：来源核对已达到时间限制。这是尽力答复，部分内容可能仍需进一步核实。"
+                                      : "Research incomplete: the source check reached its time limit. This is a best-effort answer and some points may require further verification."}
+                                  </div>
+                                ) : null}
+                              </div>
+
                               {isAssistant &&
                               !message.isStreaming &&
-                              message.researchStatus === "incomplete" ? (
-                                <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-                                  {isZhLanguage(message.responseLanguage)
-                                    ? "研究未完成：来源核对已达到时间限制。这是尽力答复，部分内容可能仍需进一步核实。"
-                                    : "Research incomplete: the source check reached its time limit. This is a best-effort answer and some points may require further verification."}
-                                </div>
+                              message.customerDocumentSources?.length ? (
+                                <section
+                                  className="rounded-xl border border-amber-200 bg-amber-50 p-3"
+                                  data-testid="customer-document-sources"
+                                >
+                                  <h4 className="text-xs font-semibold text-amber-950">
+                                    {copy.documents.customerEvidence}
+                                  </h4>
+                                  <ul className="mt-2 space-y-2 text-xs text-amber-950">
+                                    {message.customerDocumentSources.map(
+                                      (source) => (
+                                        <li
+                                          key={`${source.documentId}:${source.runId}`}
+                                        >
+                                          <p className="font-medium">
+                                            {source.originalFilename} ·{" "}
+                                            {source.runStatus.replaceAll(
+                                              "_",
+                                              " "
+                                            )}
+                                          </p>
+                                          {source.locators.map((locator) => (
+                                            <p
+                                              className="text-amber-800"
+                                              key={JSON.stringify(locator)}
+                                            >
+                                              {Object.entries(locator)
+                                                .map(
+                                                  ([key, value]) =>
+                                                    `${key}: ${value}`
+                                                )
+                                                .join(" · ")}
+                                            </p>
+                                          ))}
+                                          {source.truncated ||
+                                          source.runStatus !== "complete" ? (
+                                            <p className="mt-1">
+                                              {copy.documents.warning}
+                                            </p>
+                                          ) : null}
+                                        </li>
+                                      )
+                                    )}
+                                  </ul>
+                                </section>
+                              ) : null}
+
+                              {isAssistant &&
+                              !message.isStreaming &&
+                              !hasTerminalReferenceSection(message.text) &&
+                              compactSourcesForMessage(message).length ? (
+                                <CollapsibleSourceList
+                                  className="rounded-xl bg-slate-50 p-3"
+                                  items={compactSourcesForMessage(message)}
+                                  label={copy.consultation.sources}
+                                />
+                              ) : null}
+
+                              {isAssistant &&
+                              !message.isStreaming &&
+                              message.escalate ? (
+                                <Card className="rounded-xl border-amber-200 bg-amber-50 shadow-none">
+                                  <CardContent className="flex items-start gap-3 p-4 text-sm leading-6 text-amber-900">
+                                    <CalendarDays className="mt-0.5 size-5 shrink-0" />
+                                    <div>
+                                      <p className="font-medium">
+                                        {copy.consultation.escalationTitle}
+                                      </p>
+                                      <p className="mt-1 text-amber-800">
+                                        {
+                                          copy.consultation
+                                            .escalationDescription
+                                        }
+                                      </p>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ) : null}
+
+                              {isAssistant &&
+                              !message.isStreaming &&
+                              interaction.canRequestLawyerReview &&
+                              conversationId &&
+                              persistedAssistantMessageIdForReview(message) ? (
+                                <LawyerRequestAction
+                                  answerPreview={message.text}
+                                  assistantMessageId={
+                                    persistedAssistantMessageIdForReview(
+                                      message
+                                    ) ?? ""
+                                  }
+                                  chatId={conversationId}
+                                />
+                              ) : null}
+
+                              {isAssistant &&
+                              isLatestAssistant &&
+                              !message.isStreaming &&
+                              interaction.canUseGuidedIntake ? (
+                                <GuidedIntakeCard
+                                  draftFacts={draftFacts}
+                                  factSlotStates={message.factSlotStates}
+                                  interactionPlan={message.interactionPlan}
+                                  isSubmitting={status !== "ready"}
+                                  onBookConsultation={() =>
+                                    handleBookConsultation(
+                                      message.responseLanguage
+                                    )
+                                  }
+                                  onDraftChange={handleDraftChange}
+                                  onSubmitDraftFacts={handleSubmitDraftFacts}
+                                  responseLanguage={message.responseLanguage}
+                                />
+                              ) : null}
+
+                              {SHOW_WORKSPACE_DEBUG &&
+                              isAssistant &&
+                              message.retrievalDebug ? (
+                                <details className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+                                  <summary className="cursor-pointer font-medium text-slate-700">
+                                    Debug
+                                  </summary>
+                                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">
+                                    {JSON.stringify(
+                                      message.retrievalDebug,
+                                      null,
+                                      2
+                                    )}
+                                  </pre>
+                                </details>
                               ) : null}
                             </div>
-
-                            {isAssistant &&
-                            !message.isStreaming &&
-                            message.customerDocumentSources?.length ? (
-                              <section
-                                className="rounded-xl border border-amber-200 bg-amber-50 p-3"
-                                data-testid="customer-document-sources"
-                              >
-                                <h4 className="text-xs font-semibold text-amber-950">
-                                  {copy.documents.customerEvidence}
-                                </h4>
-                                <ul className="mt-2 space-y-2 text-xs text-amber-950">
-                                  {message.customerDocumentSources.map(
-                                    (source) => (
-                                      <li
-                                        key={`${source.documentId}:${source.runId}`}
-                                      >
-                                        <p className="font-medium">
-                                          {source.originalFilename} ·{" "}
-                                          {source.runStatus.replaceAll(
-                                            "_",
-                                            " "
-                                          )}
-                                        </p>
-                                        {source.locators.map((locator) => (
-                                          <p
-                                            className="text-amber-800"
-                                            key={JSON.stringify(locator)}
-                                          >
-                                            {Object.entries(locator)
-                                              .map(
-                                                ([key, value]) =>
-                                                  `${key}: ${value}`
-                                              )
-                                              .join(" · ")}
-                                          </p>
-                                        ))}
-                                        {source.truncated ||
-                                        source.runStatus !== "complete" ? (
-                                          <p className="mt-1">
-                                            {copy.documents.warning}
-                                          </p>
-                                        ) : null}
-                                      </li>
-                                    )
-                                  )}
-                                </ul>
-                              </section>
-                            ) : null}
-
-                            {isAssistant &&
-                            !message.isStreaming &&
-                            !hasTerminalReferenceSection(message.text) &&
-                            compactSourcesForMessage(message).length ? (
-                              <CollapsibleSourceList
-                                className="rounded-xl bg-slate-50 p-3"
-                                items={compactSourcesForMessage(message)}
-                                label={copy.consultation.sources}
-                              />
-                            ) : null}
-
-                            {isAssistant &&
-                            !message.isStreaming &&
-                            message.escalate ? (
-                              <Card className="rounded-xl border-amber-200 bg-amber-50 shadow-none">
-                                <CardContent className="flex items-start gap-3 p-4 text-sm leading-6 text-amber-900">
-                                  <CalendarDays className="mt-0.5 size-5 shrink-0" />
-                                  <div>
-                                    <p className="font-medium">
-                                      {copy.consultation.escalationTitle}
-                                    </p>
-                                    <p className="mt-1 text-amber-800">
-                                      {copy.consultation.escalationDescription}
-                                    </p>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ) : null}
-
-                            {isAssistant &&
-                            !message.isStreaming &&
-                            interaction.canRequestLawyerReview &&
-                            conversationId &&
-                            persistedAssistantMessageIdForReview(message) ? (
-                              <LawyerRequestAction
-                                answerPreview={message.text}
-                                assistantMessageId={
-                                  persistedAssistantMessageIdForReview(
-                                    message
-                                  ) ?? ""
-                                }
-                                chatId={conversationId}
-                              />
-                            ) : null}
-
-                            {isAssistant &&
-                            isLatestAssistant &&
-                            !message.isStreaming &&
-                            interaction.canUseGuidedIntake ? (
-                              <GuidedIntakeCard
-                                draftFacts={draftFacts}
-                                factSlotStates={message.factSlotStates}
-                                interactionPlan={message.interactionPlan}
-                                isSubmitting={status !== "ready"}
-                                onBookConsultation={() =>
-                                  handleBookConsultation(
-                                    message.responseLanguage
-                                  )
-                                }
-                                onDraftChange={handleDraftChange}
-                                onSubmitDraftFacts={handleSubmitDraftFacts}
-                                responseLanguage={message.responseLanguage}
-                              />
-                            ) : null}
-
-                            {SHOW_WORKSPACE_DEBUG &&
-                            isAssistant &&
-                            message.retrievalDebug ? (
-                              <details className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
-                                <summary className="cursor-pointer font-medium text-slate-700">
-                                  Debug
-                                </summary>
-                                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">
-                                  {JSON.stringify(
-                                    message.retrievalDebug,
-                                    null,
-                                    2
-                                  )}
-                                </pre>
-                              </details>
-                            ) : null}
+                            {isAssistant ? null : (
+                              <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                                <UserRound className="size-4" />
+                              </div>
+                            )}
                           </div>
-                          {isAssistant ? null : (
-                            <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                              <UserRound className="size-4" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
-              {status === "submitted" ? (
-                <div className="px-3 pb-3">
-                  <WorkspaceProcessingCard
-                    assistantMode={assistantMode}
-                    elapsedMs={pendingElapsedMs}
-                    isZh={pendingIsZh}
-                  />
-                </div>
-              ) : null}
-              {error ? (
-                <div className="border-t border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              ) : null}
-              {persistenceNotice &&
-              resolveWorkspacePersistence(persistenceNotice).noticeKind !==
-                "none" ? (
-                <div
-                  className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-                  data-testid="persistence-notice"
-                >
-                  <span>
-                    {persistenceNotice.errorCode === "client_turn_in_progress"
-                      ? copy.persistence.answerInProgress
-                      : persistenceNotice.errorCode ===
-                          "conversation_turn_not_persisted"
-                        ? copy.persistence.messageNotSaved
-                        : copy.persistence.notSaved}
-                  </span>
-                  <button
-                    className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
-                    disabled={retryingPersistence}
-                    onClick={() => retryPersistence()}
-                    type="button"
+                {status === "submitted" ? (
+                  <div className="px-3 pb-3">
+                    <WorkspaceProcessingCard
+                      assistantMode={assistantMode}
+                      elapsedMs={pendingElapsedMs}
+                      isZh={pendingIsZh}
+                    />
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="border-t border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                ) : null}
+                {persistenceNotice &&
+                resolveWorkspacePersistence(persistenceNotice).noticeKind !==
+                  "none" ? (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                    data-testid="persistence-notice"
                   >
-                    {retryingPersistence
-                      ? copy.persistence.retrying
-                      : persistenceNotice.errorCode ===
-                          "client_turn_in_progress"
-                        ? copy.persistence.checkSavedAnswer
+                    <span>
+                      {persistenceNotice.errorCode === "client_turn_in_progress"
+                        ? copy.persistence.answerInProgress
                         : persistenceNotice.errorCode ===
                             "conversation_turn_not_persisted"
-                          ? copy.persistence.retrySending
-                          : copy.persistence.retrySave}
-                  </button>
-                </div>
-              ) : null}
+                          ? copy.persistence.messageNotSaved
+                          : copy.persistence.notSaved}
+                    </span>
+                    <button
+                      className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+                      disabled={retryingPersistence}
+                      onClick={() => retryPersistence()}
+                      type="button"
+                    >
+                      {retryingPersistence
+                        ? copy.persistence.retrying
+                        : persistenceNotice.errorCode ===
+                            "client_turn_in_progress"
+                          ? copy.persistence.checkSavedAnswer
+                          : persistenceNotice.errorCode ===
+                              "conversation_turn_not_persisted"
+                            ? copy.persistence.retrySending
+                            : copy.persistence.retrySave}
+                    </button>
+                  </div>
+                ) : null}
 
-              <div className="border-t border-slate-100 bg-white p-2 sm:p-3">
-                {isReadOnlyConversation ? (
-                  // Archived history: no composer exists here, only reading and the
-                  // explicit path to a new conversation.
-                  <LegacyConversationNotice
-                    copy={copy}
-                    disabled={!interaction.canStartNewConversation}
-                    onStartNewConversation={startNewConversation}
-                    projectChat={conversationOrigin === "project"}
-                  />
-                ) : (
-                  /*
+                <div className="border-t border-slate-100 bg-white p-2 sm:p-3">
+                  {isReadOnlyConversation ? (
+                    // Archived history: no composer exists here, only reading and the
+                    // explicit path to a new conversation.
+                    <LegacyConversationNotice
+                      copy={copy}
+                      disabled={!interaction.canStartNewConversation}
+                      onStartNewConversation={startNewConversation}
+                      projectChat={conversationOrigin === "project"}
+                    />
+                  ) : (
+                    /*
                 Phase 12 Stage 2 interactive composer: one bounded auto-growing
                 input, the upload control next to it and an always-reachable send
                 button. Uploaded files are managed in the conversation file panel
                 so no attachment list grows under the composer.
               */
-                  <WorkspaceChatComposer
-                    attachmentControl={
-                      <MatterDocumentsPanel
-                        accountAccess={canUseDocuments}
-                        chatId={conversationId}
-                        compact
-                        conversationDocumentsAvailable={conversationDocumentsAvailableForOrigin(
-                          conversationOrigin
-                        )}
-                        copy={copy}
-                        disabled={!interaction.canUploadDocuments}
-                        key={`conversation-documents:${conversationOrigin}:${conversationId ?? "new"}`}
-                        onDocumentsChanged={notifyDocumentsChanged}
-                      />
-                    }
-                    disabled={!interaction.canSubmitMessage}
-                    inputLabel={copy.consultation.inputLabel}
-                    onBlur={() => setComposerFocused(false)}
-                    onFocus={() => setComposerFocused(true)}
-                    onSubmit={(value) => submitMessage(value)}
-                    onValueChange={setInput}
-                    placeholder={copy.consultation.placeholder}
-                    sendLabel={copy.consultation.send}
-                    status={status}
-                    submittedLabel={copy.status.submitted}
-                    typingLabel={copy.status.typing}
-                    value={input}
-                  />
-                )}
-              </div>
-            </>
-          )}
-        </div>
+                    <WorkspaceChatComposer
+                      attachmentControl={
+                        <MatterDocumentsPanel
+                          accountAccess={canUseDocuments}
+                          chatId={conversationId}
+                          compact
+                          conversationDocumentsAvailable={conversationDocumentsAvailableForOrigin(
+                            conversationOrigin
+                          )}
+                          copy={copy}
+                          disabled={!interaction.canUploadDocuments}
+                          key={`conversation-documents:${conversationOrigin}:${conversationId ?? "new"}`}
+                          onDocumentsChanged={notifyDocumentsChanged}
+                        />
+                      }
+                      disabled={!interaction.canSubmitMessage}
+                      inputLabel={copy.consultation.inputLabel}
+                      onBlur={() => setComposerFocused(false)}
+                      onFocus={() => setComposerFocused(true)}
+                      onSubmit={(value) => submitMessage(value)}
+                      onValueChange={setInput}
+                      placeholder={copy.consultation.placeholder}
+                      sendLabel={copy.consultation.send}
+                      status={status}
+                      submittedLabel={copy.status.submitted}
+                      typingLabel={copy.status.typing}
+                      value={input}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
-        {isWideViewport ? (
-          isNeutralProjectSelection ? (
-            <aside
-              className="order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
-              data-testid="workspace-project-context-notice"
-            >
-              {projectContextRailContent}
-            </aside>
-          ) : (
-            <aside
-              className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
-              data-testid="workspace-context-panel"
-            >
-              {conversationContextRailContent}
-            </aside>
-          )
-        ) : null}
+          {selectedProjectId ? (
+            <>
+              {isWideViewport ? (
+                <ProjectWorkspaceSplitSeparator
+                  accessibleLabel={
+                    copy.projectEntry.projectWorkbench.splitterLabel
+                  }
+                  centerWidth={projectSplit.centerWidth}
+                  controls="project-chat-region project-task-region"
+                  handlers={projectSplit.separatorHandlers}
+                  maxCenterWidth={projectSplit.maxCenterWidth}
+                  minCenterWidth={projectSplit.minCenterWidth}
+                />
+              ) : null}
+              <aside
+                className={cn(
+                  "order-3 min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-sm xl:h-full xl:min-h-0 xl:rounded-none xl:shadow-none",
+                  isWideViewport
+                    ? ""
+                    : "h-[calc(100dvh_-_16rem)] min-h-[320px]",
+                  mobileProjectSurface === "task" ? "flex" : "hidden xl:flex"
+                )}
+                data-testid="workspace-project-task-region"
+                id="project-task-region"
+              >
+                <ProjectTaskWorkspacePanel
+                  journeyCopy={copy.projectEntry.projectJourney}
+                  journeyLoad={projectJourneyResource.load}
+                  locale={locale}
+                  navigationBusy={projectNavigationBusy}
+                  onOpenWorkspace={handleSheetAwareSelectProjectView}
+                  onRefresh={projectJourneyResource.refresh}
+                  onReturnToTarget={() => {
+                    if (!projectNavigationBusyRef.current) {
+                      setProjectView("home");
+                    }
+                  }}
+                  projectId={selectedProjectId}
+                  projectView={projectView}
+                  selectedNodeId={selectedProjectTargetId}
+                  workbenchCopy={copy.projectEntry.projectWorkbench}
+                >
+                  {selectedProject && projectView !== "home" ? (
+                    <ProjectWorkspaceHome
+                      artifacts={workspaceSummary?.artifacts ?? null}
+                      copy={copy.projectEntry}
+                      locale={locale}
+                      navigationBusy={projectNavigationBusy}
+                      onOpenArtifactOwner={handleSheetAwareSelectProjectView}
+                      onReturnToPreviousView={returnToPreviousProjectView}
+                      onSelectView={handleSheetAwareSelectProjectView}
+                      presentation="section"
+                      project={selectedProject}
+                      projectDocumentsEnabled={false}
+                      projectFactsEnabled={projectFactsEnabled}
+                      projectReviewCopy={copy.projectReview}
+                      projectReviewEnabled={projectReviewEnabled}
+                      returnToPreviousViewLabel={
+                        previousProjectView === "documents"
+                          ? undefined
+                          : `← ${copy.projectEntry[PROJECT_VIEW_TAB_LABEL_KEYS[previousProjectView]]}`
+                      }
+                      schoolAdmissionsCopy={copy.schoolAdmissions}
+                      schoolAdmissionsEnabled={schoolAdmissionsEnabled}
+                      schoolApplicationsCopy={copy.schoolApplications}
+                      schoolApplicationsEnabled={schoolApplicationsEnabled}
+                      schoolPreparationRestricted={schoolPreparationRestricted}
+                      student500Copy={copy.student500}
+                      student500Enabled={student500Enabled}
+                      summaryState={workspaceSummaryState}
+                      temporaryGuestProject={temporaryGuestProject}
+                      view={projectView}
+                    />
+                  ) : null}
+                </ProjectTaskWorkspacePanel>
+              </aside>
+            </>
+          ) : isWideViewport ? (
+            isNeutralProjectSelection ? (
+              <aside
+                className="order-3 min-w-0 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+                data-testid="workspace-project-context-notice"
+              >
+                {projectContextRailContent}
+              </aside>
+            ) : (
+              <aside
+                className="order-3 min-w-0 space-y-3 rounded-2xl bg-[#f3f4f5] p-3 xl:min-h-0 xl:overflow-y-auto xl:rounded-none xl:p-3"
+                data-testid="workspace-context-panel"
+              >
+                {conversationContextRailContent}
+              </aside>
+            )
+          ) : null}
+        </div>
       </div>
       <p className="mt-3 px-1 text-xs leading-5 text-slate-500">
         {copy.legalDisclaimer}

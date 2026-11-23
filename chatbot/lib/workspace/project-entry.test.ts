@@ -909,23 +909,24 @@ test("the Project rail is navigation-only and the M5 panels live in the main are
   assert.match(projectPanelSource, /project-view-\$\{view\}/u);
 });
 
-test("the workspace renders the Project home in the main pane and can return to it", () => {
-  // A selected Project without a Chat shows the home, not the neutral placeholder.
-  assert.match(workspaceSource, /<ProjectWorkspaceHome/u);
-  assert.match(
+test("the selected Project uses the shared Chat and Task workbench", () => {
+  assert.match(workspaceSource, /<ProjectWorkbenchHeader/u);
+  assert.match(workspaceSource, /<ProjectTaskWorkspacePanel/u);
+  assert.match(workspaceSource, /data-testid="project-chat-empty-state"/u);
+  assert.match(workspaceSource, /presentation="section"/u);
+  // Changing Task sections preserves the active Project Chat and its composer.
+  assert.doesNotMatch(workspaceSource, /data-testid="return-to-project-home"/u);
+  assert.doesNotMatch(
     workspaceSource,
-    /isNeutralProjectSelection \? \(\s*selectedProject \?/u
+    /const returnToProjectHome = useCallback/u
   );
-  // A Project Chat still offers an explicit, non-creating return to the home.
-  assert.match(workspaceSource, /data-testid="return-to-project-home"/u);
-  assert.match(workspaceSource, /const returnToProjectHome = useCallback/u);
-  // Returning home invalidates in-flight conversation loads through the shared
-  // reset, and the navigation itself obeys the busy contract.
+  // The shared reset still invalidates in-flight conversation loads on a real
+  // Project switch and clears the previous Project draft.
   assert.match(
     workspaceSource,
     /const resetProjectConversation = useCallback\(\(\) => \{\s*conversationLoadSeqRef\.current \+= 1;/u
   );
-  assert.match(workspaceSource, /action: resetProjectConversation,/u);
+  assert.match(workspaceSource, /setInput\(""\);/u);
   // The home is a presentation layer only: it reuses the existing panels.
   assert.match(
     workspaceSource,
@@ -947,31 +948,25 @@ test("the workspace renders the Project home in the main pane and can return to 
 
 const resetSource = workspaceSource.slice(
   workspaceSource.indexOf("const resetProjectConversation = useCallback"),
-  workspaceSource.indexOf("const returnToProjectHome = useCallback")
+  workspaceSource.indexOf("const handleSelectedProjectChange = useCallback")
 );
 const projectNavSource = workspaceSource.slice(
-  workspaceSource.indexOf("const returnToProjectHome = useCallback"),
-  workspaceSource.indexOf("const latestAssistant = useMemo")
+  workspaceSource.indexOf("const handleSelectProjectView = useCallback"),
+  workspaceSource.indexOf("const handleSelectProjectTarget = useCallback")
 );
 const railNavSource = projectPanelSource.slice(
   projectPanelSource.indexOf('data-testid="project-view-nav"'),
   projectPanelSource.indexOf("</nav>")
 );
 
-test("Project home and section navigation reuse the navigation-busy contract", () => {
+test("Project section navigation uses the shared navigation-busy contract", () => {
   assert.ok(projectNavSource.length > 0);
-  // Both actions are guarded by the same shared busy gate.
   const guards =
     projectNavSource.match(
       /runProjectNavigationAction\(\{\s*isBusy: \(\) => projectNavigationBusyRef\.current,/gu
     ) ?? [];
-  // Phase 13 M9-A R1-04 adds a third busy-gated Project section action: the document
-  // centre's "return to the previous view". Every Project section action still goes
-  // through the one shared gate, so a new ungated action cannot be added silently.
-  assert.ok(
-    guards.length >= 3,
-    `every Project section action must use the shared busy gate (found ${guards.length})`
-  );
+  assert.equal(guards.length, 1);
+  assert.doesNotMatch(projectNavSource, /resetProjectConversation/u);
   assert.match(
     workspaceSource,
     /projectNavigationBusyRef\.current = projectNavigationBusy;/u
@@ -981,16 +976,13 @@ test("Project home and section navigation reuse the navigation-busy contract", (
     railNavSource,
     /disabled=\{projectEntryButtonDisabled\(navigationBusy\)\}/u
   );
-  // The chat header control is disabled too.
-  const buttonIndex = workspaceSource.indexOf(
-    'data-testid="return-to-project-home"'
+  // Target selection shares the same guard and does not dispatch a Chat message.
+  const targetSource = workspaceSource.slice(
+    workspaceSource.indexOf("const handleSelectProjectTarget = useCallback"),
+    workspaceSource.indexOf("const returnToPreviousProjectView = useCallback")
   );
-  assert.ok(buttonIndex > 0);
-  const buttonWindow = workspaceSource.slice(
-    buttonIndex - 400,
-    buttonIndex + 400
-  );
-  assert.match(buttonWindow, /disabled=\{projectNavigationBusy\}/u);
+  assert.match(targetSource, /projectNavigationBusyRef\.current/u);
+  assert.doesNotMatch(targetSource, /submitMessage|resetProjectConversation/u);
 });
 
 test("a busy workspace refuses Project section navigation and leaves the section unchanged", () => {
@@ -1616,7 +1608,7 @@ test("a conflicting rename reports state change, keeps the stored name and re-re
 });
 
 test("rename retries reuse the operation id only for an identical request", async () => {
-  const bodies: Array<Record<string, unknown>> = [];
+  const bodies: Record<string, unknown>[] = [];
   let failRemaining = 2;
   let operationSequence = 0;
   const client = createProjectEntryController({
@@ -1687,7 +1679,7 @@ test("the panel exposes the bilingual name field and one obvious rename action",
 });
 
 test("creation retries reuse the operation id only for the same requested name", async () => {
-  const posts: Array<Record<string, unknown>> = [];
+  const posts: Record<string, unknown>[] = [];
   let failRemaining = 2;
   let sequence = 0;
   const client = createProjectEntryController({

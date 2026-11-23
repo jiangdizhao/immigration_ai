@@ -15,24 +15,19 @@ import {
   ShieldAlert,
   TriangleAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SiteLocale } from "@/lib/site-locale";
 import {
-  buildProjectJourney,
   type ProjectJourney,
-  type ProjectJourneyLoadAction,
   type ProjectJourneyNode,
   type ProjectJourneySource,
   type ProjectStateLoadFailure,
-  parseProjectStateResponse,
   projectJourneyActionLabelKey,
-  projectJourneyFailureForStatus,
-  projectJourneyLoadReducer,
   projectJourneyReasonLabelKey,
   projectJourneySelectionReducer,
-  projectJourneyStateRequest,
   projectJourneyViewForAction,
 } from "@/lib/workspace/project-journey";
+import { useProjectJourney } from "@/lib/workspace/project-journey-client";
 import type { ProjectWorkspaceView } from "@/lib/workspace/project-workspace-view";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
 
@@ -316,74 +311,8 @@ export function ProjectGuidedJourney({
   onSelectView: (view: ProjectWorkspaceView) => void;
   projectId: string;
 }) {
-  const [loadState, setLoadState] = useState<ReturnType<
-    typeof projectJourneyLoadReducer
-  > | null>(null);
-  const dispatch = useCallback((action: ProjectJourneyLoadAction) => {
-    setLoadState((current) => projectJourneyLoadReducer(current, action));
-  }, []);
-  const [refreshRevision, setRefreshRevision] = useState(0);
-  const requestId = useRef(0);
-
-  useEffect(() => {
-    const currentRequestId = ++requestId.current + refreshRevision;
-    const controller = new AbortController();
-    dispatch({ type: "started", projectId, requestId: currentRequestId });
-
-    async function load() {
-      try {
-        const request = projectJourneyStateRequest(
-          projectId,
-          controller.signal
-        );
-        const response = await fetch(request.url, request.init);
-        if (!response.ok) {
-          dispatch({
-            type: "failed",
-            projectId,
-            requestId: currentRequestId,
-            reason: projectJourneyFailureForStatus(response.status),
-          });
-          return;
-        }
-        const body: unknown = await response.json();
-        const state = parseProjectStateResponse(body, projectId);
-        if (!state) {
-          dispatch({
-            type: "failed",
-            projectId,
-            requestId: currentRequestId,
-            reason: "invalid_response",
-          });
-          return;
-        }
-        dispatch({
-          type: "loaded",
-          projectId,
-          requestId: currentRequestId,
-          state,
-          journey: buildProjectJourney(state),
-        });
-      } catch {
-        if (!controller.signal.aborted) {
-          dispatch({
-            type: "failed",
-            projectId,
-            requestId: currentRequestId,
-            reason: "network_error",
-          });
-        }
-      }
-    }
-
-    load();
-    return () => {
-      controller.abort();
-    };
-  }, [dispatch, projectId, refreshRevision]);
-
-  const visibleState = loadState?.projectId === projectId ? loadState : null;
-  if (!visibleState || visibleState.status === "loading") {
+  const { load, refresh } = useProjectJourney(projectId);
+  if (load.status === "idle" || load.status === "loading") {
     return (
       <output
         aria-busy="true"
@@ -401,7 +330,7 @@ export function ProjectGuidedJourney({
       </output>
     );
   }
-  if (visibleState.status === "failed") {
+  if (load.status === "failed") {
     return (
       <section
         aria-label={copy.title}
@@ -418,14 +347,14 @@ export function ProjectGuidedJourney({
               className="max-w-3xl text-[15px] leading-6 text-slate-800"
               role="alert"
             >
-              {failureText(visibleState.reason, copy)}
+              {failureText(load.reason, copy)}
             </p>
           </div>
           <button
             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="project-guided-journey-refresh"
             disabled={navigationBusy}
-            onClick={() => setRefreshRevision((current) => current + 1)}
+            onClick={refresh}
             type="button"
           >
             <RefreshCw aria-hidden="true" className="size-4" />
@@ -440,11 +369,11 @@ export function ProjectGuidedJourney({
     <ProjectGuidedJourneyContent
       copy={copy}
       enabledSections={enabledSections}
-      journey={visibleState.journey}
-      key={visibleState.journey.project.id}
+      journey={load.journey}
+      key={load.journey.project.id}
       locale={locale}
       navigationBusy={navigationBusy}
-      onRefresh={() => setRefreshRevision((current) => current + 1)}
+      onRefresh={refresh}
       onSelectView={onSelectView}
     />
   );
@@ -457,6 +386,8 @@ export function ProjectGuidedJourneyContent({
   journey,
   locale,
   navigationBusy,
+  selectedNodeId: controlledSelectedNodeId,
+  onNodeSelect,
   onRefresh,
   onSelectView,
 }: {
@@ -468,6 +399,8 @@ export function ProjectGuidedJourneyContent({
   journey: ProjectJourney;
   locale: string;
   navigationBusy: boolean;
+  selectedNodeId?: string | null;
+  onNodeSelect?: (nodeId: string) => void;
   onRefresh: () => void;
   onSelectView: (view: ProjectWorkspaceView) => void;
 }) {
@@ -490,9 +423,13 @@ export function ProjectGuidedJourneyContent({
       null
     );
   }, [businessNodes, journey.nodes]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
-    defaultNodeId
-  );
+  const [internalSelectedNodeId, setInternalSelectedNodeId] = useState<
+    string | null
+  >(defaultNodeId);
+  const selectedNodeId =
+    controlledSelectedNodeId === undefined
+      ? internalSelectedNodeId
+      : controlledSelectedNodeId;
   const nodeById = useMemo(
     () => new Map(journey.nodes.map((node) => [node.id, node])),
     [journey.nodes]
@@ -503,14 +440,31 @@ export function ProjectGuidedJourneyContent({
     null;
 
   useEffect(() => {
-    setSelectedNodeId((current) =>
+    if (controlledSelectedNodeId !== undefined) {
+      return;
+    }
+    setInternalSelectedNodeId((current) =>
       projectJourneySelectionReducer(current, {
         type: "reconcile",
         availableNodeIds: journey.nodes.map((node) => node.id),
         defaultNodeId,
       })
     );
-  }, [defaultNodeId, journey.nodes]);
+  }, [controlledSelectedNodeId, defaultNodeId, journey.nodes]);
+
+  const selectNode = (nodeId: string) => {
+    const next = projectJourneySelectionReducer(selectedNodeId, {
+      type: "select",
+      nodeId,
+      availableNodeIds: journey.nodes.map((entry) => entry.id),
+    });
+    if (controlledSelectedNodeId === undefined) {
+      setInternalSelectedNodeId(next);
+    }
+    if (next) {
+      onNodeSelect?.(next);
+    }
+  };
 
   const schoolNodes = journey.nodes.filter(
     (node) => node.kind === "school_application"
@@ -571,15 +525,7 @@ export function ProjectGuidedJourneyContent({
         data-node-id={node.id}
         data-testid={`journey-node-${node.kind}`}
         key={node.id}
-        onClick={() =>
-          setSelectedNodeId((current) =>
-            projectJourneySelectionReducer(current, {
-              type: "select",
-              nodeId: node.id,
-              availableNodeIds: journey.nodes.map((entry) => entry.id),
-            })
-          )
-        }
+        onClick={() => selectNode(node.id)}
         type="button"
       >
         <span className="flex min-w-0 items-start gap-2">

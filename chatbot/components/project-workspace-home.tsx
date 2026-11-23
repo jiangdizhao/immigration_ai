@@ -62,6 +62,7 @@ export function ProjectWorkspaceHome({
   returnToPreviousViewLabel,
   onOpenArtifactOwner,
   artifacts = null,
+  presentation = "full",
 }: {
   copy: ProjectHomeCopy;
   locale: string;
@@ -107,6 +108,8 @@ export function ProjectWorkspaceHome({
   onOpenArtifactOwner?: (view: ProjectWorkspaceView) => void;
   /** Metadata-only generated-artifact references (R1-05). */
   artifacts?: ProjectArtifactsSummary | null;
+  /** Project sections can also render inside the M3-E1 Task region. */
+  presentation?: "full" | "section";
 }) {
   const created = new Intl.DateTimeFormat(locale, {
     year: "numeric",
@@ -124,7 +127,12 @@ export function ProjectWorkspaceHome({
 
   return (
     <div
-      className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-6 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"
+      className={
+        presentation === "section"
+          ? "min-w-0 space-y-4 bg-white p-1"
+          : "flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-6 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"
+      }
+      data-presentation={presentation}
       data-testid="project-workspace-home"
     >
       {/*
@@ -133,36 +141,38 @@ export function ProjectWorkspaceHome({
         fills the available width; only genuinely long-form prose keeps a reading limit.
       */}
       <div className="w-full min-w-0 max-w-none space-y-4">
-        <header className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {copy.selectedProject}
-          </p>
-          <h2
-            className="break-words text-2xl font-semibold text-slate-950"
-            data-testid="project-home-title"
-          >
-            {label}
-          </h2>
-          <p className="break-all font-mono text-xs text-slate-500">
-            {copy.projectId}: {project.id}
-          </p>
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
-            <span
-              className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-900"
-              data-testid="project-home-status"
+        {presentation === "full" ? (
+          <header className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {copy.selectedProject}
+            </p>
+            <h2
+              className="break-words text-2xl font-semibold text-slate-950"
+              data-testid="project-home-title"
             >
-              {statusLabel}
-            </span>
-            <span>
-              {copy.projectCreatedOn} {created}
-            </span>
-          </div>
-          <p className="max-w-4xl pt-1 text-[15px] leading-6 text-slate-600">
-            {copy.projectHomeSubtitle}
-          </p>
-        </header>
+              {label}
+            </h2>
+            <p className="break-all font-mono text-xs text-slate-500">
+              {copy.projectId}: {project.id}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
+              <span
+                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-900"
+                data-testid="project-home-status"
+              >
+                {statusLabel}
+              </span>
+              <span>
+                {copy.projectCreatedOn} {created}
+              </span>
+            </div>
+            <p className="max-w-4xl pt-1 text-[15px] leading-6 text-slate-600">
+              {copy.projectHomeSubtitle}
+            </p>
+          </header>
+        ) : null}
 
-        {temporaryGuestProject ? (
+        {presentation === "full" && temporaryGuestProject ? (
           <p
             className="rounded-xl border border-slate-200 bg-white p-3 text-[15px] leading-6 text-slate-600"
             data-testid="project-home-guest-notice"
@@ -172,31 +182,33 @@ export function ProjectWorkspaceHome({
           </p>
         ) : null}
 
-        <div
-          aria-label={copy.projectHomeTitle}
-          className="flex flex-wrap gap-1 border-b border-slate-200 pb-1"
-          data-testid="project-home-tabs"
-          role="tablist"
-        >
-          {PROJECT_WORKSPACE_VIEWS.map((tab) => (
-            <button
-              aria-selected={view === tab}
-              className={
-                view === tab
-                  ? "rounded-t-lg border-b-2 border-blue-800 px-3.5 py-2 text-sm font-semibold text-blue-950"
-                  : "rounded-t-lg border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              }
-              data-testid={`project-view-tab-${tab}`}
-              disabled={navigationBusy}
-              key={tab}
-              onClick={() => onSelectView(tab)}
-              role="tab"
-              type="button"
-            >
-              {copy[TAB_LABEL_KEYS[tab]]}
-            </button>
-          ))}
-        </div>
+        {presentation === "full" ? (
+          <div
+            aria-label={copy.projectHomeTitle}
+            className="flex flex-wrap gap-1 border-b border-slate-200 pb-1"
+            data-testid="project-home-tabs"
+            role="tablist"
+          >
+            {PROJECT_WORKSPACE_VIEWS.map((tab) => (
+              <button
+                aria-selected={view === tab}
+                className={
+                  view === tab
+                    ? "rounded-t-lg border-b-2 border-blue-800 px-3.5 py-2 text-sm font-semibold text-blue-950"
+                    : "rounded-t-lg border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                }
+                data-testid={`project-view-tab-${tab}`}
+                disabled={navigationBusy}
+                key={tab}
+                onClick={() => onSelectView(tab)}
+                role="tab"
+                type="button"
+              >
+                {copy[TAB_LABEL_KEYS[tab]]}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {view === "home" ? (
           <ProjectGuidedJourney
