@@ -1,4 +1,5 @@
 import type { ProjectJourney, ProjectJourneyNode } from "./project-journey";
+import type { ActiveStepSelectionV1 } from "./active-step-context";
 import {
   defaultWorkflowTaskForTarget,
   projectGoalTask,
@@ -18,6 +19,23 @@ export type ProjectWorkbenchTargetGroup =
   | "schools"
   | "independent_admissions"
   | "student500";
+
+export type ProjectWorkbenchEffectiveTask =
+  | {
+      status: "available";
+      selection: "explicit" | "default";
+      task: WorkflowTaskProjectionV1;
+    }
+  | {
+      status: "unavailable";
+      reason:
+        | "selected_task_missing"
+        | "selected_task_selection_missing"
+        | "selected_task_stale"
+        | "selected_task_target_mismatch"
+        | "selected_target_missing"
+        | "default_task_missing";
+    };
 
 export function projectWorkbenchDefaultTargetId(
   journey: ProjectJourney
@@ -155,6 +173,98 @@ export function projectWorkbenchSelectionForWorkflowTask(
     return null;
   }
   return { taskId: task.taskId, targetNodeId };
+}
+
+/**
+ * Resolve one effective task for the selected Project target. An explicit
+ * selection is never replaced by a different task when it becomes stale or
+ * belongs to another target. With no explicit task, retain the Workbench's
+ * established target-specific default.
+ */
+export function projectWorkbenchEffectiveTask(input: {
+  journey: ProjectJourney;
+  selectedNodeId: string | null;
+  selectedTaskId: string | null;
+  selectedTaskSelection: ActiveStepSelectionV1 | null;
+}): ProjectWorkbenchEffectiveTask {
+  const {
+    journey,
+    selectedNodeId,
+    selectedTaskId,
+    selectedTaskSelection,
+  } = input;
+  const selectedNode = projectWorkbenchNodeById(journey, selectedNodeId);
+  if (selectedNodeId !== null && !selectedNode) {
+    return { status: "unavailable", reason: "selected_target_missing" };
+  }
+
+  if (selectedTaskId !== null) {
+    const selectedTask = projectWorkflowTaskById(
+      journey.workflowProjection.tasks,
+      selectedTaskId
+    );
+    if (!selectedTask || selectedTask.projectId !== journey.project.id) {
+      return { status: "unavailable", reason: "selected_task_missing" };
+    }
+    if (!selectedTaskSelection) {
+      return {
+        status: "unavailable",
+        reason: "selected_task_selection_missing",
+      };
+    }
+    const revisionsMatch =
+      selectedTask.sourceRevisions.length ===
+        selectedTaskSelection.sourceRevisions.length &&
+      selectedTask.sourceRevisions.every((revision, index) => {
+        const selectedRevision = selectedTaskSelection.sourceRevisions[index];
+        return Boolean(
+          selectedRevision &&
+            selectedRevision.targetKind === revision.targetKind &&
+            selectedRevision.targetId === revision.targetId &&
+            selectedRevision.revision === revision.revision
+        );
+      });
+    const selectionMatchesTask =
+      selectedTaskSelection.projectId === selectedTask.projectId &&
+      selectedTaskSelection.taskId === selectedTask.taskId &&
+      selectedTaskSelection.workflowKind === selectedTask.workflowKind &&
+      selectedTaskSelection.definitionVersion ===
+        selectedTask.definitionVersion &&
+      selectedTaskSelection.stepKey === selectedTask.stepKey &&
+      selectedTaskSelection.targetKind === selectedTask.targetKind &&
+      selectedTaskSelection.targetId === selectedTask.targetId &&
+      revisionsMatch;
+    if (!selectionMatchesTask) {
+      return { status: "unavailable", reason: "selected_task_stale" };
+    }
+    const matchesTarget = selectedNode
+      ? selectedTask.targetKind === selectedNode.targetKind &&
+        selectedTask.targetId === selectedNode.targetId
+      : selectedTask.targetKind === "project" &&
+        selectedTask.targetId === journey.project.id;
+    if (!matchesTarget) {
+      return {
+        status: "unavailable",
+        reason: "selected_task_target_mismatch",
+      };
+    }
+    return { status: "available", selection: "explicit", task: selectedTask };
+  }
+
+  if (selectedTaskSelection !== null) {
+    return { status: "unavailable", reason: "selected_task_stale" };
+  }
+
+  const defaultTask = selectedNode
+    ? defaultWorkflowTaskForTarget(
+        journey.workflowProjection.tasks,
+        selectedNode.targetKind,
+        selectedNode.targetId
+      )
+    : projectGoalTask(journey.workflowProjection.tasks, journey.project.id);
+  return defaultTask
+    ? { status: "available", selection: "default", task: defaultTask }
+    : { status: "unavailable", reason: "default_task_missing" };
 }
 
 export function projectWorkbenchDefaultTaskIdForNode(

@@ -4,6 +4,7 @@ from pydantic import Field, field_validator, model_validator
 
 from app.core.config import get_settings
 from app.schemas.common import BaseSchema
+from app.schemas.agent import AIActionSuggestionV1
 from app.schemas.source import CitationOut
 from app.schemas.state import CaseHypothesis, FactSlotState, InteractionPlan, ConversationState
 
@@ -161,6 +162,68 @@ class ProjectContextPacket(BaseSchema):
         return self
 
 
+class ActiveStepSourceRevisionPacket(BaseSchema):
+    model_config = {"from_attributes": True, "extra": "forbid"}
+    targetKind: Literal[
+        "project", "school_application", "school_admission_case", "student500_application"
+    ]
+    targetId: str = Field(min_length=1, max_length=128)
+    revision: int = Field(ge=0)
+
+
+class ActiveStepTaskPacket(BaseSchema):
+    model_config = {"from_attributes": True, "extra": "forbid"}
+    applicability: Literal["applicable", "not_applicable", "unknown", "unavailable"]
+    progress: Literal[
+        "not_started", "in_progress", "needs_information", "waiting", "blocked", "completed", "unknown"
+    ]
+    reasonCodes: list[str] = Field(max_length=12)
+    dependencies: list[str] = Field(max_length=8)
+    actionability: Literal["read_only", "unavailable"]
+
+
+class ActiveStepContextPacket(BaseSchema):
+    """Bounded server-resolved task identity; contextual data, never authority."""
+
+    model_config = {"from_attributes": True, "extra": "forbid"}
+    schemaVersion: Literal["phase15.active-step-context.v1"]
+    projectId: str = Field(min_length=1, max_length=80)
+    chatId: str = Field(min_length=1, max_length=80)
+    definitionVersion: Literal["phase15.project-workflows.v1"]
+    taskId: str = Field(min_length=1, max_length=512)
+    workflowKind: Literal[
+        "project_planning", "school_application", "school_admissions", "student_500"
+    ]
+    stepKey: Literal[
+        "project_goal", "workflow_scope", "source_coverage", "planning",
+        "school_discovery", "academic_readiness", "language_preparation",
+        "finance_documents", "statements_materials", "pre_submission",
+        "admissions_planning", "admissions_requirements", "offer_coe_evidence",
+        "external_handoff", "visa_planning", "study_evidence_coe",
+        "genuine_student_preparation", "financial_capacity",
+        "conditional_supporting_requirements", "pre_lodgement", "lodgement_events",
+    ]
+    targetKind: Literal[
+        "project", "school_application", "school_admission_case", "student500_application"
+    ]
+    targetId: str = Field(min_length=1, max_length=128)
+    task: ActiveStepTaskPacket
+    sourceRevisions: list[ActiveStepSourceRevisionPacket] = Field(max_length=8)
+    sourceCoverage: Literal["complete", "partial", "unavailable"]
+    matter: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def bounded_identity(self):
+        import json
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 2_000:
+            raise ValueError("Active step context exceeds its byte bound")
+        if self.targetKind == "project" and self.targetId != self.projectId:
+            raise ValueError("Active project step target does not match Project")
+        if self.matter is not None and self.matter.get("kind") != self.targetKind:
+            raise ValueError("Active step matter identity mismatch")
+        return self
+
+
 class ProjectAssistantContextPacket(BaseSchema):
     """Server-derived M1 business state; customer data, not legal evidence."""
 
@@ -178,12 +241,16 @@ class ProjectAssistantContextPacket(BaseSchema):
     unresolvedIssues: list[dict[str, Any]] = Field(max_length=128)
     nextActions: list[dict[str, Any]] = Field(max_length=128)
     omissions: dict[str, int]
+    activeStep: ActiveStepContextPacket | None = None
 
     @model_validator(mode="after")
     def bounded_payload(self):
         import json
         if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 24_000:
             raise ValueError("Project assistant context exceeds its byte bound")
+        if self.activeStep is not None and self.project is not None:
+            if self.activeStep.projectId != self.project.get("id"):
+                raise ValueError("Active step Project does not match assistant context")
         expected_matters = {"schoolApplications", "standaloneAdmissions", "unresolvedLinkedAdmissions", "student500Applications"}
         expected_indexes = expected_matters | {"linkedAdmissions"}
         if set(self.matters) != expected_matters or set(self.indexes) != expected_indexes:
@@ -355,6 +422,13 @@ class QueryResponse(BaseSchema):
     # request-scoped manifest and must never widen it into "every packaged file".
     customer_document_used_ids: list[str] = Field(default_factory=list, max_length=8)
     response_language: Literal["en", "zh"] = "en"
+    # Emitted only by the typed Default AgentRuntime Project path after
+    # request-context target validation. Fast and Premium leave it absent.
+    ai_action_suggestion: AIActionSuggestionV1 | None = None
+    # Present only when Default returned a validated, same-request source-bound
+    # course research result. It is a display contract, never legal evidence or
+    # business write authority.
+    course_research_result: dict[str, Any] | None = None
     confidence: Literal["low", "medium", "high"]
     user_display_mode: Literal[
         "direct_short",

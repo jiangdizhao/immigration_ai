@@ -5,10 +5,94 @@ import {
   extractAssistantMetadata,
   extractTextFromParts,
   isMetadataPart,
+  latestCourseResearchResults,
   MAX_PERSISTED_LOCATORS,
   MAX_PERSISTED_MANIFEST_SOURCES,
   sanitizeCustomerDocumentSources,
 } from "./message-parts";
+
+const courseProjectId = "11111111-1111-4111-8111-111111111111";
+const courseChatId = "22222222-2222-4222-8222-222222222222";
+const courseSchoolAId = "33333333-3333-4333-8333-333333333333";
+const courseSchoolBId = "44444444-4444-4444-8444-444444444444";
+
+function courseResult(messageId: string, targetId = courseSchoolAId) {
+  return {
+    schemaVersion: "phase15.course-research-result.v1",
+    projectId: courseProjectId,
+    chatId: courseChatId,
+    taskId: `phase15.project-workflows.v1:school_application:school_discovery:school_application:${targetId}`,
+    definitionVersion: "phase15.project-workflows.v1",
+    workflowKind: "school_application",
+    stepKey: "school_discovery",
+    targetKind: "school_application",
+    targetId,
+    sourceRevisions: [
+      { targetKind: "school_application", targetId, revision: 1 },
+    ],
+    observedAt: "2026-11-24T00:00:00.000000Z",
+    candidates: [
+      {
+        candidateId:
+          targetId === courseSchoolAId
+            ? "55555555-5555-4555-8555-555555555555"
+            : "66666666-6666-4666-8666-666666666666",
+        institutionName: "Example University",
+        courseTitle: "Master of Example Studies",
+        identityEvidenceLevel: "model_research_lead",
+        identitySourceIds: [],
+        fields: [],
+        sources: [],
+        limitations: ["Model research lead; unverified."],
+        verificationState: "not_requested",
+      },
+    ],
+    limitations: ["Research is exploratory."],
+    diagnostics: { invalidCandidateCount: 0 },
+    assistantMessageId: messageId,
+  };
+}
+
+test("course history retains the latest bound result per target across ordinary turns", () => {
+  const schoolAFirstId = "77777777-7777-4777-8777-777777777777";
+  const schoolBMessageId = "88888888-8888-4888-8888-888888888888";
+  const schoolASecondId = "99999999-9999-4999-8999-999999999999";
+  const results = latestCourseResearchResults([
+    {
+      id: schoolAFirstId,
+      role: "assistant",
+      courseResearchResult: courseResult(schoolAFirstId),
+    },
+    {
+      id: schoolBMessageId,
+      role: "assistant",
+      courseResearchResult: courseResult(schoolBMessageId, courseSchoolBId),
+    },
+    { id: "user-turn", role: "user" },
+    {
+      id: schoolASecondId,
+      role: "assistant",
+      courseResearchResult: courseResult(schoolASecondId),
+    },
+    { id: "later-ordinary-assistant-turn", role: "assistant" },
+    {
+      id: "mismatched-message",
+      role: "assistant",
+      courseResearchResult: courseResult(schoolAFirstId),
+    },
+  ]);
+  assert.equal(results.length, 2);
+  assert.equal(
+    results.find((result) => result.targetId === courseSchoolAId)
+      ?.assistantMessageId,
+    schoolASecondId
+  );
+  assert.equal(
+    results.find((result) => result.targetId === courseSchoolBId)
+      ?.assistantMessageId,
+    schoolBMessageId
+  );
+});
 
 test("assistant parts keep the text and metadata part order used by the reload route", () => {
   const parts = buildAssistantMessageParts({
@@ -27,6 +111,52 @@ test("assistant parts keep the text and metadata part order used by the reload r
   assert.equal(
     extractTextFromParts(parts),
     "Condition 8501 requires health cover."
+  );
+});
+
+test("only a server-bound AI action suggestion survives assistant history reload", () => {
+  const bound = {
+    schemaVersion: "phase15.bound-ai-action-suggestion.v1",
+    suggestion: {
+      schemaVersion: "phase15.ai-action-suggestion.v1",
+      operation: "set_customer_reported_field",
+      fieldPath: "schoolApplication.intakeLabel",
+      proposedValue: "July 2027",
+      targetReference: null,
+      sourceOrAssumption: "The user requested July 2027.",
+      explanation: "This records a customer-reported intake label.",
+    },
+    projectId: "11111111-1111-4111-8111-111111111111",
+    chatId: "22222222-2222-4222-8222-222222222222",
+    taskId: "school_application:school_discovery:school-1",
+    definitionVersion: "phase15.project-workflows.v1",
+    workflowKind: "school_application",
+    stepKey: "school_discovery",
+    targetKind: "school_application",
+    targetId: "33333333-3333-4333-8333-333333333333",
+    sourceRevisions: [
+      {
+        targetKind: "school_application",
+        targetId: "33333333-3333-4333-8333-333333333333",
+        revision: 5,
+      },
+    ],
+  };
+  const metadata = extractAssistantMetadata([
+    { type: "metadata", aiActionSuggestion: bound },
+  ]);
+  assert.deepEqual(metadata.aiActionSuggestion, bound);
+  assert.equal(
+    extractAssistantMetadata([
+      {
+        type: "metadata",
+        // The model-facing suggestion alone has no server-bound Chat, Project,
+        // task, target or source-revision envelope and cannot become actionable
+        // when encountered as persisted assistant metadata.
+        aiActionSuggestion: bound.suggestion,
+      },
+    ]).aiActionSuggestion,
+    null
   );
 });
 

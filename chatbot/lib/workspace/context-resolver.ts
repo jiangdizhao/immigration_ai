@@ -23,6 +23,10 @@ import type { ResolvedProjectContext } from "@/lib/projects/context-resolver";
 import { resolveProjectContext } from "@/lib/projects/context-resolver";
 import { refreshProjectAssistantContext } from "@/lib/projects/project-assistant-refresh";
 import type { ProjectContextPacket } from "@/lib/projects/project-context";
+import {
+  ActiveStepContextError,
+  type ActiveStepSelectionV1,
+} from "./active-step-context";
 
 /**
  * Phase 12 Stage 2 — one typed, authenticated context resolver shared by Fast,
@@ -109,6 +113,7 @@ export async function resolveWorkspaceContext(input: {
   chatId: string | null;
   matterId?: string | null;
   clientPolicySlug?: unknown;
+  activeStepSelection?: ActiveStepSelectionV1 | null;
   historyLimit?: number;
 }): Promise<WorkspaceContext> {
   const conversationId = input.chatId;
@@ -119,6 +124,9 @@ export async function resolveWorkspaceContext(input: {
     projectId: null,
   };
   if (!conversationId) {
+    if (input.activeStepSelection) {
+      throw new ActiveStepContextError("active_step_selection_invalid");
+    }
     return emptyContext(scope);
   }
 
@@ -128,6 +136,9 @@ export async function resolveWorkspaceContext(input: {
     allowProject: true,
   });
   if (!conversation) {
+    if (input.activeStepSelection) {
+      throw new ActiveStepContextError("active_step_selection_invalid");
+    }
     return emptyContext(scope);
   }
 
@@ -188,7 +199,9 @@ export async function resolveWorkspaceContext(input: {
         resolved: projectContext,
         actorUserId: input.userId,
         actorType: input.actorType ?? "guest",
+        chatId: conversationId,
         question: input.question,
+        activeStepSelection: input.activeStepSelection,
         loadState: async (stateInput) => {
           const { loadProjectStateForActor } = await import(
             "@/lib/workspace/project-state-server"

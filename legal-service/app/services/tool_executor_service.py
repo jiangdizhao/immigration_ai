@@ -23,7 +23,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.schemas.agent import AgentSubmissionV2
+from app.schemas.agent import AIActionSuggestionV1, AgentSubmissionV2
 from app.schemas.tools import (
     DeterministicUtilityRequest,
     ExactLegalLookupBatchRequest,
@@ -901,6 +901,8 @@ class ToolExecutorContext:
     lightweight_submission: bool = False
     allow_overlapping_claims: bool = False
     residual_branch_guard_enabled: bool = False
+    project_action_suggestion_field_path: str | None = None
+    course_research_enabled: bool = False
     deadline_monotonic: float | None = None
     # Terminal submission tracking
     terminal_record: TerminalSubmissionRecord = field(default_factory=lambda: TerminalSubmissionRecord())
@@ -1459,6 +1461,39 @@ class ToolExecutorService:
                     errors=[locator_error],
                     contract_diagnostics=contract_diagnostics,
                 )
+
+            # This optional field is isolated from answer correctness. Drop it
+            # when the current Default request has no eligible Project task, or
+            # when the model output violates the bounded suggestion contract.
+            # No target identity, revision or write authority is accepted here.
+            raw_suggestion = args.get("ai_action_suggestion")
+            if context.project_action_suggestion_field_path not in {
+                "schoolApplication.intakeLabel",
+                "student500.applicationPlace",
+            }:
+                args.pop("ai_action_suggestion", None)
+            elif raw_suggestion is not None:
+                try:
+                    parsed_suggestion = AIActionSuggestionV1.model_validate(
+                        raw_suggestion, strict=True
+                    )
+                    if (
+                        parsed_suggestion.field_path
+                        != context.project_action_suggestion_field_path
+                    ):
+                        raise ValueError("suggestion field does not match active task")
+                    args["ai_action_suggestion"] = parsed_suggestion
+                except (ValidationError, TypeError, ValueError):
+                    args.pop("ai_action_suggestion", None)
+                    contract_diagnostics["project_action_suggestion_dropped_count"] = 1
+
+            # Course suggestions are isolated from terminal answer validity.
+            # The independent serving bridge applies the detailed strict
+            # candidate schema after the accepted answer has been constructed.
+            if not context.course_research_enabled:
+                args.pop("course_research_suggestion", None)
+            elif "course_research_suggestion" not in args:
+                pass
 
             try:
                 submission = AgentSubmissionV2(**args)

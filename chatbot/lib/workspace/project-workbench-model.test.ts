@@ -4,6 +4,7 @@ import type { ProjectJourney, ProjectJourneyNode } from "./project-journey";
 import {
   linkedAdmissionsNodeIds,
   projectWorkbenchDefaultTargetId,
+  projectWorkbenchEffectiveTask,
   projectWorkbenchNodeById,
   projectWorkbenchPanelKind,
   projectWorkbenchSelectionForWorkflowTask,
@@ -11,6 +12,7 @@ import {
   reconcileProjectWorkbenchTarget,
   recordedRoutesForTarget,
 } from "./project-workbench-model";
+import { activeStepSelectionForTask } from "./active-step-context";
 import {
   PROJECT_WORKFLOW_DEFINITION_VERSION,
   type WorkflowTaskProjectionV1,
@@ -259,4 +261,114 @@ test("workflow task selection binds to its exact existing Project target", () =>
     { targetNodeId: null, taskId: projectTask.taskId }
   );
   assert.equal(current.nodes.length, 3);
+});
+
+test("effective task resolution never displays a target fallback for an explicit mismatched task", () => {
+  const schoolA = node("school:school-a", "school_application");
+  const schoolB = node("school:school-b", "school_application");
+  const current = journey([schoolA, schoolB]);
+  const discoveryA = workflowTask({
+    workflowKind: "school_application",
+    stepKey: "school_discovery",
+    targetKind: "school_application",
+    targetId: schoolA.targetId,
+  });
+  const discoveryB = workflowTask({
+    workflowKind: "school_application",
+    stepKey: "school_discovery",
+    targetKind: "school_application",
+    targetId: schoolB.targetId,
+  });
+  current.workflowProjection.tasks.push(discoveryA, discoveryB);
+
+  const mismatch = projectWorkbenchEffectiveTask({
+    journey: current,
+    selectedNodeId: schoolB.id,
+    selectedTaskId: discoveryA.taskId,
+    selectedTaskSelection: activeStepSelectionForTask(discoveryA),
+  });
+  assert.deepEqual(mismatch, {
+    status: "unavailable",
+    reason: "selected_task_target_mismatch",
+  });
+
+  const explicit = projectWorkbenchEffectiveTask({
+    journey: current,
+    selectedNodeId: schoolB.id,
+    selectedTaskId: discoveryB.taskId,
+    selectedTaskSelection: activeStepSelectionForTask(discoveryB),
+  });
+  assert.deepEqual(explicit, {
+    status: "available",
+    selection: "explicit",
+    task: discoveryB,
+  });
+
+  const fallback = projectWorkbenchEffectiveTask({
+    journey: current,
+    selectedNodeId: schoolB.id,
+    selectedTaskId: null,
+    selectedTaskSelection: null,
+  });
+  assert.equal(fallback.status, "available");
+  if (fallback.status === "available") {
+    assert.equal(fallback.selection, "default");
+    assert.equal(fallback.task.targetId, schoolB.targetId);
+  }
+});
+
+test("effective task resolution reports an explicitly stale task instead of silently defaulting", () => {
+  const school = node("school:school-a", "school_application");
+  const current = journey([school]);
+
+  assert.deepEqual(
+    projectWorkbenchEffectiveTask({
+      journey: current,
+      selectedNodeId: school.id,
+      selectedTaskId: "removed-task",
+      selectedTaskSelection: null,
+    }),
+    { status: "unavailable", reason: "selected_task_missing" }
+  );
+});
+
+test("effective task resolution rejects a task whose source revision changed after selection", () => {
+  const school = node("school:school-a", "school_application");
+  const current = journey([school]);
+  const task = workflowTask({
+    workflowKind: "school_application",
+    stepKey: "school_discovery",
+    targetKind: "school_application",
+    targetId: school.targetId,
+  });
+  task.sourceRevision = 2;
+  task.sourceRevisions = [
+    {
+      targetKind: "school_application",
+      targetId: school.targetId,
+      revision: 2,
+    },
+  ];
+  current.workflowProjection.tasks.push(task);
+  const priorSelection = activeStepSelectionForTask({
+    ...task,
+    sourceRevision: 1,
+    sourceRevisions: [
+      {
+        targetKind: "school_application",
+        targetId: school.targetId,
+        revision: 1,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    projectWorkbenchEffectiveTask({
+      journey: current,
+      selectedNodeId: school.id,
+      selectedTaskId: task.taskId,
+      selectedTaskSelection: priorSelection,
+    }),
+    { status: "unavailable", reason: "selected_task_stale" }
+  );
 });

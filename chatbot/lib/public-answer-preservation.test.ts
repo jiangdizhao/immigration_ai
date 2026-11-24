@@ -81,3 +81,29 @@ test("backend used=false always removes the manifest", () => {
     { used: false, manifest: [] }
   );
 });
+
+test("provider citation control markers are removed without inventing inline mappings", () => {
+  const answer = preservePublicAnswer({
+    backendAnswer:
+      "课程来源：citeturn102913search6turn102913search12。 See [the official page](https://example.edu/course). Unresolved turn7search2 remains unlinked.",
+    emptyFallback: "empty fallback",
+    forbiddenFallback: "safe fallback",
+  });
+  assert.equal(answer.preservedBackendAnswer, true);
+  assert.equal(
+    answer.text,
+    "课程来源：。 See [the official page](https://example.edu/course). Unresolved remains unlinked."
+  );
+});
+
+test("provider citation marker-only answers use the safe fallback", () => {
+  const answer = preservePublicAnswer({
+    backendAnswer: "citeturn102913search6",
+    emptyFallback: "empty fallback",
+    forbiddenFallback: "safe fallback",
+  });
+  assert.deepEqual(answer, {
+    text: "empty fallback",
+    preservedBackendAnswer: false,
+  });
+});

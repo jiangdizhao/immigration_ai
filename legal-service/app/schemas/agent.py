@@ -42,6 +42,29 @@ class AgentCitation(StrictContract):
     display_label: str = Field(min_length=1, max_length=500)
 
 
+class AIActionSuggestionV1(StrictContract):
+    """Non-authoritative, non-executing suggestion attached to one answer."""
+
+    schema_version: Literal["phase15.ai-action-suggestion.v1"]
+    operation: Literal["set_customer_reported_field"]
+    field_path: Literal[
+        "schoolApplication.intakeLabel",
+        "student500.applicationPlace",
+    ]
+    proposed_value: str = Field(min_length=1, max_length=120)
+    target_reference: str | None = Field(default=None, max_length=120)
+    source_or_assumption: str = Field(min_length=1, max_length=240)
+    explanation: str = Field(min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def validate_supported_value(self):
+        if self.field_path == "student500.applicationPlace" and self.proposed_value not in {
+            "onshore", "offshore", "unknown"
+        }:
+            raise ValueError("student500.applicationPlace requires an allowed draft value")
+        return self
+
+
 class ApplicabilityResolution(StrictContract):
     """Bounded evidence bookkeeping for an applicable legal branch."""
 
@@ -106,6 +129,14 @@ class AgentSubmissionV2(StrictContract):
     # An empty list is the honest "I did not use any supplied document" answer
     # and is what an unrelated general question must return.
     customer_documents_used: list[str] = Field(default_factory=list, max_length=8)
+    # Optional customer-visible proposal content. It is not a business write,
+    # confirmation, or source of target/revision authority.
+    ai_action_suggestion: AIActionSuggestionV1 | None = None
+    # Optional Default-only research presentation data. It remains an untrusted
+    # object here so malformed optional research cannot invalidate the answer;
+    # the serving adapter validates it candidate-by-candidate after terminal
+    # answer acceptance.
+    course_research_suggestion: Any | None = None
 
     @field_validator("customer_documents_used")
     @classmethod
@@ -201,6 +232,15 @@ class AgentRuntimeRequest(StrictContract):
     policy_topic_context: str = Field(default="", max_length=4_000)
     project_context: str = Field(default="", max_length=16_000)
     project_assistant_context: str = Field(default="", max_length=25_500)
+    # Only Default AgentRuntime may expose one target-specific, non-executing
+    # Project suggestion field. A missing value keeps the schema absent.
+    project_action_suggestion_field_path: Literal[
+        "schoolApplication.intakeLabel",
+        "student500.applicationPlace",
+    ] | None = None
+    # Derived by the authenticated serving adapter from a fresh ActiveStepContext.
+    # It is ignored by Premium and never supplied by the browser.
+    course_research_enabled: bool = False
 
 
 class DeadlineCheckpoint(StrictContract):
@@ -310,6 +350,15 @@ class ToolCallObservation(StrictContract):
 
 class AgentExecutionMetrics(StrictContract):
     applicability_protocol_enabled: bool = True
+    # Course discovery is a conditional sidecar on the existing Default answer
+    # stage. These booleans are observed from the built policy, not inferred
+    # from a project selection or from whether a result later bound.
+    course_research_enabled: bool = False
+    course_research_tool_exposed: bool = False
+    course_research_prompt_enabled: bool = False
+    course_research_provider_schema_status: Literal[
+        "not_exposed", "required", "optional"
+    ] = "not_exposed"
     logical_llm_stage_count: int = Field(default=0, ge=0)
     provider_api_call_count: int = Field(default=0, ge=0)
     tool_call_count: int = Field(default=0, ge=0)

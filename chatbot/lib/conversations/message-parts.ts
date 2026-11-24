@@ -13,6 +13,14 @@ import {
   type CustomerDocumentUsageState,
   customerDocumentUsageState,
 } from "@/lib/matter-documents/customer-document-provenance";
+import {
+  type BoundAIActionSuggestionV1,
+  boundAiActionSuggestionV1Schema,
+} from "@/lib/workspace/ai-action-suggestions";
+import {
+  type BoundCourseResearchResultV1,
+  boundCourseResearchResultSchema,
+} from "@/lib/workspace/course-research";
 
 export type StoredTextPart = { type: "text"; text: string };
 export type StoredMetadataPart = {
@@ -24,6 +32,8 @@ export type StoredMetadataPart = {
   customerDocumentManifest?: unknown;
   /** R2: bounded acknowledged document ids (this request's authorized subset). */
   customerDocumentUsedIds?: unknown;
+  aiActionSuggestion?: unknown;
+  courseResearchResult?: unknown;
   confidence: string | null;
   researchStatus: "not_required" | "complete" | "incomplete" | null;
   followUpQuestions: string[];
@@ -43,6 +53,8 @@ export type StoredAssistantMetadata = {
   followUpQuestions: string[];
   matterId: string | null;
   retrievalDebug: unknown;
+  aiActionSuggestion: BoundAIActionSuggestionV1 | null;
+  courseResearchResult: BoundCourseResearchResultV1 | null;
 };
 
 export type BoundedCustomerDocumentSource = {
@@ -187,6 +199,8 @@ export function extractAssistantMetadata(
       followUpQuestions: [],
       matterId: null,
       retrievalDebug: null,
+      aiActionSuggestion: null,
+      courseResearchResult: null,
     };
   }
   return {
@@ -219,5 +233,48 @@ export function extractAssistantMetadata(
       metadata.retrievalDebug && typeof metadata.retrievalDebug === "object"
         ? metadata.retrievalDebug
         : null,
+    aiActionSuggestion: boundAiActionSuggestionV1Schema.safeParse(
+      metadata.aiActionSuggestion
+    ).success
+      ? boundAiActionSuggestionV1Schema.parse(metadata.aiActionSuggestion)
+      : null,
+    courseResearchResult: boundCourseResearchResultSchema.safeParse(
+      metadata.courseResearchResult
+    ).success
+      ? boundCourseResearchResultSchema.parse(metadata.courseResearchResult)
+      : null,
   };
+}
+
+/** Keep only the latest server-bound course envelope per exact chat task. */
+export function latestCourseResearchResults(
+  messages: readonly {
+    id: string;
+    role: string;
+    courseResearchResult?: unknown;
+  }[]
+): BoundCourseResearchResultV1[] {
+  const latestByTask = new Map<string, BoundCourseResearchResultV1>();
+  for (const message of messages) {
+    if (message.role !== "assistant") {
+      continue;
+    }
+    const parsed = boundCourseResearchResultSchema.safeParse(
+      message.courseResearchResult
+    );
+    if (!parsed.success || parsed.data.assistantMessageId !== message.id) {
+      continue;
+    }
+    const result = parsed.data;
+    const taskKey = JSON.stringify([
+      result.projectId,
+      result.chatId,
+      result.definitionVersion,
+      result.taskId,
+      result.targetKind,
+      result.targetId,
+    ]);
+    latestByTask.set(taskKey, result);
+  }
+  return [...latestByTask.values()];
 }

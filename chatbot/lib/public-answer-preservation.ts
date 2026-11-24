@@ -9,6 +9,21 @@ const FORBIDDEN_PUBLIC_ANSWER_PATTERNS = [
   /```json/i,
 ];
 
+const OPENAI_CITATION_BLOCK =
+  /\uE200cite\uE202(?:turn\d+search\d+)(?:\uE202turn\d+search\d+)*\uE201/gu;
+const OPENAI_SEARCH_REFERENCE = /\bturn\d+search\d+\b/giu;
+const OPENAI_CITATION_CONTROL = /[\uE200-\uE20F]/gu;
+
+/** Remove provider control syntax without mapping it to any source. */
+export function removeProviderCitationArtifacts(text: string): string {
+  return text
+    .replace(OPENAI_CITATION_BLOCK, "")
+    .replace(OPENAI_SEARCH_REFERENCE, "")
+    .replace(OPENAI_CITATION_CONTROL, "")
+    .replace(/[ \t]{2,}/gu, " ")
+    .replace(/[ \t]+([,.;:!?，。；：！？])/gu, "$1");
+}
+
 export function preservePublicAnswer(input: {
   backendAnswer: string | null | undefined;
   emptyFallback: string;
@@ -23,5 +38,9 @@ export function preservePublicAnswer(input: {
   ) {
     return { text: input.forbiddenFallback, preservedBackendAnswer: false };
   }
-  return { text: answer, preservedBackendAnswer: true };
+  const safeAnswer = removeProviderCitationArtifacts(answer).trim();
+  if (!safeAnswer) {
+    return { text: input.emptyFallback, preservedBackendAnswer: false };
+  }
+  return { text: safeAnswer, preservedBackendAnswer: true };
 }

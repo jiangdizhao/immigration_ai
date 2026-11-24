@@ -1,18 +1,43 @@
 // biome-ignore-all lint/suspicious/useAwait: Async test fakes return immediate values.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import {
+  buildAssistantMessageParts,
+  extractAssistantMetadata,
+} from "@/lib/conversations/message-parts";
+import { defaultAgentRuntimeDebug } from "@/lib/default-agent-runtime-debug";
+import { preservePublicAnswer } from "@/lib/public-answer-preservation";
+import {
+  bindCourseResearchResultWithDiagnostics,
+  courseResearchDiagnosticsForTask,
+  courseResearchDiagnosticsSchema,
+  courseResearchResultIsCurrent,
+  courseResearchResultMatchesTask,
+  courseResearchSelection,
+} from "@/lib/workspace/course-research";
 import type {
   ProjectState,
   ProjectStateAdmission,
   ProjectStateProvenance,
   ProjectStateStudent500,
 } from "@/lib/workspace/project-state";
+import { buildProjectWorkflowProjection } from "@/lib/workspace/project-workflows";
 import {
   buildProjectAssistantContext,
   PROJECT_ASSISTANT_CONTEXT_MAX_BYTES,
 } from "./project-assistant-context";
 import { refreshProjectAssistantContext } from "./project-assistant-refresh";
 import { projectContextRequestPayload } from "./project-context";
+
+const pythonWorkingDirectory = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../legal-service"
+);
 
 const provenance = (
   id: string,
@@ -380,6 +405,75 @@ test("one state read is followed by fresh authorization and serialized into the 
   assert.match(JSON.stringify(payload), /Harbour University/);
 });
 
+test("fresh selected task is added as a bounded overlay without replacing whole-Project context", async () => {
+  const projectId = "123e4567-e89b-42d3-a456-426614174000";
+  const chatId = "123e4567-e89b-42d3-a456-426614174001";
+  const current = state();
+  current.project.id = projectId;
+  const task = buildProjectWorkflowProjection(current).tasks.find(
+    (entry) => entry.stepKey === "project_goal"
+  );
+  assert.ok(task);
+  const selection = {
+    schemaVersion: "phase15.active-step-selection.v1" as const,
+    projectId,
+    taskId: task.taskId,
+    workflowKind: task.workflowKind,
+    definitionVersion: task.definitionVersion,
+    stepKey: task.stepKey,
+    targetKind: task.targetKind,
+    targetId: task.targetId,
+    sourceRevisions: task.sourceRevisions.map((item) => ({ ...item })),
+  };
+  const packet = await refreshProjectAssistantContext({
+    actorUserId: "owner",
+    actorType: "regular",
+    chatId,
+    activeStepSelection: selection,
+    question: "What is happening across the Project?",
+    resolved: {
+      projectId,
+      packet: null,
+      diagnostic: "no_authorized_content",
+      refreshBeforeProvider: async () => null,
+    },
+    loadState: async () => ({ kind: "ok", state: current }),
+  });
+  assert.equal(packet?.assistantContext?.activeStep?.taskId, task.taskId);
+  assert.equal(packet?.assistantContext?.project?.id, projectId);
+  assert.equal(packet?.assistantContext?.indexes.schoolApplications?.length, 2);
+  const payload = projectContextRequestPayload(packet);
+  assert.match(JSON.stringify(payload), /Harbour University/);
+  assert.match(JSON.stringify(payload), /project_goal/);
+
+  let authorizationRechecks = 0;
+  await assert.rejects(
+    refreshProjectAssistantContext({
+      actorUserId: "owner",
+      actorType: "regular",
+      chatId,
+      activeStepSelection: {
+        ...selection,
+        sourceRevisions: selection.sourceRevisions.map((item) => ({
+          ...item,
+          revision: item.revision + 1,
+        })),
+      },
+      resolved: {
+        projectId,
+        packet: null,
+        diagnostic: "no_authorized_content",
+        refreshBeforeProvider: async () => {
+          authorizationRechecks += 1;
+          return null;
+        },
+      },
+      loadState: async () => ({ kind: "ok", state: current }),
+    })
+  );
+  assert.equal(authorizationRechecks, 0);
+});
+
 test("standalone never loads Project state; revocation and wrong Project fail closed", async () => {
   let reads = 0;
   const standalone = await refreshProjectAssistantContext({
@@ -427,6 +521,253 @@ test("standalone never loads Project state; revocation and wrong Project fail cl
       },
       loadState: async () => ({ kind: "ok", state: wrong }),
     })
+  );
+});
+
+test("R5: real TypeScript active-task request survives the mocked Responses runtime, binding and history reload", async () => {
+  const projectId = "123e4567-e89b-42d3-a456-426614174000";
+  const chatId = "123e4567-e89b-42d3-a456-426614174001";
+  const schoolId = "123e4567-e89b-42d3-a456-426614174002";
+  const assistantMessageId = "123e4567-e89b-42d3-a456-426614174003";
+  const current = state();
+  current.project.id = projectId;
+  current.matters.schoolApplications = [
+    school(schoolId, "Synthetic Northbridge", "course_source_unverified"),
+  ] as unknown as NonNullable<ProjectState["matters"]["schoolApplications"]>;
+
+  const task = buildProjectWorkflowProjection(current).tasks.find(
+    (entry) =>
+      entry.stepKey === "school_discovery" && entry.targetId === schoolId
+  );
+  assert.ok(task);
+  assert.equal(task.applicability, "unavailable");
+  assert.equal(task.actionability, "unavailable");
+  assert.deepEqual(task.reasonCodes, ["school_course_source_unverified"]);
+  const selection = {
+    schemaVersion: "phase15.active-step-selection.v1" as const,
+    projectId,
+    taskId: task.taskId,
+    workflowKind: task.workflowKind,
+    definitionVersion: task.definitionVersion,
+    stepKey: task.stepKey,
+    targetKind: task.targetKind,
+    targetId: task.targetId,
+    sourceRevisions: task.sourceRevisions.map((item) => ({ ...item })),
+  };
+  const packet = await refreshProjectAssistantContext({
+    actorUserId: "synthetic-owner",
+    actorType: "regular",
+    chatId,
+    activeStepSelection: selection,
+    question:
+      "请研究并比较四个适合国际学生的澳大利亚人工智能硕士课程，学费和未来入学时间未知时请明确说明。",
+    resolved: {
+      projectId,
+      packet: null,
+      diagnostic: "no_authorized_content",
+      refreshBeforeProvider: async () => null,
+    },
+    loadState: async () => ({ kind: "ok", state: current }),
+  });
+  assert.equal(packet?.assistantContext?.activeStep?.taskId, task.taskId);
+  assert.deepEqual(packet?.assistantContext?.activeStep?.task.reasonCodes, [
+    "school_course_source_unverified",
+  ]);
+  const requestPayload = projectContextRequestPayload(packet);
+  const syntheticRequest = {
+    ...requestPayload,
+    frontend_chat_id: chatId,
+    question:
+      "请研究并比较四个适合国际学生的澳大利亚人工智能硕士课程，学费和未来入学时间未知时请明确说明。",
+  };
+  const fixtureDirectory = mkdtempSync(
+    join(tmpdir(), "phase15-m3-e3-r5-cross-runtime-")
+  );
+  const requestFile = join(fixtureDirectory, "request.json");
+  writeFileSync(requestFile, JSON.stringify(syntheticRequest));
+  const python =
+    process.env.PHASE15_M3_E3_R5_PYTHON ??
+    process.env.PYTHON ??
+    (existsSync("/home/rico/anaconda3/envs/torch/bin/python")
+      ? "/home/rico/anaconda3/envs/torch/bin/python"
+      : "python3");
+  const fixturePath = resolve(
+    pythonWorkingDirectory,
+    "tests/phase15_m3_e3_r5_cross_runtime_fixture.py"
+  );
+  const produced = spawnSync(python, ["-u", fixturePath, requestFile], {
+    cwd: pythonWorkingDirectory,
+    encoding: "utf8",
+    env: process.env,
+    maxBuffer: 1_000_000,
+    timeout: 15_000,
+  });
+  rmSync(fixtureDirectory, { recursive: true, force: true });
+  assert.equal(
+    produced.status,
+    0,
+    produced.stderr ||
+      produced.error?.message ||
+      "synthetic Python runtime failed"
+  );
+  const pythonOutput = JSON.parse(produced.stdout) as {
+    activation_reason: string;
+    course_research_enabled: boolean;
+    provider_calls: number;
+    provider_schema_required: boolean;
+    submission_accepted_count: number;
+    state_patch: unknown[];
+    registered_native_web_refs: number;
+    long_provider_url_length: number;
+    response: {
+      answer: string;
+      citations: Record<string, unknown>[];
+      compact_sources: string[];
+      course_research_result: unknown;
+      retrieval_debug: Record<string, unknown>;
+    };
+  };
+  assert.equal(
+    pythonOutput.activation_reason,
+    "school_course_source_unverified"
+  );
+  assert.equal(pythonOutput.course_research_enabled, true);
+  assert.equal(pythonOutput.provider_calls, 1);
+  assert.equal(pythonOutput.provider_schema_required, true);
+  assert.equal(pythonOutput.submission_accepted_count, 1);
+  assert.deepEqual(pythonOutput.state_patch, []);
+  assert.equal(pythonOutput.registered_native_web_refs, 4);
+  assert.equal(pythonOutput.long_provider_url_length > 1000, true);
+  assert.equal(pythonOutput.response.citations.length, 4);
+  assert.equal(pythonOutput.response.compact_sources.length, 4);
+
+  const runtimeDebug = defaultAgentRuntimeDebug(
+    pythonOutput.response.retrieval_debug
+  );
+  const backendDiagnostics = courseResearchDiagnosticsSchema.parse(
+    runtimeDebug?.course_research
+  );
+  assert.equal(backendDiagnostics.python_binding_status, "bound");
+  assert.equal(backendDiagnostics.valid_candidate_count, 4);
+  assert.equal(backendDiagnostics.rejected_source_count >= 2, true);
+  const binding = bindCourseResearchResultWithDiagnostics({
+    value: pythonOutput.response.course_research_result,
+    projectId,
+    chatId,
+    assistantMessageId,
+    context: packet?.assistantContext ?? null,
+  });
+  assert.equal(
+    binding.status,
+    "bound",
+    `${binding.reason}: ${JSON.stringify({ active: packet?.assistantContext?.activeStep?.sourceRevisions, result: (pythonOutput.response.course_research_result as { sourceRevisions?: unknown })?.sourceRevisions })}`
+  );
+  assert.equal(binding.boundCandidateCount, 4);
+  assert.ok(binding.result);
+  assert.equal(
+    courseResearchResultMatchesTask({
+      result: binding.result,
+      projectId,
+      chatId,
+      task,
+    }),
+    true
+  );
+  assert.equal(
+    courseResearchResultIsCurrent({ result: binding.result, task }),
+    true
+  );
+  assert.equal(
+    binding.result.candidates[0]?.identityEvidenceLevel,
+    "official_source_referenced"
+  );
+  assert.equal(
+    binding.result.candidates[0]?.fields.find(
+      (field) => field.key === "cricos_code"
+    )?.evidenceLevel,
+    "official_source_referenced"
+  );
+  assert.equal(
+    binding.result.candidates[0]?.fields.find(
+      (field) => field.key === "tuition_amount"
+    )?.value,
+    null
+  );
+  assert.equal(
+    binding.result.candidates[2]?.fields.find(
+      (field) => field.key === "course_code"
+    )?.evidenceLevel,
+    "model_research_lead"
+  );
+  assert.equal(
+    binding.result.candidates[3]?.identityEvidenceLevel,
+    "model_research_lead"
+  );
+  assert.deepEqual(binding.result.candidates[3]?.sources, []);
+
+  const frontendDiagnostics = courseResearchDiagnosticsSchema.parse({
+    ...backendDiagnostics,
+    frontend_binding_status: binding.status,
+    frontend_binding_reason: binding.reason,
+    frontend_bound_candidate_count: binding.boundCandidateCount,
+  });
+  const publicAnswer = preservePublicAnswer({
+    backendAnswer: pythonOutput.response.answer,
+    emptyFallback: "No answer was returned.",
+    forbiddenFallback: "The answer could not be displayed.",
+  });
+  assert.equal(publicAnswer.preservedBackendAnswer, true);
+  assert.doesNotMatch(publicAnswer.text, /turn\d+search\d+/u);
+  assert.doesNotMatch(publicAnswer.text, /[\uE200-\uE20F]/u);
+  const parts = buildAssistantMessageParts({
+    text: publicAnswer.text,
+    metadata: {
+      citations: pythonOutput.response.citations,
+      compactSources: pythonOutput.response.compact_sources,
+      courseResearchResult: binding.result,
+      retrievalDebug: {
+        defaultAgentRuntime: {
+          ...runtimeDebug,
+          course_research: frontendDiagnostics,
+        },
+      },
+    },
+  });
+  const reloaded = extractAssistantMetadata(parts);
+  assert.equal(reloaded.courseResearchResult?.candidates.length, 4);
+  assert.equal(reloaded.citations.length, 4);
+  assert.deepEqual(
+    reloaded.compactSources,
+    pythonOutput.response.compact_sources
+  );
+  const persistedDiagnostics = courseResearchDiagnosticsSchema.parse(
+    (reloaded.retrievalDebug as Record<string, any>).defaultAgentRuntime
+      .course_research
+  );
+  assert.equal(persistedDiagnostics.frontend_binding_status, "bound");
+  assert.equal(persistedDiagnostics.frontend_bound_candidate_count, 4);
+  assert.equal(reloaded.courseResearchResult?.candidates.length, 4);
+  assert.ok(
+    courseResearchDiagnosticsForTask({
+      value: persistedDiagnostics,
+      projectId,
+      chatId,
+      task,
+    })
+  );
+  const persistedResult = reloaded.courseResearchResult;
+  assert.ok(persistedResult);
+  const workspaceCandidate = persistedResult.candidates[0];
+  assert.ok(workspaceCandidate);
+  const workspaceSelection = courseResearchSelection({
+    result: persistedResult,
+    task,
+    candidate: workspaceCandidate,
+  });
+  assert.equal(workspaceSelection.candidateId, workspaceCandidate.candidateId);
+  assert.deepEqual(
+    workspaceSelection.selection.sourceRevisions,
+    task.sourceRevisions
   );
 });
 

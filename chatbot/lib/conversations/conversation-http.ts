@@ -1,3 +1,4 @@
+import { courseResearchDiagnosticsSchema } from "@/lib/workspace/course-research";
 import type { ConversationPolicyBindingView } from "../policy-intelligence/conversation-policy-binding";
 import {
   extractAssistantMetadata,
@@ -28,6 +29,34 @@ export type StoredMessageRecord = {
   parts: unknown;
   createdAt: Date;
 };
+
+const COURSE_RESEARCH_DIAGNOSTIC_PAGE_SIZE = 200;
+const COURSE_RESEARCH_DIAGNOSTIC_MAX_PAGES = 5;
+
+function storedCourseResearchDiagnostics(message: StoredMessageRecord) {
+  const metadata = extractAssistantMetadata(message.parts);
+  const result = metadata.courseResearchResult;
+  const retrievalDebug = metadata.retrievalDebug;
+  if (!retrievalDebug || typeof retrievalDebug !== "object") {
+    return {
+      diagnostics: null,
+      persistedCandidateCount: result?.candidates.length ?? 0,
+      resultPresent: result !== null,
+    };
+  }
+  const debug = retrievalDebug as Record<string, unknown>;
+  const runtime =
+    (debug.defaultAgentRuntime as Record<string, unknown> | undefined) ??
+    (debug.default_agent_runtime as Record<string, unknown> | undefined);
+  const parsed = courseResearchDiagnosticsSchema.safeParse(
+    runtime?.course_research ?? runtime?.courseResearch
+  );
+  return {
+    diagnostics: parsed.success ? parsed.data : null,
+    persistedCandidateCount: result?.candidates.length ?? 0,
+    resultPresent: result !== null,
+  };
+}
 
 export type ConversationSummaryRecord = {
   chatId: string;
@@ -154,12 +183,15 @@ function storedMessageFields(message: StoredMessageRecord) {
     followUpQuestions: metadata.followUpQuestions,
     matterId: metadata.matterId,
     retrievalDebug: metadata.retrievalDebug,
+    aiActionSuggestion: metadata.aiActionSuggestion,
+    courseResearchResult: metadata.courseResearchResult,
   };
 }
 
 export function createConversationHistoryHandlers(deps: {
   authenticate: () => Promise<ConversationHistoryUser | null>;
   repository: ConversationHistoryRepository;
+  courseResearchDiagnosticsEnabled?: () => boolean;
 }) {
   async function requireUser(): Promise<
     { userId: string } | { response: Response }
@@ -345,6 +377,79 @@ export function createConversationHistoryHandlers(deps: {
           page.hasOlder && oldest
             ? encodeCursor("message", messageCursor(oldest))
             : null,
+      });
+    },
+
+    /**
+     * Owner-only, read-only inspection of the latest persisted course research
+     * stage. The endpoint returns only the versioned content-free diagnostic
+     * contract; it never returns message text, source URLs, citations or raw
+     * retrieval debug. Scanning is bounded to five 200-message pages.
+     */
+    async courseResearchDiagnostics(_request: Request, chatId: string) {
+      if (deps.courseResearchDiagnosticsEnabled?.() !== true) {
+        return jsonResponse({ error: "Diagnostics unavailable" }, 404);
+      }
+      const access = await requireUser();
+      if ("response" in access) {
+        return access.response;
+      }
+      const conversation = await deps.repository.getConversation({
+        chatId,
+        userId: access.userId,
+      });
+      if (!conversation) {
+        return jsonResponse({ error: "Conversation not found" }, 404);
+      }
+
+      let olderThan: PaginationCursor | null = null;
+      let scannedMessageCount = 0;
+      let pagesRead = 0;
+      let hasOlder = false;
+      while (pagesRead < COURSE_RESEARCH_DIAGNOSTIC_MAX_PAGES) {
+        const page = await deps.repository.listMessages({
+          chatId,
+          userId: access.userId,
+          limit: COURSE_RESEARCH_DIAGNOSTIC_PAGE_SIZE,
+          olderThan,
+        });
+        pagesRead += 1;
+        scannedMessageCount += page.messages.length;
+        hasOlder = page.hasOlder;
+        for (const message of [...page.messages].reverse()) {
+          if (message.role !== "assistant") {
+            continue;
+          }
+          const projected = storedCourseResearchDiagnostics(message);
+          if (!projected.diagnostics && !projected.resultPresent) {
+            continue;
+          }
+          return jsonResponse({
+            schema_version: "phase15.course-research-diagnostic-read.v1",
+            found: true,
+            message_created_at: message.createdAt,
+            diagnostics: projected.diagnostics,
+            persisted_result_present: projected.resultPresent,
+            persisted_candidate_count: projected.persistedCandidateCount,
+            scanned_message_count: scannedMessageCount,
+            scan_truncated: false,
+          });
+        }
+        const oldest = page.messages.at(0);
+        if (!page.hasOlder || !oldest) {
+          hasOlder = false;
+          break;
+        }
+        olderThan = messageCursor(oldest);
+      }
+      return jsonResponse({
+        schema_version: "phase15.course-research-diagnostic-read.v1",
+        found: false,
+        diagnostics: null,
+        persisted_result_present: false,
+        persisted_candidate_count: 0,
+        scanned_message_count: scannedMessageCount,
+        scan_truncated: hasOlder,
       });
     },
 

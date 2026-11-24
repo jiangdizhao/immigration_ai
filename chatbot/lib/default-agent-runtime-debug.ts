@@ -6,14 +6,13 @@
  * without forwarding arbitrary debug keys, prompts, tool output, or private
  * review content.
  */
+import { courseResearchDiagnosticsSchema } from "@/lib/workspace/course-research";
 
 type UnknownRecord = Record<string, any>;
 
 function pick(source: UnknownRecord, keys: string[]): UnknownRecord {
   return Object.fromEntries(
-    keys
-      .filter((key) => key in source)
-      .map((key) => [key, source[key]])
+    keys.filter((key) => key in source).map((key) => [key, source[key]])
   );
 }
 
@@ -23,10 +22,63 @@ function projectCheckerDecisions(value: unknown): UnknownRecord[] {
   }
   return value
     .slice(0, 100)
-    .filter((item): item is UnknownRecord => Boolean(item) && typeof item === "object")
+    .filter(
+      (item): item is UnknownRecord => Boolean(item) && typeof item === "object"
+    )
     .map((item) =>
       pick(item, ["claim_id", "verdict", "reason_codes", "evidence_refs"])
     );
+}
+
+function projectCourseResearchDiagnostics(
+  value: unknown
+): UnknownRecord | null {
+  const parsed = courseResearchDiagnosticsSchema.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
+  const diagnostics = parsed.data;
+  return {
+    schema_version: diagnostics.schema_version,
+    scope_fingerprint: diagnostics.scope_fingerprint,
+    client_scope_fingerprint: diagnostics.client_scope_fingerprint,
+    server_scope_fingerprint: diagnostics.server_scope_fingerprint,
+    scope_match: diagnostics.scope_match,
+    client_requested_workflow_kind:
+      diagnostics.client_requested_workflow_kind,
+    client_requested_step_key: diagnostics.client_requested_step_key,
+    client_requested_target_kind: diagnostics.client_requested_target_kind,
+    server_resolved_workflow_kind:
+      diagnostics.server_resolved_workflow_kind,
+    server_resolved_step_key: diagnostics.server_resolved_step_key,
+    server_resolved_target_kind: diagnostics.server_resolved_target_kind,
+    python_received_workflow_kind: diagnostics.python_received_workflow_kind,
+    python_received_step_key: diagnostics.python_received_step_key,
+    python_received_target_kind: diagnostics.python_received_target_kind,
+    activation_failed_condition: diagnostics.activation_failed_condition,
+    course_research_enabled: diagnostics.course_research_enabled,
+    research_activation_reason: diagnostics.research_activation_reason,
+    research_tool_exposed: diagnostics.research_tool_exposed,
+    research_prompt_enabled: diagnostics.research_prompt_enabled,
+    provider_schema_status: diagnostics.provider_schema_status,
+    suggestion_present: diagnostics.suggestion_present,
+    suggestion_container_status: diagnostics.suggestion_container_status,
+    diagnostic_counter_saturated: diagnostics.diagnostic_counter_saturated,
+    research_status: diagnostics.research_status,
+    raw_candidate_count: diagnostics.raw_candidate_count,
+    valid_candidate_count: diagnostics.valid_candidate_count,
+    rejected_candidate_count: diagnostics.rejected_candidate_count,
+    rejected_field_count: diagnostics.rejected_field_count,
+    source_locator_count: diagnostics.source_locator_count,
+    resolved_source_count: diagnostics.resolved_source_count,
+    rejected_source_count: diagnostics.rejected_source_count,
+    python_binding_status: diagnostics.python_binding_status,
+    python_binding_reason: diagnostics.python_binding_reason,
+    python_bound_candidate_count: diagnostics.python_bound_candidate_count,
+    frontend_binding_status: diagnostics.frontend_binding_status,
+    frontend_binding_reason: diagnostics.frontend_binding_reason,
+    frontend_bound_candidate_count: diagnostics.frontend_bound_candidate_count,
+  };
 }
 
 export function defaultAgentRuntimeDebug(
@@ -112,6 +164,9 @@ export function defaultAgentRuntimeDebug(
         ])
       : null,
     execution_metrics: nested.execution_metrics ?? null,
+    course_research: projectCourseResearchDiagnostics(
+      nested.course_research ?? nested.courseResearch
+    ),
   };
 
   if (nested.checker && typeof nested.checker === "object") {

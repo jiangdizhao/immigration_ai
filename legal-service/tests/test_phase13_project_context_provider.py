@@ -217,6 +217,63 @@ def test_m2_context_rejects_invalid_version_and_oversize_and_old_requests_still_
     assert QueryRequest(question="standalone").project_assistant_context is None
 
 
+def test_active_step_context_is_typed_bounded_and_shared_by_fast_default_and_premium():
+    import pytest
+    from pydantic import ValidationError
+    from app.services.project_context import render_project_assistant_context_prompt_section
+
+    packet = _assistant_packet()
+    packet["activeStep"] = {
+        "schemaVersion": "phase15.active-step-context.v1",
+        "projectId": "project-synthetic",
+        "chatId": "chat-synthetic",
+        "definitionVersion": "phase15.project-workflows.v1",
+        "taskId": "school-task",
+        "workflowKind": "school_application",
+        "stepKey": "school_discovery",
+        "targetKind": "school_application",
+        "targetId": "school-a",
+        "task": {
+            "applicability": "applicable",
+            "progress": "needs_information",
+            "reasonCodes": ["intake_missing"],
+            "dependencies": [],
+            "actionability": "read_only",
+        },
+        "sourceRevisions": [
+            {"targetKind": "school_application", "targetId": "school-a", "revision": 3}
+        ],
+        "sourceCoverage": "complete",
+        "matter": {
+            "kind": "school_application",
+            "status": "draft",
+            "institutionName": "Northbridge",
+            "courseTitle": "Recorded course",
+            "intakeLabel": "March 2027",
+            "packageStatus": None,
+            "revision": 3,
+        },
+    }
+    payload = QueryRequest(question="What should I do for this school?", project_assistant_context=packet)
+    fast = FastDirectLunaService._model_input(payload, payload.question)
+    default = AgentRuntimeService(provider=SimpleNamespace())._build_user_message(
+        SimpleNamespace(
+            user_text=payload.question, matter_state={}, customer_document_context="", policy_topic_context="",
+            project_context="", project_assistant_context=render_project_assistant_context_prompt_section(payload.project_assistant_context),
+            response_language="en", as_of_date=SimpleNamespace(isoformat=lambda: "2026-11-24"),
+        )
+    )
+    premium = PremiumDirectAnswerService._append_project_context(payload, payload.question)
+    for model_input in (fast, default, premium):
+        assert "Selected workflow task" in model_input
+        assert "school-a" in model_input and "school-b" in model_input
+        assert "continue to answer whole-Project" in model_input
+
+    packet["activeStep"]["projectId"] = "project-other"
+    with pytest.raises(ValidationError):
+        QueryRequest(question="foreign active step", project_assistant_context=packet)
+
+
 def test_m2_fast_actual_provider_request_has_project_context_and_native_search(monkeypatch):
     from app.services import fast_direct_luna_service as fast_module
     from app.services.agent_observability_service import AbsoluteTurnDeadline

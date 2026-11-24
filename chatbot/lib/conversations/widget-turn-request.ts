@@ -1,5 +1,6 @@
 import { DEFAULT_CHAT_MODEL } from "../ai/models";
 import type { AssistantMode } from "../assistant-mode";
+import type { ActiveStepSelectionV1 } from "../workspace/active-step-context";
 
 /**
  * Phase 12 Stage 2 hotfix — request construction for one widget turn.
@@ -25,6 +26,8 @@ export type WidgetTurnRequestBody = {
    * exact conversation id. Absent — never JSON `null` — when there is no policy.
    */
   policySlug?: string;
+  /** Browser task selection is only an untrusted server-validated hint. */
+  activeStepSelection?: ActiveStepSelectionV1;
   messages: Array<{
     id: string;
     role: string;
@@ -72,6 +75,7 @@ export function buildWidgetTurnRequestBody(input: {
   policySlug: string | null;
   messages: Array<{ id: string; role: string; text: string }>;
   selectedChatModel?: string;
+  activeStepSelection?: ActiveStepSelectionV1 | null;
 }): WidgetTurnRequestBody {
   const body: WidgetTurnRequestBody = {
     id: input.conversationId,
@@ -93,6 +97,9 @@ export function buildWidgetTurnRequestBody(input: {
   }
   if (input.policySlug) {
     body.policySlug = input.policySlug;
+  }
+  if (input.activeStepSelection) {
+    body.activeStepSelection = input.activeStepSelection;
   }
   return body;
 }

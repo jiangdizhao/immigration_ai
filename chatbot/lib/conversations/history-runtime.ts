@@ -233,7 +233,12 @@ export function getConversationHistoryRepository() {
 export function createDatabaseConversationHistoryHandlers(
   authenticate: Parameters<
     typeof createConversationHistoryHandlers
-  >[0]["authenticate"]
+  >[0]["authenticate"],
+  courseResearchDiagnosticsEnabled: () => boolean = () => false
 ) {
-  return createConversationHistoryHandlers({ authenticate, repository });
+  return createConversationHistoryHandlers({
+    authenticate,
+    repository,
+    courseResearchDiagnosticsEnabled,
+  });
 }

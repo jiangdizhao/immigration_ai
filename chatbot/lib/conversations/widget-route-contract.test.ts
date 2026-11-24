@@ -70,6 +70,23 @@ test("the widget routes share one message-parts contract", () => {
   );
 });
 
+test("course research diagnostic route reuses owner auth and an explicit debug gate", () => {
+  const diagnosticsRoute = readFileSync(
+    new URL(
+      "../../app/api/immigration-conversations/[chatId]/course-research-diagnostics/route.ts",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  assert.match(diagnosticsRoute, /createDatabaseConversationHistoryHandlers/u);
+  assert.match(
+    diagnosticsRoute,
+    /process\.env\.NEXT_PUBLIC_WIDGET_DEBUG === "true"/u
+  );
+  assert.match(diagnosticsRoute, /courseResearchDiagnostics\(/u);
+  assert.doesNotMatch(diagnosticsRoute, /POST|PATCH|DELETE/u);
+});
+
 test("the generic chat API cannot downgrade Project Chat IDs to standalone", () => {
   const route = source("app/(chat)/api/chat/route.ts");
   assert.match(route, /guardProjectChatIngress\(\{ id \}\)/u);

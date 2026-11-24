@@ -430,6 +430,7 @@ export async function POST(request: Request) {
       question,
       chatId: ownedConversation?.chatId ?? null,
       clientPolicySlug: parsed.policySlug,
+      activeStepSelection: parsed.activeStepSelection ?? null,
     });
     customerDocumentEvidence = workspaceContext.documents.evidence;
     customerDocumentManifest = workspaceContext.documents.manifest;

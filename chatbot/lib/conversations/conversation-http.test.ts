@@ -180,12 +180,43 @@ function makeRepository(options: {
 
 function handlersFor(
   repository: ConversationHistoryRepository,
-  userId: string | null = USER_A
+  userId: string | null = USER_A,
+  diagnosticsEnabled = false
 ) {
   return createConversationHistoryHandlers({
     authenticate: async () => (userId ? { userId } : null),
     repository,
+    courseResearchDiagnosticsEnabled: () => diagnosticsEnabled,
   });
+}
+
+function courseResearchDiagnostics() {
+  return {
+    schema_version: "phase15.course-research-diagnostics.v1",
+    scope_fingerprint: "0123456789abcdef",
+    course_research_enabled: true,
+    research_activation_reason: "school_course_source_unverified",
+    research_tool_exposed: true,
+    research_prompt_enabled: true,
+    provider_schema_status: "required",
+    suggestion_present: true,
+    suggestion_container_status: "valid",
+    diagnostic_counter_saturated: false,
+    research_status: "completed",
+    raw_candidate_count: 4,
+    valid_candidate_count: 4,
+    rejected_candidate_count: 0,
+    rejected_field_count: 0,
+    source_locator_count: 6,
+    resolved_source_count: 4,
+    rejected_source_count: 2,
+    python_binding_status: "bound",
+    python_binding_reason: "all_valid_candidates_bound",
+    python_bound_candidate_count: 4,
+    frontend_binding_status: "bound",
+    frontend_binding_reason: "bound_success",
+    frontend_bound_candidate_count: 4,
+  };
 }
 
 function request(path: string, init?: RequestInit) {
@@ -527,6 +558,221 @@ test("another account's conversation and messages are not reachable", async () =
   );
   assert.equal(update.status, 404);
   assert.equal(foreign[0]?.title, "Conversation 0");
+});
+
+test("course research diagnostics require the debug gate and authenticated chat ownership", async () => {
+  const chatId = conversationId(6000);
+  const foreign = makeConversations(1, USER_B);
+  const disabled = handlersFor(
+    makeRepository({ conversations: makeConversations(1) }),
+    USER_A,
+    false
+  );
+  assert.equal(
+    (
+      await disabled.courseResearchDiagnostics(
+        request(
+          `/api/immigration-conversations/${chatId}/course-research-diagnostics`
+        ),
+        chatId
+      )
+    ).status,
+    404
+  );
+
+  const unauthorized = handlersFor(
+    makeRepository({ conversations: makeConversations(1) }),
+    null,
+    true
+  );
+  assert.equal(
+    (
+      await unauthorized.courseResearchDiagnostics(
+        request(
+          `/api/immigration-conversations/${chatId}/course-research-diagnostics`
+        ),
+        chatId
+      )
+    ).status,
+    401
+  );
+
+  const foreignChatId = foreign[0]?.chatId ?? "";
+  const ownerScoped = handlersFor(
+    makeRepository({ conversations: foreign }),
+    USER_A,
+    true
+  );
+  assert.equal(
+    (
+      await ownerScoped.courseResearchDiagnostics(
+        request(
+          `/api/immigration-conversations/${foreignChatId}/course-research-diagnostics`
+        ),
+        foreignChatId
+      )
+    ).status,
+    404
+  );
+});
+
+test("course research diagnostics return only projected persisted metrics", async () => {
+  const chatId = conversationId(0);
+  const conversations = makeConversations(1);
+  const messages = makeMessages(chatId, 4);
+  const olderAssistant = messages.find(
+    (message) => message.id === messageId(1)
+  );
+  const latestAssistant = messages.find(
+    (message) => message.id === messageId(3)
+  );
+  assert.ok(olderAssistant);
+  assert.ok(latestAssistant);
+  olderAssistant.parts = [
+    { type: "text", text: "older private answer and question" },
+    {
+      type: "metadata",
+      courseResearchResult: { candidates: [{ candidateId: "old" }] },
+      retrievalDebug: {
+        privateQuestion: "must not be returned",
+        defaultAgentRuntime: { course_research: courseResearchDiagnostics() },
+      },
+    },
+  ];
+  latestAssistant.parts = [
+    { type: "text", text: "latest private answer and question" },
+    {
+      type: "metadata",
+      citations: [{ url: "https://private.example/secret" }],
+      courseResearchResult: {
+        schemaVersion: "phase15.course-research-result.v1",
+        projectId: conversationId(9001),
+        chatId,
+        taskId: "synthetic-task",
+        definitionVersion: "phase15.project-workflows.v1",
+        workflowKind: "school_application",
+        stepKey: "school_discovery",
+        targetKind: "school_application",
+        targetId: conversationId(9002),
+        sourceRevisions: [
+          {
+            targetKind: "project",
+            targetId: conversationId(9001),
+            revision: 1,
+          },
+        ],
+        observedAt: "2026-10-01T00:00:00.000000Z",
+        candidates: [
+          {
+            candidateId: conversationId(9003),
+            institutionName: "Private candidate name",
+            courseTitle: "Private course name",
+            identityEvidenceLevel: "model_research_lead",
+            identitySourceIds: [],
+            fields: [],
+            sources: [],
+            limitations: [],
+            verificationState: "not_requested",
+          },
+          {
+            candidateId: conversationId(9004),
+            institutionName: "Private candidate name 2",
+            courseTitle: "Private course name 2",
+            identityEvidenceLevel: "model_research_lead",
+            identitySourceIds: [],
+            fields: [],
+            sources: [],
+            limitations: [],
+            verificationState: "not_requested",
+          },
+        ],
+        limitations: [],
+        diagnostics: {
+          invalidCandidateCount: 0,
+          invalidFieldCount: 0,
+          rejectedSourceLocatorCount: 0,
+        },
+        assistantMessageId: conversationId(9005),
+      },
+      retrievalDebug: {
+        privateQuestion: "must not be returned",
+        rawProviderOutput: "must not be returned",
+        defaultAgentRuntime: { course_research: courseResearchDiagnostics() },
+      },
+    },
+  ];
+  const handlers = handlersFor(
+    makeRepository({ conversations, messages }),
+    USER_A,
+    true
+  );
+  const response = await handlers.courseResearchDiagnostics(
+    request(
+      `/api/immigration-conversations/${chatId}/course-research-diagnostics`
+    ),
+    chatId
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.found, true);
+  assert.equal(body.persisted_result_present, true);
+  assert.equal(body.persisted_candidate_count, 2);
+  assert.equal(body.diagnostics.raw_candidate_count, 4);
+  assert.equal(body.diagnostics.frontend_binding_status, "bound");
+  assert.equal(body.scanned_message_count, 4);
+  assert.equal(body.scan_truncated, false);
+  assert.deepEqual(Object.keys(body).sort(), [
+    "diagnostics",
+    "found",
+    "message_created_at",
+    "persisted_candidate_count",
+    "persisted_result_present",
+    "scan_truncated",
+    "scanned_message_count",
+    "schema_version",
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(body),
+    /private|secret|citation|candidate name|course name/u
+  );
+});
+
+test("course research diagnostics stop after five bounded message pages", async () => {
+  const chatId = conversationId(6002);
+  const conversations = makeConversations(1);
+  const conversation = conversations[0];
+  assert.ok(conversation);
+  conversation.chatId = chatId;
+  const messages = makeMessages(chatId, 1201);
+  const firstAssistant = messages.find(
+    (message) => message.id === messageId(1)
+  );
+  assert.ok(firstAssistant);
+  firstAssistant.parts = [
+    { type: "text", text: "older answer" },
+    {
+      type: "metadata",
+      retrievalDebug: {
+        defaultAgentRuntime: { course_research: courseResearchDiagnostics() },
+      },
+    },
+  ];
+  const handlers = handlersFor(
+    makeRepository({ conversations, messages }),
+    USER_A,
+    true
+  );
+  const response = await handlers.courseResearchDiagnostics(
+    request(
+      `/api/immigration-conversations/${chatId}/course-research-diagnostics`
+    ),
+    chatId
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.found, false);
+  assert.equal(body.scanned_message_count, 1000);
+  assert.equal(body.scan_truncated, true);
 });
 
 test("a long conversation can be continued from a detail page without losing older messages", async () => {

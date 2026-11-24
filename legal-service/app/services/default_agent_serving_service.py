@@ -28,6 +28,15 @@ from app.services.customer_document_context import (
 from app.services.evidence_salvage_finalizer import EvidenceSalvageFinalizer
 from app.services.policy_topic_context import extract_policy_topic_context
 from app.services.project_context import render_project_assistant_context_prompt_section, render_project_context_prompt_section
+from app.services.project_action_suggestion_service import (
+    project_action_suggestion_field_path,
+    validate_project_action_suggestion,
+)
+from app.services.course_research_bridge import (
+    bind_course_research_suggestion_with_diagnostics,
+    initial_course_research_diagnostics,
+    course_research_activation_reason,
+)
 from app.services.request_evidence_registry import RequestEvidenceRegistry, create_registry
 
 logger = logging.getLogger(__name__)
@@ -109,6 +118,18 @@ class DefaultAgentServingService:
             policy_topic_context = extract_policy_topic_context(
                 getattr(payload, "frontend_messages", None)
             )
+            suggestion_field_path = project_action_suggestion_field_path(
+                payload.project_assistant_context,
+                payload.frontend_chat_id,
+            )
+            course_research_enabled, _activation_reason = course_research_activation_reason(
+                payload.project_assistant_context,
+                payload.frontend_chat_id,
+            )
+            course_research_diagnostics = initial_course_research_diagnostics(
+                context=payload.project_assistant_context,
+                frontend_chat_id=payload.frontend_chat_id,
+            )
             runtime_request = AgentRuntimeRequest(
                 request_id=request_id,
                 turn_id=turn_id,
@@ -127,6 +148,8 @@ class DefaultAgentServingService:
                 policy_topic_context=policy_topic_context,
                 project_context=render_project_context_prompt_section(payload.project_context),
                 project_assistant_context=render_project_assistant_context_prompt_section(payload.project_assistant_context),
+                project_action_suggestion_field_path=suggestion_field_path,
+                course_research_enabled=course_research_enabled,
             )
             registry = create_registry(request_id)
 
@@ -160,6 +183,7 @@ class DefaultAgentServingService:
                     response_language=response_language,
                     result=result,
                     registry=registry,
+                    course_research_diagnostics=course_research_diagnostics,
                 )
                 self._record_trace(
                     query_service=query_service,
@@ -174,12 +198,34 @@ class DefaultAgentServingService:
                 )
                 return response
 
+            course_research_result, course_research_diagnostics = (
+                bind_course_research_suggestion_with_diagnostics(
+                    raw=getattr(result.submission, "course_research_suggestion", None),
+                    context=payload.project_assistant_context,
+                    frontend_chat_id=payload.frontend_chat_id,
+                    registry=registry,
+                )
+            )
+            course_research_diagnostics.update(
+                {
+                    "research_tool_exposed": result.metrics.course_research_tool_exposed,
+                    "research_prompt_enabled": result.metrics.course_research_prompt_enabled,
+                    "provider_schema_status": result.metrics.course_research_provider_schema_status,
+                }
+            )
             response = self._response_from_submission(
                 matter_id=matter_id,
                 response_language=response_language,
                 submission=result.submission,
                 result=result,
                 registry=registry,
+                ai_action_suggestion=validate_project_action_suggestion(
+                    getattr(result.submission, "ai_action_suggestion", None),
+                    payload.project_assistant_context,
+                    payload.frontend_chat_id,
+                ),
+                course_research_result=course_research_result,
+                course_research_diagnostics=course_research_diagnostics,
                 customer_document_evidence_present=customer_document_evidence_present,
                 authorized_document_ids=frozenset(
                     document.documentId
@@ -277,6 +323,9 @@ class DefaultAgentServingService:
         submission: Any,
         result: Any,
         registry: RequestEvidenceRegistry,
+        ai_action_suggestion: Any | None = None,
+        course_research_result: dict[str, Any] | None = None,
+        course_research_diagnostics: dict[str, Any] | None = None,
         customer_document_evidence_present: bool = False,
         authorized_document_ids: frozenset[str] = frozenset(),
     ) -> QueryResponse:
@@ -327,6 +376,8 @@ class DefaultAgentServingService:
 
         metrics = result.metrics.model_dump(mode="json")
         debug = self._debug_payload(result=result, metrics=metrics, registry=registry)
+        if course_research_diagnostics is not None:
+            debug["course_research"] = course_research_diagnostics
         is_safety = submission.answer_class == "safety_blocked"
         next_action = "suggest_consultation" if is_safety else submission.next_action
         display_mode = submission.user_display_mode or (
@@ -376,6 +427,8 @@ class DefaultAgentServingService:
             customer_document_usage=document_usage,
             customer_document_used_ids=used_document_ids,
             response_language="zh" if response_language == "zh" else "en",
+            ai_action_suggestion=ai_action_suggestion,
+            course_research_result=course_research_result,
             confidence="medium" if submission.answer_class == "substantive_legal" else "high",
             user_display_mode=display_mode,
             issue_type="agent_runtime_default",
@@ -399,6 +452,7 @@ class DefaultAgentServingService:
         result: Any | None,
         error: Exception | None = None,
         registry: RequestEvidenceRegistry | None = None,
+        course_research_diagnostics: dict[str, Any] | None = None,
     ) -> QueryResponse:
         is_zh = response_language == "zh"
         metrics = result.metrics.model_dump(mode="json") if result is not None else {}
@@ -451,6 +505,8 @@ class DefaultAgentServingService:
                     metrics=metrics,
                     registry=registry,
                 )
+                if course_research_diagnostics is not None:
+                    debug["course_research"] = course_research_diagnostics
                 debug.update({
                     "completion_status": "evidence_salvage",
                     "evidence_salvage": salvage.telemetry,
@@ -472,6 +528,34 @@ class DefaultAgentServingService:
                     research_status="incomplete",
                     fact_check_status="uncertain",
                 )
+        failure_debug = {
+            "agent_runtime_serving": True,
+            "runtime_architecture": self.RUNTIME_ARCHITECTURE,
+            "legacy_pfvd_skipped": True,
+            "fallback_to_pfvd": False,
+            "failure_neutral": True,
+            "error_type": error.__class__.__name__ if error else None,
+            "execution_metrics": metrics,
+        }
+        if course_research_diagnostics is not None:
+            course_research_diagnostics.update(
+                {
+                    "research_tool_exposed": bool(
+                        getattr(getattr(result, "metrics", None), "course_research_tool_exposed", False)
+                    ),
+                    "research_prompt_enabled": bool(
+                        getattr(getattr(result, "metrics", None), "course_research_prompt_enabled", False)
+                    ),
+                    "provider_schema_status": getattr(
+                        getattr(result, "metrics", None),
+                        "course_research_provider_schema_status",
+                        "not_exposed",
+                    ),
+                    "python_binding_status": "not_run",
+                    "python_binding_reason": "answer_submission_unavailable",
+                }
+            )
+            failure_debug["course_research"] = course_research_diagnostics
         return QueryResponse(
             matter_id=matter_id,
             answer=(
@@ -488,15 +572,7 @@ class DefaultAgentServingService:
             compact_sources=[],
             escalate=True,
             next_action="suggest_consultation",
-            retrieval_debug={
-                "agent_runtime_serving": True,
-                "runtime_architecture": self.RUNTIME_ARCHITECTURE,
-                "legacy_pfvd_skipped": True,
-                "fallback_to_pfvd": False,
-                "failure_neutral": True,
-                "error_type": error.__class__.__name__ if error else None,
-                "execution_metrics": metrics,
-            },
+            retrieval_debug=failure_debug,
             architecture_version=self.RUNTIME_ARCHITECTURE,
             research_status="incomplete",
             fact_check_status="failed" if result is not None else "not_required",

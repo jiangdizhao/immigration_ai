@@ -111,6 +111,8 @@ def test_fast_uses_one_luna_request_with_only_optional_native_web_search(monkeyp
     )
 
     assert response.answer == "A concise answer."
+    assert response.ai_action_suggestion is None
+    assert response.course_research_result is None
     assert response.research_status == "complete"
     assert len(response.citations) == 1
     assert response.citations[0].url == "https://immi.homeaffairs.gov.au/example"

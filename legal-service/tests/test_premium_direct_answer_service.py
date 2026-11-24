@@ -246,6 +246,28 @@ def test_no_search_answer_succeeds_without_fallback(monkeypatch) -> None:
     assert calls == [service.primary_model]
     assert response.compact_sources == []
     assert response.retrieval_debug["premium_direct_answer"]["live_web_search_used"] is False
+    assert response.ai_action_suggestion is None
+    assert response.course_research_result is None
+
+
+def test_premium_provider_stub_keeps_plain_text_web_contract_without_suggestion(monkeypatch):
+    service = _service(monkeypatch)
+    calls = _capturing_client(monkeypatch, service, FakeResponse("A direct answer."))
+    response = service.answer(
+        payload=QueryRequest(question="What is a visa?", assistant_mode="premium"),
+        original_question="What is a visa?",
+        effective_question="What is a visa?",
+        response_language="en",
+        matter_id=None,
+    )
+    provider_request = next(item for item in calls if "model" in item)
+    assert response.ai_action_suggestion is None
+    assert response.course_research_result is None
+    assert response.answer.endswith("A direct answer.")
+    assert provider_request["tools"] == [
+        {"type": "web_search", "search_context_size": service.web_search_context_size}
+    ]
+    assert all(tool.get("name") != "submit_answer" for tool in provider_request["tools"])
 
 
 def test_model_input_removes_duplicate_optimistic_user_message_and_keeps_history(

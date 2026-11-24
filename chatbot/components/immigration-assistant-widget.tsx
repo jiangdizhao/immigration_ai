@@ -1060,7 +1060,7 @@ export function ImmigrationAssistantWidget() {
                               Source details
                             </p>
                             <div className="space-y-2">
-                              {message.citations.slice(0, 3).map((citation) => (
+                              {message.citations.map((citation) => (
                                 <div
                                   className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
                                   key={`${citation.title ?? "source"}-${stableTextKey(citation.url ?? citation.quote ?? citation.authority ?? "")}`}

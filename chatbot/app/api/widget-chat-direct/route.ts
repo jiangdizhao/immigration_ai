@@ -355,6 +355,7 @@ export async function POST(request: Request) {
       responseLanguage: requestedResponseLanguage,
       answerPreference,
       currentIntakeFacts,
+      activeStepSelection,
     } = widgetDirectRequestBodySchema.parse(json);
 
     // Defence in depth for direct or stale clients. This must stay ahead of
@@ -556,6 +557,7 @@ export async function POST(request: Request) {
       question,
       chatId: ownedConversation?.chatId ?? null,
       clientPolicySlug: policySlug,
+      activeStepSelection: activeStepSelection ?? null,
     });
     const customerDocumentEvidence: CustomerDocumentEvidence =
       workspaceContext.documents.evidence;

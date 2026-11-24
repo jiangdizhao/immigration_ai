@@ -104,13 +104,19 @@ function application(
     courseTitle: string;
     intakeLabel: string | null;
     institutionId: string | null;
+    courseId: string | null;
+    deliveryId: string | null;
+    intakeId: string | null;
   }> = {}
 ) {
   return {
     actorUserId: owner,
     courseTitle: "Bachelor of Nursing",
+    courseId: null,
+    deliveryId: null,
     institutionId: null,
     institutionName: "Example University",
+    intakeId: null,
     intakeLabel: "February 2027",
     operationId: "op-create-1",
     projectId,
@@ -635,6 +641,122 @@ test("references are identity bindings: owner-scoped, existence-hidden and never
   });
   assert.equal(revoked.application.references[0]?.revokedAt !== null, true);
   assert.equal(revoked.application.status, "preparing");
+});
+
+test("customer-reported course selection is normalized by the owning service and invalidates the package", async () => {
+  const { service, store } = harness(unverifiedCatalog);
+  const schoolA = await service.create(
+    application({
+      institutionName: "Example Institute",
+      institutionId: "provider:unverified:1",
+      courseTitle: "Master of Data Science",
+      courseId: "course:unverified:1",
+      intakeLabel: "March 2027",
+      operationId: "op-course-draft-a",
+    })
+  );
+  const schoolB = await service.create(
+    application({
+      institutionName: "Harbour Institute",
+      courseTitle: "Bachelor of Harbour Studies",
+      intakeLabel: "October 2027",
+      operationId: "op-course-draft-b",
+    })
+  );
+  const prepared = await service.buildPackage({
+    actorUserId: owner,
+    applicationId: schoolA.application.applicationId,
+    expectedRevision: schoolA.application.revision,
+    operationId: "op-course-draft-package",
+    projectId,
+  });
+
+  const confirmedTarget = {
+    institutionName: "  Example   Institute ",
+    institutionId: null,
+    courseTitle: "  Master of\u3000Example Studies ",
+    courseId: null,
+    deliveryId: null,
+    intakeId: null,
+    intakeLabel: "  July   2027 ",
+  };
+  const updated = await service.update({
+    actorUserId: owner,
+    applicationId: schoolA.application.applicationId,
+    ...confirmedTarget,
+    expectedRevision: prepared.application.revision,
+    operationId: "op-course-draft-confirm",
+    projectId,
+  });
+
+  assert.deepEqual(
+    {
+      institutionName: updated.application.institution.name,
+      institutionId: updated.application.institution.catalogId,
+      courseTitle: updated.application.course.title,
+      courseId: updated.application.course.catalogId,
+      deliveryId: updated.application.deliveryId,
+      intakeId: updated.application.intake.id,
+      intakeLabel: updated.application.intake.label,
+    },
+    {
+      institutionName: "Example Institute",
+      institutionId: null,
+      courseTitle: "Master of Example Studies",
+      courseId: null,
+      deliveryId: null,
+      intakeId: null,
+      intakeLabel: "July 2027",
+    }
+  );
+  assert.equal(
+    updated.application.source.status,
+    "unverified_customer_declared"
+  );
+  assert.equal(updated.application.source.independentlyVerified, false);
+  assert.equal(updated.application.currentPackage, null);
+  assert.equal(updated.application.packages[0]?.status, "stale");
+
+  const fresh = await service.get({
+    actorUserId: owner,
+    applicationId: schoolA.application.applicationId,
+    projectId,
+  });
+  assert.equal(fresh.institution.name, updated.application.institution.name);
+  assert.equal(fresh.course.title, updated.application.course.title);
+  assert.equal(fresh.source.status, "unverified_customer_declared");
+  const other = await service.get({
+    actorUserId: owner,
+    applicationId: schoolB.application.applicationId,
+    projectId,
+  });
+  assert.equal(other.institution.name, "Harbour Institute");
+  assert.equal(other.course.title, "Bachelor of Harbour Studies");
+  assert.equal(other.revision, 1);
+
+  await assert.rejects(
+    service.update({
+      actorUserId: owner,
+      applicationId: schoolA.application.applicationId,
+      institutionName: "Example Institute",
+      courseTitle: "x".repeat(201),
+      institutionId: null,
+      courseId: null,
+      deliveryId: null,
+      intakeId: null,
+      intakeLabel: null,
+      expectedRevision: fresh.revision,
+      operationId: "op-course-draft-invalid",
+      projectId,
+    }),
+    (error: unknown) => (error as { code?: string }).code === "invalid_request"
+  );
+  const persisted = store
+    .state()
+    .applications.find(
+      (application) => application.id === schoolA.application.applicationId
+    );
+  assert.equal(persisted?.revision, fresh.revision);
 });
 
 test("the preparation package is deterministic, immutable and versioned", async () => {

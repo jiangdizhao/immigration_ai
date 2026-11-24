@@ -17,11 +17,16 @@ import {
   widgetRouteForAssistantMode,
 } from "@/lib/assistant-mode";
 import { consultationCreateHref } from "@/lib/consultations/customer-ui";
+import { latestCourseResearchResults } from "@/lib/conversations/message-parts";
 import { resolveWorkspacePersistence } from "@/lib/conversations/persistence-notice";
 import {
   buildWidgetTurnRequestBody,
   requestPolicySlugForConversation,
 } from "@/lib/conversations/widget-turn-request";
+import {
+  activeStepSelectionForTask,
+  type ActiveStepSelectionV1,
+} from "@/lib/workspace/active-step-context";
 import { ChatbotError, type ErrorCode } from "@/lib/errors";
 import { persistedAssistantMessageIdForReview } from "@/lib/lawyer-requests/message-identity";
 import { conversationDocumentsAvailableForOrigin } from "@/lib/matter-documents/workspace-panel";
@@ -80,6 +85,7 @@ import {
 } from "@/lib/workspace/project-stages";
 import {
   projectWorkbenchDefaultTaskIdForNode,
+  projectWorkbenchEffectiveTask,
   projectWorkbenchSelectionForWorkflowTask,
   reconcileProjectWorkbenchTarget,
   reconcileProjectWorkbenchTaskId,
@@ -447,6 +453,8 @@ type ImmigrationStoredMessage = {
   customerDocumentEvidenceUsed?: boolean;
   customerDocumentUsage?: "not_supplied" | "supplied_unconfirmed" | "confirmed";
   customerDocumentSources?: WidgetAssistantMessage["customerDocumentSources"];
+  aiActionSuggestion?: WidgetAssistantMessage["aiActionSuggestion"];
+  courseResearchResult?: WidgetAssistantMessage["courseResearchResult"];
 };
 
 type ImmigrationConversationDetail = ImmigrationConversationSummary & {
@@ -466,6 +474,7 @@ type PendingTurnSubmission = {
   clientTurnId: string;
   conversationId: string;
   messages: WidgetMessage[];
+  activeStepSelection: ActiveStepSelectionV1 | null;
 };
 
 function assistantFromStoredMessage(
@@ -497,6 +506,8 @@ function assistantFromStoredMessage(
     factSlotStates: [],
     interactionPlan: null,
     retrievalDebug: message.retrievalDebug ?? null,
+    aiActionSuggestion: message.aiActionSuggestion ?? null,
+    courseResearchResult: message.courseResearchResult ?? null,
   };
 }
 
@@ -704,6 +715,8 @@ export function ImmigrationAIWorkspace({
   >(null);
   const [selectedProjectWorkflowTaskId, setSelectedProjectWorkflowTaskId] =
     useState<string | null>(null);
+  const [selectedProjectWorkflowTaskSelection, setSelectedProjectWorkflowTaskSelection] =
+    useState<ActiveStepSelectionV1 | null>(null);
   const [mobileProjectSurface, setMobileProjectSurface] = useState<
     "chat" | "task"
   >("chat");
@@ -824,6 +837,7 @@ export function ImmigrationAIWorkspace({
     setSelectedProject(null);
     setSelectedProjectTargetId(null);
     setSelectedProjectWorkflowTaskId(null);
+    setSelectedProjectWorkflowTaskSelection(null);
     setMobileProjectSurface("chat");
     setProjectView("home");
     setProjectSelectionReset((current) => current + 1);
@@ -883,6 +897,7 @@ export function ImmigrationAIWorkspace({
         setPreviousProjectView("home");
         setSelectedProjectTargetId(null);
         setSelectedProjectWorkflowTaskId(null);
+        setSelectedProjectWorkflowTaskSelection(null);
         setMobileProjectSurface("chat");
       }
       if (
@@ -947,8 +962,17 @@ export function ImmigrationAIWorkspace({
         return;
       }
       setSelectedProjectTargetId(exactNodeId);
-      setSelectedProjectWorkflowTaskId(
-        projectWorkbenchDefaultTaskIdForNode(load.journey, exactNodeId)
+      const taskId = projectWorkbenchDefaultTaskIdForNode(
+        load.journey,
+        exactNodeId
+      );
+      const task = projectWorkflowTaskById(
+        load.journey.workflowProjection.tasks,
+        taskId
+      );
+      setSelectedProjectWorkflowTaskId(taskId);
+      setSelectedProjectWorkflowTaskSelection(
+        task ? activeStepSelectionForTask(task) : null
       );
       setProjectView("home");
       setMobileProjectSurface("task");
@@ -974,7 +998,17 @@ export function ImmigrationAIWorkspace({
       if (!selection) {
         return;
       }
+      const task = projectWorkflowTaskById(
+        load.journey.workflowProjection.tasks,
+        selection.taskId
+      );
+      if (!task) {
+        return;
+      }
       setSelectedProjectWorkflowTaskId(selection.taskId);
+      setSelectedProjectWorkflowTaskSelection(
+        activeStepSelectionForTask(task)
+      );
       setSelectedProjectTargetId(selection.targetNodeId);
       setProjectView("home");
       setMobileProjectSurface("task");
@@ -1222,6 +1256,53 @@ export function ImmigrationAIWorkspace({
       conversationProjectId === selectedProjectId
   );
 
+  const effectiveWorkflowTask =
+    projectJourneyResource.load.status === "ready" &&
+    projectJourneyResource.load.journey.project.id === selectedProjectId
+      ? projectWorkbenchEffectiveTask({
+          journey: projectJourneyResource.load.journey,
+          selectedNodeId: selectedProjectTargetId,
+          selectedTaskId: selectedProjectWorkflowTaskId,
+          selectedTaskSelection: selectedProjectWorkflowTaskSelection,
+        })
+      : null;
+  const effectiveWorkflowTaskId =
+    effectiveWorkflowTask?.status === "available"
+      ? effectiveWorkflowTask.task.taskId
+      : null;
+
+  const activeStepSelectionForCurrentTurn = ():
+    | { ok: true; selection: ActiveStepSelectionV1 | null }
+    | { ok: false } => {
+    if (!isActiveSelectedProjectConversation) {
+      return { ok: true, selection: null };
+    }
+    const load = projectJourneyResource.load;
+    if (
+      load.status !== "ready" ||
+      load.journey.project.id !== selectedProjectId
+    ) {
+      return selectedProjectWorkflowTaskId === null
+        ? { ok: true, selection: null }
+        : { ok: false };
+    }
+    const effective = projectWorkbenchEffectiveTask({
+      journey: load.journey,
+      selectedNodeId: selectedProjectTargetId,
+      selectedTaskId: selectedProjectWorkflowTaskId,
+      selectedTaskSelection: selectedProjectWorkflowTaskSelection,
+    });
+    if (effective.status === "unavailable") {
+      return selectedProjectWorkflowTaskId === null
+        ? { ok: true, selection: null }
+        : { ok: false };
+    }
+    return {
+      ok: true,
+      selection: activeStepSelectionForTask(effective.task),
+    };
+  };
+
   useEffect(() => {
     const load = projectJourneyResource.load;
     if (
@@ -1240,11 +1321,26 @@ export function ImmigrationAIWorkspace({
         load.journey,
         preserveProjectSelection
       );
-      const taskId = reconcileProjectWorkbenchTaskId(
-        selectedProjectWorkflowTaskId,
-        load.journey,
-        targetId,
-        preserveProjectSelection && targetId === null
+      const effectiveTask = projectWorkbenchEffectiveTask({
+        journey: load.journey,
+        selectedNodeId: targetId,
+        selectedTaskId: selectedProjectWorkflowTaskId,
+        selectedTaskSelection: selectedProjectWorkflowTaskSelection,
+      });
+      const preserveUnavailableExplicitTask =
+        selectedProjectWorkflowTaskId !== null &&
+        effectiveTask.status === "unavailable";
+      const taskId = preserveUnavailableExplicitTask
+        ? selectedProjectWorkflowTaskId
+        : reconcileProjectWorkbenchTaskId(
+            selectedProjectWorkflowTaskId,
+            load.journey,
+            targetId,
+            preserveProjectSelection && targetId === null
+          );
+      const nextTask = projectWorkflowTaskById(
+        load.journey.workflowProjection.tasks,
+        taskId
       );
       setSelectedProjectTargetId((current) =>
         current === targetId ? current : targetId
@@ -1252,15 +1348,18 @@ export function ImmigrationAIWorkspace({
       setSelectedProjectWorkflowTaskId((current) =>
         current === taskId ? current : taskId
       );
-    } else if (load.status === "failed") {
-      setSelectedProjectTargetId(null);
-      setSelectedProjectWorkflowTaskId(null);
+      if (selectedProjectWorkflowTaskId === null) {
+        setSelectedProjectWorkflowTaskSelection(
+          nextTask ? activeStepSelectionForTask(nextTask) : null
+        );
+      }
     }
   }, [
     projectJourneyResource.load,
     selectedProjectId,
     selectedProjectTargetId,
     selectedProjectWorkflowTaskId,
+    selectedProjectWorkflowTaskSelection,
   ]);
   /**
    * Phase 13 M9-A navigation/overview. Derived only from the server-authorized
@@ -2034,6 +2133,8 @@ export function ImmigrationAIWorkspace({
       factSlotStates: data.factSlotStates ?? [],
       interactionPlan: data.interactionPlan ?? null,
       retrievalDebug: data.retrievalDebug ?? null,
+      aiActionSuggestion: data.aiActionSuggestion ?? null,
+      courseResearchResult: data.courseResearchResult ?? null,
     };
 
     shouldAutoScrollRef.current = true;
@@ -2084,7 +2185,8 @@ export function ImmigrationAIWorkspace({
     currentFacts: IntakeFacts = {},
     answerPreference: AnswerPreference = "answer_first",
     activeConversationId: string | null = conversationId,
-    clientTurnId?: string
+    clientTurnId?: string,
+    activeStepSelection: ActiveStepSelectionV1 | null = null
   ) => {
     const stableConversationId =
       activeConversationId ?? conversationId ?? generateUUID();
@@ -2110,6 +2212,7 @@ export function ImmigrationAIWorkspace({
         answerPreference,
         assistantMode,
         policySlug: requestPolicySlug,
+        activeStepSelection,
         messages: nextMessages.map((message) => ({
           id: message.id,
           role: message.role,
@@ -2218,6 +2321,13 @@ export function ImmigrationAIWorkspace({
       return;
     }
 
+    const taskSelection = activeStepSelectionForCurrentTurn();
+    if (!taskSelection.ok) {
+      toast.error(copy.projectEntry.projectWorkbench.targetUnavailable);
+      return;
+    }
+    const submittedActiveStepSelection = taskSelection.selection;
+
     const nextUserMessage: WidgetMessage = {
       id: generateUUID(),
       role: "user",
@@ -2265,6 +2375,7 @@ export function ImmigrationAIWorkspace({
         clientTurnId: nextUserMessage.id,
         conversationId: activeConversationId,
         messages: nextMessages,
+        activeStepSelection: submittedActiveStepSelection,
       };
       // Phase 14-A R1-02: the turn is recorded and about to be dispatched, which
       // is the point at which the chat has genuinely become the active view.
@@ -2275,7 +2386,8 @@ export function ImmigrationAIWorkspace({
         {},
         answerPreference,
         activeConversationId,
-        nextUserMessage.id
+        nextUserMessage.id,
+        submittedActiveStepSelection
       );
       await appendAssistantMessage(data, nextUserMessage.id);
     } catch (requestError) {
@@ -2381,7 +2493,8 @@ export function ImmigrationAIWorkspace({
         {},
         "answer_first",
         pending.conversationId,
-        pending.clientTurnId
+        pending.clientTurnId,
+        pending.activeStepSelection
       );
       const persistence = data.persistence ?? null;
       const persistenceState = resolveWorkspacePersistence(persistence);
@@ -2487,7 +2600,9 @@ export function ImmigrationAIWorkspace({
         mergedFacts,
         draftFacts,
         "answer_first",
-        activeConversationId
+        activeConversationId,
+        undefined,
+        null
       );
       await appendAssistantMessage(data, visibleUserMessage.id);
     } catch (requestError) {
@@ -2745,7 +2860,7 @@ export function ImmigrationAIWorkspace({
           onSelectTarget={handleSelectProjectTarget}
           onSelectWorkflowTask={handleSelectProjectWorkflowTask}
           selectedNodeId={selectedProjectTargetId}
-          selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
+          selectedWorkflowTaskId={effectiveWorkflowTaskId}
         />
       }
     />
@@ -3849,10 +3964,40 @@ export function ImmigrationAIWorkspace({
                 id="project-task-region"
               >
                 <ProjectTaskWorkspacePanel
+                  aiActionSuggestion={
+                    isActiveSelectedProjectConversation
+                      ? ([...messages]
+                          .reverse()
+                          .find(
+                            (message): message is WidgetAssistantMessage =>
+                              message.role === "assistant"
+                          )?.aiActionSuggestion ?? null)
+                      : null
+                  }
+                  chatId={
+                    isActiveSelectedProjectConversation ? conversationId : null
+                  }
+                  courseResearchDiagnostics={
+                    isActiveSelectedProjectConversation
+                      ? ([...messages]
+                          .reverse()
+                          .find(
+                            (message): message is WidgetAssistantMessage =>
+                              message.role === "assistant"
+                          )?.retrievalDebug?.defaultAgentRuntime
+                          ?.course_research ?? null)
+                      : null
+                  }
+                  courseResearchResults={
+                    isActiveSelectedProjectConversation
+                      ? latestCourseResearchResults(messages)
+                      : []
+                  }
                   journeyCopy={copy.projectEntry.projectJourney}
                   journeyLoad={projectJourneyResource.load}
                   locale={locale}
                   navigationBusy={projectNavigationBusy}
+                  onMutation={projectJourneyResource.refresh}
                   onOpenWorkspace={handleSheetAwareSelectProjectView}
                   onRefresh={projectJourneyResource.refresh}
                   onReturnToTarget={() => {
@@ -3864,6 +4009,9 @@ export function ImmigrationAIWorkspace({
                   projectView={projectView}
                   selectedNodeId={selectedProjectTargetId}
                   selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
+                  selectedWorkflowTaskSelection={
+                    selectedProjectWorkflowTaskSelection
+                  }
                   workbenchCopy={copy.projectEntry.projectWorkbench}
                 >
                   {selectedProject && projectView !== "home" ? (
@@ -3997,7 +4145,7 @@ export function ImmigrationAIWorkspace({
                         onSelectTarget={handleSelectProjectTarget}
                         onSelectWorkflowTask={handleSelectProjectWorkflowTask}
                         selectedNodeId={selectedProjectTargetId}
-                        selectedWorkflowTaskId={selectedProjectWorkflowTaskId}
+                        selectedWorkflowTaskId={effectiveWorkflowTaskId}
                       />
                     ) : (
                       <div

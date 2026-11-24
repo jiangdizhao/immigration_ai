@@ -15,6 +15,7 @@ f.__m2Route = {
   refreshes: 0,
   userId: "owner",
   projectId: "project-a",
+  selections: [],
 };
 const modules: Record<string, string> = {
   "@vercel/functions": "export const ipAddress = () => undefined;",
@@ -55,7 +56,7 @@ const modules: Record<string, string> = {
     "export const preservePublicAnswer = ({backendAnswer,emptyFallback}) => backendAnswer || emptyFallback;",
   "@/lib/ratelimit": "export const checkIpRateLimit = async () => {};",
   "@/lib/vip/entitlement": `export const isPremiumAllowed = () => true; export const premiumDeniedResponse = () => Response.json({error:'denied'}, {status:403});`,
-  "@/lib/workspace/context-resolver": `export const resolveWorkspaceContext = async ({userId,actorType,question,chatId}) => { if(userId !== 'owner' || actorType !== 'regular' || !chatId || !question) throw Error('wrong actor'); return {documents:{evidence:{documents:[]},manifest:[],status:{}},policyBinding:null,refreshProjectContextBeforeProvider:async()=>{globalThis.__m2Route.refreshes++; if(globalThis.__m2Route.revoked) throw Error('revoked'); return globalThis.__m2Route.standalone ? null : globalThis.__m2Route.packet;}}; };`,
+  "@/lib/workspace/context-resolver": `export const resolveWorkspaceContext = async ({userId,actorType,question,chatId,activeStepSelection}) => { if(userId !== 'owner' || actorType !== 'regular' || !chatId || !question) throw Error('wrong actor'); globalThis.__m2Route.selections.push(activeStepSelection ?? null); return {documents:{evidence:{documents:[]},manifest:[],status:{}},policyBinding:null,refreshProjectContextBeforeProvider:async()=>{globalThis.__m2Route.refreshes++; if(globalThis.__m2Route.revoked) throw Error('revoked'); return globalThis.__m2Route.standalone ? null : globalThis.__m2Route.packet;}}; };`,
 };
 const fixtureDir = mkdtempSync(join(tmpdir(), "phase15-widget-mocks-"));
 const mockUrls = Object.fromEntries(
@@ -108,6 +109,10 @@ test("all three real widget POST handlers send server-refreshed Project context,
           { applicationId: "school-b" },
         ],
       },
+      activeStep: {
+        schemaVersion: "phase15.active-step-context.v1",
+        taskId: "server-resolved-school-a-discovery",
+      },
     },
   };
   f.fetch = async (_url: unknown, init: { body: string }) => {
@@ -129,6 +134,17 @@ test("all three real widget POST handlers send server-refreshed Project context,
       frontendChatId: "22222222-2222-4222-8222-222222222222",
       selectedChatModel: "synthetic",
       assistantMode: ["fast", "default", "premium"][index],
+      activeStepSelection: {
+        schemaVersion: "phase15.active-step-selection.v1",
+        projectId: "123e4567-e89b-42d3-a456-426614174000",
+        taskId: "browser-selected-task-hint",
+        workflowKind: "school_application",
+        definitionVersion: "phase15.project-workflows.v1",
+        stepKey: "school_discovery",
+        targetKind: "school_application",
+        targetId: "123e4567-e89b-42d3-a456-426614174001",
+        sourceRevisions: [],
+      },
       messages: [
         {
           id: "synthetic-message",
@@ -154,6 +170,14 @@ test("all three real widget POST handlers send server-refreshed Project context,
       f.__m2Route.payloads[index].project_assistant_context.matters
         .schoolApplications.length,
       2
+    );
+    assert.equal(
+      f.__m2Route.selections[index].taskId,
+      "browser-selected-task-hint"
+    );
+    assert.equal(
+      f.__m2Route.payloads[index].project_assistant_context.activeStep.taskId,
+      "server-resolved-school-a-discovery"
     );
   }
   assert.equal(f.__m2Route.refreshes, 3);

@@ -14,6 +14,21 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import {
+  courseResearchWorkspaceContextKey,
+  projectActionProposalContextKey,
+} from "@/lib/workspace/action-proposal-context-key";
+import {
+  type BoundAIActionSuggestionV1,
+  boundSuggestionMatchesTask,
+} from "@/lib/workspace/ai-action-suggestions";
+import {
+  type BoundCourseResearchResultV1,
+  type CourseResearchDiagnosticsV1,
+  courseResearchDiagnosticsForTask,
+  courseResearchResultMatchesTask,
+} from "@/lib/workspace/course-research";
+import type { ActiveStepSelectionV1 } from "@/lib/workspace/active-step-context";
 import type { ProjectEntryProject } from "@/lib/workspace/project-entry";
 import type {
   ProjectJourney,
@@ -23,19 +38,20 @@ import type {
 import type { ProjectJourneyClientLoad } from "@/lib/workspace/project-journey-client";
 import {
   linkedAdmissionsNodeIds,
+  projectWorkbenchEffectiveTask,
   projectWorkbenchNodeById,
   projectWorkbenchPanelKind,
   recordedRoutesForTarget,
 } from "@/lib/workspace/project-workbench-model";
 import { getProjectWorkflowCopy } from "@/lib/workspace/project-workflow-copy";
 import {
-  defaultWorkflowTaskForTarget,
-  projectWorkflowTaskById,
   type WorkflowTaskProjectionV1,
   workflowTasksForTarget,
 } from "@/lib/workspace/project-workflows";
 import type { ProjectWorkspaceView } from "@/lib/workspace/project-workspace-view";
 import type { WorkspaceCopy } from "@/lib/workspace-copy";
+import { CourseResearchWorkspace } from "./course-research-workspace";
+import { ProjectActionProposalPanel } from "./project-action-proposal-panel";
 import { ProjectGuidedJourneyContent } from "./project-guided-journey";
 import {
   ProjectWorkflowProgressDetails,
@@ -1076,14 +1092,20 @@ function SelectedMatterDetails({
 }
 
 export function ProjectTaskWorkspacePanel({
+  aiActionSuggestion,
+  courseResearchDiagnostics,
+  courseResearchResults,
   children,
+  chatId,
   journeyLoad,
   onOpenWorkspace,
   onRefresh,
+  onMutation,
   onReturnToTarget,
   projectId,
   selectedNodeId,
   selectedWorkflowTaskId,
+  selectedWorkflowTaskSelection,
   workbenchCopy,
   journeyCopy,
   projectView,
@@ -1091,13 +1113,19 @@ export function ProjectTaskWorkspacePanel({
   navigationBusy,
 }: {
   children?: ReactNode;
+  aiActionSuggestion?: BoundAIActionSuggestionV1 | null;
+  courseResearchDiagnostics?: CourseResearchDiagnosticsV1 | null;
+  courseResearchResults?: readonly BoundCourseResearchResultV1[];
+  chatId?: string | null;
   journeyLoad: ProjectJourneyClientLoad;
   onOpenWorkspace: (view: ProjectWorkspaceView) => void;
   onRefresh: () => void;
+  onMutation?: () => void;
   onReturnToTarget: () => void;
   projectId: string;
   selectedNodeId: string | null;
   selectedWorkflowTaskId: string | null;
+  selectedWorkflowTaskSelection?: ActiveStepSelectionV1 | null;
   workbenchCopy: ProjectWorkbenchCopy;
   journeyCopy: ProjectJourneyCopy;
   projectView: ProjectWorkspaceView;
@@ -1106,27 +1134,26 @@ export function ProjectTaskWorkspacePanel({
 }) {
   const journey = journeyLoad.status === "ready" ? journeyLoad.journey : null;
   const selectedNode = projectWorkbenchNodeById(journey, selectedNodeId);
-  const selectedWorkflowTaskCandidate = projectWorkflowTaskById(
-    journey?.workflowProjection.tasks ?? [],
-    selectedWorkflowTaskId
-  );
+  const effectiveTask = journey
+    ? projectWorkbenchEffectiveTask({
+        journey,
+        selectedNodeId,
+        selectedTaskId: selectedWorkflowTaskId,
+        selectedTaskSelection: selectedWorkflowTaskSelection ?? null,
+      })
+    : null;
   const selectedWorkflowTask =
-    journey &&
-    selectedWorkflowTaskCandidate?.projectId === journey.project.id &&
-    ((selectedNodeId === null &&
-      selectedWorkflowTaskCandidate.targetKind === "project") ||
-      (selectedNodeId !== null &&
-        selectedNode &&
-        selectedWorkflowTaskCandidate.targetKind === selectedNode.targetKind &&
-        selectedWorkflowTaskCandidate.targetId === selectedNode.targetId))
-      ? selectedWorkflowTaskCandidate
-      : journey && selectedNode
-        ? defaultWorkflowTaskForTarget(
-            journey.workflowProjection.tasks,
-            selectedNode.targetKind,
-            selectedNode.targetId
-          )
-        : null;
+    effectiveTask?.status === "available" ? effectiveTask.task : null;
+  const courseResearchResult = selectedWorkflowTask
+    ? ([...(courseResearchResults ?? [])].reverse().find((result) =>
+        courseResearchResultMatchesTask({
+          result,
+          projectId,
+          chatId: chatId ?? null,
+          task: selectedWorkflowTask,
+        })
+      ) ?? null)
+    : null;
 
   return (
     <section
@@ -1225,12 +1252,23 @@ export function ProjectTaskWorkspacePanel({
               className="space-y-3"
               data-testid="project-task-workflow-context"
             >
-              <ProjectWorkflowTaskDetails
-                journey={journey}
-                journeyCopy={journeyCopy}
-                locale={locale}
-                task={selectedWorkflowTask}
-              />
+              {selectedWorkflowTaskId !== null &&
+              effectiveTask?.status === "unavailable" ? (
+                <p
+                  className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950"
+                  data-testid="project-workflow-task-selection-unavailable"
+                  role="alert"
+                >
+                  {workbenchCopy.targetUnavailable}
+                </p>
+              ) : (
+                <ProjectWorkflowTaskDetails
+                  journey={journey}
+                  journeyCopy={journeyCopy}
+                  locale={locale}
+                  task={selectedWorkflowTask}
+                />
+              )}
               <SelectedMatterDetails
                 journey={journey}
                 journeyCopy={journeyCopy}
@@ -1240,6 +1278,53 @@ export function ProjectTaskWorkspacePanel({
                 onOpenWorkspace={onOpenWorkspace}
                 workbenchCopy={workbenchCopy}
               />
+              {selectedWorkflowTask ? (
+                <ProjectActionProposalPanel
+                  aiActionSuggestion={
+                    boundSuggestionMatchesTask({
+                      suggestion: aiActionSuggestion,
+                      projectId,
+                      chatId: chatId ?? null,
+                      task: selectedWorkflowTask,
+                    })
+                      ? aiActionSuggestion
+                      : null
+                  }
+                  chatId={chatId ?? null}
+                  key={projectActionProposalContextKey({
+                    chatId: chatId ?? null,
+                    projectId,
+                    task: selectedWorkflowTask,
+                  })}
+                  locale={locale}
+                  onApplied={onMutation ?? onRefresh}
+                  projectId={projectId}
+                  task={selectedWorkflowTask}
+                />
+              ) : null}
+              {selectedWorkflowTask ? (
+                <CourseResearchWorkspace
+                  chatId={chatId ?? null}
+                  diagnostics={courseResearchDiagnosticsForTask({
+                    value: courseResearchDiagnostics,
+                    projectId,
+                    chatId: chatId ?? null,
+                    task: selectedWorkflowTask,
+                  })}
+                  key={courseResearchWorkspaceContextKey({
+                    chatId: chatId ?? null,
+                    projectId,
+                    task: selectedWorkflowTask,
+                    researchAssistantMessageId:
+                      courseResearchResult?.assistantMessageId ?? null,
+                  })}
+                  locale={locale}
+                  onApplied={onMutation ?? onRefresh}
+                  projectId={projectId}
+                  result={courseResearchResult}
+                  task={selectedWorkflowTask}
+                />
+              ) : null}
             </div>
           )}
         </div>

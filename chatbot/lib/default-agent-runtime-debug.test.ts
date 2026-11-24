@@ -36,6 +36,44 @@ test("projects Default AgentRuntime telemetry into the stable public namespace",
       selected_rule_keys: ["bounded_research"],
       private_source_case: "must not escape",
     },
+    course_research: {
+      schema_version: "phase15.course-research-diagnostics.v1",
+      scope_fingerprint: "0123456789abcdef",
+      course_research_enabled: false,
+      research_activation_reason: "step_key_mismatch",
+      research_tool_exposed: false,
+      research_prompt_enabled: false,
+      provider_schema_status: "not_exposed",
+      suggestion_present: false,
+      suggestion_container_status: "not_checked",
+      diagnostic_counter_saturated: false,
+      raw_candidate_count: 0,
+      valid_candidate_count: 0,
+      rejected_candidate_count: 0,
+      rejected_field_count: 0,
+      source_locator_count: 0,
+      resolved_source_count: 0,
+      rejected_source_count: 0,
+      python_binding_status: "not_eligible",
+      python_binding_reason: "step_key_mismatch",
+      python_bound_candidate_count: 0,
+      frontend_binding_status: "not_run",
+      frontend_binding_reason: "not_run",
+      frontend_bound_candidate_count: 0,
+      client_requested_workflow_kind: "school_application",
+      client_requested_step_key: "school_discovery",
+      client_requested_target_kind: "school_application",
+      server_resolved_workflow_kind: "school_application",
+      server_resolved_step_key: "school_discovery",
+      server_resolved_target_kind: "school_application",
+      python_received_workflow_kind: "school_application",
+      python_received_step_key: "planning",
+      python_received_target_kind: "school_application",
+      activation_failed_condition: "step_key_mismatch",
+      client_scope_fingerprint: "0123456789abcdef",
+      server_scope_fingerprint: "0123456789abcdef",
+      scope_match: true,
+    },
     checker: {
       status: "failed",
       provider_call_count: 1,
@@ -105,6 +143,16 @@ test("projects Default AgentRuntime telemetry into the stable public namespace",
     },
   ]);
   assert.equal(projected?.checker_packet.evidence_with_backend_text_count, 1);
+  assert.equal(
+    (projected?.course_research as Record<string, unknown> | undefined)
+      ?.client_requested_step_key,
+    "school_discovery"
+  );
+  assert.equal(
+    (projected?.course_research as Record<string, unknown> | undefined)
+      ?.python_received_step_key,
+    "planning"
+  );
   assert.equal("evidence" in projected!.checker_packet, false);
   assert.equal("phase6" in projected!, false);
   assert.equal(projected?.evidence_registry.graph_evidence_count, 0);

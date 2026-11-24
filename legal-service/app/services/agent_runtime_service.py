@@ -382,6 +382,14 @@ class AgentRuntimeService:
         policy = self._policy_service.build_policy(
             mode=request.mode,
             experiment_arm=request.experiment_arm,
+            project_action_suggestion_field_path=(
+                request.project_action_suggestion_field_path
+                if request.mode == "default"
+                else None
+            ),
+            course_research_enabled=(
+                request.course_research_enabled if request.mode == "default" else False
+            ),
             applicability_protocol_enabled=(
                 request.applicability_protocol_enabled
                 if request.mode == "default"
@@ -398,6 +406,14 @@ class AgentRuntimeService:
             allow_model_canonical_refs=request.experiment_arm not in {"A", "L"},
             lightweight_submission=request.experiment_arm == "L",
             allow_overlapping_claims=request.experiment_arm == "N",
+            project_action_suggestion_field_path=(
+                request.project_action_suggestion_field_path
+                if request.mode == "default"
+                else None
+            ),
+            course_research_enabled=(
+                request.course_research_enabled if request.mode == "default" else False
+            ),
             residual_branch_guard_enabled=(
                 request.mode == "default"
                 and request.applicability_protocol_enabled
@@ -1714,11 +1730,50 @@ class AgentRuntimeService:
 
         # Build metrics
         total_duration = (time.perf_counter() - start_time) * 1000.0
+        course_research_enabled = bool(
+            request.mode == "default" and request.course_research_enabled
+        )
+        submit_tool = next(
+            (tool for tool in policy.tools if tool.get("name") == "submit_answer"),
+            None,
+        )
+        submit_parameters = (
+            submit_tool.get("parameters", {}) if isinstance(submit_tool, dict) else {}
+        )
+        submit_properties = (
+            submit_parameters.get("properties", {})
+            if isinstance(submit_parameters, dict)
+            else {}
+        )
+        research_tool_exposed = bool(
+            course_research_enabled
+            and isinstance(submit_properties, dict)
+            and "course_research_suggestion" in submit_properties
+        )
+        required_fields = (
+            submit_parameters.get("required", [])
+            if isinstance(submit_parameters, dict)
+            else []
+        )
+        provider_schema_status = (
+            "required"
+            if research_tool_exposed and "course_research_suggestion" in required_fields
+            else "optional"
+            if research_tool_exposed
+            else "not_exposed"
+        )
         metrics = AgentExecutionMetrics(
             applicability_protocol_enabled=(
                 request.mode != "default"
                 or request.applicability_protocol_enabled
             ),
+            course_research_enabled=course_research_enabled,
+            course_research_tool_exposed=research_tool_exposed,
+            course_research_prompt_enabled=(
+                course_research_enabled
+                and "Required Conditional Course Research Result" in policy.system_prompt
+            ),
+            course_research_provider_schema_status=provider_schema_status,
             logical_llm_stage_count=1 + int(checker_provider_call_count > 0),
             provider_api_call_count=provider_call_count,
             tool_call_count=len(tool_outputs) + checker_result_tool_call_count,

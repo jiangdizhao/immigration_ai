@@ -1,3 +1,4 @@
+import type { ActiveStepContextV1 } from "@/lib/workspace/active-step-context";
 import type {
   ProjectState,
   ProjectStateAdmission,
@@ -103,6 +104,8 @@ export type ProjectAssistantContext = {
   >;
   unresolvedIssues: Record<string, unknown>[];
   nextActions: Record<string, unknown>[];
+  /** One server-resolved task overlay; it never replaces whole-Project state. */
+  activeStep: ActiveStepContextV1 | null;
   omissions: Record<DetailSection, number> & {
     linkedAdmissions: number;
     admissionsCases: number;
@@ -341,6 +344,7 @@ function unavailableContext(reasonCode: string): ProjectAssistantContext {
     },
     unresolvedIssues: [],
     nextActions: [],
+    activeStep: null,
     omissions: {
       schoolApplications: 0,
       standaloneAdmissions: 0,
@@ -361,7 +365,8 @@ function unavailableContext(reasonCode: string): ProjectAssistantContext {
 export function buildProjectAssistantContext(
   state: ProjectState | null,
   reasonCode = "project_state_unavailable",
-  question = ""
+  question = "",
+  maxBytes = PROJECT_ASSISTANT_CONTEXT_MAX_BYTES
 ): ProjectAssistantContext {
   if (!state) {
     return unavailableContext(reasonCode);
@@ -509,6 +514,7 @@ export function buildProjectAssistantContext(
     },
     unresolvedIssues: [],
     nextActions: [],
+    activeStep: null,
     omissions: {
       schoolApplications: schoolRows.length,
       standaloneAdmissions: standaloneRows.length,
@@ -523,7 +529,7 @@ export function buildProjectAssistantContext(
 
   // The index is the completeness contract. If it cannot fit, no partial
   // application overview is sent to the model as if it were complete.
-  if (bytes(packet) > PROJECT_ASSISTANT_CONTEXT_MAX_BYTES) {
+  if (bytes(packet) > maxBytes) {
     return unavailableContext("project_matter_index_exceeds_context_bound");
   }
 
@@ -681,7 +687,7 @@ export function buildProjectAssistantContext(
       }
       target.push(item);
       packet.omissions[key] -= 1;
-      if (bytes(packet) > PROJECT_ASSISTANT_CONTEXT_MAX_BYTES) {
+      if (bytes(packet) > maxBytes) {
         target.pop();
         packet.omissions[key] += 1;
       }

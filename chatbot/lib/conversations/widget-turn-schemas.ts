@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requestPolicySlugSchema } from "../policy-intelligence/request-policy-slug";
+import { activeStepSelectionV1Schema } from "../workspace/active-step-context";
 
 /**
  * Phase 12 Stage 2 hotfix — the real request contract shared by the three widget
@@ -61,6 +62,7 @@ export const fastWidgetRequestSchema = z.object({
   currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: answerPreferenceSchema,
+  activeStepSelection: activeStepSelectionV1Schema.optional(),
 });
 
 /** Legal Check — the bounded Default AgentRuntime path. */
@@ -80,6 +82,7 @@ export const legalCheckWidgetRequestSchema = z.object({
   currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: answerPreferenceSchema,
+  activeStepSelection: activeStepSelectionV1Schema.optional(),
 });
 
 /** Premium — direct web answer. */
@@ -99,4 +102,5 @@ export const premiumWidgetRequestSchema = z.object({
   currentIntakeFacts: z.record(z.string(), z.any()).optional(),
   responseLanguage: z.enum(["en", "zh"]).optional(),
   answerPreference: answerPreferenceSchema,
+  activeStepSelection: activeStepSelectionV1Schema.optional(),
 });

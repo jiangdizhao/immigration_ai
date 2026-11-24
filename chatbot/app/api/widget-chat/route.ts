@@ -7,6 +7,7 @@ import {
   assistantModeAccessPolicy,
   isGuestAssistantUser,
 } from "@/lib/assistant-mode-access";
+import { deterministicMessageId } from "@/lib/conversations/message-identity";
 import { updateWidgetConversationBookkeeping } from "@/lib/conversations/widget-conversation-bookkeeping";
 import {
   beginWidgetTurn,
@@ -50,7 +51,18 @@ import { projectContextRequestPayload } from "@/lib/projects/project-context";
 import { preservePublicAnswer } from "@/lib/public-answer-preservation";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import { LEGAL_SERVICE_TIMEOUT_MS } from "@/lib/server-http-timeouts";
+import { bindProjectActionSuggestion } from "@/lib/workspace/ai-action-suggestions";
+import type {
+  ActiveStepContextV1,
+  ActiveStepSelectionV1,
+} from "@/lib/workspace/active-step-context";
 import { resolveWorkspaceContext } from "@/lib/workspace/context-resolver";
+import {
+  bindCourseResearchResultWithDiagnostics,
+  courseResearchDiagnosticsSchema,
+  courseResearchScopeFingerprint,
+  courseResearchSelectionScopeFingerprint,
+} from "@/lib/workspace/course-research";
 
 export const maxDuration = 390;
 
@@ -76,6 +88,9 @@ type LegalServiceResponse = {
   customer_document_used_ids?: string[];
   trace_id?: string | null;
   answer?: string;
+  architecture_version?: string | null;
+  ai_action_suggestion?: unknown;
+  course_research_result?: unknown;
   response_language?: string | null;
   research_status?: "not_required" | "complete" | "incomplete" | null;
   citations?: LegalCitation[];
@@ -313,7 +328,7 @@ function normalizeCompactSources(data: LegalServiceResponse) {
     )
   );
   if (fromBackend.length > 0) {
-    return fromBackend.slice(0, 4);
+    return fromBackend;
   }
 
   const fromCitations = uniqueStrings(
@@ -328,7 +343,7 @@ function normalizeCompactSources(data: LegalServiceResponse) {
       })
       .filter(Boolean)
   );
-  return fromCitations.slice(0, 4);
+  return fromCitations;
 }
 
 function normalizeCaseHypothesis(
@@ -467,6 +482,88 @@ function normalizeRetrievalDebug(
   return runtimeDebug
     ? { ...normalized, defaultAgentRuntime: runtimeDebug }
     : normalized;
+}
+
+function withCourseResearchFrontendBinding(
+  retrievalDebug: ReturnType<typeof normalizeRetrievalDebug>,
+  binding: ReturnType<typeof bindCourseResearchResultWithDiagnostics> | null,
+  identity: {
+    chatId: string | null;
+    selection: ActiveStepSelectionV1 | null;
+    serverResolved: ActiveStepContextV1 | null;
+  }
+) {
+  if (!retrievalDebug || !binding) {
+    return retrievalDebug;
+  }
+  const runtimeValue = (retrievalDebug as Record<string, unknown>)
+    .defaultAgentRuntime;
+  const runtime =
+    runtimeValue &&
+    typeof runtimeValue === "object" &&
+    !Array.isArray(runtimeValue)
+      ? (runtimeValue as Record<string, unknown>)
+      : {};
+  const diagnostics = courseResearchDiagnosticsSchema.safeParse(
+    runtime.course_research
+  );
+  if (!diagnostics.success) {
+    return retrievalDebug;
+  }
+  const clientScopeFingerprint =
+    identity.chatId && identity.selection
+      ? courseResearchSelectionScopeFingerprint({
+          chatId: identity.chatId,
+          selection: identity.selection,
+        })
+      : null;
+  const serverScopeFingerprint =
+    identity.chatId && identity.serverResolved
+      ? courseResearchScopeFingerprint({
+          projectId: identity.serverResolved.projectId,
+          chatId: identity.chatId,
+          activeStep: identity.serverResolved,
+        })
+      : null;
+  const pythonScopeFingerprint = diagnostics.data.scope_fingerprint;
+  const hasAnyScope = Boolean(
+    identity.selection || identity.serverResolved || pythonScopeFingerprint
+  );
+  const scopeMatch = hasAnyScope
+    ? Boolean(
+        clientScopeFingerprint &&
+          serverScopeFingerprint &&
+          pythonScopeFingerprint &&
+          clientScopeFingerprint === serverScopeFingerprint &&
+          serverScopeFingerprint === pythonScopeFingerprint
+      )
+    : null;
+  const nextDiagnostics = courseResearchDiagnosticsSchema.safeParse({
+    ...diagnostics.data,
+    client_scope_fingerprint: clientScopeFingerprint,
+    server_scope_fingerprint: serverScopeFingerprint,
+    scope_match: scopeMatch,
+    client_requested_workflow_kind: identity.selection?.workflowKind ?? null,
+    client_requested_step_key: identity.selection?.stepKey ?? null,
+    client_requested_target_kind: identity.selection?.targetKind ?? null,
+    server_resolved_workflow_kind:
+      identity.serverResolved?.workflowKind ?? null,
+    server_resolved_step_key: identity.serverResolved?.stepKey ?? null,
+    server_resolved_target_kind: identity.serverResolved?.targetKind ?? null,
+    frontend_binding_status: binding.status,
+    frontend_binding_reason: binding.reason,
+    frontend_bound_candidate_count: binding.boundCandidateCount,
+  });
+  if (!nextDiagnostics.success) {
+    return retrievalDebug;
+  }
+  return {
+    ...retrievalDebug,
+    defaultAgentRuntime: {
+      ...runtime,
+      course_research: nextDiagnostics.data,
+    },
+  };
 }
 
 function extractEvidenceGaps(
@@ -751,6 +848,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       responseLanguage: requestedResponseLanguage,
       answerPreference,
       currentIntakeFacts,
+      activeStepSelection,
     } = widgetRequestBodySchema.parse(json);
 
     // This is intentionally before rate limiting, authentication, database
@@ -960,6 +1058,8 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         factSlotStates: [],
         interactionPlan: null,
         retrievalDebug: replayFields.metadata.retrievalDebug ?? null,
+        aiActionSuggestion: replayFields.metadata.aiActionSuggestion,
+        courseResearchResult: replayFields.metadata.courseResearchResult,
         persistence: turnStart.persistence,
         replayed: true,
       });
@@ -1004,6 +1104,8 @@ async function handleWidgetRequest(request: Request, requestId: string) {
         factSlotStates: [],
         interactionPlan: null,
         retrievalDebug: resumedFields.metadata.retrievalDebug ?? null,
+        aiActionSuggestion: resumedFields.metadata.aiActionSuggestion,
+        courseResearchResult: resumedFields.metadata.courseResearchResult,
         persistence: resumedPersistence,
         replayed: true,
       });
@@ -1023,6 +1125,7 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       chatId: ownedConversation?.chatId ?? null,
       matterId: effectiveMatterId,
       clientPolicySlug: policySlug,
+      activeStepSelection: activeStepSelection ?? null,
     });
     const {
       evidence: customerDocumentEvidence,
@@ -1110,6 +1213,32 @@ async function handleWidgetRequest(request: Request, requestId: string) {
     }
 
     const data = legalServiceResult.data;
+    const aiActionSuggestion =
+      assistantMode === "default" &&
+      data.architecture_version === "phase2.default_agent_runtime"
+        ? bindProjectActionSuggestion({
+            value: data.ai_action_suggestion,
+            context: currentProjectContext?.assistantContext ?? null,
+            chatId: activeFrontendChatId,
+            projectId: currentProjectContext?.projectId ?? null,
+          })
+        : null;
+    const predictedAssistantMessageId =
+      turnStart.status === "proceed"
+        ? deterministicMessageId(`assistant:${turnStart.turnId}`)
+        : null;
+    const courseResearchBinding =
+      assistantMode === "default" &&
+      data.architecture_version === "phase2.default_agent_runtime"
+        ? bindCourseResearchResultWithDiagnostics({
+            value: data.course_research_result,
+            context: currentProjectContext?.assistantContext ?? null,
+            chatId: activeFrontendChatId,
+            projectId: currentProjectContext?.projectId ?? null,
+            assistantMessageId: predictedAssistantMessageId,
+          })
+        : null;
+    const courseResearchResult = courseResearchBinding?.result ?? null;
     const finalResponseLanguage = normalizeResponseLanguage(
       data.response_language,
       responseLanguage
@@ -1143,6 +1272,18 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       used_for: c.used_for ?? null,
     }));
     const compactSources = normalizeCompactSources(data);
+    const retrievalDebug = SHOW_WIDGET_DEBUG
+      ? withCourseResearchFrontendBinding(
+          normalizeRetrievalDebug(data.retrieval_debug),
+          courseResearchBinding,
+          {
+            chatId: activeFrontendChatId,
+            selection: activeStepSelection ?? null,
+            serverResolved:
+              currentProjectContext?.assistantContext?.activeStep ?? null,
+          }
+        )
+      : null;
     const persistedAssistantMetadata = {
       type: "metadata",
       compactSources,
@@ -1168,9 +1309,9 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       researchStatus: data.research_status ?? null,
       followUpQuestions: data.follow_up_questions ?? [],
       matterId: data.matter_id ?? effectiveMatterId,
-      retrievalDebug: SHOW_WIDGET_DEBUG
-        ? normalizeRetrievalDebug(data.retrieval_debug)
-        : null,
+      retrievalDebug,
+      aiActionSuggestion,
+      courseResearchResult,
     };
 
     let persistence: WidgetTurnPersistence | null = null;
@@ -1262,9 +1403,9 @@ async function handleWidgetRequest(request: Request, requestId: string) {
       caseHypothesis: normalizeCaseHypothesis(data.case_hypothesis),
       factSlotStates: normalizeFactSlotStates(data.fact_slot_states),
       interactionPlan: normalizeInteractionPlan(data.interaction_plan),
-      retrievalDebug: SHOW_WIDGET_DEBUG
-        ? normalizeRetrievalDebug(data.retrieval_debug)
-        : null,
+      retrievalDebug,
+      aiActionSuggestion,
+      courseResearchResult,
     });
   } catch (error) {
     console.error(

@@ -1,3 +1,9 @@
+import type { BoundAIActionSuggestionV1 } from "@/lib/workspace/ai-action-suggestions";
+import type {
+  BoundCourseResearchResultV1,
+  CourseResearchDiagnosticsV1,
+} from "@/lib/workspace/course-research";
+
 export interface CustomerDocumentSource {
   documentId: string;
   runId: string;
@@ -109,6 +115,9 @@ export interface RetrievalDebug {
   need_live_fetch?: boolean | null;
   live_fetch_used?: boolean | null;
   top_titles?: string[] | null;
+  defaultAgentRuntime?: {
+    course_research?: CourseResearchDiagnosticsV1 | null;
+  } | null;
 }
 
 export interface WidgetAssistantMessage {
@@ -139,6 +148,8 @@ export interface WidgetAssistantMessage {
   factSlotStates?: FactSlotState[] | null;
   interactionPlan?: InteractionPlan | null;
   retrievalDebug?: RetrievalDebug | null;
+  aiActionSuggestion?: BoundAIActionSuggestionV1 | null;
+  courseResearchResult?: BoundCourseResearchResultV1 | null;
 }
 
 export interface WidgetUserMessage {
@@ -193,6 +204,8 @@ export interface WidgetRouteResponse {
   factSlotStates?: FactSlotState[] | null;
   interactionPlan?: InteractionPlan | null;
   retrievalDebug?: RetrievalDebug | null;
+  aiActionSuggestion?: BoundAIActionSuggestionV1 | null;
+  courseResearchResult?: BoundCourseResearchResultV1 | null;
 }
 
 export type IntakeFacts = Record<string, string | number | boolean | null>;
