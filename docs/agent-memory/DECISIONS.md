@@ -1,3 +1,33 @@
+<!-- BEGIN D_P15_007_2026_11_24 -->
+## D-P15-007 — Accept M3-E3 with limitations; keep E4 separate
+
+**Date:** 2026-11-24 (Australia/Sydney). **Owner decision:** `PHASE15_M3_E3_OWNER_ACCEPTED_WITH_LIMITATIONS`. **Code commit:** `ace73515a21b87c7b35f763d31dcbccc7b43c7f7` on `phase15-guided-project-workflows`, 78 code/test/runner files. **Release:** `LIVE_PRODUCTION_NO_GO`.
+
+The owner accepts the M3-E3 contextual research and confirmed School workflow implementation with the evidence and limitations recorded in the current handoff and milestone plan. Accepted evidence includes owner local Build and mounted Workspace Playwright PASS; owner-authenticated correct task/revision capture; 14/14 local cross-runtime integration; Default structured suggestion and explicitly confirmed School update; real-provider candidate persistence/refresh restoration with matching client/server/Python scope fingerprints; comparison and source-link presentation; bounded incomplete results; Admissions/Student 500 replacement restrictions; and the independently selected UTS course update with unknown intake preserved, revision 3, package invalidation and unaffected other Schools.
+
+The owner accepts `PG-E3-R3_ACCEPTED_VIA_GUARDED_RESUME`: guarded PostgreSQL preview, confirmation, durable readback, replay protection, stale conflict, package invalidation, School B isolation and fresh-process M1/E2 projection passed. This is explicitly a retained-scope resume, not a clean single-run acceptance. Student 500 write-path evidence remains the earlier R1 guarded acceptance with its original limitations.
+
+**Limitations carried forward:** historical R4/R5 failure causes remain partly unknown; L2 official-source coverage is limited, L3 manifests are not configured, and real course-field accuracy is not independently established; Fast/Premium structured course output is unsupported; some research is incomplete under current budgets; English UI messages remain in some Chinese surfaces; task/Chat restoration after refresh and a brief post-confirm unavailable state require E4 integration review; the non-blocking Node `TimeoutNegativeWarning` cause is unknown. M2 native-search privacy and owner-acceptance limitations are unchanged.
+
+M3 overall remains open pending E4. E4 is not started and requires its separate acceptance execution contract. M2 owner acceptance remains pending. This decision does not authorize migrations, production traffic, paid calls, AWS, deployment or release.
+<!-- END D_P15_007_2026_11_24 -->
+
+<!-- BEGIN D_P15_006_2026_11_24 -->
+## D-P15-006 — Adopt tiered course-research evidence for M3-E3 R3
+
+**Date:** 2026-11-24 (Australia/Sydney). **Owner authorization:** `PHASE15_M3_E3_R3_IMPLEMENTATION_AUTHORIZED`. **Release:** `LIVE_PRODUCTION_NO_GO`.
+
+**Decision:** Course discovery and comparison may display bounded AI research leads under an explicit tiered-evidence contract. Independently verified observations are not a prerequisite for useful structured candidates. This refines the earlier M3-E3 planning language; it does not weaken source identity, legal evidence, or business-write controls.
+
+**Evidence tiers:** L1 (`model_research_lead`) identifies a model-proposed course/value with no established field support. L2 (`official_source_referenced`) requires a genuine same-request provider citation bound through the request evidence registry, exact official source identity, and an allowed field-authority scope; the field remains unverified and source currentness remains unknown. L3 (`independently_verified_field`) is per-field and requires the trusted server acquisition path to establish exact institution/course identity, field, value, source, timestamp, snapshot/hash and locator. One L3 field never upgrades the entire candidate. The strict R2 `ResearchCandidateV1` validator remains unchanged.
+
+**Business boundary:** Research candidates are not catalog records, confirmed facts, admissions outcomes, Offers, CoEs or visa outcomes. Candidate selection creates one full-target School Application preview; only explicit customer confirmation reaches the existing owning Service, revision/CAS, idempotency, package invalidation and readback path. A linked Admissions or Student 500 matter blocks unsafe course replacement.
+
+**Operational limits:** Default uses the existing answer/research stage and native Web Search; no mandatory model stage or extra provider call is added. Fast and Premium remain on their existing paths. Native-search query/privacy limitations accepted under D-P15-003 remain; this decision does not claim pre-execution query isolation or zero privacy risk. Selective public-source acquisition is explicit and manifest-scoped. The R3 institution manifest registry is empty, so live L3 is unavailable until an exact source completes the existing authority/access review and is registered. Synthetic extraction tests are not real-source acceptance.
+
+This decision authorizes R3 implementation only. Independent review and owner acceptance remain pending. It does not authorize migrations, production traffic, paid provider calls, E4, deployment or release.
+<!-- END D_P15_006_2026_11_24 -->
+
 <!-- BEGIN D_P15_005_2026_11_24 -->
 ## D-P15-005 — Close M3-E2 engineering and accept M3-E2.5 UI with limitations
 

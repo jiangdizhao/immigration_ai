@@ -1,3 +1,87 @@
+<!-- BEGIN PHASE15_M3_E3_OWNER_ACCEPTED_2026_11_24 -->
+## Current handoff — Phase 15 M3-E3 owner accepted with limitations
+
+**Status:** `PHASE15_M3_E3_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E4_NOT_STARTED / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / LIVE_PRODUCTION_NO_GO`. M3 overall remains open pending E4. Branch `phase15-guided-project-workflows`. Owner-accepted E3 code commit: [`ace73515a21b87c7b35f763d31dcbccc7b43c7f7`](https://github.com/jiangdizhao/immigration_ai/commit/ace73515a21b87c7b35f763d31dcbccc7b43c7f7), 78 code/test/runner files. The owner removed temporary review patches; no patch recreation or historical patch comparison is required.
+
+### Accepted evidence
+
+- Owner local production Build: **PASS**. Mounted Workspace Playwright regression: **PASS**.
+- Owner authenticated browser request capture resolved the correct School Discovery task and target revision. Local cross-runtime integration: **14/14 PASS**.
+- Default AI structured action suggestion, explicit confirmation and School intake update: owner browser **PASS**. Northbridge changed to July 2027 at revision 2; Harbour remained unchanged.
+- Real-provider course research generated three candidates, bound them in Python and Next.js, persisted them and restored them after browser refresh. Client, server and Python task-scope fingerprints matched. Course comparison and genuine source-link presentation: owner browser **PASS**.
+- Incomplete research returned two bounded course leads and retained unknown fields. Linked Admissions and Student 500 course-replacement restrictions were observed in the browser.
+- An independent synthetic School Application changed from Initial Test Course to UTS Master of Artificial Intelligence. Unknown intake was not invented or inherited. The result persisted after refresh at revision 3, its preparation package became stale, and Northbridge and Harbour remained unchanged.
+- `PG-E3-R3_ACCEPTED_VIA_GUARDED_RESUME`: real PostgreSQL preview, confirmation, durable readback, replay protection, stale conflict, package invalidation, School B isolation and fresh-process M1/E2 projection all passed. This used the guarded retained-scope resume; it was not a clean single-run acceptance.
+- Student 500 write-path evidence remains the R1 guarded PostgreSQL acceptance with its original limitations.
+
+### Accepted limitations
+
+- Historical R4/R5 failure causes were not fully reconstructed. Real course-field accuracy has not been independently established.
+- L2 official-source coverage is limited; live L3 verification manifests remain unconfigured. Fast and Premium structured course output is unsupported. Some research requests end with incomplete results under existing budgets.
+- Some English messages remain in the Chinese UI. Task selection and Chat restoration after refresh need E4 integration review. A brief unavailable-task state was observed after confirmation.
+- A non-blocking Node `TimeoutNegativeWarning` was observed; its exact cause is unverified.
+- M2 native-search privacy and owner-acceptance limitations are unchanged. `LIVE_PRODUCTION_NO_GO` remains binding.
+
+### R1–R6 engineering lessons to carry into E4
+
+- Treat Python/TypeScript/JSON as one contract: canonical timestamps must meet the production schema, full envelopes must validate before database persistence, and equivalent revision objects must be compared structurally rather than by property-order-sensitive serialization.
+- Exercise actual mounted browser requests and rendered workspace state. Static source assertions and service-only tests did not establish the selected task, target revision, refresh behavior or cross-panel continuity.
+- Resolve one authoritative task selection and carry its identity and scope fingerprint through browser, Next.js and Python. Reject stale or mismatched Project, Chat, task, target and source revisions at each binding boundary.
+- Keep diagnostics bounded and content-free. Expose validated counters/status only; do not retain raw provider arguments or include response bodies, secrets or confirmation tokens in failure logs.
+- Build PostgreSQL fixtures from the production schema contract. Guard the shared-runtime socket, database, role, schema and migration ledger before SQL; preserve retained fixtures, use an explicit resume authorization and fail closed on unexpected state.
+- Research candidates remain non-authoritative until supported by genuine same-request provenance. Unknown fields stay unknown, and proposal writes still require visible preview, explicit confirmation, owning-service CAS/idempotency and durable readback.
+
+### E4 integration acceptance handoff — implementation not started
+
+E4 should verify the accepted E1–E3 surfaces together in a real authenticated browser against an isolated database. Cover School-only, Student 500-only, combined and alternative/Offer paths; correct effective task/target selection and Chat restoration across refresh; responsive splitter and keyboard behavior; confirmed form readback; stale/revoked/archived/unavailable restrictions; research provenance, incomplete results and citations; and cross-panel refresh after writes. Report browser, PostgreSQL, local cross-runtime and real-provider evidence separately. Resolve or explicitly carry the limitations above. Do not infer release readiness from these synthetic/owner acceptance results.
+
+No E4 implementation, migration, paid provider call, AWS operation, production enablement, deployment or push is authorized by this closeout. M2 remains pending owner acceptance.
+<!-- END PHASE15_M3_E3_OWNER_ACCEPTED_2026_11_24 -->
+
+<!-- BEGIN PHASE15_M3_E3_R5_2026_11_24 -->
+## Phase 15 M3-E3 R5 — integration correction implemented; review pending (2026-11-24, Australia/Sydney)
+
+**Status:** `PHASE15_M3_E3_R5_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Branch `phase15-guided-project-workflows`; committed base `fa26428ad585110ea80070c7e6085017c06ed439`. Cumulative E3 through R5 changes remain unstaged and uncommitted. M3 remains partial; E4 has not started.
+
+**R5 correction:** The reported historical turn's exact failure stage remains unknown: persisted data showed a null course result and no provider tool arguments were retained. Independent synthetic execution did confirm a latent R4 frontend defect: the valid Python `sourceRevisions` and independently constructed TypeScript ActiveStep revisions had identical values but different object-key order, and JSON string comparison rejected them. The binder now compares revision fields structurally. For the eligible `school_course_source_unverified` School discovery task, the existing Default answer stage now requires the bounded research result container while allowing honest `not_performed` and completed-empty outcomes. Candidate and locator failures remain isolated from the answer; per-candidate validation preserves valid L1 leads and binds only same-request source evidence.
+
+The synthetic cross-runtime chain runs the real TypeScript Project State → workflow task → ActiveStepContext → request packet, actual Python Default policy and Responses adapter with a fake provider, terminal submission, bridge, QueryResponse, TypeScript binding, persisted metadata serialization/reload, and Workspace task/selection projection. It returned four candidates, retained genuine synthetic citations/source metadata, stripped invalid locators without false L2/L3 promotion, made one fake provider call, accepted one answer, and produced an empty business `state_patch`. Raw provider citation controls are removed from answer text while backend citations and compact sources remain. Content-free research-stage diagnostics are persisted only under `NEXT_PUBLIC_WIDGET_DEBUG=true`; an authenticated, owner-scoped read-only endpoint exposes only those bounded metrics and the persisted candidate count.
+
+**Verified:** 153 focused Python tests passed across Default, bridge, native-web locator, Project context, Fast, Premium and provider stream compatibility. Seventeen focused Node test files passed, including the cross-runtime chain, message reload, diagnostics endpoint, answer marker cleanup, Workspace and E3 proposal/authorization regressions. Changed-file Biome (56 TS/TSX files), Ruff lint, `pnpm db:check`, TypeScript baseline comparison (44 diagnostics, zero changed-path diagnostics), and `git diff --check` passed. The synthetic fake-provider path used one existing answer-stage call; no extra call was added. Optional Ruff formatting check reported 16 files would be reformatted and did not modify them.
+
+**NOT RUN / NOT VERIFIED:** No paid provider, database, migration, owner-retained Project, authenticated browser session, live official-source verification or production traffic was used. Five Playwright browser cases were attempted but zero test bodies ran because Chrome launch failed at sandbox Crashpad `setsockopt: Operation not permitted`. `pnpm build` stopped when Google Fonts could not be fetched; the existing `pdfjs-dist` externalization warning also appeared. Real-provider acceptance remains owner-run. The supplied R4 cumulative patch artifact was absent, so its declared SHA could not be verified. No migration, AWS operation, production activation, E4, commit, push or deployment occurred.
+
+**Owner next run:** With the owner-authenticated app built/run using `NEXT_PUBLIC_WIDGET_DEBUG=true`, call `GET /api/immigration-conversations/{CHAT_ID}/course-research-diagnostics` from the same browser session. It scans at most the newest 1,000 messages and returns a content-free latest-stage projection or an explicit truncated/no-result status. Real-provider acceptance must still verify visible candidates and raw-marker cleanup.
+<!-- END PHASE15_M3_E3_R5_2026_11_24 -->
+
+<!-- BEGIN PHASE15_M3_E3_R4_2026_11_24 -->
+## Phase 15 M3-E3 R4 — integration corrections implemented; review pending (2026-11-24, Australia/Sydney)
+
+**Status:** `PHASE15_M3_E3_R4_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Branch `phase15-guided-project-workflows`; committed base `fa26428ad585110ea80070c7e6085017c06ed439`. All scoped E3 through R4 source remains unstaged and uncommitted.
+
+**R4 corrections:** Python course-research observations serialize timezone-aware instants as canonical UTC `Z` timestamps; invalid registry timestamps do not create source records. The Course Research Workspace now invalidates preview/token, shortlist/comparison and verification state when Project, Chat, task, target, source revisions or originating research message changes. The mounted-component regression preserves state on same-scope ordinary answer rerenders and desktop/mobile resizing, and rejects delayed preview/verification responses after scope changes. Candidate course selections pass the actual School target resolver as customer-reported data with all catalog/delivery/intake identifiers cleared; normalization is validated before preview and the display separates persisted fields from research-only fields.
+
+**Verified:** actual Python producer → TypeScript binder → assistant metadata reload contract PASS; Python bridge 9/9 tests; 8 focused Node test files passed; Ruff and changed-file Biome (46 TypeScript/JavaScript files) passed; `pnpm db:check` and `git diff --check` passed. TypeScript remains at 44 diagnostics, matching the recorded baseline, with none in changed paths. Build was attempted but could not fetch Geist/Geist Mono from Google Fonts. Playwright's two browser cases were NOT RUN because Chrome launch failed at sandbox Crashpad socket setup.
+
+**NOT RUN / NOT VERIFIED:** no PostgreSQL connection or write, no real provider call, no live L3 source verification, no authenticated browser session and no production validation. The existing reviewed-source manifest registry remains empty. The prior R3 patch artifact was absent at this checkpoint; the claimed R3 SHA could not be reverified, although the current cumulative source diff is rebuilt and verified against the committed base. Owner acceptance remains pending. No migration, AWS, production enablement, E4, commit, push or deployment occurred.
+<!-- END PHASE15_M3_E3_R4_2026_11_24 -->
+
+<!-- BEGIN PHASE15_M3_E3_R3_2026_11_24 -->
+## Phase 15 M3-E3 R3 — implementation complete; independent review pending (2026-11-24, Australia/Sydney)
+
+**Status:** `PHASE15_M3_E3_R3_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW / PHASE15_M3_E2_ENGINEERING_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E2_5_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M2_OWNER_ACCEPTANCE_PENDING / PHASE15_M3_E4_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Branch `phase15-guided-project-workflows`; committed base `fa26428ad585110ea80070c7e6085017c06ed439`; all scoped E3/R1/R2/R3 changes remain unstaged and uncommitted. Protected owner artifacts remain excluded.
+
+**R3 implemented under D-P15-006:** Default's existing `submit_answer` stage has optional bounded typed course suggestions and does not add a model call. Python binds only same-request source records from the RequestEvidenceRegistry. The display envelope is Project/Chat/message/task/target/revision scoped and uses per-field L1 model lead, L2 cited exact-host official source with field authority scope, and L3 exact field observation semantics. Strict `ResearchCandidateV1` validation remains unchanged. The right Task Workspace supports filtering, shortlist, up to four-course comparison, evidence/source detail and selection preview. Course selection resolves the candidate from persisted assistant metadata, previews the full normalized School target, requires confirmation, and uses existing CAS/idempotency/owning-service/readback logic. Linked Admissions/Student 500 targets fail closed. Fast and Premium stay on existing paths.
+
+**Selective verification:** The route re-resolves actor, Project, Chat, School task, current revisions and persisted message; acquisition uses the existing manifest validation/acquisition core plus a pinned HTTPS transport, deterministic exact-identity JSON-LD extraction and short-lived HMAC attestation. The reviewed live manifest registry is empty, so current UI does not offer live L3 verification. Synthetic transport/extraction and attestation tests are not real-source evidence. The original visual-reference DOCX was not found in the repository; implementation followed the task's explicit interaction contract.
+
+**Verified:** 84 focused Python tests passed across Default/AI bridge, Fast, Premium and Project-context regressions; 62 focused Node tests passed across proposal/runtime, candidate tiers, verification, metadata reload, ActiveStep and Project context. Ruff, 47-file changed TypeScript/TSX Biome, `pnpm db:check` and `git diff --check` passed. TypeScript comparison retained the 44-diagnostic historical baseline with no final diagnostics in changed paths. Build was attempted and failed only at sandbox Google Fonts fetches for Geist/Geist Mono; the existing `pdfjs-dist` externalization warning was also reported.
+
+**NOT RUN / NOT VERIFIED:** Playwright Chrome could not start because sandbox socket permissions rejected Crashpad `setsockopt`; the 4 tests did not execute. PostgreSQL R3 preflight stopped at the guard because `POSTGRES_URL` was unset; no DB connection or write occurred. A separate R3-only guarded runner mode is prepared; the exact owner-run command is in the R3 report. Actual public-source acquisition, live L3, authenticated browser, paid provider quality and production remain unverified. The prior R1 isolated PostgreSQL evidence is retained with its original scope only.
+
+**Next:** Independent review and owner-local acceptance of R3. No migration, paid call, AWS operation, production feature activation, E4, commit, push or deployment. Keep `LIVE_PRODUCTION_NO_GO`.
+<!-- END PHASE15_M3_E3_R3_2026_11_24 -->
+
 <!-- BEGIN PHASE15_M3_E2_E2_5_CLOSEOUT_2026_11_24 -->
 ## Phase 15 M3-E2 and M3-E2.5 — reviewed source committed; owner UI acceptance with limitations (2026-11-24, Australia/Sydney)
 
