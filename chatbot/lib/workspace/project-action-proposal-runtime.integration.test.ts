@@ -83,6 +83,7 @@ function loadState() {
       status: application.status,
       revision: application.revision,
       context: {
+        applicationPlace: application.context.applicationPlace,
         entryRoute: application.context.entryRoute,
         coeStatus: application.context.coeStatus,
         schoolApplicationId: application.context.schoolApplicationId,

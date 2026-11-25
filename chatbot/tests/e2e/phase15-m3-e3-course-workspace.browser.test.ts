@@ -49,7 +49,7 @@ const source = {
   title: "Example University course page",
   authority: "approved_institution_source",
   association: "observed_only",
-  observedAt: "2026-11-24T00:00:00.000Z",
+  observedAt: "2026-11-24T00:00:00.000000Z",
   currentness: "unknown",
   manifestId: "reviewed-example-course-manifest",
 };
@@ -65,7 +65,7 @@ const result = {
   targetKind: "school_application",
   targetId: schoolId,
   sourceRevisions: task.sourceRevisions,
-  observedAt: "2026-11-24T00:00:00.000Z",
+  observedAt: "2026-11-24T00:00:00.000000Z",
   candidates: [
     {
       candidateId: ${JSON.stringify(candidateId)},
@@ -260,7 +260,7 @@ test("course research filtering, comparison, L3 field display, proposal and resp
             sourceIds: [sourceId, verifiedSourceId],
             applicabilityNote: null,
             independentObservation: {
-              observedAt: "2026-11-24T00:01:00.000Z",
+              observedAt: "2026-11-24T00:01:00.000000Z",
               sourceId: verifiedSourceId,
               sourceUrl: "https://courses.example.edu.au/master-example",
               manifestId: "reviewed-example-course-manifest",
@@ -277,7 +277,7 @@ test("course research filtering, comparison, L3 field display, proposal and resp
             title: "Example University course page",
             authority: "approved_institution_source",
             association: "observed_only",
-            observedAt: "2026-11-24T00:01:00.000Z",
+            observedAt: "2026-11-24T00:01:00.000000Z",
             currentness: "unknown",
             manifestId: "reviewed-example-course-manifest",
           },
@@ -338,13 +338,15 @@ test("course research filtering, comparison, L3 field display, proposal and resp
 
   const cards = page.getByTestId("course-candidate-card");
   await expect(cards).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "Compare", exact: true })
+  const comparisonCards = page.getByTestId("course-candidate-card");
+  await expect(comparisonCards).toHaveCount(2);
+  await comparisonCards
     .nth(0)
-    .click();
-  await page
     .getByRole("button", { name: "Compare", exact: true })
+    .click();
+  await comparisonCards
     .nth(1)
+    .getByRole("button", { name: "Compare", exact: true })
     .click();
   await expect(page.getByTestId("course-comparison")).toBeVisible();
   await page
@@ -410,14 +412,24 @@ test("course research filtering, comparison, L3 field display, proposal and resp
         document
           .querySelector('[data-testid="course-research-workspace"]')
           ?.getBoundingClientRect().width ?? 0,
-      comparison: document.querySelector(
-        '[data-testid="course-comparison"]'
-      ) as HTMLElement | null,
+      comparison: (() => {
+        const element = document.querySelector(
+          '[data-testid="course-comparison"]'
+        ) as HTMLElement | null;
+        return element
+          ? {
+              scrollWidth: element.scrollWidth,
+              clientWidth: element.clientWidth,
+            }
+          : null;
+      })(),
     }));
     expect(dimensions.workspace).toBeGreaterThan(0);
     expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
     expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport);
+    expect(dimensions.comparison).not.toBeNull();
     if (dimensions.comparison) {
+      expect(dimensions.comparison.clientWidth).toBeGreaterThan(0);
       expect(dimensions.comparison.scrollWidth).toBeGreaterThanOrEqual(
         dimensions.comparison.clientWidth
       );
@@ -515,13 +527,15 @@ test("mounted course workspace invalidates scoped state but retains it for ordin
   await page.getByTestId("scope-research-message").click();
   await expect(page.getByTestId("course-selection-preview")).toHaveCount(0);
 
-  await page
-    .getByRole("button", { name: "Compare", exact: true })
+  const comparisonCards = page.getByTestId("course-candidate-card");
+  await expect(comparisonCards).toHaveCount(2);
+  await comparisonCards
     .nth(0)
-    .click();
-  await page
     .getByRole("button", { name: "Compare", exact: true })
+    .click();
+  await comparisonCards
     .nth(1)
+    .getByRole("button", { name: "Compare", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Shortlist", exact: true })
@@ -535,7 +549,7 @@ test("mounted course workspace invalidates scoped state but retains it for ordin
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByTestId("scope-school").click();
   await expect(page.getByTestId("course-comparison")).toHaveCount(0);
-  await expect(page.getByTestId("course-shortlist-count")).toContainText("0");
+  await expect(page.getByTestId("course-shortlist-count")).toHaveCount(0);
 
   await page
     .getByRole("button", { name: "Select and preview" })
@@ -599,7 +613,7 @@ test("mounted course workspace invalidates scoped state but retains it for ordin
         sourceIds: [sourceId, verifiedSourceId],
         applicabilityNote: null,
         independentObservation: {
-          observedAt: "2026-11-24T00:01:00.000Z",
+          observedAt: "2026-11-24T00:01:00.000000Z",
           sourceId: verifiedSourceId,
           sourceUrl: "https://courses.example.edu.au/master-example",
           manifestId: "reviewed-example-course-manifest",
@@ -616,7 +630,7 @@ test("mounted course workspace invalidates scoped state but retains it for ordin
         title: "Example University course page",
         authority: "approved_institution_source",
         association: "observed_only",
-        observedAt: "2026-11-24T00:01:00.000Z",
+        observedAt: "2026-11-24T00:01:00.000000Z",
         currentness: "unknown",
         manifestId: "reviewed-example-course-manifest",
       },

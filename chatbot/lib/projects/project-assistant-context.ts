@@ -66,6 +66,7 @@ type Student500IndexEntry = {
   projectOrdinal: number;
   status: string;
   progress: string;
+  applicationPlace: ProjectStateStudent500["applicationPlace"];
   coeStatus: string;
   schoolDependency: ProjectStateStudent500["schoolDependency"];
   sourceVerification: string;
@@ -298,6 +299,7 @@ function compactStudent500(
     projectOrdinal,
     status: item.status,
     progress: item.progress,
+    applicationPlace: item.applicationPlace,
     coeStatus: item.coeStatus,
     schoolDependency: item.schoolDependency,
     sourceVerification: item.sourceVerification,

@@ -166,6 +166,7 @@ function student(input: {
     applicationId: input.id,
     archivedAt: input.archived ? timestamp : null,
     context: {
+      applicationPlace: "unknown",
       coeStatus: input.coeStatus ?? "unknown",
       entryRoute: input.route,
       schoolApplicationId: input.schoolApplicationId ?? null,

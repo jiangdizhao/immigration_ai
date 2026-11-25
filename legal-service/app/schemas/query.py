@@ -305,6 +305,20 @@ class ProjectAssistantContextPacket(BaseSchema):
             detail_identities = [row.get(id_key) for row in detail_rows]
             if any(identity not in identities for identity in detail_identities) or len(set(detail_identities)) != len(detail_identities):
                 raise ValueError("Project details must resolve to unique indexed identities")
+            if key == "student500Applications":
+                indexed_places = {
+                    row[id_key]: row["applicationPlace"]
+                    for row in index_rows
+                    if "applicationPlace" in row
+                }
+                if any(
+                    row.get("applicationId") in indexed_places
+                    and "applicationPlace" in row
+                    and row["applicationPlace"]
+                    != indexed_places[row["applicationId"]]
+                    for row in detail_rows
+                ):
+                    raise ValueError("Student 500 application place does not match its index")
             index_ids[key] = set(identities)
 
         school_rows = self.indexes["schoolApplications"] or []
@@ -315,6 +329,19 @@ class ProjectAssistantContextPacket(BaseSchema):
             *(self.indexes["unresolvedLinkedAdmissions"] or []),
         ]
         student_rows = self.indexes["student500Applications"] or []
+        allowed_application_places = {"onshore", "offshore", "unknown"}
+        for rows in (
+            student_rows,
+            self.matters["student500Applications"] or [],
+        ):
+            for row in rows:
+                if "applicationPlace" in row:
+                    application_place = row["applicationPlace"]
+                    if (
+                        not isinstance(application_place, str)
+                        or application_place not in allowed_application_places
+                    ):
+                        raise ValueError("Invalid Student 500 application place")
         if len(school_rows) > 12 or len(admissions_rows) > 16 or len(student_rows) > 6:
             raise ValueError("Project index exceeds M1 record limits")
         admission_ids = [row.get("caseId") for row in admissions_rows]

@@ -110,6 +110,7 @@ function student500(input: {
     input.route === undefined ? "no_school_application" : input.route;
   return {
     applicationId: input.id,
+    applicationPlace: "unknown",
     coeStatus: "unknown",
     entryRoute: route,
     missingInformationCodes: [],
@@ -458,6 +459,31 @@ test("source availability distinguishes an empty readable source from a restrict
 test("response validation fails closed for unsupported, mismatched, incomplete and cross-target data", () => {
   const valid = state();
   assert.ok(parseProjectStateResponse({ state: valid }, projectId));
+  const validStudent500 = student500({ id: "visa-only" });
+  const validStudentState = state({
+    matters: { student500Applications: [validStudent500] },
+  });
+  assert.equal(
+    parseProjectStateResponse({ state: validStudentState }, projectId)?.matters
+      .student500Applications?.[0]?.applicationPlace,
+    "unknown"
+  );
+  const invalidStudent500 = {
+    ...validStudent500,
+    applicationPlace:
+      "unavailable" as ProjectStateStudent500["applicationPlace"],
+  };
+  assert.equal(
+    parseProjectStateResponse(
+      {
+        state: state({
+          matters: { student500Applications: [invalidStudent500] },
+        }),
+      },
+      projectId
+    ),
+    null
+  );
   assert.equal(
     parseProjectStateResponse(
       { state: { ...valid, schemaVersion: "future.v2" } },

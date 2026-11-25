@@ -202,9 +202,16 @@ test("proposal preview and cancel do not write; explicit confirmation reads back
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByLabel("Intake label (customer-reported)").fill("July 2027");
   await page.getByRole("button", { name: "Review change" }).click();
-  await expect(page.getByText("March 2027", { exact: true })).toBeVisible();
-  await expect(page.getByText("July 2027", { exact: true })).toBeVisible();
-  await expect(page.getByText("4", { exact: true })).toBeVisible();
+  const preview = page
+    .getByTestId("project-action-proposal-panel")
+    .locator("dl")
+    .filter({
+      has: page.getByText("March 2027", { exact: true }),
+    });
+  await expect(preview).toHaveCount(1);
+  await expect(preview.getByText("March 2027", { exact: true })).toBeVisible();
+  await expect(preview.getByText("July 2027", { exact: true })).toBeVisible();
+  await expect(preview.getByText("4", { exact: true })).toBeVisible();
   expect(proposalRequests).toHaveLength(2);
   expect(confirmationRequests).toHaveLength(0);
   await page.getByRole("button", { name: "Cancel" }).click();

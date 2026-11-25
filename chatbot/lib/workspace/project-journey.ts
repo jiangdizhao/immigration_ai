@@ -200,6 +200,7 @@ const student500Schema = z
     stage: z.literal("student500"),
     status: nonEmptyString,
     progress: progressSchema,
+    applicationPlace: z.enum(["onshore", "offshore", "unknown"]),
     entryRoute: nullableString,
     routeState: z.enum(["recorded", "unknown"]),
     coeStatus: nonEmptyString,

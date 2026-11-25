@@ -153,7 +153,7 @@ def _assistant_packet():
             ],
             "unresolvedLinkedAdmissions": [],
             "student500Applications": [
-                {"applicationId": "visa-d", "projectOrdinal": 1, "status": "in_progress", "progress": "in_progress", "coeStatus": "unknown", "schoolDependency": {"state": "unknown", "reasonCode": "not_recorded"}, "sourceVerification": "declared_pending_verification", "preparationState": "not_recorded", "latestDraftVersion": None, "latestSnapshotVersion": None, "sourceAvailability": "available", "provenanceRevision": 1}
+                {"applicationId": "visa-d", "projectOrdinal": 1, "status": "in_progress", "progress": "in_progress", "applicationPlace": "unknown", "coeStatus": "unknown", "schoolDependency": {"state": "unknown", "reasonCode": "not_recorded"}, "sourceVerification": "declared_pending_verification", "preparationState": "not_recorded", "latestDraftVersion": None, "latestSnapshotVersion": None, "sourceAvailability": "available", "provenanceRevision": 1}
             ],
         },
         "matters": {
@@ -163,12 +163,58 @@ def _assistant_packet():
             ],
             "standaloneAdmissions": [{"caseId": "case-c", "originKind": "existing_coe", "outcomes": [{"provenance": "customer_reported", "independentlyVerified": False}]}],
             "unresolvedLinkedAdmissions": [],
-            "student500Applications": [{"applicationId": "visa-d", "progress": "in_progress"}],
+            "student500Applications": [{"applicationId": "visa-d", "applicationPlace": "unknown", "progress": "in_progress"}],
         },
         "unresolvedIssues": [],
         "nextActions": [{"targetId": "school-a", "targetKind": "school_application", "actions": [{"actionability": "executable"}]}],
         "omissions": {"schoolApplications": 0, "standaloneAdmissions": 0, "unresolvedLinkedAdmissions": 0, "student500Applications": 0, "unresolvedIssues": 0, "nextActions": 0, "linkedAdmissions": 0, "admissionsCases": 0},
     }
+
+
+def _student500_only_assistant_packet(application_place):
+    packet = _assistant_packet()
+    for key in ("schoolApplications", "standaloneAdmissions", "unresolvedLinkedAdmissions"):
+        packet["indexes"][key] = []
+        packet["matters"][key] = []
+        packet["omissions"][key] = 0
+    packet["indexes"]["linkedAdmissions"] = []
+    packet["indexes"]["student500Applications"] = [
+        {
+            "applicationId": "visa-only",
+            "projectOrdinal": 1,
+            "status": "in_progress",
+            "progress": "in_progress",
+            "applicationPlace": application_place,
+            "coeStatus": "unknown",
+            "schoolDependency": {"state": "not_applicable", "reasonCode": "visa_only"},
+            "sourceVerification": "declared_pending_verification",
+            "preparationState": "not_recorded",
+            "latestDraftVersion": None,
+            "latestSnapshotVersion": None,
+            "sourceAvailability": "available",
+            "provenanceRevision": 2,
+        }
+    ]
+    packet["matters"]["student500Applications"] = [
+        {
+            "applicationId": "visa-only",
+            "applicationPlace": application_place,
+            "progress": "in_progress",
+            "provenance": {"revision": 2},
+        }
+    ]
+    packet["omissions"].update(
+        {
+            "student500Applications": 0,
+            "unresolvedIssues": 0,
+            "nextActions": 0,
+            "linkedAdmissions": 0,
+            "admissionsCases": 0,
+        }
+    )
+    packet["unresolvedIssues"] = []
+    packet["nextActions"] = []
+    return packet
 
 
 def test_m2_context_reaches_fast_default_and_premium_model_inputs_without_replacing_old_context():
@@ -192,6 +238,61 @@ def test_m2_context_reaches_fast_default_and_premium_model_inputs_without_replac
         assert "customer_reported" in text and "existing_coe" in text
         assert "unavailable" in text and "untrusted data" in text
         assert "study.start_date" in text
+
+
+def test_student500_application_place_reaches_fast_default_and_premium_inputs():
+    import pytest
+    import re
+    from pydantic import ValidationError
+    from app.services.project_context import render_project_assistant_context_prompt_section
+
+    for application_place in ("offshore", "unknown"):
+        packet = _student500_only_assistant_packet(application_place)
+        payload = QueryRequest(
+            question="Where did I report I am applying from?",
+            project_assistant_context=packet,
+        )
+        fast = FastDirectLunaService._model_input(payload, payload.question)
+        default = AgentRuntimeService(provider=SimpleNamespace())._build_user_message(
+            SimpleNamespace(
+                user_text=payload.question,
+                matter_state={},
+                customer_document_context="",
+                policy_topic_context="",
+                project_context="",
+                project_assistant_context=render_project_assistant_context_prompt_section(
+                    payload.project_assistant_context
+                ),
+                response_language="en",
+                as_of_date=SimpleNamespace(isoformat=lambda: "2026-11-25"),
+            )
+        )
+        premium = PremiumDirectAnswerService._append_project_context(
+            payload, payload.question
+        )
+        for model_input in (fast, default, premium):
+            assert re.search(
+                rf'"applicationPlace"\s*:\s*"{application_place}"',
+                model_input,
+            )
+            assert re.search(r'"provenanceRevision"\s*:\s*2', model_input)
+            assert "customer-reported context only" in model_input
+            assert "Do not infer it from missing-fact codes" in model_input
+
+    for invalid_place in ("unavailable", None):
+        invalid = _student500_only_assistant_packet(invalid_place)
+        with pytest.raises(ValidationError):
+            QueryRequest(
+                question="invalid source state",
+                project_assistant_context=invalid,
+            )
+    mismatched = _student500_only_assistant_packet("offshore")
+    mismatched["matters"]["student500Applications"][0]["applicationPlace"] = "onshore"
+    with pytest.raises(ValidationError):
+        QueryRequest(
+            question="mismatched compact and detail state",
+            project_assistant_context=mismatched,
+        )
 
 
 def test_m2_context_rejects_invalid_version_and_oversize_and_old_requests_still_work():

@@ -129,9 +129,11 @@ const admissionRecord = (
 });
 const studentRecord = (
   id: string,
-  schoolApplicationId: string | null
+  schoolApplicationId: string | null,
+  applicationPlace: ProjectStateStudent500["applicationPlace"] = "unknown"
 ): ProjectStateStudent500 => ({
   applicationId: id,
+  applicationPlace,
   stage: "student500",
   status: "in_progress",
   progress: "in_progress",
@@ -509,6 +511,9 @@ test("standalone never loads Project state; revocation and wrong Project fail cl
   );
   const wrong = state();
   wrong.project.id = "project-b";
+  wrong.matters.student500Applications = [
+    studentRecord("private-visa", null, "offshore"),
+  ];
   await assert.rejects(
     refreshProjectAssistantContext({
       actorUserId: "owner",

@@ -48,6 +48,7 @@ import {
   mapWithConcurrency,
   projectStateSourceFailure,
 } from "./project-state-load-utils";
+import { student500ProjectStateInput } from "./project-state-student500-adapter";
 
 export type ProjectStateLoadResult =
   | { kind: "ok"; state: ProjectState }
@@ -332,32 +333,7 @@ async function readStudent500(input: {
           applicationId: entry.applicationId,
           projectId: input.projectId,
         });
-        return {
-          applicationId: detail.applicationId,
-          archivedAt: detail.archivedAt,
-          context: {
-            coeStatus: detail.context.coeStatus,
-            entryRoute: detail.context.entryRoute,
-            schoolApplicationId: detail.context.schoolApplicationId,
-          },
-          createdAt: detail.createdAt,
-          events: detail.events.map((event) => ({
-            createdAt: event.createdAt,
-            eventType: event.eventType,
-            revision: event.applicationRevision,
-            subjectId: event.subjectId,
-            subjectKind: event.subjectKind,
-          })),
-          projectId: detail.projectId,
-          revision: detail.revision,
-          screening: {
-            missingFactCodes: detail.screening.missingFactCodes,
-            sourceVerification:
-              detail.screening.officialChecklist.legalSourceVerification,
-          },
-          status: detail.status,
-          updatedAt: detail.updatedAt,
-        };
+        return student500ProjectStateInput(detail);
       },
     });
     return { capability: capability("available"), rows };

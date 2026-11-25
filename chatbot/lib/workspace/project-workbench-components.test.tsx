@@ -82,6 +82,7 @@ const admissionRecord: ProjectStateAdmission = {
 
 const studentRecord: ProjectStateStudent500 = {
   applicationId: "student-a",
+  applicationPlace: "unknown",
   stage: "student500",
   status: "in_progress",
   progress: "in_progress",

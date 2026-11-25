@@ -1,3 +1,5 @@
+import type { Student500ApplicationPlace } from "@/lib/student-500/contracts";
+
 /**
  * Phase 15 M1 — deterministic, bounded Project State projection.
  *
@@ -183,6 +185,7 @@ export type ProjectStateStudent500 = {
   stage: "student500";
   status: string;
   progress: ProjectStateProgressState;
+  applicationPlace: Student500ApplicationPlace;
   entryRoute: string | null;
   routeState: "recorded" | "unknown";
   coeStatus: string;
@@ -345,6 +348,7 @@ export type ProjectStateStudent500Input = {
   status: string;
   revision: number;
   context: {
+    applicationPlace: Student500ApplicationPlace;
     entryRoute: string | null;
     coeStatus: string;
     schoolApplicationId: string | null;
@@ -652,6 +656,7 @@ function buildStudent500(input: {
   const route = application.context.entryRoute;
   return {
     applicationId: application.applicationId,
+    applicationPlace: application.context.applicationPlace,
     coeStatus: application.context.coeStatus,
     entryRoute: route,
     missingInformationCodes: [...application.screening.missingFactCodes],

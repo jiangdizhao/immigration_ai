@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { buildProjectAssistantContext } from "../projects/project-assistant-context";
 import { SCHOOL_ADMISSIONS_NEXT_STEPS } from "../school-admissions/contracts";
 import {
   buildRequirementChecklist,
@@ -12,6 +13,10 @@ import {
   createSchoolApplicationService,
   type SchoolApplicationDetailView,
 } from "../school-applications/service";
+import { createInMemoryStudent500Store } from "../student-500/in-memory-store";
+import { createDeclaredStudent500LegalSourceProvider } from "../student-500/legal-source-provider";
+import { createStudent500RequirementResolver } from "../student-500/requirement-resolver";
+import { createStudent500Service } from "../student-500/service";
 import {
   buildProjectState,
   PROJECT_STATE_MAX_CONCURRENT_DETAIL_READS,
@@ -29,6 +34,7 @@ import {
   mapWithConcurrency,
   projectStateSourceFailure,
 } from "./project-state-load-utils";
+import { student500ProjectStateInput } from "./project-state-student500-adapter";
 
 const project = { id: "project-a", revision: 17, status: "active" } as const;
 const generatedAt = "2026-11-21T10:00:00.000Z";
@@ -191,6 +197,7 @@ function admission(input: {
 function student500(input: {
   id: string;
   route: string | null;
+  applicationPlace?: "onshore" | "offshore" | "unknown";
   schoolApplicationId?: string | null;
   projectId?: string;
   archived?: boolean;
@@ -199,6 +206,7 @@ function student500(input: {
     applicationId: input.id,
     archivedAt: input.archived ? "2026-11-20T00:00:00.000Z" : null,
     context: {
+      applicationPlace: input.applicationPlace ?? "unknown",
       coeStatus: "unknown",
       entryRoute: input.route,
       schoolApplicationId: input.schoolApplicationId ?? null,
@@ -216,12 +224,144 @@ function student500(input: {
   };
 }
 
+test("authorized Student 500 applicationPlace reaches M1 and bounded M2 context", async () => {
+  const actorUserId = "11111111-1111-4111-8111-111111111101";
+  const projectId = "22222222-2222-4222-8222-222222222201";
+  const store = createInMemoryStudent500Store();
+  store.seedActor(actorUserId, { registeredCustomer: true });
+  store.seedProject(projectId, { ownerUserId: actorUserId, status: "active" });
+  const service = createStudent500Service({
+    resolver: createStudent500RequirementResolver({
+      provider: createDeclaredStudent500LegalSourceProvider(),
+    }),
+    store,
+  });
+
+  const created = await service.create({
+    actorUserId,
+    context: { applicationPlace: "unknown" },
+    operationId: "application-place-create",
+    projectId,
+  });
+  const unknownDetail = await service.getProjectState({
+    actorUserId,
+    applicationId: created.application.applicationId,
+    projectId,
+  });
+  assert.equal(unknownDetail.context.applicationPlace, "unknown");
+  assert.equal(
+    student500ProjectStateInput(unknownDetail).context.applicationPlace,
+    "unknown"
+  );
+  const unknownState = buildProjectState(
+    stateInput({
+      project: { id: projectId, revision: 1, status: "active" },
+      student500Applications: [student500ProjectStateInput(unknownDetail)],
+    })
+  );
+  assert.equal(
+    unknownState.matters.student500Applications?.[0]?.applicationPlace,
+    "unknown"
+  );
+  const unknownPacket = buildProjectAssistantContext(
+    unknownState,
+    "project_state_unavailable",
+    created.application.applicationId
+  );
+  assert.equal(
+    unknownPacket.indexes.student500Applications?.[0]?.applicationPlace,
+    "unknown"
+  );
+  assert.equal(
+    unknownPacket.matters.student500Applications?.[0]?.applicationPlace,
+    "unknown"
+  );
+
+  await service.update({
+    actorUserId,
+    applicationId: created.application.applicationId,
+    context: { ...created.application.context, applicationPlace: "offshore" },
+    expectedRevision: 1,
+    operationId: "application-place-update",
+    projectId,
+  });
+  const freshService = createStudent500Service({
+    resolver: createStudent500RequirementResolver({
+      provider: createDeclaredStudent500LegalSourceProvider(),
+    }),
+    store,
+  });
+  const persisted = await freshService.getProjectState({
+    actorUserId,
+    applicationId: created.application.applicationId,
+    projectId,
+  });
+  assert.equal(persisted.revision, 2);
+  assert.equal(persisted.context.applicationPlace, "offshore");
+
+  const state = buildProjectState(
+    stateInput({
+      project: { id: projectId, revision: 2, status: "active" },
+      student500Applications: [student500ProjectStateInput(persisted)],
+    })
+  );
+  const projected = state.matters.student500Applications?.[0];
+  assert.equal(projected?.provenance.revision, 2);
+  assert.equal(projected?.applicationPlace, "offshore");
+
+  const packet = buildProjectAssistantContext(
+    state,
+    "project_state_unavailable",
+    created.application.applicationId
+  );
+  assert.equal(
+    packet.indexes.student500Applications?.[0]?.applicationPlace,
+    "offshore"
+  );
+  assert.equal(
+    packet.matters.student500Applications?.[0]?.applicationPlace,
+    "offshore"
+  );
+});
+
+test("unavailable Student 500 source remains unavailable rather than unknown applicationPlace", () => {
+  const state = buildProjectState(
+    stateInput({
+      capabilities: {
+        ...capabilities,
+        student500: {
+          reasonCode: "student500_read_unavailable",
+          state: "unavailable",
+        },
+        student500Preparation: {
+          reasonCode: "student500_read_unavailable",
+          state: "unavailable",
+        },
+      },
+      project: {
+        id: project.id,
+        revision: project.revision,
+        status: project.status,
+      },
+      student500Applications: null,
+      student500PreparationCapability: "unavailable",
+      student500Preparations: null,
+    })
+  );
+  assert.equal(state.matters.student500Applications, null);
+  const packet = buildProjectAssistantContext(state);
+  assert.equal(packet.indexes.student500Applications, null);
+  assert.equal(packet.matters.student500Applications, null);
+  assert.doesNotMatch(JSON.stringify(packet), /applicationPlace/u);
+});
+
 function stateInput(
   input: {
     schoolApplications?: readonly ProjectStateSchoolApplicationInput[] | null;
     admissionsCases?: readonly ProjectStateAdmissionInput[] | null;
     student500Applications?: readonly ProjectStateStudent500Input[] | null;
     student500Preparations?: readonly ProjectStatePreparationInput[] | null;
+    student500PreparationCapability?: ProjectStateInput["student500PreparationCapability"];
     serviceEngagements?: ProjectStateInput["serviceEngagements"];
     capabilities?: ProjectStateInput["capabilities"];
     project?: ProjectStateInput["project"];
@@ -242,7 +382,8 @@ function stateInput(
       input.student500Applications === undefined
         ? []
         : input.student500Applications,
-    student500PreparationCapability: "available",
+    student500PreparationCapability:
+      input.student500PreparationCapability ?? "available",
     student500Preparations: input.student500Preparations ?? [],
   };
 }
