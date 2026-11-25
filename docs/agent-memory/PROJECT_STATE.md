@@ -1,3 +1,15 @@
+<!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+## Project state — Phase 15 M2 and M3-E4 owner accepted with limitations (2026-11-25)
+
+- **Current owner decision:** `PHASE15_M2_OWNER_ACCEPTED_WITH_LIMITATIONS`, `PHASE15_M3_E4_OWNER_ACCEPTED_WITH_LIMITATIONS`, and `PHASE15_M3_OWNER_ACCEPTED_WITH_LIMITATIONS`. `PHASE15_M4_NOT_STARTED`, `PHASE15_M5_NOT_STARTED`, `LIVE_PRODUCTION_NO_GO`. M1 and previous M3 acceptance evidence remain preserved below.
+- **Accepted code commit:** `34b184cf0971a41f1cff9dc4110564c58854f7ea` on `phase15-guided-project-workflows`, parent `dd14c7e6de26160431aaa1252f590c5dc34258c2`. Exact scope: 16 implementation/test paths (14 Student 500 `applicationPlace` correction paths plus two Playwright test corrections).
+- **Owner evidence:** M2 real Default context covered Northbridge, Harbour, UTS, linked Admissions and independent Student 500 state; Student 500-only route confirmed `unknown → offshore`, revision 2 and Updated event with CoE still customer-reported/unverified; a guarded read-only PostgreSQL query confirmed values. Subsequent Fast and Default answers recognized Offshore. Corrected local Playwright: 6/6. No dedicated Student-only PostgreSQL runner was run.
+- **Offline evidence:** joint integration 21 Node files/96 Python tests; projection correction focused TypeScript tests and 11 Python tests; Ruff, changed-file Biome and whitespace checks passed. TypeScript remains at 44 historical diagnostics. The old joint report's sandbox Playwright/PG skips are distinct from later owner-local evidence. No new final Build result was established; prior E3 owner Build PASS is historical.
+- **Open limits and next milestone:** see the consolidated limitation list and M4 handoff in [CURRENT_HANDOFF](./CURRENT_HANDOFF.md). M4 planning must separate DIY/Managed engagement scope, direct/first-tier agents and domestic intake partners; reuse Phase 13 business services; and obtain business-owner confirmation for stamped forms, signatures, sharing authority and external handoffs. M4 implementation has not begun.
+
+The earlier joint report recommendation to keep M2 pending and E4 not started preceded this owner decision. The new status does not convert its remaining NOT RUN/NOT VERIFIED items into PASS or authorize production activity.
+<!-- END PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+
 <!-- BEGIN PHASE15_M3_E3_OWNER_ACCEPTED_2026_11_24 -->
 ## Project state — M3-E3 owner accepted with limitations (2026-11-24)
 

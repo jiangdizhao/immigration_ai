@@ -1,4 +1,18 @@
 <!-- BEGIN D_P15_007_2026_11_24 -->
+## D-P15-008 — Close M2 and M3-E4 with owner acceptance and limitations
+
+**Date:** 2026-11-25 (Australia/Sydney). **Owner decision:** `PHASE15_M2_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E4_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_OWNER_ACCEPTED_WITH_LIMITATIONS`. **Next:** `PHASE15_M4_NOT_STARTED / PHASE15_M5_NOT_STARTED`. **Release:** `LIVE_PRODUCTION_NO_GO`.
+
+The owner accepts M2 and M3-E4 with the limitations consolidated in [CURRENT_HANDOFF](./CURRENT_HANDOFF.md). This owner decision supersedes the earlier proposed `M2_OWNER_ACCEPTANCE_PENDING` and `M3_E4_NOT_STARTED` conclusions in the joint acceptance report, which preceded the owner's local acceptance window. It does not turn unexecuted tests into PASS, certify comprehensive legal quality, or authorize release.
+
+The accepted owner-created implementation commit is `34b184cf0971a41f1cff9dc4110564c58854f7ea` on `phase15-guided-project-workflows`, parent `dd14c7e6de26160431aaa1252f590c5dc34258c2`. It contains exactly 16 implementation/test paths: 14 Student 500 `applicationPlace` projection paths and two Playwright test correction paths. The authorized application-place readback at revision 2 is accepted; the PostgreSQL evidence was a guarded read-only check, not a dedicated Student 500-only runner.
+
+Accepted evidence includes the owner's multi-matter Default context and current-policy answer review; Student 500-only preview, cancel, confirmation and readback with CoE still reported/unverified; subsequent Fast/Default recognition of Offshore; 21 focused Node files and 96 Python tests from joint offline integration; final corrected owner-local Playwright 6/6; and the projection correction's focused TypeScript/Python regressions. TypeScript remains at 44 baseline diagnostics. No new final joint Build result is recorded; the prior M3-E3 owner Build PASS remains historical evidence.
+
+M4 is the next implementation milestone, but this decision only prepares its handoff. M4 must cover DIY versus Managed route and engagement-scope semantics, direct versus first-tier school agents, and domestic intake partner participation while reusing existing Phase 13 business infrastructure. Business-owner confirmation is required for stamped forms, signatures, sharing authority and external handoff rules. No M4 implementation, migration, production enablement, paid provider activity, AWS operation, external submission or deployment is authorized by this closeout.
+
+---
+
 ## D-P15-007 — Accept M3-E3 with limitations; keep E4 separate
 
 **Date:** 2026-11-24 (Australia/Sydney). **Owner decision:** `PHASE15_M3_E3_OWNER_ACCEPTED_WITH_LIMITATIONS`. **Code commit:** `ace73515a21b87c7b35f763d31dcbccc7b43c7f7` on `phase15-guided-project-workflows`, 78 code/test/runner files. **Release:** `LIVE_PRODUCTION_NO_GO`.

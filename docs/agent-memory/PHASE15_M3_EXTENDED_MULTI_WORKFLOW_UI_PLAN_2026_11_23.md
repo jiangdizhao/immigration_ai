@@ -187,3 +187,21 @@ The end-to-end synthetic regression independently constructs the TypeScript acti
 Use a separately authorized, real authenticated browser and exact-target isolated database. Verify the integrated School-only, Student 500-only, combined and alternative/Offer paths; shared effective task and target-revision resolution across browser/Next.js/Python; Chat restoration and task selection across refresh and Project navigation; desktop/mobile splitters and keyboard controls; explicit proposal confirmation, CAS conflict, package staleness and durable form/readback updates; linked Admissions/Student 500 restrictions; source identity/citations and honest incomplete-research behavior; and unavailable/revoked/archived boundaries. Include an end-to-end regression for the brief unavailable-task state and a bounded observation of the Node timeout warning. Keep owner authenticated browser, mounted Playwright, PostgreSQL, cross-runtime and real-provider results separately labeled; do not infer production safety from these tests.
 
 E4 implementation has not started and is not authorized by this documentation closeout. M2 remains pending owner acceptance. No production flags, migrations, paid provider runs, AWS or deployment are approved. Preserve `LIVE_PRODUCTION_NO_GO`.
+
+## 14. Final M2 + M3-E4 joint owner closeout (2026-11-25)
+
+**Current status:** `PHASE15_M2_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E4_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M4_NOT_STARTED / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. This owner decision supersedes the proposed pending statuses in the earlier joint acceptance report, while all its NOT RUN/NOT VERIFIED distinctions and the consolidated carry-forward limitations in [CURRENT_HANDOFF](./CURRENT_HANDOFF.md) remain binding. The historical E1/E2/E2.5/E3 acceptance evidence above is preserved.
+
+The accepted implementation commit is `34b184cf0971a41f1cff9dc4110564c58854f7ea` (parent `dd14c7e6de26160431aaa1252f590c5dc34258c2`), exactly 16 implementation/test paths: 14 Student 500 `applicationPlace` projection paths and two corrected Playwright paths.
+
+Owner evidence includes the multi-matter Default Project answer, a Student 500-only external-CoE route, explicit `unknown → offshore` preview/cancel/confirmation and revision-2 readback, and subsequent Fast and Default recognition of Offshore. CoE remains customer-reported held and unverified; no School or Admissions case was introduced. A guarded read-only PostgreSQL check confirmed stored values, but no dedicated Student 500-only database acceptance runner was executed. The final corrected local Playwright run passed 6/6; joint offline acceptance passed 21 focused Node files and 96 Python tests. The projection correction then passed focused TypeScript tests and 11 Python tests, Ruff, changed-file Biome and diff checks. TypeScript remains at the historical 44-diagnostic baseline. No new final consolidated Build result is established; preserve the prior M3-E3 owner Build PASS as historical evidence only.
+
+### M4 handoff — next milestone, not implementation authorization
+
+- Resolve **DIY versus Managed application routes** against actual recorded **engagement scope**. A route label or AI output does not establish an engagement or authority.
+- Cover **direct** and **first-tier school-agent** routes and the role of **domestic intake partners**, using actual owner-confirmed business relationships and scope.
+- Reuse the existing Phase 13 Project/operation/event, Service Engagement, agreement/acceptance/signature-evidence, resource-disclosure, School Application and workflow infrastructure. Do not create duplicate workflow, consent or business-state stores.
+- Obtain actual business-owner confirmation for stamped forms, signature requirements, sharing/recipient authority, and external handoff rules before writing a concrete contract or workflow.
+- Keep external submission, professional authority and production operation gated. M4 has not started; implement only after its own bounded owner authorization.
+
+This closeout accepts M2 and M3-E4 with limitations. It does not certify comprehensive legal quality, change D-P15-003's native-search privacy limitation, or alter `LIVE_PRODUCTION_NO_GO`.

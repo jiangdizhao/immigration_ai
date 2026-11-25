@@ -1,3 +1,17 @@
+<!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+## Current milestone — Phase 15 M2 + M3-E4 owner accepted with limitations (2026-11-25)
+
+**Status:** `PHASE15_M2_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E4_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M4_NOT_STARTED / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. M1 and the previously accepted E1/E2/E2.5/E3 evidence remain in their historical records. The owner decision supersedes the joint report's earlier proposed pending statuses while preserving its NOT RUN/NOT VERIFIED items.
+
+**Implementation commit:** `34b184cf0971a41f1cff9dc4110564c58854f7ea`, parent `dd14c7e6de26160431aaa1252f590c5dc34258c2`, exactly 16 implementation/test paths (14 Student 500 projection paths and two Playwright corrections).
+
+**Acceptance:** 21 focused Node files and 96 Python tests passed in the joint offline run; corrected local Playwright passed 6/6. The subsequent Student 500 projection correction passed focused TypeScript tests and 11 Python tests, with Ruff, changed-file Biome and diff checks passing; TypeScript remains at 44 baseline diagnostics. Owner acceptance also covers multi-matter Default context, Student 500-only `unknown → offshore` confirmation/readback at revision 2, subsequent Fast/Default awareness, and bounded GS research review.
+
+**Limits:** no dedicated Student 500-only PostgreSQL runner was executed; owner browser acceptance plus guarded read-only database readback is not full runner acceptance. Premium live Project-context quality, exact returned source URLs, unavailable/conflicting source cases and several legal-quality questions remain unverified. No new consolidated Build result is established; the prior E3 owner Build PASS remains historical. The full carry-forward list and M4 handoff are in [CURRENT_HANDOFF](./CURRENT_HANDOFF.md).
+
+**Next:** M4 is the next implementation milestone but has not started. Its handoff must distinguish DIY/Managed routes and engagement scope, direct/first-tier school-agent routes and domestic intake partners, reuse Phase 13 business infrastructure, and obtain business-owner decisions on stamped forms, signatures, sharing authority and external handoff rules. No M4 implementation, migration, external operation, production enablement or deployment is included here.
+<!-- END PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+
 <!-- BEGIN PHASE15_M3_E3_OWNER_ACCEPTED_2026_11_24 -->
 ## Current milestone — M3-E3 owner accepted with limitations
 

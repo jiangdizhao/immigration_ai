@@ -1,3 +1,44 @@
+<!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+## Current handoff — Phase 15 M2 + M3-E4 accepted with limitations (2026-11-25, Australia/Sydney)
+
+**Current owner status:** `PHASE15_M2_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_E4_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M3_OWNER_ACCEPTED_WITH_LIMITATIONS / PHASE15_M4_NOT_STARTED / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. M1's `PHASE15_M1_ENGINEERING_ACCEPTED_WITH_LIMITATIONS` and all E1/E2/E2.5/E3 records remain in force. M3 is accepted with limitations; the next implementation milestone is M4, which has not started.
+
+**Accepted implementation commit:** `34b184cf0971a41f1cff9dc4110564c58854f7ea` on `phase15-guided-project-workflows`, parent `dd14c7e6de26160431aaa1252f590c5dc34258c2`. The owner-created commit contains exactly 16 implementation/test paths: 14 Student 500 `applicationPlace` projection paths and two corrected Playwright test paths. No additional source commit is part of this closeout.
+
+The joint acceptance report's earlier recommendation to leave M2 pending and E4 not started was made before the owner's local acceptance window. The owner decisions above supersede those proposed statuses, not the evidence limits. The temporary joint and Student 500 correction reports were read and remain outside the repository. Their prior Build, test, browser and database observations retain their original scope; no new consolidated Build result is claimed here.
+
+### Owner acceptance evidence
+
+- **M2 Project Assistant:** owner acceptance found the real Default response identified Northbridge, Harbour, UTS, the linked Admissions record and the independent Student 500 matter; it kept Schools separate, distinguished intake/package freshness/events, and described a hypothetical intake deferral without a business mutation. The exact empty-history condition for that multi-school Chat was not established. A fresh Student 500 Project Chat demonstrated current Project awareness in Fast mode.
+- **Student 500-only route:** in `P15 E4 Student500 Only Acceptance`, the owner verified the external/self-reported existing-CoE route without a School Application or Admissions Case. Visa-only workflow display and Default understanding passed. Default suggested typed `student500.applicationPlace`; the owner previewed `unknown → offshore` at revision 1, cancelled once, then explicitly confirmed. Revision 2 and a Student 500 Updated event were observed; CoE remained customer-reported held and unverified; no linked School was added. A guarded read-only PostgreSQL check confirmed expected persisted values. This is not acceptance by a dedicated Student 500-only PostgreSQL runner.
+- **Projection defect and correction:** the first Fast answer after confirmation incorrectly said application place was not recorded because the deterministic M1/M2 projection omitted the authorized field. The business write had succeeded. The accepted correction carries only `onshore | offshore | unknown` through the authorized service adapter, M1 state, compact index, bounded detail and all three Python provider inputs. Offline regression covers revision 2, explicit unknown/unavailable distinction, actor/Project isolation and Fast/Default/Premium inputs. Subsequent real Fast returned Offshore while retaining the existing CoE route and reported-held qualification; subsequent real Default GS research also recognized Offshore. No migration, additional provider call or write capability was introduced.
+- **M3-E4 integration:** the owner reports final corrected local Playwright **6/6 PASS**. Corrections covered dynamic Compare locators, ambiguous proposal-preview selection, six-digit UTC fixture timestamps, shortlist empty-state assertions and DOM-dimension serialization. Earlier failures exposed test-contract defects, not established production failures. The joint sandbox run had failed before browser test bodies because Chrome could not start there; the later owner-local 6/6 result is distinct evidence.
+- **Automated checks:** the joint offline run passed 21 focused Node test files and 96 Python tests. The later Student 500 projection correction passed its focused TypeScript tests and 11 Python tests; Ruff, changed-file Biome and whitespace checks passed. TypeScript remained at the historical 44-diagnostic baseline. The previously recorded M3-E3 owner-local production Build PASS remains historical E3 evidence; this joint closeout has no newly established final Build result.
+- **Current policy research:** owner review found the Default Genuine Student answer covered the principal commencement date, GS/GTE distinction, study-purpose requirement and separation between customer reports and legal conclusions. This is limited owner acceptance, not comprehensive legal accuracy certification. Source names/conclusions were reviewed; exact returned reference URLs were not independently verified.
+
+### Consolidated carry-forward limitations — do not treat as PASS or repair in this closeout
+
+- Creating a Student 500 preparation record does not immediately refresh the left Workflow; the owner clicked refresh and explicitly deferred the issue. A brief unavailable-task state also appeared after confirmation.
+- Same-value proposals are rejected and show a generic failure; the observed HTTP error code was not captured. Project Chat/task selection restoration after refresh needs work.
+- Missing-information and next-action descriptions repeat. Some English text remains in the Chinese UI.
+- AI can conflate missing recorded evidence with evidence the customer does not possess, and can narrow missing application references to school application numbers.
+- Official-source coverage is limited to L2; no approved live L3 verification manifests exist. Source inspection identified a potential L3 producer timestamp compatibility issue, but live execution did not verify it.
+- Structured course research in Fast/Premium remains unsupported. Premium real-provider Project-context quality was not newly verified. Actual unavailable/conflicting official-source cases were not fully exercised, and an independent School-only Offer browser scenario was not newly exercised.
+- There is no dedicated Student 500-only PostgreSQL acceptance runner. Owner browser confirmation plus guarded read-only PostgreSQL readback is not a full runner or a substitute for one.
+- GS answer limitations remain: older legislative compilation; exact Direction No. 106 applicability wording; nuanced prior GTE treatment; primary/secondary applicant distinctions; and internal preparation state versus government lodgement.
+- Native-search privacy limitations under D-P15-003 remain. Historical E3 R4/R5 failure causes were not fully reconstructed; real course-field accuracy has not been independently established; some requests end with incomplete research under current budgets.
+- Historical TypeScript diagnostics remain at 44; unrelated Biome diagnostics remain. A non-blocking Node `TimeoutNegativeWarning` was previously observed and its cause remains unverified.
+- All production, document-trust, professional-authority and external-operation restrictions remain. No acceptance here authorizes a production flag, release, AWS activity, external submission or deployment.
+
+### M4 handoff — next milestone, implementation not started
+
+The next bounded M4 task should map **DIY versus Managed application routes** to actual recorded **engagement scope**, then distinguish **direct** and **first-tier school-agent** routes and the participation of **domestic intake partners**. Reuse existing Phase 13 Project, operation/event, Service Engagement, agreement/acceptance/signature-evidence, resource-disclosure, School Application and workflow services; do not create parallel business state or imply a partner or staff authority from an AI suggestion or route label.
+
+Obtain actual business-owner confirmation before defining stamped forms, signature requirements, recipient/sharing authority, or external handoff rules. Preserve the separation between customer self-service and Managed authority. No external handoff or submission is implied by workflow completion. M4 planning may begin only under its separately bounded implementation contract; M4 code, migration, provider call and deployment did not begin in this closeout.
+
+The preceding E3, E2/E2.5, E1, M1, M2 privacy-decision and historical acceptance sections below are retained as contemporaneous records. This newest dated section supersedes their outdated milestone-status summaries only. Preserve the unrelated modified `chatbot/tsconfig.tsbuildinfo` and untracked M2 privacy-boundary note.
+<!-- END PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
+
 <!-- BEGIN PHASE15_M3_E3_OWNER_ACCEPTED_2026_11_24 -->
 ## Current handoff — Phase 15 M3-E3 owner accepted with limitations
 
