@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+## Current milestone — Phase 15 M4 implementation contract approved (2026-11-28)
+
+**Status:** `PHASE15_M4_IMPLEMENTATION_CONTRACT_APPROVED / PHASE15_M4_AWAITING_CODEX_EXECUTION / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Owner approved the consolidated M4 plan on 2026-11-28; source implementation has not started. M1–M3 acceptance and all recorded limitations from D-P15-008 remain. Baseline a3d709b246d49da45746d2506116531250ce3683. [M4 implementation contract](./tasks/PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28.md); [Codex implementation prompt](./tasks/PHASE15_M4_CODEX_IMPLEMENTATION_PROMPT_2026_11_28.md).
+
+M4 deliverables: Modules A–F in one implementation package; T1–T8 consolidated acceptance, source migration only, exact scope/route/form/recipient and authority checks, synthetic positive path, persistent state and UI readback. No code or tests executed by this documentation commit. Real contract, signature, representation, form, disclosure, partner receipt and professional authority remain unavailable until approved. M5 is not started; no production release. Next: owner dispatches Codex, then independent cumulative patch review and separately authorized isolated DB/browser acceptance.
+<!-- END PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+
 <!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
 ## Current milestone — Phase 15 M2 + M3-E4 owner accepted with limitations (2026-11-25)
 

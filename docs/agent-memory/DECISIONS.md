@@ -1,3 +1,11 @@
+<!-- BEGIN D_P15_009_2026_11_28 -->
+## D-P15-009 — Approve one integrated Phase 15 M4 implementation contract
+
+**Date:** 2026-11-28 (Australia/Sydney). **Owner decision:** approve consolidated M4 plan and prepare repository contract plus English Codex execution prompt. **Status:** `PHASE15_M4_IMPLEMENTATION_CONTRACT_APPROVED / PHASE15_M4_AWAITING_CODEX_EXECUTION / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. **Authority:** [M4 implementation contract](./tasks/PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28.md); [Codex implementation prompt](./tasks/PHASE15_M4_CODEX_IMPLEMENTATION_PROMPT_2026_11_28.md).
+
+Adopt exact application-scoped service intent, immutable explicit multi-target engagement/terms (no automatic expansion), internally maintained partner/representation/channel/form registry, exact-version human handoff and distinct agent/school receipts, action-specific readiness and minimal scoped staff assignment seam. Preserve legacy agreement bytes, M5 outcomes, M8 packages/authorization, Phase 15 M1–M3 and professional/financial/document/privacy boundaries. No universal double signature or lawyer review of ordinary school preparation. No external partner portal or M5 implementation. Actual commercial rules not supplied are UNKNOWN/unavailable; no production trust from synthetic fixtures or flags. Implementation proceeds as one bounded task after owner dispatch; forward migration source only, no execution. No real customer data, paid models, AWS, payment or external action, release, or deployment. Documentation-only commit; no new test or source acceptance. D-P15-008's engineering acceptance and limits unchanged.
+<!-- END D_P15_009_2026_11_28 -->
+
 <!-- BEGIN D_P15_007_2026_11_24 -->
 ## D-P15-008 — Close M2 and M3-E4 with owner acceptance and limitations
 

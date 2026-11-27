@@ -1,3 +1,13 @@
+<!-- BEGIN PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+## Current handoff — Phase 15 M4 contract approved, awaiting implementation (2026-11-28)
+
+**Status:** `PHASE15_M4_IMPLEMENTATION_CONTRACT_APPROVED / PHASE15_M4_AWAITING_CODEX_EXECUTION / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Owner approved the consolidated M4 plan on 2026-11-28; source implementation has not started. M1–M3 acceptance and all recorded limitations from D-P15-008 remain. Baseline a3d709b246d49da45746d2506116531250ce3683. [M4 implementation contract](./tasks/PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28.md); [Codex implementation prompt](./tasks/PHASE15_M4_CODEX_IMPLEMENTATION_PROMPT_2026_11_28.md).
+
+One integrated task: exact application-level engagement/immutable v2 scope, internal partner/representation/route/form registry, minimal target-scoped assignment seam, M8 exact-package handoff/recipient-stage evidence, action-specific existing readiness and M1–M3 integration. Verified baseline has one nonterminated engagement per Project (0043) and latest-engagement selection in managed-handoff-snapshot-repository; correct both, do not create parallel business truth. Legacy scope is not automatically mapped. Existing deny-by-default contract/signature/disclosure/professional/receipt authorities remain; actual anonymized business examples and rules are pending. Positive path is synthetic only; preparation remains usable; no universal lawyer double signoff. No partner portal, M5 Copilot, paid calls, real data, migration execution, AWS, commit/push by executor or deployment. Source-only forward migration permitted when owner sends the prompt. Guarded DB/browser acceptance remains distinct. Preserve pre-existing tsconfig.tsbuildinfo and untracked M2 note.
+
+Next: owner syncs docs and dispatches the companion English prompt to Codex. One cumulative patch plus SHA-256 and exact validation; independent review before owner commit/push. The following 2026-11-25 section is the preserved M2/M3 closeout, not a statement that M4 remains unplanned.
+<!-- END PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+
 <!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
 ## Current handoff — Phase 15 M2 + M3-E4 accepted with limitations (2026-11-25, Australia/Sydney)
 

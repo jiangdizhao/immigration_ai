@@ -1,3 +1,11 @@
+<!-- BEGIN PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+## Project state — Phase 15 M4 planning close / contract approved (2026-11-28)
+
+**Status:** `PHASE15_M4_IMPLEMENTATION_CONTRACT_APPROVED / PHASE15_M4_AWAITING_CODEX_EXECUTION / PHASE15_M5_NOT_STARTED / LIVE_PRODUCTION_NO_GO`. Owner approved the consolidated M4 plan on 2026-11-28; source implementation has not started. M1–M3 acceptance and all recorded limitations from D-P15-008 remain. Baseline a3d709b246d49da45746d2506116531250ce3683. [M4 implementation contract](./tasks/PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28.md); [Codex implementation prompt](./tasks/PHASE15_M4_CODEX_IMPLEMENTATION_PROMPT_2026_11_28.md).
+
+M4 is an application-scoped commercial layer over existing Phase 13 contracts, School Admissions and M8 package/authorization; proposed new registry/target links must preserve existing business state and legacy evidence. Actual M4 product implementation, migration execution, positive real managed-service authority, external transmission and deployment are NOT RUN/NOT AUTHORIZED. Existing M1–M3 and Phase 13/14 document-trust, privacy and professional gates remain. Business-owner real stamped-form, signature, payment, representation and disclosure/handoff rules outstanding; synthetic acceptance only. No M5 Copilot or external partner portal in scope.
+<!-- END PHASE15_M4_IMPLEMENTATION_CONTRACT_2026_11_28 -->
+
 <!-- BEGIN PHASE15_M2_M3_E4_FINAL_CLOSEOUT_2026_11_25 -->
 ## Project state — Phase 15 M2 and M3-E4 owner accepted with limitations (2026-11-25)
 
